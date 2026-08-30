@@ -1,0 +1,130 @@
+version: '3'
+
+vars:
+  GO: go
+  PNPM: pnpm
+
+tasks:
+  default:
+    deps: [ci]
+
+  bootstrap:
+    desc: Prepare local dependencies, schema, generated artifacts, and seeds
+    cmds:
+      - bash scripts/bootstrap.sh
+
+  dev:
+    desc: Run the API, worker, and web development processes
+    cmds:
+      - bash scripts/dev.sh
+
+  build:
+    cmds:
+      - go build ./cmd/...
+      - pnpm --dir web build
+
+  test:
+    deps: ['test:unit', 'test:integration', 'web:test']
+
+  test:unit:
+    cmds:
+      - go test ./...
+
+  test:integration:
+    cmds:
+      - bash scripts/test-integration.sh
+
+  test:e2e:
+    cmds:
+      - bash scripts/test-e2e.sh
+
+  test:race:
+    cmds:
+      - go test -race ./...
+
+  test:fuzz:
+    cmds:
+      - go test ./... -run '^$'
+
+  lint:
+    cmds:
+      - bash scripts/lint.sh
+
+  security:
+    cmds:
+      - bash scripts/security.sh
+
+  release:certify:
+    desc: Fail-closed production-v1 certification across code, infrastructure, and approvals
+    cmds:
+      - bash scripts/release-certify.sh
+
+  generate:
+    cmds:
+      - bash scripts/generate.sh
+
+  api:lint:
+    cmds:
+      - bash scripts/api-lint.sh
+
+  readme:check:
+    desc: Verify the executable repository contract declared by README.md
+    cmds:
+      - bash scripts/readme-conformance.sh
+
+  plan:check:
+    desc: Verify workstream ownership, status, and completion evidence
+    cmds:
+      - bash scripts/implementation-plan-conformance-test.sh
+
+  db:migrate:
+    cmds:
+      - go run ./cmd/migrate
+
+  db:rollback:
+    cmds:
+      - bash scripts/db-rollback.sh
+
+  db:reset:
+    cmds:
+      - bash scripts/db-reset.sh
+
+  db:seed:
+    cmds:
+      - go run ./cmd/seed
+
+  db:check:
+    cmds:
+      - bash scripts/db-check.sh
+
+  data:inventory:generate:
+    cmds:
+      - bash scripts/data-inventory-generate.sh
+
+  data:inventory:check:
+    cmds:
+      - bash scripts/data-inventory-check.sh
+
+  openapi:generate:
+    cmds:
+      - bash scripts/openapi-generate.sh
+
+  sqlc:generate:
+    cmds:
+      - bash scripts/sqlc-generate.sh
+
+  sqlc:check:
+    cmds:
+      - bash scripts/sqlc-check.sh
+
+  web:check:
+    cmds:
+      - pnpm --dir web check
+
+  web:test:
+    cmds:
+      - bash scripts/web-test.sh
+
+  ci:
+    cmds:
+      - bash scripts/ci.sh

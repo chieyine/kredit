@@ -1,0 +1,2 @@
+<script lang="ts">import Money from './Money.svelte'; import DueDate from './DueDate.svelte'; import StatusPill from './StatusPill.svelte'; let { principalKobo, dueDate, status = 'draft' } = $props<{ principalKobo: number; dueDate: string; status?: string }>();</script>
+<section class="card"><h2>Sale details</h2><p><Money amountKobo={principalKobo} /> to be paid by <DueDate value={dueDate} /></p><StatusPill {status} /></section>

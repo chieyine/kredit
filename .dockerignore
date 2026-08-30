@@ -1,0 +1,9 @@
+.git
+.tmp
+node_modules
+web/node_modules
+web/.svelte-kit
+web/build
+coverage
+*.log
+.env

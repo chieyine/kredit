@@ -1,0 +1,21 @@
+receivers:
+  otlp:
+    protocols:
+      http: {endpoint: "0.0.0.0:4318"}
+processors:
+  memory_limiter: {check_interval: 1s, limit_mib: 256}
+  batch: {send_batch_size: 512, timeout: 5s}
+  attributes/privacy:
+    actions:
+      - {key: http.request.header.authorization, action: delete}
+      - {key: http.request.header.cookie, action: delete}
+      - {key: db.statement, action: delete}
+exporters:
+  otlphttp:
+    endpoint: ${env:OBSERVABILITY_OTLP_ENDPOINT}
+    headers: {Authorization: "Bearer ${env:OBSERVABILITY_OTLP_TOKEN}"}
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [memory_limiter, attributes/privacy, batch], exporters: [otlphttp]}
+  telemetry:
+    logs: {level: info}

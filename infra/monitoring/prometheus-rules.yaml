@@ -1,0 +1,37 @@
+groups:
+  - name: kredit-api
+    rules:
+      - alert: KreditAPIUnavailable
+        expr: up{job="kredit-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "Kredit API is unavailable"}
+      - alert: KreditHighServerErrorRate
+        expr: sum(rate(kredit_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(kredit_http_requests_total[5m])), 1) > 0.01
+        for: 10m
+        labels: {severity: critical}
+        annotations: {summary: "API 5xx rate is above 1%"}
+      - alert: KreditHighRequestLatency
+        expr: kredit_http_request_duration_seconds{quantile="0.95"} > 1
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "API p95 latency is above one second"}
+  - name: kredit-financial
+    rules:
+      - alert: KreditLedgerReconciliationFailure
+        expr: increase(kredit_ledger_reconciliation_failures_total[5m]) > 0
+        labels: {severity: critical}
+        annotations: {summary: "Ledger reconciliation failed; financial writes require investigation"}
+      - alert: KreditProviderWebhookBacklog
+        expr: kredit_provider_webhook_oldest_unprocessed_seconds > 300
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: "Provider webhook processing is delayed"}
+      - alert: KreditCollectionUnknownState
+        expr: increase(kredit_collection_unknown_state_total[10m]) > 0
+        labels: {severity: critical}
+        annotations: {summary: "A collection entered an unknown provider state"}
+      - alert: KreditNotificationDeadLetters
+        expr: increase(kredit_notification_dead_letters_total[15m]) > 0
+        labels: {severity: warning}
+        annotations: {summary: "Critical notification delivery exhausted its retry budget"}

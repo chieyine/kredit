@@ -1,0 +1,151 @@
+name: kredit
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: kredit
+      POSTGRES_USER: kredit
+      POSTGRES_PASSWORD: kredit
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kredit -d kredit"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
+        mc mb --ignore-existing local/kredit-local
+    depends_on:
+      minio:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  provider-simulator:
+    build:
+      context: .
+      dockerfile: infra/containers/Dockerfile.api
+      target: simulator
+    environment:
+      SIMULATOR_ADDR: :8090
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "/app/kredit-provider-simulator", "-healthcheck"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/containers/Dockerfile.api
+      target: api
+    entrypoint: ["/app/kredit-migrate"]
+    environment:
+      DATABASE_URL: postgres://kredit:kredit@postgres:5432/kredit?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/containers/Dockerfile.api
+      target: api
+    environment:
+      APP_ENV: development
+      API_ADDR: :8080
+      DATABASE_URL: postgres://kredit:kredit@postgres:5432/kredit?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@postgres:5432/kredit?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit:kredit@postgres:5432/kredit?sslmode=disable
+      PUBLIC_BASE_URL: http://localhost:3000
+      APP_BASE_URL: http://localhost:3000
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      DOCUMENT_SCANNER_ENDPOINT: http://provider-simulator:8090/documents/scan
+      DOCUMENT_SCANNER_TOKEN: development-simulator-token
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "/app/kredit-api", "-healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      provider-simulator:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/containers/Dockerfile.api
+      target: worker
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgres://kredit:kredit@postgres:5432/kredit?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit:kredit@postgres:5432/kredit?sslmode=disable
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+    healthcheck:
+      test: ["CMD", "/app/kredit-worker", "-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/containers/Dockerfile.web
+    environment:
+      ORIGIN: http://localhost:3000
+      API_INTERNAL_URL: http://api:8080
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  minio-data:

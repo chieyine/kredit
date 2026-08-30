@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Kredit Trade Credit",
+  "short_name": "Kredit",
+  "description": "Keep every credit sale, payment day and payment clear.",
+  "start_url": "/app/overview?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f5f2ea",
+  "theme_color": "#2738d6",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "categories": ["business", "finance", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Seller account", "short_name": "Home", "url": "/app/overview?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Add a sale", "short_name": "Add sale", "url": "/app/credit/new?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Customer account", "short_name": "Customer", "url": "/buyer?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

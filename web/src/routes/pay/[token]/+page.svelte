@@ -1,0 +1,9 @@
+<script lang="ts">
+	import { onMount } from 'svelte'; import { page } from '$app/state';
+	import Money from '$lib/components/Money.svelte';
+	let intent:any=$state(null);let error=$state('');
+	onMount(async()=>{const response=await fetch(`/api/v1/public/payment-intents/${page.params.token}`);const result=await response.json().catch(()=>({}));if(response.ok)intent=result.payment_intent;else error=result.detail??'Payment link unavailable.'});
+</script>
+<svelte:head><title>Secure payment — Kredit</title></svelte:head>
+<main class="shell prose-page"><p class="eyebrow">Private payment</p>{#if intent}<h1>Check the amount before you pay.</h1><dl><div><dt>Paying</dt><dd>{intent.supplier_name||'Seller'}</dd></div><div><dt>For</dt><dd>{intent.description}</dd></div><div><dt>Money left to pay</dt><dd><Money amountKobo={intent.amount_kobo} /></dd></div></dl><p>{intent.provider_action}</p><a class="primary" href="/buyer">Continue to payment</a><p class="privacy">This page does not show your bank details or private account information.</p>{:else if error}<h1>This payment link cannot be opened.</h1><p role="alert">{error}</p>{:else}<p>Opening your payment…</p>{/if}</main>
+<style>dl{display:grid;gap:.8rem;padding:1.25rem;border:1px solid var(--color-border);border-radius:1rem;background:var(--color-surface)}dl div{display:flex;justify-content:space-between;gap:2rem}dt{color:var(--color-muted)}dd{font-weight:750;text-align:right}.privacy{font-size:.9rem;color:var(--color-muted)}</style>

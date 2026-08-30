@@ -1,0 +1,8 @@
+<script lang="ts">
+	import { page } from '$app/state'; import { onMount } from 'svelte';
+	let item=$state<any>(null), timeline:any[]=$state([]), error=$state(''), loading=$state(true);
+	onMount(async()=>{const response=await fetch(`/api/v1/ops/cases/${page.params.id}`,{credentials:'include'});const data=await response.json().catch(()=>({}));loading=false;if(!response.ok){error=data.detail??'The case could not be loaded.';return}item=data.case;timeline=data.timeline??[]});
+</script>
+<svelte:head><title>Support case — Kredit</title></svelte:head>
+<main class="shell workspace"><p class="eyebrow">Operations / Case</p><h1>Support case</h1>{#if loading}<p>Loading case…</p>{:else if error}<p class="error" role="alert">{error}</p>{:else}<section class="summary"><div><span>Status</span><strong>{item.state}</strong></div><div><span>Subject</span><strong>{item.subject_type}</strong></div><div><span>Reference</span><code>{item.subject_id}</code></div><div><span>Opened</span><strong>{new Date(item.created_at).toLocaleString()}</strong></div></section><h2>Append-only timeline</h2><ol>{#each timeline as event}<li><strong>{event.action.replaceAll('_',' ')}</strong><span>{new Date(event.created_at).toLocaleString()}</span>{#if event.note}<p>{event.note}</p>{/if}</li>{/each}</ol>{/if}</main>
+<style>.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;margin:1.5rem 0}.summary div,li{padding:1rem;border:1px solid var(--color-border);border-radius:.8rem;background:var(--color-surface)}.summary div{display:grid;gap:.3rem}.summary span,li span{color:var(--color-muted)}ol{display:grid;gap:.7rem;padding:0;list-style:none}li span{display:block;font-size:.9rem;margin-top:.25rem}</style>

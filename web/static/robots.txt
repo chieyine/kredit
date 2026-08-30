@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /buyer/
+Disallow: /admin/
+Disallow: /supplier/
+Disallow: /c/
+Disallow: /pay/
+Disallow: /receipt/
+Disallow: /secure
+Disallow: /recover
+Disallow: /buyer-invitations
+Sitemap: https://kredit.com.ng/sitemap.xml

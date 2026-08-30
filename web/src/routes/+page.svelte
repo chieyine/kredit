@@ -1,0 +1,129 @@
+<script lang="ts">
+	import Money from '$lib/components/Money.svelte';
+	import { jsonLd } from '$lib/seo';
+
+	let activeView = $state<'terms' | 'evidence' | 'repayment'>('terms');
+	const views = [
+		{ id: 'terms', label: '01 / The sale', title: 'Write down the amount and date.' },
+		{ id: 'evidence', label: '02 / The goods', title: 'Show that the goods arrived.' },
+		{ id: 'repayment', label: '03 / The money', title: 'See what your customer still owes.' }
+	] as const;
+	const sectors = ['Wholesale', 'Distribution', 'Manufacturing', 'FMCG', 'Agriculture'];
+	const steps = [
+		{ number: '01', title: 'Add the sale', body: 'Write the goods, amount and day your customer will pay.' },
+		{ number: '02', title: 'Send it to your customer', body: 'Your customer opens a private link and says yes to the sale.' },
+		{ number: '03', title: 'See every payment', body: 'Kredit keeps the delivery, reminders and payments together.' }
+	];
+</script>
+
+<svelte:head>
+	{@html `<script type="application/ld+json">${jsonLd({ '@context':'https://schema.org', '@type':'SoftwareApplication', name:'Kredit', applicationCategory:'BusinessApplication', operatingSystem:'Web', description:'A simple way for businesses to record credit sales, delivery and payment', offers:{'@type':'Offer', price:'0', priceCurrency:'NGN'} })}<\/script>`}
+</svelte:head>
+
+<main class="home">
+	<section class="hero shell" aria-labelledby="page-title">
+		<div class="hero-copy">
+			<p class="kicker"><span></span> Sell now. Let them pay later.</p>
+			<h1 id="page-title">Give goods now.<br /><em>Get your money later.</em></h1>
+			<p class="hero-lede">Kredit writes down who took the goods, how much they will pay and when. It sends reminders and keeps every payment.</p>
+			<div class="hero-actions">
+				<a class="button button-dark" href="/app">Add your first sale <span aria-hidden="true">↗</span></a>
+				<a class="text-link" href="#how-it-works">See how it works <span aria-hidden="true">↓</span></a>
+			</div>
+			<div class="assurances" aria-label="Product assurances"><span>We do not give loans</span><span>No monthly payment</span><span>You choose your customer</span></div>
+		</div>
+
+		<div class="hero-product" aria-label="Example Kredit credit sale">
+			<div class="product-glow"></div>
+			<div class="agreement-window">
+				<div class="window-top"><div class="mini-brand"><span>K</span></div><span class="demo-label">Credit sale</span><button aria-label="More options">•••</button></div>
+				<div class="agreement-head"><div><p>Customer</p><h2>Adebayo Stores</h2></div><span class="verified-mark">✓ Accepted</span></div>
+				<div class="amount-block"><p>Amount left to pay</p><strong><Money amountKobo={120000000} /></strong><div class="balance-line"><span style="width: 68%"></span></div><div class="amount-meta"><span>Paid ₦400,000</span><span>Pay by 18 Sep</span></div></div>
+				<div class="agreement-timeline">
+					<div class="event done"><span>✓</span><p><strong>Deal accepted</strong><small>Customer confirmed · 10:42</small></p></div>
+					<div class="event done"><span>✓</span><p><strong>Goods received</strong><small>Delivery proof saved</small></p></div>
+					<div class="event current"><span></span><p><strong>Payment in progress</strong><small>Next reminder in 4 days</small></p></div>
+				</div>
+				<div class="window-bottom"><span>Deal TC-2048</span><a href="/app">See details →</a></div>
+			</div>
+			<div class="floating-receipt"><span class="receipt-icon">✓</span><div><strong>Payment recorded</strong><small>₦400,000 · just now</small></div></div>
+		</div>
+	</section>
+
+	<section class="sector-strip" aria-label="Designed for business trade"><div class="shell sector-inner"><p>Built for the businesses<br />that keep goods moving</p><div>{#each sectors as sector}<span>{sector}</span>{/each}</div></div></section>
+
+	<section class="belief shell">
+		<div class="section-number">01 — WHY KREDIT</div>
+		<div class="belief-copy"><h2>Trust your customer.<br /><em>But write it down.</em></h2><div class="belief-text"><p>It is easy to forget an amount or payment date. Paper can get lost. Old WhatsApp messages can be hard to find.</p><p>Kredit keeps the sale, the goods and every payment in one place.</p></div></div>
+	</section>
+
+	<section id="how-it-works" class="process-section">
+		<div class="shell">
+			<div class="section-heading"><div><div class="section-number light">02 — HOW IT WORKS</div><h2>Three easy<br />steps.</h2></div><p>Add the sale. Let your customer accept it. Then see every payment.</p></div>
+			<div class="process-grid">{#each steps as step}<article><span>{step.number}</span><div class="process-icon" aria-hidden="true">{step.number === '01' ? '✦' : step.number === '02' ? '↗' : '✓'}</div><h3>{step.title}</h3><p>{step.body}</p></article>{/each}</div>
+		</div>
+	</section>
+
+	<section class="product-story shell">
+		<div class="section-number">03 — ONE CLEAR RECORD</div>
+		<div class="story-layout">
+			<div class="story-nav"><p class="story-intro">Know what is happening with every sale.</p>{#each views as view}<button class:active={activeView === view.id} onclick={() => activeView = view.id} aria-pressed={activeView === view.id}><span>{view.label}</span><strong>{view.title}</strong><i aria-hidden="true">→</i></button>{/each}</div>
+			<div class="story-canvas">
+				{#if activeView === 'terms'}
+					<div class="canvas-top"><span>Sale details</span><span class="status-chip">Waiting for customer</span></div><h3>The amount and payment day are clear.</h3>
+					<div class="terms-grid"><div><small>Money to pay</small><strong>₦1,200,000</strong></div><div><small>Pay before</small><strong>18 Sep 2026</strong></div><div><small>Extra days</small><strong>3 days</strong></div><div><small>If payment is late</small><strong>Debit after 3 days</strong></div></div>
+					<div class="accept-bar"><span><b>✓</b> Your customer sees it before saying yes</span><button>Check the sale</button></div>
+				{:else if activeView === 'evidence'}
+					<div class="canvas-top"><span>The goods</span><span class="status-chip">2 items saved</span></div><h3>Show that the goods arrived.</h3>
+					<div class="evidence-list"><div><span class="evidence-thumb">DR</span><p><strong>Delivery receipt</strong><small>Added by Chidi Okafor · 14 Sep, 11:24</small></p><i>Saved</i></div><div><span class="evidence-thumb photo">IMG</span><p><strong>Customer confirmation</strong><small>Confirmed from the customer's private link</small></p><i>Saved</i></div></div>
+					<div class="accept-bar"><span><b>✓</b> Delivery and receipt stay together</span><button>See proof</button></div>
+				{:else}
+					<div class="canvas-top"><span>Payments</span><span class="status-chip">On track</span></div><h3>See what has been paid and what is left.</h3>
+					<div class="repayment-visual"><div class="ring"><div><strong>33%</strong><small>paid</small></div></div><div class="repayment-facts"><p><span>Starting amount</span><strong>₦1,200,000</strong></p><p><span>Paid so far</span><strong>₦400,000</strong></p><p><span>Left to pay</span><strong>₦800,000</strong></p></div></div>
+					<div class="accept-bar"><span><b>✓</b> Every payment updates the balance</span><button>See payments</button></div>
+				{/if}
+			</div>
+		</div>
+	</section>
+
+	<section class="whatsapp-section">
+		<div class="shell whatsapp-layout">
+			<div class="phone-scene" aria-label="Example WhatsApp payment conversation"><div class="phone"><div class="phone-bar"><span>‹</span><div class="avatar">K</div><p><strong>Kredit</strong><small>business account</small></p><span>•••</span></div><div class="chat-date">TODAY</div><div class="chat incoming">Hello Adebayo Stores. Your ₦800,000 payment to <strong>Kora Wholesale</strong> is due on 18 September.<small>09:16</small></div><div class="chat outgoing">I’ve paid ₦400,000 now.<small>09:22 ✓✓</small></div><div class="chat incoming receipt-chat"><span>✓</span><div><strong>Payment confirmed</strong><p>₦400,000 recorded<br />Left to pay: ₦400,000</p></div><small>09:23</small></div><div class="chat-input">Message <span>➤</span></div></div></div>
+			<div class="whatsapp-copy"><div class="section-number light">04 — ON WHATSAPP</div><h2>We remind them.<br /><em>You chase less.</em></h2><p>Your customer does not need a new app. Kredit sends the reminder, payment link and receipt on WhatsApp.</p><ul><li><span>01</span>Reminder before payment day</li><li><span>02</span>A safe link to pay</li><li><span>03</span>Receipt after payment</li></ul></div>
+		</div>
+	</section>
+
+	<section class="closing shell"><p class="kicker"><span></span> Start with one customer</p><h2>Give the goods.<br /><em>Keep the payment clear.</em></h2><p>Add your next sale before the goods leave.</p><a class="button button-coral" href="/app">Add your first sale <span aria-hidden="true">↗</span></a></section>
+</main>
+
+<style>
+	:global(body) { background: #f4f0e7; }
+	:global(.site-header) { background: rgb(245 242 234 / .94); border-color: #cec9bf; }
+	.home { overflow: hidden; color: #17181b; background: #f5f2ea; }
+	.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(28rem, .85fr); gap: clamp(3rem, 7vw, 7rem); align-items: center; min-height: calc(100vh - 5rem); padding-top: clamp(4rem, 9vw, 8rem); padding-bottom: clamp(5rem, 9vw, 8rem); }
+	.kicker { display: flex; align-items: center; gap: .65rem; margin: 0 0 1.6rem; color: #5a625d; font-size: .76rem; font-weight: 780; letter-spacing: .12em; text-transform: uppercase; }.kicker span { width: 1.8rem; height: 2px; background: #e85f3d; }
+	h1 { max-width: 12ch; margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(3.8rem, 7.5vw, 7.2rem); font-weight: 500; line-height: .88; letter-spacing: -.065em; } h1 em, h2 em { color: #e85f3d; font-weight: 500; }
+	.hero-lede { max-width: 37rem; margin: 2rem 0 0; color: #5f6863; font-size: clamp(1.05rem, 1.7vw, 1.3rem); line-height: 1.62; }.hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 1.5rem; margin-top: 2.2rem; }
+	.button { display: inline-flex; align-items: center; justify-content: center; gap: 2rem; min-height: 3.5rem; padding: 0 1.4rem; border-radius: 0; text-decoration: none; font-size: .92rem; font-weight: 760; transition: transform .2s ease, box-shadow .2s ease; }.button:hover { transform: translateY(-3px); }.button-dark { color: white; background: #2738d6; box-shadow: 8px 8px 0 #17181b; }.button-dark:hover { background: #1827b9; box-shadow: 11px 11px 0 #17181b; }.button span { font-size: 1.2rem; }
+	.text-link { color: #17181b; text-decoration: none; font-size: .9rem; font-weight: 740; border-bottom: 1px solid #17181b; }.text-link span { margin-left: .4rem; }.assurances { display: flex; flex-wrap: wrap; gap: .5rem 1.3rem; margin-top: 2.2rem; color: #5f625f; font-size: .74rem; font-weight: 650; }.assurances span::before { content: '✓'; margin-right: .4rem; color: #2738d6; }
+	.hero-product { position: relative; display: grid; place-items: center; min-height: 38rem; }.product-glow { position: absolute; width: 31rem; height: 34rem; background: #2738d6; opacity: 1; }.product-glow::before, .product-glow::after { content: ''; position: absolute; border-radius: 0; border: 1px solid rgb(255 255 255 / .2); }.product-glow::before { inset: 2.3rem; }.product-glow::after { inset: 5.6rem; }
+	.agreement-window { position: relative; z-index: 1; width: min(100%, 29rem); border: 1px solid rgb(28 42 37 / .16); background: #fffdfa; box-shadow: 0 34px 80px rgb(66 48 35 / .22); transform: rotate(-1.5deg); }.window-top, .agreement-head, .window-bottom { display: flex; align-items: center; justify-content: space-between; }.window-top { padding: .85rem 1.1rem; border-bottom: 1px solid #e9e3da; }.mini-brand span { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; color: #fff; background: #17181b; font-family: Georgia, serif; }.demo-label { margin-left: -8rem; color: #5f645f; font-size: .66rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }.window-top button { min-height: 1.7rem; border: 0; background: transparent; color: #5f665f; }
+	.agreement-head { padding: 1.4rem 1.35rem 1.15rem; }.agreement-head p, .amount-block p { margin: 0 0 .3rem; color: #5f645f; font-size: .68rem; font-weight: 720; letter-spacing: .08em; text-transform: uppercase; }.amount-block p { color: #d7d9d7; }.agreement-head h2 { margin: 0; font-size: 1.15rem; }.verified-mark { padding: .38rem .62rem; color: #2738d6; background: #eef0ff; font-size: .69rem; font-weight: 760; }
+	.amount-block { margin: 0 1.35rem; padding: 1.2rem; background: #17181b; color: white; }.amount-block strong { display: block; font-family: Georgia, serif; font-size: 2.2rem; font-weight: 500; }.balance-line { height: 4px; margin-top: 1.1rem; background: #55565b; }.balance-line span { display: block; height: 100%; background: #ee6b48; }.amount-meta { display: flex; justify-content: space-between; margin-top: .6rem; color: #b9b8b3; font-size: .69rem; }
+	.agreement-timeline { display: grid; gap: 0; padding: 1.1rem 1.35rem; }.event { position: relative; display: grid; grid-template-columns: 1.6rem 1fr; gap: .7rem; min-height: 3.45rem; }.event:not(:last-child)::after { content: ''; position: absolute; left: .71rem; top: 1.45rem; height: 1.55rem; border-left: 1px solid #d7d2c8; }.event > span { display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: #2738d6; color: #fff; font-size: .7rem; }.event.current > span { box-sizing: border-box; border: 4px solid #ffd8cd; background: #ec6a47; }.event p { display: grid; gap: .12rem; margin: .05rem 0 0; }.event strong { font-size: .78rem; }.event small { color: #5f645f; font-size: .67rem; }.window-bottom { padding: .85rem 1.35rem; border-top: 1px solid #e9e3da; color: #5f645f; font-size: .67rem; }.window-bottom a { color: #17181b; font-weight: 760; text-decoration: none; }
+	.floating-receipt { position: absolute; z-index: 3; right: -1.5rem; bottom: 3rem; display: flex; align-items: center; gap: .7rem; width: 12.5rem; padding: .8rem; background: #fff; box-shadow: 0 20px 40px rgb(38 33 27 / .22); transform: rotate(2deg); }.receipt-icon { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: #eef0ff; color: #2738d6; font-weight: 900; }.floating-receipt div { display: grid; gap: .15rem; }.floating-receipt strong { font-size: .72rem; }.floating-receipt small { color: #5f645f; font-size: .64rem; }
+	.sector-strip { border-top: 1px solid #d6d0c5; border-bottom: 1px solid #d6d0c5; }.sector-inner { display: grid; grid-template-columns: 1.1fr 3fr; align-items: center; gap: 3rem; padding-top: 1.4rem; padding-bottom: 1.4rem; }.sector-inner p { margin: 0; color: #5f645f; font-size: .68rem; font-weight: 740; letter-spacing: .08em; line-height: 1.45; text-transform: uppercase; }.sector-inner div { display: flex; justify-content: space-between; gap: 1rem; color: #4c554f; font-family: Georgia, serif; font-size: 1rem; font-style: italic; }
+	.belief { padding-top: 9rem; padding-bottom: 10rem; }.section-number { color: #68665f; font-size: .67rem; font-weight: 780; letter-spacing: .13em; }.belief-copy { display: grid; grid-template-columns: 1.25fr .75fr; gap: 7rem; align-items: end; margin-top: 3rem; }.belief h2, .closing h2 { margin: 0; font-family: Georgia, serif; font-size: clamp(3.1rem, 6vw, 6.6rem); font-weight: 500; line-height: .95; letter-spacing: -.055em; }.belief-text { padding-left: 2rem; border-left: 1px solid #cfc8bc; }.belief-text p { margin: 0 0 1.2rem; color: #626863; line-height: 1.7; }
+	.process-section { padding: 8rem 0; color: #f0efe9; background: #17181b; }.section-number.light { color: #979792; }.section-heading { display: grid; grid-template-columns: 1.2fr .7fr; gap: 5rem; align-items: end; }.section-heading h2 { max-width: 11ch; margin: 2.5rem 0 0; font-family: Georgia, serif; font-size: clamp(3.2rem, 6vw, 6rem); font-weight: 500; line-height: .92; letter-spacing: -.05em; }.section-heading > p { max-width: 28rem; margin: 0; color: #b6b6b1; font-size: 1.05rem; line-height: 1.7; }
+	.process-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 5rem; border-top: 1px solid #45464b; border-bottom: 1px solid #45464b; }.process-grid article { position: relative; min-height: 25rem; padding: 1.4rem 2rem 2rem; border-right: 1px solid #45464b; }.process-grid article:last-child { border-right: 0; }.process-grid article > span { color: #839089; font-size: .72rem; }.process-icon { display: grid; place-items: center; width: 4.2rem; height: 4.2rem; margin: 4rem 0; border-radius: 50%; color: #17181b; background: #e86643; font-size: 1.4rem; }.process-grid article:nth-child(2) .process-icon { background: #ded8cc; }.process-grid article:nth-child(3) .process-icon { background: #cfd4ff; }.process-grid h3 { margin: 0 0 .9rem; font-family: Georgia, serif; font-size: 1.5rem; font-weight: 500; }.process-grid p { margin: 0; color: #9eaaa4; line-height: 1.65; }
+	.product-story { padding-top: 9rem; padding-bottom: 10rem; }.story-layout { display: grid; grid-template-columns: .85fr 1.35fr; gap: 5rem; margin-top: 3rem; }.story-intro { max-width: 15ch; margin: 0 0 2.5rem; font-family: Georgia, serif; font-size: 2.5rem; line-height: 1.08; }.story-nav button { position: relative; display: grid; width: 100%; grid-template-columns: 1fr auto; gap: .55rem; min-height: auto; padding: 1.25rem 0; border: 0; border-top: 1px solid #cbc6bc; color: #626662; background: transparent; text-align: left; cursor: pointer; }.story-nav button:last-child { border-bottom: 1px solid #cbc6bc; }.story-nav button span { grid-column: 1 / -1; font-size: .65rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }.story-nav button strong { font-family: Georgia, serif; font-size: 1.1rem; font-weight: 500; }.story-nav button i { font-style: normal; opacity: 0; }.story-nav button.active { color: #17181b; }.story-nav button.active::before { content: ''; position: absolute; left: -1rem; top: 0; bottom: 0; width: 3px; background: #e85f3d; }.story-nav button.active i { opacity: 1; }
+	.story-canvas { display: flex; min-height: 31rem; flex-direction: column; padding: 2rem; color: #f0efe9; background: #17181b; box-shadow: 18px 18px 0 #2738d6; }.canvas-top { display: flex; justify-content: space-between; align-items: center; color: #aaa9a5; font-size: .69rem; letter-spacing: .08em; text-transform: uppercase; }.status-chip { padding: .4rem .65rem; color: #d7daff; background: #2738d6; font-size: .62rem; }.story-canvas h3 { max-width: 17ch; margin: 2.7rem 0 2.2rem; font-family: Georgia, serif; font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 500; line-height: 1.05; }
+	.terms-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #505158; border-left: 1px solid #505158; }.terms-grid div { display: grid; gap: .5rem; padding: 1rem; border-right: 1px solid #505158; border-bottom: 1px solid #505158; }.terms-grid small { color: #8e9b94; }.terms-grid strong { font-size: .95rem; }.accept-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: auto; padding-top: 1.4rem; color: #b0bbb5; font-size: .75rem; }.accept-bar b { color: #aeb4ff; }.accept-bar button { padding: .55rem .8rem; border: 1px solid #69766f; color: white; background: transparent; font-size: .7rem; }
+	.evidence-list { display: grid; border-top: 1px solid #505158; }.evidence-list > div { display: grid; grid-template-columns: 3rem 1fr auto; gap: 1rem; align-items: center; padding: .9rem 0; border-bottom: 1px solid #505158; }.evidence-thumb { display: grid; place-items: center; height: 3rem; background: #e6c8ba; color: #17181b; font-weight: 800; font-size: .68rem; }.evidence-thumb.photo { background: #cfd4ff; }.evidence-list p { display: grid; gap: .25rem; margin: 0; }.evidence-list small { color: #8e9b94; }.evidence-list i { color: #aeb4ff; font-size: .7rem; font-style: normal; }
+	.repayment-visual { display: grid; grid-template-columns: 10rem 1fr; gap: 2rem; align-items: center; }.ring { display: grid; place-items: center; width: 8.5rem; height: 8.5rem; border-radius: 50%; background: conic-gradient(#ec6a47 0 33%, #44454a 33% 100%); }.ring::before { content: ''; grid-area: 1/1; width: 6.4rem; height: 6.4rem; border-radius: 50%; background: #17181b; }.ring div { z-index: 1; grid-area: 1/1; display: grid; text-align: center; }.ring strong { font-family: Georgia, serif; font-size: 1.7rem; }.ring small { color: #999894; }.repayment-facts { display: grid; }.repayment-facts p { display: flex; justify-content: space-between; margin: 0; padding: .8rem 0; border-bottom: 1px solid #505158; color: #aaa9a5; font-size: .75rem; }.repayment-facts strong { color: white; }
+	.whatsapp-section { padding: 8rem 0; color: #f5f2ea; background: #2738d6; }.whatsapp-layout { display: grid; grid-template-columns: .95fr 1fr; gap: 8rem; align-items: center; }.phone-scene { position: relative; display: grid; place-items: center; min-height: 42rem; }.phone-scene::before { content: ''; position: absolute; width: 31rem; height: 34rem; border-radius: 0; background: #ff6848; }.phone { position: relative; z-index: 1; width: min(100%, 21rem); padding: .55rem; border: 5px solid #17181b; border-radius: 2.3rem; color: #17181b; background: #efeae0; box-shadow: 0 30px 60px rgb(8 12 38 / .3); transform: rotate(2deg); }.phone-bar { display: grid; grid-template-columns: auto auto 1fr auto; gap: .6rem; align-items: center; padding: .8rem .6rem; background: #f9f7f2; border-radius: 1.6rem 1.6rem 0 0; }.avatar { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; color: white; background: #2738d6; font-family: Georgia, serif; }.phone-bar p { display: grid; margin: 0; font-size: .78rem; }.phone-bar small { color: #7d837f; font-size: .55rem; }.chat-date { width: max-content; margin: .9rem auto; padding: .25rem .45rem; color: #777e79; background: #dedbd3; font-size: .52rem; }.chat { position: relative; max-width: 80%; margin: .55rem; padding: .7rem .8rem 1.1rem; border-radius: .7rem; background: #fff; font-size: .72rem; line-height: 1.45; box-shadow: 0 1px 2px rgb(20 30 25 / .1); }.chat small { position: absolute; right: .45rem; bottom: .25rem; color: #89908c; font-size: .5rem; }.chat.outgoing { margin-left: auto; background: #edf0ff; }.receipt-chat { display: grid; grid-template-columns: 2rem 1fr; gap: .65rem; align-items: start; }.receipt-chat > span { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; color: #fff; background: #2738d6; }.receipt-chat p { margin: .2rem 0 0; color: #68716c; }.chat-input { display: flex; justify-content: space-between; margin: 1.8rem .5rem .45rem; padding: .7rem .8rem; border-radius: 999px; color: #8a8e8b; background: white; font-size: .7rem; }.chat-input span { color: #2738d6; }
+	.whatsapp-copy .section-number.light { color: #fff; }.whatsapp-copy h2 { margin: 2.6rem 0 1.6rem; font-family: Georgia, serif; font-size: clamp(3.2rem, 5vw, 5.4rem); font-weight: 500; line-height: .94; letter-spacing: -.05em; }.whatsapp-copy h2 em { color: #ffa184; }.whatsapp-copy > p { max-width: 32rem; color: #d0d3ff; font-size: 1.05rem; line-height: 1.7; }.whatsapp-copy ul { padding: 0; margin: 2.6rem 0 0; list-style: none; }.whatsapp-copy li { display: flex; gap: 1.3rem; padding: 1rem 0; border-top: 1px solid rgb(255 255 255 / .18); font-family: Georgia, serif; font-size: 1.1rem; }.whatsapp-copy li:last-child { border-bottom: 1px solid rgb(255 255 255 / .18); }.whatsapp-copy li span { color: #d0d3ff; font-family: inherit; font-size: .7rem; }
+	.closing { padding-top: 10rem; padding-bottom: 11rem; text-align: center; }.closing .kicker { justify-content: center; }.closing h2 { max-width: 14ch; margin: 0 auto; }.closing > p:not(.kicker) { margin: 2rem 0; color: #686a66; font-size: 1.1rem; }.button-coral { color: #fff; background: #2738d6; box-shadow: 8px 8px 0 #17181b; }.button-coral:hover { background: #1827b9; box-shadow: 11px 11px 0 #17181b; }
+	@media (max-width: 980px) { .hero { grid-template-columns: 1fr; }.hero-copy { max-width: 45rem; }.hero-product { min-height: 35rem; }.sector-inner { grid-template-columns: 1fr; gap: 1rem; }.belief-copy, .section-heading, .story-layout, .whatsapp-layout { grid-template-columns: 1fr; gap: 3rem; }.belief-text { max-width: 38rem; }.process-grid article { padding-left: 1rem; padding-right: 1rem; }.whatsapp-copy { grid-row: 1; }.phone-scene { min-height: 38rem; } }
+	@media (max-width: 700px) { .hero { min-height: auto; padding-top: 5rem; }.hero-product { min-height: 31rem; margin: 0 -.25rem; }.product-glow { width: 25rem; height: 25rem; }.agreement-window { width: calc(100% - 1.5rem); }.floating-receipt { right: -.4rem; bottom: 1rem; }.demo-label { margin-left: -3rem; }.sector-inner div { flex-wrap: wrap; justify-content: flex-start; gap: .65rem 1.5rem; }.belief { padding-top: 6rem; padding-bottom: 6rem; }.belief-copy { gap: 2rem; }.belief-text { padding-left: 1rem; }.process-section, .product-story, .whatsapp-section { padding-top: 6rem; padding-bottom: 6rem; }.process-grid { grid-template-columns: 1fr; }.process-grid article { min-height: auto; padding: 1.3rem 0 2.2rem; border-right: 0; border-bottom: 1px solid #45464b; }.process-grid article:last-child { border-bottom: 0; }.process-icon { margin: 2rem 0; }.story-canvas { min-height: 32rem; padding: 1.25rem; box-shadow: 10px 10px 0 #d9d3c7; }.terms-grid { grid-template-columns: 1fr; }.accept-bar { align-items: flex-start; flex-direction: column; }.repayment-visual { grid-template-columns: 1fr; }.phone-scene::before { width: 24rem; height: 24rem; }.phone { width: min(calc(100% - 2rem), 20rem); }.closing { padding-top: 7rem; padding-bottom: 8rem; } }
+</style>

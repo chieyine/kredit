@@ -1,0 +1,2 @@
+<script lang="ts">import Money from './Money.svelte'; import StatusPill from './StatusPill.svelte'; import ReferenceCode from './ReferenceCode.svelte'; let { provider, status, amountKobo, reference = '' } = $props<{ provider: string; status: string; amountKobo: number; reference?: string }>();</script>
+<article class="card"><h3>Bank debit</h3><p>Kredit asked {provider} for <Money amountKobo={amountKobo} />.</p><StatusPill {status} />{#if reference}<ReferenceCode value={reference} />{/if}</article>

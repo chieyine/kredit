@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1.7
+FROM node:24.11.0-alpine AS build
+WORKDIR /src
+RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY web/package.json web/package.json
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+COPY web web
+RUN pnpm --dir web build
+
+# Production dependencies only; devDependencies (playwright, svelte-check,
+# typescript) never reach the runtime image.
+FROM node:24.11.0-alpine AS deps-prod
+WORKDIR /src
+RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY web/package.json web/package.json
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --prod --frozen-lockfile
+
+FROM node:24.11.0-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
+COPY --from=deps-prod /src/node_modules ./node_modules
+COPY --from=build /src/web/build ./build
+USER node
+EXPOSE 3000
+CMD ["node", "build"]

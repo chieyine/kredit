@@ -1,0 +1,35 @@
+# Go
+/bin/
+/dist/
+*.test
+coverage.out
+
+# Node / SvelteKit
+node_modules/
+web/.svelte-kit/
+web/build/
+web/.vite/
+*.tsbuildinfo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local services and generated output
+.data/
+.tmp/
+api/generated/*
+!api/generated/.gitkeep
+db/generated/*
+!db/generated/.gitkeep
+web/src/lib/api/generated/*
+!web/src/lib/api/generated/.gitkeep
+
+# Test and OS output
+playwright-report/
+test-results/
+.DS_Store
+

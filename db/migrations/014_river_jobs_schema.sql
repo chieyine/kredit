@@ -1,0 +1,5 @@
+-- +goose Up
+CREATE SCHEMA IF NOT EXISTS jobs;
+
+-- +goose Down
+DROP SCHEMA IF EXISTS jobs CASCADE;

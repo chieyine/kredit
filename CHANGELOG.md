@@ -1,0 +1,240 @@
+# Changelog
+
+## Unreleased — world-class product-quality closure
+
+- Added a durable product-quality standard spanning complete journeys,
+  financial clarity, navigation, visual consistency, accessibility, recovery,
+  trust, SEO, index privacy, performance, installability, measurement,
+  operations and release enforcement.
+- Added route-correct search and social metadata, valid JSON-LD, canonical and
+  language links, refreshed sitemap/robots controls, branded PNG/PWA icons,
+  install shortcuts, public caching and private no-store responses.
+- Added responsive current-page portal navigation, substantive supplier,
+  buyer, security and support journeys, safe pre-launch legal boundaries, and
+  a branded privacy-safe 404/500 recovery experience.
+- Replaced browser prompts for protected job, webhook, privacy and recovery
+  actions with accessible reasoned review dialogs and verified impact previews.
+- Added browser-enforced metadata uniqueness, structured-data validity,
+  responsive overflow, public-route WCAG, indexing, caching, error, sitemap and
+  install-asset checks. Production web builds now block CI and certification.
+
+## Wave 6 — product analytics and pilot evidence
+
+- Added migrations 050–051 with versioned, privacy-minimised, deterministic
+  product events emitted from authoritative lifecycle writes and backfilled
+  safely, including payment mandates, collections, repeat sales and retention.
+- Added the protected live pilot scorecard with three primary KPIs, funnel
+  drivers, loss/dispute/provider/support/accessibility safety guardrails,
+  definitions, filters, freshness and
+  zero-tolerance source reconciliation.
+- Added the event catalog, KPI measurement contract, compliance inventory
+  coverage, replay/reconciliation integration tests and Wave 6 release evidence.
+
+## Unreleased — semantic README audit
+
+- Completed Wave 0 contract lock: accountable workstream and external-decision
+  records, fail-closed evidence-backed feature gates, shared state/event/problem
+  vocabulary, stable acceptance fixture IDs, frozen financial/trust copy, and
+  an executable negative-tested completion-evidence gate.
+- Completed Wave 3 user control and privacy: authenticated notification
+  preferences with required/optional categories and quiet hours; hashed
+  one-time recovery codes, enumeration-safe rate limits, independent review,
+  cooling-off and session revocation; seven privacy-rights workflows with
+  legal holds, restrictions, dual control and protected authoritative exports;
+  and a generated field-level data inventory with schema-drift enforcement.
+- Completed Wave 4 protected operations: immutable versioned commands and
+  events; recent-MFA, permission, reason, idempotency and impact-preview gates;
+  controlled job/webhook replay; user/organization suspension/restoration;
+  expiring scoped buyer/supplier holds; reconciliation and provider-safe
+  collection retry/cancellation; affected-user notices; redacted bounded
+  diagnostics; operator runbooks; and five dedicated browser scenarios. The
+  regenerated catalog inventory now covers all 924 persisted fields.
+- Completed the repository-owned Wave 5 interface closure: team role and
+  access-status controls; mandate-backed trade-line creation, suspension,
+  restoration, safe reduction and amount-labelled drawdown actions; complete
+  supplier/buyer dispute submission, evidence, decision and status surfaces;
+  and permission/error/conflict/provider-state browser coverage.
+- Added `@axe-core/playwright` as a blocking WCAG gate over twelve critical
+  journeys. Serious and critical violations now fail CI; the companion suite
+  verifies skip navigation, focus restoration, modal focus containment,
+  reduced motion, touch sizing and 200% reflow. Real VoiceOver/TalkBack and
+  target-device sign-off remain an explicit external release gate.
+- Added a sequenced README completion implementation plan covering all ten open
+  repository workstreams, their dependencies, vertical-slice deliverables,
+  acceptance criteria, rollout stages, and external launch gates.
+- Corrected the conformance record so structural file/route presence is no
+  longer presented as proof that every product workflow is complete; added a
+  prioritized repository-owned gap register.
+- Made one-time, equal, and custom repayment schedule terms immutable before
+  buyer acceptance and generate the activated schedule from those accepted
+  terms.
+- Added hash-verified printable agreement documents for suppliers and buyers,
+  including acceptance, mandate, goods evidence, schedule, support guidance,
+  and a browser print/save-as-PDF action.
+- Added private invoice upload to credit creation and bound the scanned
+  document digest and reference into the canonical agreement.
+- Removed client control over trade-line mandate state. Trade-line creation now
+  verifies the stored mandate's buyer/business ownership, ACTIVE state, and
+  ceiling server-side; migration 045 enforces mandate referential integrity and
+  prevents an ACTIVE line without a mandate.
+- Completed Wave 1 recurring trade-line drawdowns: immutable exact-term hashes,
+  replay-safe reserve/confirm/release/receipt/cancel commands, linked receipt
+  disputes, internally created obligations and schedules, and hash-verified
+  printable supplier/buyer agreements.
+- Consolidated drawdown exposure conversion, credit normalization, balanced
+  activation postings, repayment schedule, and outbox events into one
+  PostgreSQL transaction; forced-rollback and retry tests prove no partial
+  financial state or duplicate obligation can escape.
+- Made reservation expiry atomically release line capacity and emit its outbox
+  event, and added amount-labelled mobile/desktop supplier and buyer flows.
+- Completed Wave 2 supplier onboarding with versioned, server-derived readiness;
+  owner email/phone verification; provider-hosted KYB; masked/reference-only
+  settlement storage; billing, default-credit-policy, consent, owner-MFA, and
+  finance-MFA evidence; explicit review/rejection/resubmission/expiry states;
+  and immutable revision/outbox history.
+- Added recent-MFA, optimistic-concurrency, role-filtered onboarding APIs and
+  functional mobile onboarding, settlement, billing, credit-policy, and team
+  invitation interfaces. Financial activity returns precise recovery steps
+  until pilot ready, including automated collection eligibility.
+- Added clean migration-047 rollback/reapply proof, full tagged PostgreSQL
+  verification, and browser acceptance for pilot readiness, sales invitation,
+  and incomplete-supplier recovery.
+
+## Unreleased — README code-requirement closure
+
+- Added durable buyer payment claims with supplier confirmation/rejection,
+  bounded collection holds, evidence references, atomic payment application,
+  explicit payment-source reporting, audit events, and notifications.
+- Added signed, expiring, privacy-minimized public payment and receipt
+  projections plus buyer and supplier interfaces for the complete workflow.
+- Added mandate cancellation and fresh authorization restoration, dependent
+  trade-line suspension, safe unused-limit reduction, and buyer obligation
+  detail across the domain, API contract, generated clients, and browser UI.
+- Added production-shaped Kubernetes/OpenTofu deployment definitions,
+  Prometheus alert rules, privacy-filtered OTLP collection, provider contract
+  tests, browser acceptance coverage, and performance harnesses.
+- Validated all 49 migrations, idempotent seed execution, tagged PostgreSQL
+  integration, Go unit/race/vet checks, Svelte diagnostics/build, OpenAPI
+  generation, and 24 Chromium product-flow scenarios.
+
+## Unreleased — README conformance audit
+
+- Added an executable README conformance gate covering required living docs,
+  task commands, processes, route map, UI primitives, database model, provider
+  simulator, PWA boundary, and acceptance fixtures; CI now runs this gate.
+- Added the deterministic local provider simulator for identity, mandate,
+  collection, reconciliation, notification-idempotency, and document-scanning
+  scenarios and wired it into bootstrap, development, Compose, and containers.
+- Expanded the deterministic seed with Royal Pharmacy identity/authority data,
+  mandates, recurring trade line, README scenarios A–F, and duplicate-webhook
+  evidence; clean migration and repeated seed execution now pass.
+- Added safe draft amendment with optimistic version checking, supplier
+  cancellation, and buyer decline across the contract, generated types,
+  backend domain/API, supplier/buyer interfaces, audit history, and tests.
+- Declared and pinned `openapi-typescript` so TypeScript contract generation no
+  longer silently depends on a global tool.
+
+- Added the README-specified network and payment-mandate/event schema with
+  encrypted account-token storage and persistence-contract checks.
+- Added executable ledger reconciliation (global and per-transaction), tagged
+  database integration coverage, and explicit runbooks for failed jobs,
+  webhooks, provider reconciliation, mandates, reversals, disputes, restore,
+  and break-glass access.
+- Added the complete documented SvelteKit route map, buyer/public/admin
+  layouts, reusable financial/accessibility primitives, PWA manifest/service
+  worker, and an explicit offline financial-action banner.
+- Expanded mutation idempotency coverage to buyer acceptance, release/receipt,
+  drawdown confirmation, member changes, scheduling, evidence, and send flows.
+- Added a PostgreSQL buyer repository for encrypted invitations, buyer persons,
+  businesses, representatives, verification cases, consents, and bank-account
+  references, with migration 023 and RLS-safe token lookup functions.
+- Added the PostgreSQL credit aggregate boundary and migration 024, including
+  restart hydration and tenant-scoped persistence for lifecycle and balance
+  mutations.
+
+## Unreleased — Priority 4 persistence contract
+
+- Added a complete PostgreSQL state-table contract and explicit runtime
+  durability capabilities.
+- Added a PostgreSQL authentication repository with encrypted OTP targets,
+  encrypted TOTP secrets, transactionally consumed challenges, session
+  revocation, and MFA step-up support.
+- Added a PostgreSQL organization repository with tenant-scoped memberships,
+  invitations, invitation activation, role changes, UUIDv7 identifiers, and a
+  protected organization-count capability for pilot limits.
+- Added fail-closed persistence checks to staging API startup, API readiness,
+  and worker startup, plus the repository migration runbook.
+- Kept production disabled until every state-bearing domain aggregate is backed
+  by a tenant-safe, transactionally tested PostgreSQL repository.
+
+## Unreleased — Priority 3 observability and reliability
+
+- Added bounded request counters/duration summaries, protected Prometheus
+  metrics, OTLP HTTP tracing with W3C trace propagation, response
+  status/latency logging, explicit API timeouts, checksummed backups, isolated
+  restore verification, and the observability/SLO contract.
+
+## Unreleased — Priority 2 security hardening
+
+- Added fail-closed production secret/TLS endpoint validation, PII-safe
+  structured logs and audit metadata, safe request IDs and problem details,
+  security-denial auditing, cross-origin security headers, strict scanner mode,
+  and security/privacy governance artifacts.
+
+## Unreleased — durable foundation
+
+- Added a pgx PostgreSQL pool boundary and fail-closed staging/production health checks.
+- Replaced raw migration replay with Goose version tracking and River migration support.
+- Added River-backed maintenance jobs and worker startup/shutdown handling.
+- Added dedicated River financial/provider/collections/notifications/documents/reports/maintenance queues, per-job retry budgets, scheduled ledger reconciliation, provider webhook inbox de-duplication, terminal dead-letter persistence, and provider circuit-breaker health reporting.
+- Added generated Go and TypeScript OpenAPI contract artifacts and an `openapi-fetch` client helper.
+- Added recovery, rate limiting, request-size limits, CSP/HSTS/security headers, and safer client-IP handling.
+- Added document/object-storage, support-case, relationship-consent, idempotency, and River schema foundations.
+- Added fail-closed staging/worker schema checks and removed non-development silent fallback to in-memory object storage.
+- Added HTTP idempotency replay/conflict persistence, support-case and buyer-consent routes, pilot supplier/buyer/industry/provider controls, and enhanced-review marking.
+- Corrected factual repayment history so completed late payments remain classified as late.
+- Added executable RLS identity helpers, tenant-scoped PostgreSQL transaction context, a durable PostgreSQL ledger implementation with deferred balance enforcement, transactional outbox primitives, mandatory financial idempotency headers, and exact integer-kobo WhatsApp amount parsing.
+
+All notable user-visible changes will be recorded here.
+
+## Unreleased
+
+- Added a polished public product shell with sticky navigation, conversion
+  calls-to-action, responsive footer, refined visual tokens, richer homepage
+  storytelling, accessible skip navigation, structured metadata, robots rules,
+  and an XML sitemap.
+- Replaced the new-credit placeholder with a responsive, validated workflow
+  that loads the supplier organisation, enforces required commercial terms,
+  preserves integer-kobo API semantics, includes CSRF credentials, and submits
+  directly to the versioned credit-request endpoint.
+- Replaced supplier, buyer, and operations placeholder pages with a reusable
+  responsive workspace surface providing consistent headings, actions,
+  highlights, loading/error/empty states, and record presentation.
+- Added authenticated organisation selection, session-expiry recovery,
+  API-backed record loading, filtering, refresh controls, client pagination,
+  and live wiring for credit requests, trade lines, disputes, members, audit
+  events, and buyer consents.
+- Added branded favicon and maskable PWA artwork plus expanded Playwright
+  coverage for public routes, mobile navigation, and private-page indexing.
+
+- Added a fail-closed `release:certify` gate covering code, SQLC drift,
+  database contract, browser dependencies, runtime durability, and protected
+  approval evidence.
+- Added a PostgreSQL relationship-consent repository with buyer/supplier RLS
+  policies and wired it into database-backed runtimes.
+- Added a PostgreSQL-backed provider-neutral mandate state repository while
+  keeping the deterministic mock provider for development.
+
+- Added the pre-milestone project foundation and Milestone 0 repository scaffolding.
+- Added Milestone 1 authentication, organisation onboarding, RBAC/MFA step-up, audit events, and the PostgreSQL auth/organisation/RLS schema baseline.
+- Added Milestone 2 buyer invitations, buyer portal onboarding, person/business/authority records, consent tracking, and provider-neutral mock identity verification.
+- Added Milestone 3 one-time credit lifecycle, immutable agreement hashes, mock mandate authorization, release and receipt evidence, active obligations, balanced activation ledger postings, SQL schema, API routes, and buyer review UI.
+- Added Milestone 4 voluntary/collected payments, payment allocations, collection-fee postings, reversal events, reconciliation/balance rebuild, payment API routes, SQL schema, and buyer payment history.
+- Added Milestone 5 repayment schedule generation, cadence/month-end policies, grace and overdue states, schedule-aware allocations/reversals, schedule APIs, and schedule SQL schema.
+- Added Milestone 6 recurring trade lines, locked drawdown reservations, buyer confirmation, exposure/availability calculations, suspension controls, statements, API routes, and SQL schema.
+- Added Milestone 7 mock collection engine, eligibility reason codes, collection reservations, provider submission, signed webhooks, partial success/retry handling, timeout reconciliation, collection-fee integration, API routes, and SQL schema.
+- Added Milestone 8 structured disputes, evidence and decisions, partial/full collection blocking, balanced dispute adjustments, audited write-offs/fee waivers, operations history, API routes, and SQL schema.
+- Added Milestone 9 channel-neutral notifications, versioned templates, fallback delivery, quiet hours, secure links, signed WhatsApp webhooks, safe command parsing, API routes, and SQL schema.
+- Added Milestone 10 reconciled receivables, ageing and fee reports, CSV exports, buyer factual repayment history without scoring, append-only correction requests and decisions, privacy-safe analytics events, API routes, UI views, and SQL schema.
+- Added Milestone 11 provider-neutral approved-adapter gates, provider capability/status reporting, settlement/reversal state tracking, signed webhook support through adapters, written-approval configuration checks, sandbox contract tests, provider SQL schema, and the operations enablement runbook. Real collection remains disabled by default.
+- Added Milestone 12 production-readiness evidence gates, configurable pilot limits, authenticated readiness and metrics endpoints, backup/restore and k6 load-smoke tooling, optional security/dependency/container scans, race checks, launch checklist, and pilot runbook. Production remains blocked until all gates and durable infrastructure requirements are complete.

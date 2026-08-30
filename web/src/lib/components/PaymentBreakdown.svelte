@@ -1,0 +1,2 @@
+<script lang="ts">import Money from './Money.svelte'; let { principalKobo, feeKobo = 0, totalKobo } = $props<{ principalKobo: number; feeKobo?: number; totalKobo?: number }>(); const total = $derived(totalKobo ?? principalKobo + feeKobo);</script>
+<dl class="breakdown"><div><dt>Price of goods</dt><dd><Money amountKobo={principalKobo} /></dd></div><div><dt>Kredit fee</dt><dd><Money amountKobo={feeKobo} /></dd></div><div><dt>Total to pay</dt><dd><strong><Money amountKobo={total} /></strong></dd></div></dl>

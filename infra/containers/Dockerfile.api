@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.7
+
+FROM golang:1.26.5-alpine AS build
+WORKDIR /src
+# TARGETARCH is provided automatically by BuildKit so images build correctly
+# on amd64 and arm64 hosts alike.
+ARG TARGETARCH
+ENV CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH}
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
+
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -trimpath -ldflags='-s -w' -o /out/kredit-api ./cmd/api && \
+    go build -trimpath -ldflags='-s -w' -o /out/kredit-worker ./cmd/worker && \
+    go build -trimpath -ldflags='-s -w' -o /out/kredit-migrate ./cmd/migrate && \
+    go build -trimpath -ldflags='-s -w' -o /out/kredit-reconcile ./cmd/reconcile
+
+FROM gcr.io/distroless/static-debian12:nonroot AS runtime-base
+WORKDIR /app
+COPY --from=build /out/kredit-api /app/kredit-api
+COPY --from=build /out/kredit-worker /app/kredit-worker
+COPY --from=build /out/kredit-migrate /app/kredit-migrate
+COPY --from=build /out/kredit-reconcile /app/kredit-reconcile
+COPY --from=build /src/db/migrations /app/db/migrations
+USER nonroot:nonroot
+ENV APP_ENV=production
+
+FROM runtime-base AS worker
+EXPOSE 8081
+ENTRYPOINT ["/app/kredit-worker"]
+
+FROM runtime-base AS api
+ENTRYPOINT ["/app/kredit-api"]
+
+# Development-only provider simulator; built explicitly via `--target simulator`
+# so it never ships inside the production api/worker image.
+FROM build AS build-simulator
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -trimpath -ldflags='-s -w' -o /out/kredit-provider-simulator ./cmd/provider-simulator
+
+FROM gcr.io/distroless/static-debian12:nonroot AS simulator
+COPY --from=build-simulator /out/kredit-provider-simulator /app/kredit-provider-simulator
+USER nonroot:nonroot
+ENTRYPOINT ["/app/kredit-provider-simulator"]

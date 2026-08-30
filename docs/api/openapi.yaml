@@ -1,0 +1,6 @@
+# Canonical OpenAPI source: ../../api/openapi.yaml
+#
+# The generated contract lives under api/ to match the repository structure in
+# README.md. Update that file first; this path exists for the required living
+# documentation index and must not become a second source of truth.
+

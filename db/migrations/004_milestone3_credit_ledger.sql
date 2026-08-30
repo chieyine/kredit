@@ -1,0 +1,29 @@
+-- +goose Up
+CREATE SCHEMA IF NOT EXISTS ledger;
+
+CREATE TABLE app.credit_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), supplier_organization_id uuid NOT NULL REFERENCES app.organizations(id), buyer_user_id uuid NOT NULL REFERENCES app.users(id), buyer_business_id uuid NOT NULL, principal_kobo bigint NOT NULL CHECK (principal_kobo > 0), currency char(3) NOT NULL DEFAULT 'NGN', goods_description text NOT NULL, invoice_reference text, invoice_document_hash text, due_date date NOT NULL, grace_hours integer NOT NULL DEFAULT 0 CHECK (grace_hours BETWEEN 0 AND 720), collection_at timestamptz NOT NULL, state text NOT NULL CHECK (state IN ('DRAFT','SENT','BUYER_REVIEWING','BUYER_ACCEPTED','VERIFICATION_PENDING','READY_TO_RELEASE','GOODS_RELEASED','RECEIPT_CONFIRMATION_PENDING','ACTIVE','CLOSED','CANCELLED','EXPIRED','DECLINED')), agreement_version_id uuid, mandate_id uuid, acceptance_id uuid, release_id uuid, receipt_id uuid, obligation_id uuid, created_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), version bigint NOT NULL DEFAULT 1
+);
+CREATE TABLE app.agreement_versions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credit_request_id uuid NOT NULL REFERENCES app.credit_requests(id), version integer NOT NULL, canonical_json jsonb NOT NULL, document_hash text NOT NULL, terms_version text NOT NULL, privacy_version text NOT NULL, created_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now(), UNIQUE (credit_request_id, version), UNIQUE (credit_request_id, document_hash));
+CREATE TABLE app.agreement_acceptances (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credit_request_id uuid NOT NULL REFERENCES app.credit_requests(id), agreement_version_id uuid NOT NULL REFERENCES app.agreement_versions(id), accepting_user_id uuid NOT NULL REFERENCES app.users(id), person_id uuid NOT NULL, business_id uuid NOT NULL, acceptance_method text NOT NULL, authentication_level text NOT NULL, agreement_hash text NOT NULL, mandate_provider_id text NOT NULL, accepted_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE app.mandates (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credit_request_id uuid NOT NULL REFERENCES app.credit_requests(id), provider text NOT NULL, provider_id text NOT NULL UNIQUE, user_id uuid NOT NULL REFERENCES app.users(id), business_id uuid NOT NULL, status text NOT NULL, amount_ceiling_kobo bigint NOT NULL CHECK (amount_ceiling_kobo > 0), created_at timestamptz NOT NULL DEFAULT now(), activated_at timestamptz);
+CREATE TABLE app.goods_releases (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credit_request_id uuid NOT NULL REFERENCES app.credit_requests(id), supplier_actor_id uuid NOT NULL REFERENCES app.users(id), delivery_method text NOT NULL, notes text, released_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE app.receipt_confirmations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credit_request_id uuid NOT NULL REFERENCES app.credit_requests(id), buyer_user_id uuid NOT NULL REFERENCES app.users(id), state text NOT NULL CHECK (state IN ('confirmed','issue_raised')), issue_reason text, received_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE app.obligations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credit_request_id uuid NOT NULL UNIQUE REFERENCES app.credit_requests(id), agreement_version_id uuid NOT NULL REFERENCES app.agreement_versions(id), supplier_organization_id uuid NOT NULL REFERENCES app.organizations(id), buyer_business_id uuid NOT NULL, principal_kobo bigint NOT NULL, currency char(3) NOT NULL, lifecycle_status text NOT NULL, payment_status text NOT NULL, outstanding_kobo bigint NOT NULL, base_fee_kobo bigint NOT NULL, ledger_transaction_id uuid NOT NULL, activated_at timestamptz NOT NULL);
+
+CREATE TABLE ledger.accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text NOT NULL UNIQUE, name text NOT NULL, normal_balance text NOT NULL CHECK (normal_balance IN ('debit','credit')));
+CREATE TABLE ledger.transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), event_type text NOT NULL, reference_type text NOT NULL, reference_id uuid NOT NULL, idempotency_key text NOT NULL UNIQUE, effective_at timestamptz NOT NULL, recorded_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE ledger.postings (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), transaction_id uuid NOT NULL REFERENCES ledger.transactions(id), account_id uuid NOT NULL REFERENCES ledger.accounts(id), debit_kobo bigint NOT NULL DEFAULT 0 CHECK (debit_kobo >= 0), credit_kobo bigint NOT NULL DEFAULT 0 CHECK (credit_kobo >= 0), CHECK ((debit_kobo > 0 AND credit_kobo = 0) OR (credit_kobo > 0 AND debit_kobo = 0)));
+
+ALTER TABLE app.credit_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY credit_supplier_access ON app.credit_requests USING (supplier_organization_id IN (SELECT organization_id FROM app.memberships WHERE user_id = app.current_user_id() AND status = 'active'));
+CREATE POLICY credit_buyer_access ON app.credit_requests USING (buyer_user_id = app.current_user_id());
+ALTER TABLE app.agreement_versions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY agreement_request_access ON app.agreement_versions USING (credit_request_id IN (SELECT id FROM app.credit_requests));
+ALTER TABLE app.obligations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY obligation_supplier_access ON app.obligations USING (supplier_organization_id IN (SELECT organization_id FROM app.memberships WHERE user_id = app.current_user_id() AND status = 'active'));
+
+-- +goose Down
+DROP TABLE IF EXISTS ledger.postings, ledger.transactions, ledger.accounts;
+DROP TABLE IF EXISTS app.obligations, app.receipt_confirmations, app.goods_releases, app.mandates, app.agreement_acceptances, app.agreement_versions, app.credit_requests;
+DROP SCHEMA IF EXISTS ledger;

@@ -1,0 +1,2 @@
+<script lang="ts">let { value, timezone = 'Africa/Lagos' } = $props<{ value: string | Date; timezone?: string }>(); const instant = $derived(value instanceof Date ? value : new Date(value)); const formatted = $derived(new Intl.DateTimeFormat('en-NG', { dateStyle: 'medium', timeStyle: 'short', timeZone: timezone }).format(instant));</script>
+<time datetime={instant.toISOString()}>{formatted} ({timezone})</time>

@@ -1,0 +1,2 @@
+<script lang="ts">import { page } from '$app/state';import DisputeDetail from '$lib/components/DisputeDetail.svelte';</script>
+<svelte:head><title>Reported problem — Kredit</title></svelte:head><main class="shell workspace"><p class="eyebrow">Your reported problem</p><h1>See what is happening.</h1><DisputeDetail endpoint={`/api/v1/buyer/disputes/${page.params.id}`} backHref="/buyer/disputes" /></main>

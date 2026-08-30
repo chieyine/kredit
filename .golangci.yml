@@ -1,0 +1,19 @@
+version: "2"
+run:
+  timeout: 3m
+  tests: true
+linters:
+  default: standard
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  exclusions:
+    generated: lax
+formatters:
+  enable:
+    - gofmt
+    - goimports
+

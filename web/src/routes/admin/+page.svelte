@@ -1,0 +1,9 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	let overview=$state<any>(null), role=$state(''), error=$state(''), loading=$state(true);
+	onMount(async()=>{const response=await fetch('/api/v1/ops/overview',{credentials:'include'});loading=false;if(response.status===401){location.assign('/app');return}const data=await response.json().catch(()=>({}));if(!response.ok){error=data.detail??'This operations view is unavailable.';return}overview=data.overview;role=data.role});
+	const labels:{[key:string]:string}={queued_jobs:'Queued work',failed_jobs:'Retrying jobs',dead_letter_jobs:'Dead letters',pending_outbox:'Events awaiting handoff',failed_outbox:'Event handoff failures',provider_failures:'Provider failures',open_cases:'Open cases',open_disputes:'Open disputes'};
+</script>
+<svelte:head><title>Operations overview — Kredit</title></svelte:head>
+<main class="shell workspace"><p class="eyebrow">Operations</p><h1>Controlled support and compliance access.</h1><p class="lede">Every restricted lookup is permissioned, step-up protected, audited, and privacy-safe.</p>{#if loading}<p aria-live="polite">Loading operations health…</p>{:else if error}<p class="error" role="alert">{error}</p>{:else}<p class="role">Active role: {role.replaceAll('_',' ')}</p><section aria-label="Operations health">{#each Object.entries(overview??{}) as [key,value]}<article><strong>{value}</strong><span>{labels[key]??key}</span></article>{/each}</section>{/if}</main>
+<style>section{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;margin-top:2rem}article{display:grid;gap:.35rem;padding:1.25rem;border:1px solid var(--color-border);border-radius:1rem;background:var(--color-surface)}article strong{font-size:2rem}article span,.role{color:var(--color-muted);text-transform:capitalize}</style>

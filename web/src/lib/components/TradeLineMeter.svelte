@@ -1,0 +1,2 @@
+<script lang="ts">import Money from './Money.svelte'; let { usedKobo, limitKobo } = $props<{ usedKobo: number; limitKobo: number }>(); const percentage = $derived(limitKobo > 0 ? Math.min(100, (usedKobo / limitKobo) * 100) : 0);</script>
+<div aria-label={`Customer limit ${Math.round(percentage)}% used`}><div class="meter"><span style={`width:${percentage}%`}></span></div><small><Money amountKobo={usedKobo} /> used from <Money amountKobo={limitKobo} /></small></div>
