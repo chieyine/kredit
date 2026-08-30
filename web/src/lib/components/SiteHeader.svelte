@@ -28,8 +28,8 @@
 
 <header class="site-header">
 	<nav class="shell" aria-label="Main navigation">
-		<a class="wordmark" href="/" aria-label="Tichara home" onclick={closeMobileMenu}>
-			<span>T</span><b>Tichara</b>
+		<a class="wordmark" href="/" aria-label="Kredit home" onclick={closeMobileMenu}>
+			<span>K</span><b>Kredit</b>
 		</a>
 		<details class="site-menu-disclosure" bind:open={menuOpen}>
 			<summary><span aria-hidden="true">☰</span>Menu</summary>
