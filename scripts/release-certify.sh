@@ -31,12 +31,67 @@ run_gate() {
 require_command go
 require_command pnpm
 require_command docker
+require_command psql
+require_command rg
 
+if command -v tofu >/dev/null 2>&1; then
+	run_gate 'OpenTofu formatting' tofu fmt -check -recursive infra/environments
+elif command -v terraform >/dev/null 2>&1; then
+	run_gate 'Terraform formatting' terraform fmt -check -recursive infra/environments
+else
+	printf 'MISSING TOOL: tofu or terraform\n' >&2
+	failures=$((failures + 1))
+fi
+
+run_gate 'Repository and product contract audit' pnpm run audit
+run_gate 'Implementation evidence contract' bash scripts/implementation-plan-conformance-test.sh
+run_gate 'Environment precedence contract' bash scripts/load-env-test.sh
 run_gate 'Go unit tests' go test ./...
 run_gate 'Go vet' go vet ./...
+run_gate 'Go production builds' go build ./cmd/...
 run_gate 'API contract lint' bash scripts/api-lint.sh
 run_gate 'SQLC drift check' bash scripts/sqlc-check.sh
 run_gate 'Compose configuration' docker compose config --quiet
+
+if [[ "${APP_ENV:-}" != "production" ]]; then
+	printf 'MISSING PRODUCTION MODE: APP_ENV=production is required for release certification.\n' >&2
+	failures=$((failures + 1))
+else
+	run_gate 'Production runtime configuration' go run ./cmd/configcheck
+fi
+
+for legal_value in LEGAL_ENTITY_NAME LEGAL_SERVICE_ADDRESS LEGAL_CONTACT_EMAIL PRIVACY_CONTACT_EMAIL LEGAL_EFFECTIVE_DATE TERMS_VERSION PRIVACY_VERSION; do
+	if [[ -z "${!legal_value:-}" ]]; then
+		printf 'MISSING PUBLIC LEGAL VALUE: %s\n' "$legal_value" >&2
+		failures=$((failures + 1))
+	fi
+done
+if [[ "${LEGAL_DOCUMENTS_ACTIVE:-}" != "true" ]]; then
+	printf 'MISSING LEGAL ACTIVATION: LEGAL_DOCUMENTS_ACTIVE=true is required.\n' >&2
+	failures=$((failures + 1))
+fi
+for launch_flag in FEATURE_APPROVED_RETENTION_POLICY FEATURE_PRODUCTION_PILOT FEATURE_REAL_IDENTITY FEATURE_REAL_COLLECTIONS; do
+	if [[ "${!launch_flag:-}" != "true" ]]; then
+		printf 'MISSING LAUNCH CAPABILITY: %s=true is required.\n' "$launch_flag" >&2
+		failures=$((failures + 1))
+	fi
+done
+if [[ -n "${LEGAL_EFFECTIVE_DATE:-}" && ! "${LEGAL_EFFECTIVE_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+	printf 'INVALID LEGAL DATE: LEGAL_EFFECTIVE_DATE must use YYYY-MM-DD.\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ "${TERMS_VERSION:-}" != "supplier-terms-v1" || "${PRIVACY_VERSION:-}" != "privacy-v1" ]]; then
+	printf 'LEGAL VERSION MISMATCH: document versions must match supplier onboarding.\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ -n "${LEGAL_CONTACT_EMAIL:-}" && ! "${LEGAL_CONTACT_EMAIL}" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
+	printf 'INVALID LEGAL EMAIL: LEGAL_CONTACT_EMAIL is not a valid email address.\n' >&2
+	failures=$((failures + 1))
+fi
+if [[ -n "${PRIVACY_CONTACT_EMAIL:-}" && ! "${PRIVACY_CONTACT_EMAIL}" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
+	printf 'INVALID PRIVACY EMAIL: PRIVACY_CONTACT_EMAIL is not a valid email address.\n' >&2
+	failures=$((failures + 1))
+fi
 
 if [[ -d web/node_modules ]]; then
 	run_gate 'Svelte checks' pnpm --dir web check
@@ -57,6 +112,7 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
 	failures=$((failures + 1))
 else
 	run_gate 'Database persistence contract' bash scripts/db-check.sh
+	run_gate 'Database field inventory' bash scripts/data-inventory-check.sh
 fi
 
 if rg -n 'DomainAggregatesDurable:[[:space:]]*false' internal/web/runtime.go >/dev/null 2>&1; then

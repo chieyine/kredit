@@ -13,10 +13,10 @@
 		['Home', '/app/overview'], ['Finish setup', '/app/onboarding'], ['Add a sale', '/app/credit/new'], ['Customers', '/app/customers'],
 		['Customer limits', '/app/trade-lines'], ['Money received', '/app/payments'], ['Late payments', '/app/collections'],
 		['Problems', '/app/disputes'], ['Money overdue', '/app/overdue'], ['Reports', '/app/reports'],
-		['Your staff', '/app/team'], ['Account safety', '/app/settings/security'],
-		['Messages', '/app/settings/notifications'], ['Your details', '/app/settings/privacy'],
+		['Your staff', '/app/team'], ['Business activity', '/app/activity'], ['Message history', '/app/notifications'],
+		['Account safety', '/app/settings/security'], ['Message choices', '/app/settings/notifications'], ['Your details', '/app/settings/privacy'],
 		['Kredit fees', '/app/settings/billing'], ['Bank account', '/app/settings/settlement'],
-		['Get help', '/legal/complaints']
+		['Get help', '/app/help']
 	];
 	const mobilePrimary: [string, string, string][] = [
 		['Home', '/app/overview', 'home'],
@@ -24,14 +24,16 @@
 		['Customers', '/app/customers', 'customers'],
 		['Payments', '/app/payments', 'payments']
 	];
-	const mobileMore: [string, string][] = [
-		['Money owed', '/app/collections'],
-		['Problems', '/app/disputes'],
-		['Reports', '/app/reports'],
-		['Customer limits', '/app/trade-lines'],
-		['Your staff', '/app/team'],
-		['Settings', '/app/settings'],
-		['Get help', '/legal/complaints']
+	const mobileMore: [string, string, string][] = [
+		['Money owed', '/app/collections', 'Sales and money'],
+		['Problems', '/app/disputes', 'Sales and money'],
+		['Reports', '/app/reports', 'Sales and money'],
+		['Customer limits', '/app/trade-lines', 'Sales and money'],
+		['Your staff', '/app/team', 'Your business'],
+		['Business activity', '/app/activity', 'Your business'],
+		['Message history', '/app/notifications', 'Your business'],
+		['Settings', '/app/settings', 'Account and help'],
+		['Get help', '/app/help', 'Account and help']
 	];
 </script>
 

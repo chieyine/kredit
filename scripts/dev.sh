@@ -4,11 +4,8 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root_dir"
 
-if [[ -f .env ]]; then
-	set -a
-	source .env
-	set +a
-fi
+source "$root_dir/scripts/load-env.sh"
+load_env_defaults "$root_dir/.env"
 
 docker compose up -d postgres minio mailpit provider-simulator
 

@@ -245,6 +245,12 @@ func (c Config) Validate() error {
 		return errors.New("FEATURE_DIRECT_SUPPLIER_SETTLEMENT requires FEATURE_REAL_COLLECTIONS")
 	}
 	if c.Environment == "production" {
+		if !c.ApprovedRetentionPolicy {
+			return errors.New("FEATURE_APPROVED_RETENTION_POLICY must be enabled in production")
+		}
+		if !c.ProductionPilot {
+			return errors.New("FEATURE_PRODUCTION_PILOT must be enabled in production")
+		}
 		if !c.RealIdentity {
 			return errors.New("FEATURE_REAL_IDENTITY must be enabled in production; mock identity is not permitted")
 		}

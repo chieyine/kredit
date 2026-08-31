@@ -55,6 +55,16 @@ func TestSupplierOnboardingAndTenantBoundaries(t *testing.T) {
 	if organizationPayload.Organization.ID == "" {
 		t.Fatal("expected organization id")
 	}
+	feedbackResponse := doJSON(t, client, "/api/v1/me/product-feedback", http.MethodPost, map[string]string{"organization_id": organizationPayload.Organization.ID, "area": "seller", "screen": "overview", "answer": "yes"}, map[string]string{"X-CSRF-Token": csrfValue, "Idempotency-Key": "seller-feedback-1"}, http.StatusCreated)
+	var feedbackPayload struct {
+		Feedback struct {
+			Answer string `json:"answer"`
+		} `json:"feedback"`
+	}
+	decodeResponse(t, feedbackResponse, &feedbackPayload)
+	if feedbackPayload.Feedback.Answer != "yes" {
+		t.Fatalf("unexpected product feedback response: %#v", feedbackPayload)
+	}
 
 	organizationsResponse := doJSON(t, client, "/api/v1/organizations", http.MethodGet, nil, nil, http.StatusOK)
 	_ = organizationsResponse.Body.Close()

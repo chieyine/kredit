@@ -32,6 +32,7 @@ domain tables, not copied into generic event metadata.
 | Recurring credit | `trade_line.created`, `trade_line.activated`, `trade_line.expired`, `trade_line.drawdown_reserved`, `trade_line.drawdown_confirmed`, `trade_line.drawdown_released`, `trade_line.drawdown_activated`, `trade_line.drawdown_expired` | pilot | state only |
 | Disputes and support | `dispute.opened`, `dispute.resolved`, `operations.intervention` | pilot / reliability | state or subject type only |
 | Retention | `credit.repeat_sale`, `supplier.retained` | pilot | no metadata |
+| Product clarity | `feedback.clarity_submitted` | improvement | seller or buyer area, overview screen, and yes/partly/no answer only |
 
 Database triggers emit reconstructable lifecycle facts in the same transaction
 as their source writes. Command replay, webhook replay and migration backfill
@@ -43,6 +44,13 @@ Migration 051 aligns the stored names with the Wave 0 vocabulary. It preserves
 event IDs and deduplication keys for compatibility and adds coverage for the
 authoritative `payment_mandates` store, collection submission, repeat sales and
 supplier retention.
+
+The clarity event is submitted by an authenticated seller or customer from
+their overview page. It deliberately excludes comments and contact details.
+Seller answers require an active membership of the selected organisation. The
+normal API idempotency boundary prevents retry duplicates, while a hashed
+monthly person/business/page key prevents one person from inflating the result
+by answering from several devices.
 
 ## Retention and consent boundary
 

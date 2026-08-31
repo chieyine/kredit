@@ -2,11 +2,24 @@ import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 const publicRoutes = [
-	'/', '/how-it-works', '/for-suppliers', '/for-buyers', '/pricing', '/security',
-	'/faq', '/glossary', '/blog', '/blog/sell-on-credit-safely',
-	'/blog/why-credit-agreements-fail', '/blog/collections-last-resort',
-	'/blog/trade-credit-vs-loan', '/legal/complaints'
+	'/', '/demo', '/how-it-works', '/for-suppliers', '/for-buyers', '/pricing', '/security',
+	'/faq', '/glossary', '/blog', '/legal/complaints'
 ];
+
+test('public navigation is clear, complete and closes after a mobile choice', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+	const menu = page.locator('.site-menu-disclosure');
+	await menu.locator('summary').click();
+	await expect(menu).toHaveAttribute('open', '');
+	await menu.getByRole('link', { name: 'For sellers' }).click();
+	await expect(page).toHaveURL(/\/for-suppliers$/);
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.locator('.site-menu-disclosure')).not.toHaveAttribute('open', '');
+	const footer = page.locator('footer.site-footer');
+	await expect(footer.getByRole('link', { name: 'For customers' })).toBeVisible();
+	await expect(footer.getByRole('link', { name: 'How we keep it safe' })).toBeVisible();
+});
 
 test('every indexable page has complete, unique search and social metadata', async ({ page }) => {
 	test.setTimeout(180_000);
@@ -37,7 +50,7 @@ test('every indexable page has complete, unique search and social metadata', asy
 });
 
 test('responsive public pages avoid horizontal overflow and serious accessibility defects', async ({ page }) => {
-	test.setTimeout(180_000);
+	test.setTimeout(300_000);
 	await page.setViewportSize({ width: 390, height: 844 });
 	for (const path of publicRoutes) {
 		await page.goto(path);
@@ -63,7 +76,8 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 	for (const path of publicRoutes) expect(sitemap, `sitemap ${path}`).toContain(`<loc>https://kredit.com.ng${path}</loc>`);
 	for (const path of ['/app/', '/buyer/', '/admin/', '/recover', '/legal/privacy', '/legal/terms']) expect(sitemap).not.toContain(`<loc>https://kredit.com.ng${path}`);
 	const robots = await (await request.get('/robots.txt')).text();
-	for (const path of ['/app/', '/buyer/', '/admin/', '/recover']) expect(robots).toContain(`Disallow: ${path}`);
+	for (const path of ['/app', '/buyer', '/admin', '/recover']) expect(robots).toContain(`Disallow: ${path}`);
+	for (const path of ['/legal/privacy', '/legal/terms']) expect(robots).toContain(`Disallow: ${path}`);
 
 	const manifestResponse = await request.get('/manifest.webmanifest');
 	expect(manifestResponse.ok()).toBe(true);

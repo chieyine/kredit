@@ -1330,11 +1330,17 @@ Recommended route map:
 /receipt/[public-token]       # privacy-safe receipt
 
 /admin
+/admin/users
+/admin/organizations
+/admin/money
 /admin/search
+/admin/cases
 /admin/cases/[id]
+/admin/disputes
 /admin/disputes/[id]
 /admin/provider-events
 /admin/jobs
+/admin/team
 /admin/audit
 ```
 

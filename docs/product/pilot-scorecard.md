@@ -1,8 +1,10 @@
 # Pilot KPI scorecard
 
-The protected scorecard at `/admin/analytics` is a live, date-filtered and
-optional supplier-filtered view. Compliance-review permission and AAL2 step-up
-are required; every read is audited.
+The protected application-evidence view at `/admin/analytics` is a live,
+date-filtered and optional supplier-filtered view. Compliance-review permission
+and AAL2 step-up are required; every read is audited. Its first section is a
+print-ready snapshot for accelerator and funding applications. The full pilot
+scorecard remains available below it.
 
 ## KPI hierarchy
 
@@ -21,6 +23,10 @@ Guardrails cover on-time payment, failed-collection recovery, recognised loss,
 dispute rate, issue-at-receipt rate, collection-provider reliability, support
 interventions per 100 active suppliers, and open accessibility defects. Metric
 cards display their exact definition and source.
+
+The snapshot also shows direct clarity feedback from authenticated sellers and
+customers: total Yes, Partly and No answers, split by seller and customer. No
+free-form comment or contact detail is collected with this signal.
 
 No numerical targets are invented in code. Every metric reports
 `baseline_required` until pilot volume, risk appetite, provider SLAs and the

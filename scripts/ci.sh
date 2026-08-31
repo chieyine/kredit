@@ -7,6 +7,9 @@ mkdir -p "$GOCACHE"
 
 bash scripts/api-lint.sh
 bash scripts/readme-conformance.sh
+bash scripts/implementation-plan-conformance-test.sh
+bash scripts/load-env-test.sh
+pnpm run audit
 format_output="$(gofmt -l .)"
 if [[ -n "$format_output" ]]; then
   printf '%s\n' "$format_output"
@@ -28,4 +31,5 @@ pnpm --dir web test
 
 if [[ -n "${DATABASE_URL:-}" ]]; then
 	bash scripts/test-integration.sh
+	bash scripts/data-inventory-check.sh
 fi

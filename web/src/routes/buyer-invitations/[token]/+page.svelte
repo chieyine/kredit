@@ -38,7 +38,7 @@
 		const response = await fetch(`/api/v1/buyer-invitations/${page.params.token}/otp`, { method: 'POST' });
 		const body = await response.json();
 		if (!response.ok) {
-			error = body.detail ?? 'We could not send a verification code.';
+			error = body.detail ?? 'We could not send the six-digit code.';
 			return;
 		}
 		challengeId = body.challenge_id;
@@ -55,7 +55,7 @@
 		});
 		const body = await response.json();
 		if (!response.ok) {
-			error = body.detail ?? 'We could not complete buyer verification.';
+			error = body.detail ?? 'We could not check your details.';
 			return;
 		}
 		await goto('/buyer');
@@ -76,9 +76,9 @@
 		<p>Loading your invitation…</p>
 	{:else if preview}
 		<section class="panel" aria-labelledby="invite-title">
-			<p class="eyebrow">Secure buyer invitation</p>
-			<h1 id="invite-title">{preview.supplier.trading_name || preview.supplier.legal_name} invited your business to Kredit.</h1>
-			<p>Review the business details below, verify your contact, and create your buyer portal account.</p>
+			<p class="eyebrow">Your private link</p>
+			<h1 id="invite-title">{preview.supplier.trading_name || preview.supplier.legal_name} wants to add you as a customer.</h1>
+			<p>Check the details below. We will send a six-digit code to make sure this phone or email belongs to you.</p>
 			<dl>
 				<div><dt>Business</dt><dd>{preview.invitation.proposed_legal_name}</dd></div>
 				<div><dt>Type</dt><dd>{preview.invitation.proposed_business_type}</dd></div>
@@ -86,12 +86,12 @@
 				<div><dt>Industry</dt><dd>{preview.invitation.proposed_industry}</dd></div>
 			</dl>
 			{#if !challengeId}
-				<button class="primary" on:click={requestCode}>Send verification code</button>
+				<button class="primary" on:click={requestCode}>Send me a code</button>
 			{:else}
 				<label>Full name<input bind:value={fullName} autocomplete="name" /></label>
-				<label>Verification code<input bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
+				<label>Six-digit code<input bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
 				{#if developmentCode}<p class="hint">Development code: {developmentCode}</p>{/if}
-				<button class="primary" on:click={accept}>Create buyer portal</button>
+				<button class="primary" on:click={accept}>Yes, these details are mine</button>
 			{/if}
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
 		</section>

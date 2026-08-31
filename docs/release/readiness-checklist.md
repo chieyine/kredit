@@ -4,9 +4,31 @@ The machine-checkable certification report is maintained in
 `docs/release/certification-report.md`; run `bash scripts/release-certify.sh`
 before treating this checklist as complete.
 
+Use `docs/release/go-live-runbook.md` for staging, cutover, rollback and the
+first-day review.
+
 - [ ] All v1 definition-of-done items pass.
 - [ ] No unresolved critical/high security defect.
 - [ ] Legal, privacy, provider, fee/tax, and mandate approvals recorded.
+- [ ] Approved operator name, service address, legal/privacy contacts,
+      effective date and document versions are deployed; live legal pages no
+      longer show the pre-launch notice.
+- [ ] `kredit.com.ng` DNS, TLS renewal, canonical origin and HTTPS redirects are
+      verified from outside the production network.
+- [ ] `scripts/post-deploy-check.sh` passes against the public production
+      origin and approved legal entity.
+- [ ] Google Search Console domain ownership is verified, the live
+      `https://kredit.com.ng/sitemap.xml` is submitted, and its first fetch
+      succeeds without sitemap or robots errors.
+- [ ] The live home page and one guide pass Google Rich Results and URL
+      Inspection checks; canonical URL, rendered HTML and index permission
+      match what the application publishes.
+- [ ] Home-page and guide links have been previewed in WhatsApp and at least
+      one other social service to confirm the title, description and 1200×630
+      image are readable.
+- [ ] Production analytics receives page, sign-in, demo, sale-created and
+      payment-completed events without storing private sale or payment data in
+      marketing tools.
 - [ ] Threat model, data map, retention rules, and runbooks reviewed.
 - [ ] Backup restore and reconciliation drills completed.
 - [ ] WCAG 2.2 AA critical flows checked. Automated serious/critical gate is

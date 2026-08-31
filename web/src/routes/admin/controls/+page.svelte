@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	let form: HTMLFormElement;
 	let targetType = $state('user'), targetId = $state(''), organizationId = $state('');
 	let scope = $state('all_sensitive'), expiresAt = $state(''), version = $state(1), reason = $state('');
 	let preview: any = $state(null), message = $state(''), ready = $state(false);
-	onMount(() => ready = true);
+	onMount(() => {targetType=page.url.searchParams.get('target_type')||targetType;targetId=page.url.searchParams.get('target_id')||'';organizationId=page.url.searchParams.get('organization_id')||'';version=Number(page.url.searchParams.get('version')||1);ready = true;});
 	function payload() {
 		const command = new FormData(form).get('command')?.toString() ?? 'suspend_user';
 		return { command_type: command, target_type: targetType, target_id: targetId, organization_id: organizationId || undefined, scope, expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined, expected_version: Number(version), reason };
@@ -27,7 +28,7 @@
 	<p class="eyebrow">Operations / Controls</p><h1>Protected account and financial controls.</h1>
 	<p>Every action needs recent MFA, an explicit permission, current version, structured reason, impact preview, immutable audit record, and affected-user notification.</p>
 	<form bind:this={form} data-ready={ready} onsubmit={(event) => { event.preventDefault(); inspect(); }}>
-		<label>Command<select name="command" onchange={() => preview = null}><option value="suspend_user">suspend_user</option><option value="restore_user">restore_user</option><option value="suspend_organization">suspend_organization</option><option value="restore_organization">restore_organization</option><option value="place_risk_hold">place_risk_hold</option><option value="lift_risk_hold">lift_risk_hold</option><option value="request_reconciliation">request_reconciliation</option><option value="resolve_unknown_submission">resolve_unknown_submission</option><option value="retry_collection">retry_collection</option><option value="cancel_collection">cancel_collection</option></select></label>
+		<label>Action<select name="command" onchange={() => preview = null}><option value="suspend_user">Suspend a user</option><option value="restore_user">Restore a user</option><option value="suspend_organization">Suspend a business</option><option value="restore_organization">Restore a business</option><option value="place_risk_hold">Place a temporary hold</option><option value="lift_risk_hold">Remove a temporary hold</option><option value="request_reconciliation">Ask for a money check</option><option value="resolve_unknown_submission">Resolve an unknown bank result</option><option value="retry_collection">Retry a bank debit</option><option value="cancel_collection">Cancel a bank debit</option></select></label>
 		<label>Target type<input bind:value={targetType} required /></label><label>Target ID<input bind:value={targetId} required /></label>
 		<label>Organization ID (when known)<input bind:value={organizationId}/></label><label>Current version<input type="number" min="1" bind:value={version}/></label>
 		<label>Scope (risk holds only)<select bind:value={scope}><option>all_sensitive</option><option>credit</option><option>release</option><option>collection</option><option>settlement</option></select></label>

@@ -37,3 +37,51 @@ variable "ingress_namespace" {
 variable "tls_secret_name" { type = string }
 variable "host" { type = string }
 variable "otel_endpoint" { type = string }
+variable "legal_entity_name" {
+  type        = string
+  description = "Approved registered entity operating Kredit; displayed publicly."
+  validation {
+    condition     = length(trimspace(var.legal_entity_name)) >= 3
+    error_message = "legal_entity_name must contain the approved registered entity name"
+  }
+}
+variable "legal_service_address" {
+  type        = string
+  description = "Approved address for legal notices; displayed publicly."
+  validation {
+    condition     = length(trimspace(var.legal_service_address)) >= 10
+    error_message = "legal_service_address must contain the approved service address"
+  }
+}
+variable "legal_contact_email" {
+  type        = string
+  description = "Public legal contact email."
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.legal_contact_email))
+    error_message = "legal_contact_email must be a valid email address"
+  }
+}
+variable "privacy_contact_email" {
+  type        = string
+  description = "Public privacy contact email."
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.privacy_contact_email))
+    error_message = "privacy_contact_email must be a valid email address"
+  }
+}
+variable "legal_effective_date" {
+  type        = string
+  description = "Approved legal-document effective date in YYYY-MM-DD format."
+  validation {
+    condition     = can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", var.legal_effective_date))
+    error_message = "legal_effective_date must use YYYY-MM-DD"
+  }
+}
+variable "terms_version" {
+  type    = string
+  default = "supplier-terms-v1"
+}
+variable "privacy_version" {
+  type    = string
+  default = "privacy-v1"
+}

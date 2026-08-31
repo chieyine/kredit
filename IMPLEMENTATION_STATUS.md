@@ -327,7 +327,7 @@ they do not satisfy the remaining durable-repository or external approval gates.
 - Clean PostgreSQL migration and deterministic seed — passed through migration 051; migrations 046 and 047 were independently rolled back and reapplied on isolated databases, and the expanded acceptance seed passed repeated idempotent runs.
 - Tagged PostgreSQL integration suite — passed through migration 051, including supplier onboarding, atomic drawdown activation/rollback, payment-claim persistence, trade-line mandate integrity, analytics reconciliation, the persistence contract, and global/per-transaction ledger reconciliation.
 - `pnpm --dir web build` — passed with `@sveltejs/adapter-node`.
-- Playwright — 46 Chromium checks cover complete financial/product flows,
+- Playwright — 60 Chromium checks cover complete financial/product flows,
   protected operations, mobile navigation and reflow, critical accessibility,
   every indexable acquisition route, SEO/social metadata, structured data,
   index/cache privacy, error recovery, sitemap/robots and PWA assets.
@@ -364,7 +364,7 @@ privacy-rights request types support deadlines, legal holds, restrictions,
 dual-control completion, and expiring tenant-bound exports generated from
 authoritative stores. The catalog-generated field inventory covers 924 fields.
 
-Browser acceptance now contains 46 Chromium scenarios, including notification
+Browser acceptance now contains 60 Chromium scenarios, including notification
 preferences, identity-bound privacy submission, enumeration-safe recovery,
 protected operations, accessibility and the product-quality gate.
 

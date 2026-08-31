@@ -5,19 +5,22 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import MotionObserver from '$lib/components/MotionObserver.svelte';
-	import { jsonLd, nonIndexablePaths, seoForPath } from '$lib/seo';
+	import { jsonLd, nonIndexablePaths, seoForPath, SITE_URL } from '$lib/seo';
 	import { page } from '$app/state';
+	import { applySavedDisplayChoice } from '$lib/product-tools';
 
 	let { children } = $props();
 	let offline = $state(false);
 	let privateShell = $derived(/^\/(app|buyer|admin|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(page.url.pathname));
 	let publicChrome = $derived(page.url.pathname === '/app' || !privateShell);
 
-	const SITE_URL = 'https://kredit.com.ng';
 	const normalizedPath = $derived(page.url.pathname.length > 1 ? page.url.pathname.replace(/\/$/, '') : page.url.pathname);
 	const canonical = $derived(SITE_URL + normalizedPath);
-	const seo = $derived(seoForPath(normalizedPath));
-	const indexable = $derived(!privateShell && !nonIndexablePaths.has(normalizedPath) && page.status < 400);
+	const routeArticle = $derived((page.data as any)?.article);
+	const routeSEO = $derived((page.data as any)?.seo);
+	const legalActive = $derived(Boolean((page.data as any)?.legal?.active));
+	const seo = $derived(routeArticle ? { title: routeArticle.title, description: routeArticle.description, type: 'article' as const, published: routeArticle.published, modified: routeArticle.modified, wordCount: routeArticle.wordCount, category: routeArticle.category } : routeSEO ?? seoForPath(normalizedPath));
+	const indexable = $derived(!privateShell && (!nonIndexablePaths.has(normalizedPath) || legalActive) && page.status < 400);
 	const organizationSchema = {
 		'@context': 'https://schema.org',
 		'@type': 'Organization',
@@ -25,7 +28,7 @@
 		url: SITE_URL,
 		logo: `${SITE_URL}/icon-512.png`,
 		description:
-			'Verified, trackable supplier-funded trade credit for African businesses.',
+			'Kredit helps Nigerian businesses sell goods on credit, track payments and collect money.',
 		areaServed: 'NG',
 	};
 	const websiteSchema = {
@@ -45,10 +48,17 @@
 		inLanguage: 'en-NG',
 		isPartOf: { '@type': 'WebSite', name: 'Kredit', url: SITE_URL },
 		publisher: seo.type === 'article' ? { '@type': 'Organization', name: 'Kredit', logo: { '@type': 'ImageObject', url: `${SITE_URL}/icon-512.png` } } : undefined,
-		datePublished: seo.published
+		image: seo.type === 'article' ? `${SITE_URL}/og.png` : undefined,
+		mainEntityOfPage: seo.type === 'article' ? { '@type': 'WebPage', '@id': canonical } : undefined,
+		datePublished: seo.published,
+		dateModified: seo.modified,
+		wordCount: seo.wordCount,
+		articleSection: seo.category,
+		author: seo.type === 'article' ? { '@type': 'Organization', name: 'Kredit Editorial Team' } : undefined
 	});
 
 	onMount(() => {
+		applySavedDisplayChoice();
 		offline = !navigator.onLine;
 		const online = () => (offline = false);
 		const disconnected = () => (offline = true);
@@ -75,17 +85,21 @@
 	<link rel="canonical" href={canonical} />
 	<link rel="alternate" hreflang="en-NG" href={canonical} />
 	<link rel="alternate" hreflang="x-default" href={canonical} />
+	<link rel="alternate" type="application/rss+xml" title="Kredit helpful guides" href="https://kredit.com.ng/blog/rss.xml" />
 	<meta property="og:site_name" content="Kredit" />
 	<meta property="og:type" content={seo.type ?? 'website'} />
 	<meta property="og:url" content={canonical} />
 	<meta property="og:title" content={seo.title} />
 	<meta property="og:description" content={seo.description} />
 	<meta property="og:image" content={`${SITE_URL}/og.png`} />
+	<meta property="og:image:type" content="image/png" />
 	<meta property="og:image:alt" content="Kredit — give goods on credit and get paid with confidence" />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 	<meta property="og:locale" content="en_NG" />
 	{#if seo.published}<meta property="article:published_time" content={`${seo.published}T08:00:00+01:00`} />{/if}
+	{#if seo.modified}<meta property="article:modified_time" content={`${seo.modified}T08:00:00+01:00`} />{/if}
+	{#if seo.category}<meta property="article:section" content={seo.category} />{/if}
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content={seo.title} />
 	<meta name="twitter:description" content={seo.description} />

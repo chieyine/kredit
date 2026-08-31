@@ -406,6 +406,7 @@ paths:
               properties:
                 subject_type: {type: string}
                 subject_id: {type: string}
+                message: {type: string, maxLength: 2000}
                 break_glass: {type: boolean}
       responses:
         '201': {description: Support case opened}
@@ -1419,6 +1420,30 @@ paths:
         '200': { description: KPI definitions, values, freshness, funnel and source reconciliation }
         '400': { description: Invalid date window or organization filter }
         '403': { description: Compliance review role and step-up authentication required }
+  /me/product-feedback:
+    post:
+      operationId: submitProductFeedback
+      summary: Record one privacy-safe product clarity answer
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [area, screen, answer]
+              properties:
+                organization_id: { type: string, format: uuid }
+                area: { type: string, enum: [seller, buyer] }
+                screen: { type: string, enum: [overview] }
+                answer: { type: string, enum: [yes, partly, no] }
+      responses:
+        '201': { description: Feedback answer recorded }
+        '400': { description: Invalid feedback answer }
+        '401': { description: Authentication required }
+        '403': { description: CSRF or supplier organisation access failed }
   /ops/jobs:
     get:
       operationId: operationsJobs
@@ -1489,6 +1514,51 @@ paths:
         '200': { description: Permission-scoped reference matches }
         '400': { description: Search reference is invalid }
         '403': { description: Support search role required }
+  /ops/users:
+    get:
+      operationId: operationsUsers
+      summary: List or find platform users for audited administration
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: User directory with account state and organization count }
+        '403': { description: Support search role required }
+  /ops/organizations:
+    get:
+      operationId: operationsOrganizations
+      summary: List or find businesses for audited administration
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Business directory with status and outstanding balance }
+        '403': { description: Support search role required }
+  /ops/money:
+    get:
+      operationId: operationsMoney
+      summary: Review platform-wide payment and collection totals
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Reconciled money summary and recent activity }
+        '403': { description: Compliance review role required }
+  /ops/cases:
+    get:
+      operationId: operationsCases
+      summary: List support cases across the platform
+      parameters:
+        - name: state
+          in: query
+          schema: { type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED] }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Support case queue }
+        '403': { description: Case management role required }
   /ops/audit:
     get:
       operationId: operationsAudit
@@ -1514,6 +1584,39 @@ paths:
         '200': { description: Support case and timeline }
         '403': { description: Case management role required }
         '404': { description: Support case not found }
+    patch:
+      operationId: transitionOperationsCase
+      summary: Move a platform support case to its next state
+      parameters:
+        - name: caseID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state, note]
+              properties:
+                state: { type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED] }
+                note: { type: string, minLength: 4, maxLength: 2000 }
+      responses:
+        '200': { description: Updated case and appended timeline event }
+        '403': { description: Recent MFA, CSRF, and case management role required }
+  /ops/disputes:
+    get:
+      operationId: operationsDisputes
+      summary: List disputes across the platform
+      parameters:
+        - name: state
+          in: query
+          schema: { type: string, enum: [OPEN, UNDER_REVIEW, PARTIALLY_RESOLVED, RESOLVED, WITHDRAWN] }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Dispute review queue }
+        '403': { description: Dispute review role required }
   /ops/disputes/{disputeID}:
     get:
       operationId: operationsDispute
@@ -1527,6 +1630,85 @@ paths:
         '200': { description: Dispute review record }
         '403': { description: Dispute review role required }
         '404': { description: Dispute not found }
+  /ops/disputes/{disputeID}/decide:
+    post:
+      operationId: decideOperationsDispute
+      summary: Record an audited platform dispute decision
+      parameters:
+        - name: disputeID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome, valid_principal_kobo, adjustment_kobo, remaining_disputed_kobo, reason]
+              properties:
+                outcome: { type: string, enum: [FULL_ADJUSTMENT, PARTIAL_ADJUSTMENT, REJECTED] }
+                valid_principal_kobo: { type: integer, format: int64, minimum: 0 }
+                adjustment_kobo: { type: integer, format: int64, minimum: 0 }
+                remaining_disputed_kobo: { type: integer, format: int64, minimum: 0 }
+                reason: { type: string, minLength: 8, maxLength: 2000 }
+      responses:
+        '200': { description: Updated dispute and decision }
+        '403': { description: Recent MFA, CSRF, and dispute review role required }
+  /ops/team:
+    get:
+      operationId: operationsTeam
+      summary: List active platform role assignments
+      responses:
+        '200': { description: Active admin team and access expiry }
+        '403': { description: Platform administrator role required }
+  /ops/team/{userID}/roles:
+    post:
+      operationId: grantOperationsRole
+      summary: Grant or refresh an audited platform role
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role, reason]
+              properties:
+                role: { type: string, enum: [support_agent, compliance_reviewer, dispute_reviewer, platform_admin] }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+                expires_at: { type: string, format: date-time }
+      responses:
+        '200': { description: Active platform role assignment }
+        '403': { description: Recent MFA, CSRF, and platform administrator role required }
+  /ops/team/roles/{assignmentID}:
+    delete:
+      operationId: revokeOperationsRole
+      summary: Revoke an audited platform role
+      parameters:
+        - name: assignmentID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Platform role revoked }
+        '409': { description: Last administrator cannot remove their own access }
   /organizations/{organizationID}/reports/ageing:
     get:
       operationId: reportAgeing

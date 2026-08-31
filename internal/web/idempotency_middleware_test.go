@@ -65,6 +65,7 @@ func TestFinancialMutationRouteMatrixRequiresIdempotencyKey(t *testing.T) {
 		"/api/v1/organizations/org-1/members",
 		"/api/v1/buyer/trade-lines/line-1/drawdowns/draw-1/confirm",
 		"/api/v1/organizations/org-1/credit-requests/req-1/send",
+		"/api/v1/me/product-feedback",
 	}
 	for _, path := range cases {
 		t.Run(path, func(t *testing.T) {

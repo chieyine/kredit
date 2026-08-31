@@ -50,6 +50,11 @@ tasks:
     cmds:
       - bash scripts/lint.sh
 
+  audit:
+    desc: Check every owned file, product contract, frontend API surface, and article
+    cmds:
+      - pnpm run audit
+
   security:
     cmds:
       - bash scripts/security.sh

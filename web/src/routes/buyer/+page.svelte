@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { productLabel } from '$lib/product-language';
+	import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
 
 	let portal: any = null;
 	let error = '';
@@ -27,6 +28,7 @@
 			<article><span>Checks completed</span><strong>{portal.verification_cases.length}</strong></article>
 			<article><span>Rules you agreed to</span><strong>{portal.consents.length}</strong></article>
 		</section>
+		<FeedbackPrompt area="buyer" />
 	{:else if error}
 		<p class="eyebrow">Your customer account</p>
 		<h1>Open your private link.</h1>

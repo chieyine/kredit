@@ -77,7 +77,19 @@ func TestPlatformOperationsRequiresRoleAndStepUp(t *testing.T) {
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "queued_jobs") {
 		t.Fatalf("authorized status=%d body=%s", response.Code, response.Body.String())
 	}
-	for _, path := range []string{"/api/v1/ops/jobs", "/api/v1/ops/provider-events", "/api/v1/ops/audit", "/api/v1/ops/analytics/scorecard?from=2026-01-01&to=2026-12-31", "/api/v1/ops/search?q=reference-that-does-not-exist"} {
+	for _, path := range []string{
+		"/api/v1/ops/users",
+		"/api/v1/ops/organizations",
+		"/api/v1/ops/money",
+		"/api/v1/ops/cases",
+		"/api/v1/ops/disputes",
+		"/api/v1/ops/team",
+		"/api/v1/ops/jobs",
+		"/api/v1/ops/provider-events",
+		"/api/v1/ops/audit",
+		"/api/v1/ops/analytics/scorecard?from=2026-01-01&to=2026-12-31",
+		"/api/v1/ops/search?q=reference-that-does-not-exist",
+	} {
 		request = httptest.NewRequest(http.MethodGet, path, nil)
 		request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
 		response = httptest.NewRecorder()

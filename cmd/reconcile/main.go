@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"kredit/internal/db"
 	"kredit/internal/ledger"
 )
 
 func main() {
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		fail(fmt.Errorf("DATABASE_URL is required for reconciliation"))
+	databaseURL, err := databaseURLFromEnv(os.Getenv)
+	if err != nil {
+		fail(err)
 	}
 	database, err := db.Open(context.Background(), databaseURL)
 	if err != nil {
@@ -38,6 +39,14 @@ func main() {
 	if len(report.UnbalancedIDs) > 0 || report.DebitKobo != report.CreditKobo {
 		os.Exit(2)
 	}
+}
+
+func databaseURLFromEnv(getenv func(string) string) (string, error) {
+	databaseURL := strings.TrimSpace(getenv("DATABASE_URL"))
+	if databaseURL == "" {
+		return "", fmt.Errorf("DATABASE_URL is required for reconciliation")
+	}
+	return databaseURL, nil
 }
 
 func fail(err error) {

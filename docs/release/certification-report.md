@@ -20,14 +20,43 @@ certificate.
 
 ## Implemented in the latest product-completion pass
 
+- Added a fail-closed production configuration executable to release
+  certification, checking the exact provider, secret, TLS, database, approval
+  and pilot-limit configuration the API will load.
+- Added runtime-controlled legal activation. Production web startup now
+  requires the approved operator, address, contacts, effective date and
+  matching document versions. Approved pages become live and indexable;
+  incomplete production legal configuration cannot serve.
+- Added a go-live runbook for release freeze, staging evidence, migrations,
+  DNS/TLS, low-value production proof, monitoring, stop conditions, rollback
+  and first-day sign-off.
+
+- Completed the launch-wide code audit across 552 owned files, 168 backend and
+  OpenAPI operations, 165 screen-relevant endpoints, 100 long-form guides and
+  every production database column. Product-contract, content, repository and
+  data-inventory checks are now mandatory CI and release gates.
+- Made caller-supplied environment values take priority over local `.env`
+  defaults, preventing release checks and guarded database commands from
+  silently selecting the wrong database. An executable regression test locks
+  this behavior.
+- Expanded the database integration gate from a hand-maintained package list
+  to every PostgreSQL adapter, with a twice-applied deterministic seed and
+  serial package isolation. This closed a previously unexecuted analytics
+  scorecard path on clean databases.
+- Added a public, no-sign-in interactive demo that takes a visitor through both
+  sides of a credit sale—from choosing the amount to acceptance, delivery and
+  a recorded payment. It uses sample-only data, plain Nigerian English and a
+  direct path into the real product.
 - Added atomic PostgreSQL payments spanning schedules, obligation/credit
   balances, ledger postings, fees and outbox events.
 - Added restart-safe PostgreSQL trade-line and collection adapters plus
   provider-neutral identity, mandate, collection and notification connectors.
 - Completed customer onboarding/directory, live reports/statements, signed
   secure links, same-origin production proxy and adapter-node containers.
-- Passed tagged PostgreSQL tests, production web build, structural conformance,
-  31 public/product/quality checks, and 15 accessibility/interaction checks.
+- Passed all 51 migrations, every database-backed package, the tagged
+  PostgreSQL suite, production API/worker/web builds, structural conformance,
+  and all 60 Chromium product, access-control, admin, SEO and accessibility
+  scenarios in one uninterrupted run.
 - Added durable disputes, corrections, operations, notification delivery,
   analytics and messaging repositories; River notification/document workers;
   transactional outbox dispatch; malware-scanner integration; and a

@@ -9,9 +9,8 @@ if [[ ! -f .env ]]; then
   printf 'Created .env from .env.example; review development values before use.\n'
 fi
 
-set -a
-source .env
-set +a
+source "$root_dir/scripts/load-env.sh"
+load_env_defaults "$root_dir/.env"
 
 printf '%s\n' 'Checking local toolchain...'
 bash scripts/check-tools.sh

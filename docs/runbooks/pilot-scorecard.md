@@ -26,9 +26,12 @@ Escalation: Financial Systems Lead for money reconciliation; Security and Access
 5. Review every guardrail: on-time payment, failed-collection recovery,
    recognised loss, disputes, receipt issues, provider reliability, support
    interventions per 100 active suppliers, and open accessibility defects.
-6. Compare only against an approved target reference. While a metric says
+6. Review the Yes, Partly and No clarity answers. Treat a small response count
+   as early qualitative evidence, not a representative customer claim.
+7. Compare only against an approved target reference. While a metric says
    `baseline_required`, record the observation but do not label it pass/fail.
-7. Attach the filter/window, generated timestamp, reconciliation result,
+8. Print or save the application snapshot only after reconciliation passes.
+   Attach the filter/window, generated timestamp, reconciliation result,
    metric snapshot, target reference, decisions, owners and due dates to the
    protected weekly pilot record.
 

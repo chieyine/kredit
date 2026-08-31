@@ -19,10 +19,13 @@ test('every account area requires a session while private-token pages remain pub
 	}
 	const removedSupplierRoute = await request.get('/supplier/organizations/example/reports', { maxRedirects: 0 });
 	expect(removedSupplierRoute.status()).toBe(404);
-	for (const path of ['/pay/example', '/receipt/example', '/c/example', '/secure?token=example', '/recover', '/buyer-invitations/example']) {
+	for (const path of ['/pay/example', '/receipt/example', '/secure?token=example', '/recover', '/buyer-invitations/example']) {
 		const response = await request.get(path, { maxRedirects: 0 });
 		expect(response.status(), path).toBe(200);
 	}
+	const shortInvitation = await request.get('/c/example', { maxRedirects: 0 });
+	expect(shortInvitation.status()).toBe(307);
+	expect(shortInvitation.headers().location).toBe('/buyer-invitations/example');
 });
 
 test('an invalid saved session shows only the account check before sign-in', async ({ page, context, baseURL }) => {
@@ -84,7 +87,9 @@ test('the signed-in payments page prioritizes money and items needing an answer'
 	await page.getByRole('button', { name: 'More', exact: true }).click();
 	const moreMenu = page.getByRole('dialog', { name: 'More pages' });
 	await expect(moreMenu).toBeVisible();
-	await expect(moreMenu.getByRole('navigation', { name: 'More account pages' }).getByRole('link')).toHaveCount(7);
+	await expect(moreMenu.getByRole('navigation', { name: 'More account pages' }).getByRole('link')).toHaveCount(9);
+	await expect(moreMenu.getByText('Sales and money', { exact: true })).toBeVisible();
+	await expect(moreMenu.getByText('Account and help', { exact: true })).toBeVisible();
 	await expect(moreMenu.getByRole('link', { name: /Settings/ })).toBeVisible();
 	await expect(moreMenu.getByRole('button', { name: 'Find a page' })).toHaveCount(0);
 });

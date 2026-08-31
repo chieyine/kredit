@@ -3,26 +3,51 @@ export type PageSEO = {
 	description: string;
 	type?: 'website' | 'article';
 	published?: string;
+	modified?: string;
+	wordCount?: number;
+	category?: string;
 };
+
+export const SITE_URL = 'https://kredit.com.ng';
+
+export const publicSitemapEntries = [
+	{ path: '/', priority: '1.0', changeFrequency: 'weekly' },
+	{ path: '/demo', priority: '0.9', changeFrequency: 'monthly' },
+	{ path: '/how-it-works', priority: '0.9', changeFrequency: 'monthly' },
+	{ path: '/for-suppliers', priority: '0.9', changeFrequency: 'monthly' },
+	{ path: '/for-buyers', priority: '0.9', changeFrequency: 'monthly' },
+	{ path: '/pricing', priority: '0.8', changeFrequency: 'monthly' },
+	{ path: '/security', priority: '0.7', changeFrequency: 'monthly' },
+	{ path: '/faq', priority: '0.7', changeFrequency: 'monthly' },
+	{ path: '/glossary', priority: '0.6', changeFrequency: 'monthly' },
+	{ path: '/blog', priority: '0.8', changeFrequency: 'weekly' },
+	{ path: '/legal/complaints', priority: '0.4', changeFrequency: 'monthly' },
+	{ path: '/legal/privacy', priority: '0.3', changeFrequency: 'yearly', requiresLegalApproval: true },
+	{ path: '/legal/terms', priority: '0.3', changeFrequency: 'yearly', requiresLegalApproval: true }
+] as const;
 
 const defaultSEO: PageSEO = {
 	title: 'Kredit — sell goods on credit and get paid',
 	description: 'Write down the deal, get your customer to accept it, keep proof of delivery and track every payment.'
 };
 
-const pages: Record<string, PageSEO> = {
+export const pageSEOByPath: Record<string, PageSEO> = {
 	'/': defaultSEO,
+	'/demo': {
+		title: 'Try Kredit in 60 seconds — interactive credit-sale demo',
+		description: 'Try a complete sample credit sale as the seller and customer. Accept the deal, confirm the goods and record a payment without signing in.'
+	},
 	'/how-it-works': {
 		title: 'How Kredit works — from credit sale to final payment',
-		description: 'Write down the deal, let your customer accept it, confirm delivery and track every payment in one place.'
+		description: 'See how to write down a credit sale, let your customer accept it, confirm delivery and track every payment in one clear place.'
 	},
 	'/for-suppliers': {
 		title: 'Sell goods on credit with less chasing — Kredit',
-		description: 'Put every credit sale in writing, keep delivery proof and see what each customer still owes.'
+		description: 'Put every credit sale in writing, keep proof that the goods arrived, send simple reminders and see what each customer still owes.'
 	},
 	'/for-buyers': {
 		title: 'Know what you owe and why — Kredit for buyers',
-		description: 'Check the full deal before accepting, confirm delivery, report problems and see every payment.'
+		description: 'Check the goods, amount and payment day before you accept a sale. Confirm delivery, report a problem and see every payment clearly.'
 	},
 	'/pricing': {
 		title: 'Pricing — pay only when you get paid — Kredit',
@@ -30,39 +55,19 @@ const pages: Record<string, PageSEO> = {
 	},
 	'/security': {
 		title: 'How Kredit protects your money and records',
-		description: 'See how Kredit protects sign-in, private information, payment records and shared links.'
+		description: 'See how Kredit protects account sign-in, private business information, payment records, staff access and links shared with customers.'
 	},
 	'/faq': {
 		title: 'Frequently asked questions — Kredit',
-		description: 'Simple answers about selling on credit, customer payments, fees, late payment, privacy and safety.'
+		description: 'Get simple answers about selling goods on credit, customer payments, Kredit fees, late payment, private information and account safety.'
 	},
 	'/glossary': {
 		title: 'Trade credit glossary — Kredit',
-		description: 'Simple meanings for finance words you may see when selling or buying goods on credit.'
+		description: 'Understand the simple meaning of words used for credit sales, customer payments, delivery, late payment and money collection in Nigeria.'
 	},
 	'/blog': {
 		title: 'Helpful guides for selling on credit — Kredit',
-		description: 'Short, simple guides about clear credit sales, delivery proof, late payment and customer relationships.'
-	},
-	'/blog/sell-on-credit-safely': {
-		title: 'How to sell on credit and protect your money — Kredit',
-		description: 'Five things to agree before goods leave your shop: the amount, payment date, extra time, delivery proof and late-payment steps.',
-		type: 'article', published: '2026-08-10'
-	},
-	'/blog/why-credit-agreements-fail': {
-		title: 'Why credit sales turn into arguments — Kredit',
-		description: 'How a clear record of the goods, date, amount and delivery can prevent payment arguments.',
-		type: 'article', published: '2026-08-04'
-	},
-	'/blog/collections-last-resort': {
-		title: 'What to do when a customer pays late — Kredit',
-		description: 'A fair order for late payments: reminders, extra time, recording direct payments and automatic debit as the last step.',
-		type: 'article', published: '2026-07-28'
-	},
-	'/blog/trade-credit-vs-loan': {
-		title: 'Goods on credit or a loan app? — Kredit',
-		description: 'A simple look at two ways a customer can buy business stock now and pay later.',
-		type: 'article', published: '2026-07-20'
+		description: 'Read simple guides for Nigerian businesses about credit sales, customer checks, delivery proof, payment records and late payment.'
 	},
 	'/legal/complaints': {
 		title: 'Complaints and support — Kredit',
@@ -70,11 +75,11 @@ const pages: Record<string, PageSEO> = {
 	},
 	'/legal/privacy': {
 		title: 'Privacy notice — Kredit',
-		description: 'Pre-launch information about Kredit privacy controls, data rights, retention and provider disclosures.'
+		description: 'Read how Kredit collects, uses, shares, protects and removes information, and how to use your privacy rights in Nigeria.'
 	},
 	'/legal/terms': {
 		title: 'Terms of service — Kredit',
-		description: 'Pre-launch information about the Kredit service terms and supplier-funded trade-credit model.'
+		description: 'Read the clear rules for Kredit accounts, credit sales, delivery, payments, fees, bank-debit permission and complaints.'
 	}
 };
 
@@ -82,7 +87,7 @@ export const nonIndexablePaths = new Set(['/legal/privacy', '/legal/terms']);
 
 export function seoForPath(pathname: string): PageSEO {
 	const normalized = pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname;
-	return pages[normalized] ?? defaultSEO;
+	return pageSEOByPath[normalized] ?? defaultSEO;
 }
 
 export function jsonLd(value: unknown) {

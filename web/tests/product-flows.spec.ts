@@ -29,15 +29,15 @@ test('operator replays a failed webhook without changing its identity',async({pa
 });
 
 test('operator resolves an unknown provider submission through protected controls',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Command').selectOption('resolve_unknown_submission');await page.getByLabel('Target type').fill('collection');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000101');await page.getByLabel('Structured reason').fill('Provider reconciliation confirms final state');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('Safely apply resolve_unknown_submission')).toBeVisible();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied[0]).toMatchObject({command_type:'resolve_unknown_submission'});
+	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('resolve_unknown_submission');await page.getByLabel('Target type').fill('collection');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000101');await page.getByLabel('Structured reason').fill('Provider reconciliation confirms final state');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('Safely apply resolve_unknown_submission')).toBeVisible();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied[0]).toMatchObject({command_type:'resolve_unknown_submission'});
 });
 
 test('operator previews user suspension and restoration consequences',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000202');await page.getByLabel('Structured reason').fill('Confirmed account compromise investigation');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply protected command'}).click();await page.getByLabel('Command').selectOption('restore_user');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000203');await page.getByLabel('Structured reason').fill('Security investigation completed safely');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied.map(x=>x.command_type)).toEqual(['suspend_user','restore_user']);
+	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000202');await page.getByLabel('Structured reason').fill('Confirmed account compromise investigation');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply protected command'}).click();await page.getByLabel('Action').selectOption('restore_user');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000203');await page.getByLabel('Structured reason').fill('Security investigation completed safely');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied.map(x=>x.command_type)).toEqual(['suspend_user','restore_user']);
 });
 
 test('operator places an expiring scoped buyer risk hold',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Command').selectOption('place_risk_hold');await page.getByLabel('Target type').fill('buyer');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000301');await page.getByLabel('Scope').selectOption('collection');await page.getByLabel('Expires').fill('2026-08-30T12:00');await page.getByLabel('Structured reason').fill('Collection anomaly requires compliance review');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('User notification',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied[0]).toMatchObject({command_type:'place_risk_hold',target_type:'buyer',scope:'collection'});
+	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('place_risk_hold');await page.getByLabel('Target type').fill('buyer');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000301');await page.getByLabel('Scope').selectOption('collection');await page.getByLabel('Expires').fill('2026-08-30T12:00');await page.getByLabel('Structured reason').fill('Collection anomaly requires compliance review');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('User notification',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied[0]).toMatchObject({command_type:'place_risk_hold',target_type:'buyer',scope:'collection'});
 });
 
 test('supplier can create exact credit terms with a replay-safe request', async ({ page }) => {
@@ -72,30 +72,55 @@ test('operations overview presents redacted health counters', async ({ page }) =
 		status: 200, contentType: 'application/json', body: JSON.stringify({ role: 'platform_admin', overview: { queued_jobs: 2, failed_jobs: 0, dead_letter_jobs: 0, pending_outbox: 1, failed_outbox: 0, provider_failures: 0, open_cases: 3, open_disputes: 1 } })
 	}));
 	await page.goto('/admin');
-	await expect(page.getByRole('heading', { name: 'Controlled support and compliance access.' })).toBeVisible();
-	await expect(page.getByText('Queued work')).toBeVisible();
-	await expect(page.getByText('Active role: platform admin')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Run the whole platform from one place.' })).toBeVisible();
+	await expect(page.getByText('Work in progress')).toBeVisible();
+	await expect(page.getByText('platform admin', { exact: true })).toBeVisible();
 });
 
-test('pilot scorecard shows definitions, guardrails, filters, and reconciliation state', async ({ page }) => {
+test('application evidence shows real traction, user clarity, filters, and reconciliation', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
 	let requestedOrganization = '';
 	await page.route('**/api/v1/ops/analytics/scorecard**', async (route) => { requestedOrganization = new URL(route.request().url()).searchParams.get('organization_id') ?? ''; await route.fulfill({
 		status: 200, contentType: 'application/json', body: JSON.stringify({ scorecard: {
-			generated_at: '2026-08-29T12:00:00Z', refresh_mode: 'live query', reconciliation_ok: true,
+			generated_at: '2026-08-29T12:00:00Z', from: '2026-08-22T00:00:00Z', to: '2026-08-30T00:00:00Z', refresh_mode: 'live query', reconciliation_ok: true,
 			kpis: [{ key:'gross_trade_credit_volume', label:'Gross trade credit activated', value:120000000, unit:'kobo', definition:'Sum of principal for obligations activated in the window.', source:'app.obligations' }],
-			drivers: [{ key:'sent_to_acceptance', label:'Sent-to-acceptance conversion', value:75, unit:'percent', definition:'Accepted agreements divided by sent events.', source:'transition evidence' }],
+			drivers: [{ key:'sent_to_acceptance', label:'Sent-to-acceptance conversion', value:75, unit:'percent', definition:'Accepted agreements divided by sent events.', source:'transition evidence' }, { key:'repeat_sale_rate', label:'Repeat-sale rate', value:40, unit:'percent', definition:'Customers with another sale.', source:'app.obligations' }, { key:'supplier_retention', label:'Supplier retention', value:60, unit:'percent', definition:'Suppliers who returned.', source:'app.obligations' }],
 			guardrails: [{ key:'dispute_rate', label:'Dispute rate', value:1.2, unit:'percent', definition:'Obligations with a dispute divided by activated obligations.', source:'app.disputes + app.obligations' }],
+			feedback: { total: 10, yes: 8, partly: 1, no: 1, seller: 6, buyer: 4, clear_percent: 80 },
 			reconciliation: [{ event:'obligation.activated', source_count:4, event_count:4, status:'reconciled' }]
 		} })
 	}); });
 	await page.goto('/admin/analytics');
-	await expect(page.getByRole('heading', {name:'Know whether the pilot is healthy.'})).toBeVisible();
-	await expect(page.getByText('Gross trade credit activated')).toBeVisible();
-	await expect(page.getByText('Dispute rate')).toBeVisible();
+	await expect(page.getByRole('heading', {name:'Show what Kredit has achieved.'})).toBeVisible();
+	await expect(page.getByText('Trade credit recorded')).toBeVisible();
+	await expect(page.getByLabel(/Evidence for/).getByText('₦1,200,000.00')).toBeVisible();
+	await expect(page.getByText('80.0%')).toBeVisible();
 	await expect(page.getByText('Reconciled', {exact:true})).toBeVisible();
+	expect(await page.locator('html').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+	await page.getByText('Open the full product scorecard').click();
+	await expect(page.getByText('Dispute rate')).toBeVisible();
 	await page.getByLabel('Supplier organisation UUID (optional)').fill('00000000-0000-7000-8000-000000000001');
 	await page.getByRole('button', {name:'Apply filters'}).click();
 	await expect.poll(()=>requestedOrganization).toBe('00000000-0000-7000-8000-000000000001');
+});
+
+test('seller can give one simple product clarity answer', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	let submitted: Record<string, unknown> | undefined;
+	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies' }] }) }));
+	for (const name of ['credit-requests', 'payments', 'overdue', 'payment-claims', 'disputes']) {
+		await page.route(`**/api/v1/organizations/org-1/${name}`, async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ requests: [], payments: [], overdue: [], payment_claims: [], disputes: [] }) }));
+	}
+	await page.route('**/api/v1/me/product-feedback', async (route) => {
+		submitted = route.request().postDataJSON();
+		await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ feedback: submitted }) });
+	});
+	await page.goto('/app/overview');
+	await expect(page.getByRole('heading', { name: 'Was this page easy to understand?' })).toBeVisible();
+	expect(await page.locator('html').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+	await page.getByRole('button', { name: 'Yes', exact: true }).click();
+	await expect(page.getByText('Thank you. Your answer will help us make Kredit easier.')).toBeVisible();
+	await expect.poll(() => submitted).toEqual({ area: 'seller', screen: 'overview', answer: 'yes', organization_id: 'org-1' });
 });
 
 test('supplier can amend and cancel a draft before immutable terms are sent', async ({ page }) => {
@@ -259,15 +284,23 @@ test('user changes notification routing, quiet hours, and optional categories', 
 		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preferences, required_groups: ['SECURITY_REQUIRED', 'TRANSACTIONAL_REQUIRED'] }) });
 	});
 	await page.goto('/app/settings/notifications');
-	await expect(page.getByText(/Security alerts and financial receipts remain on/)).toBeVisible();
-	await page.getByLabel('Preferred channel').selectOption('email');
-	await page.getByLabel('Fallback channel').selectOption('sms');
-	await page.getByLabel('Payment reminders').uncheck();
-	await page.getByLabel('Product updates').check();
-	await page.getByLabel('Quiet time starts').fill('21');
-	await page.getByRole('button', { name: 'Save preferences' }).click();
-	await expect(page.getByText(/Future optional messages/)).toBeVisible();
+	await expect(page.getByText(/We will still send important account and payment messages/)).toBeVisible();
+	await page.getByLabel('Use this first').selectOption('email');
+	await page.getByLabel('If that does not work, use').selectOption('sms');
+	await page.getByLabel('Remind me about payments').uncheck();
+	await page.getByLabel('Tell me about new Kredit features').check();
+	await page.getByLabel('Do not disturb from').fill('21');
+	await page.getByRole('button', { name: 'Save my choices' }).click();
+	await expect(page.getByText('Your message choices were saved.')).toBeVisible();
 	await expect.poll(() => saved).toMatchObject({ preferred_channel: 'email', fallback_channel: 'sms', payment_reminders_enabled: false, product_updates_enabled: true, quiet_start_hour: 21, expected_version: 1 });
+});
+
+test('user can choose a lighter display on this phone', async ({ page }) => {
+	await page.goto('/app/settings/data');
+	await page.getByLabel('Use less data on this phone').check();
+	await page.getByRole('button', { name: 'Save this setting' }).click();
+	await expect(page.getByText('Kredit will now use fewer effects on this phone.')).toBeVisible();
+	await expect.poll(() => page.locator('html').evaluate((element) => element.classList.contains('low-data'))).toBe(true);
 });
 
 test('identity-bound privacy request is submitted and remains trackable', async ({ page }) => {

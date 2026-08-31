@@ -22,12 +22,12 @@
 		const body = await response.json().catch(() => ({}));
 		busy = false;
 		if (!response.ok) {
-			message = body.detail ?? 'MFA enrollment could not be started.';
+			message = body.detail ?? 'We could not start extra sign-in safety.';
 			return;
 		}
 		secret = body.secret ?? '';
 		otpURI = body.otpauth_uri ?? '';
-		message = 'Add this account to your authenticator, then enter the six-digit code.';
+		message = 'Add Kredit to your authenticator app, then enter the six-digit code.';
 	}
 
 	async function verify() {
@@ -36,7 +36,7 @@
 		const body = await response.json().catch(() => ({}));
 		busy = false;
 		if (!response.ok) {
-			message = body.detail ?? 'That authenticator code was not accepted.';
+			message = body.detail ?? 'That six-digit code did not work.';
 			return;
 		}
 		enrolled = true;
@@ -44,7 +44,7 @@
 		secret = '';
 		otpURI = '';
 		code = '';
-		message = 'MFA is enabled for this session. High-impact actions now require step-up authentication.';
+		message = 'Extra sign-in safety is now on. Kredit will ask for a new code before an important change.';
 	}
 
 	async function regenerateCodes() {
@@ -52,9 +52,9 @@
 		const response = await fetch('/api/v1/me/recovery-codes/regenerate', { method: 'POST', credentials: 'include', headers: { 'Idempotency-Key': idempotencyKey(), ...csrfHeaders() } });
 		const body = await response.json().catch(() => ({}));
 		busy = false;
-		if (!response.ok) { message = body.detail ?? 'Recovery codes could not be regenerated.'; return; }
+		if (!response.ok) { message = body.detail ?? 'We could not make new backup codes.'; return; }
 		recoveryCodes = body.recovery_codes ?? [];
-		message = 'New recovery codes created. Every older code is now invalid.';
+		message = 'New backup codes are ready. Your old codes will no longer work.';
 	}
 
 	onMount(load);
@@ -63,26 +63,26 @@
 <svelte:head><title>Security settings — Kredit</title></svelte:head>
 <main class="shell workspace form-page">
 	<p class="eyebrow">Settings / Access</p>
-	<h1>Protect high-impact actions.</h1>
-	<p class="lede">MFA protects financial changes, member administration, and other material operations.</p>
+	<h1>Keep your money and account safe.</h1>
+	<p class="lede">Use a six-digit code from an authenticator app before changing money, bank or staff details.</p>
 	{#if message}<p class="notice" role="status">{message}</p>{/if}
 	<section class="card">
-		<h2>{enrolled ? 'Authenticator enabled' : 'Enable authenticator MFA'}</h2>
+		<h2>{enrolled ? 'Extra sign-in safety is on' : 'Add extra sign-in safety'}</h2>
 		{#if enrolled}
-			<p>Your account is enrolled. Re-authenticate with your authenticator when a material action asks for step-up confirmation.</p>
+			<p>When Kredit asks, open your authenticator app and enter the new six-digit code.</p>
 			<label class="field">Authenticator code<input bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
-			<button class="primary" type="button" disabled={busy || code.length !== 6} onclick={verify}>{busy ? 'Verifying…' : 'Refresh secure session'}</button>
-			<button type="button" disabled={busy} onclick={regenerateCodes}>Regenerate recovery codes</button>
+			<button class="primary" type="button" disabled={busy || code.length !== 6} onclick={verify}>{busy ? 'Checking…' : 'Check this code'}</button>
+			<button type="button" disabled={busy} onclick={regenerateCodes}>Make new backup codes</button>
 		{:else if !secret}
-			<p>Use an authenticator app rather than receiving financial step-up codes by email or chat.</p>
-			<button class="primary" type="button" disabled={busy} onclick={beginEnrollment}>{busy ? 'Starting…' : 'Start MFA enrollment'}</button>
+			<p>Use an authenticator app such as Google Authenticator or Microsoft Authenticator. Do not send these codes to anyone.</p>
+			<button class="primary" type="button" disabled={busy} onclick={beginEnrollment}>{busy ? 'Starting…' : 'Start extra safety'}</button>
 		{:else}
-			<p>Scan this URI in your authenticator app, or enter the secret manually.</p>
+			<p>In your authenticator app, add a new account and enter the setup key below.</p>
 			<p><code>{secret}</code></p>
 			<p class="muted"><code>{otpURI}</code></p>
 			<label class="field">Authenticator code<input bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
-			<button class="primary" type="button" disabled={busy || code.length !== 6} onclick={verify}>{busy ? 'Verifying…' : 'Verify and enable MFA'}</button>
+			<button class="primary" type="button" disabled={busy || code.length !== 6} onclick={verify}>{busy ? 'Checking…' : 'Check code and turn it on'}</button>
 		{/if}
 	</section>
-	{#if recoveryCodes.length}<section class="card"><h2>Save these recovery codes now</h2><p>Each code works once. They will not be shown again.</p><ul>{#each recoveryCodes as recoveryCode}<li><code>{recoveryCode}</code></li>{/each}</ul></section>{/if}
+	{#if recoveryCodes.length}<section class="card"><h2>Save these backup codes now</h2><p>Keep them somewhere safe. Each code works once and will not be shown again.</p><ul>{#each recoveryCodes as recoveryCode}<li><code>{recoveryCode}</code></li>{/each}</ul></section>{/if}
 </main>

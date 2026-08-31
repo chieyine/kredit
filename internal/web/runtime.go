@@ -13,6 +13,7 @@ import (
 	"kredit/internal/db"
 	"kredit/internal/disputes"
 	"kredit/internal/documents"
+	"kredit/internal/feedback"
 	"kredit/internal/idempotency"
 	"kredit/internal/identity"
 	"kredit/internal/ledger"
@@ -75,6 +76,7 @@ type Runtime struct {
 	Outbox               *outbox.Store
 	PlatformOps          *platformops.Store
 	UserControl          *usercontrol.Store
+	Feedback             *feedback.Store
 }
 
 // PersistenceStatus describes which runtime boundaries are actually backed
@@ -127,10 +129,12 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	}
 	var outboxStore *outbox.Store
 	var platformOpsStore *platformops.Store
+	feedbackStore := feedback.NewStore()
 	var ledgerStore ledger.Service = ledger.NewStore()
 	if database != nil {
 		outboxStore = outbox.NewStore(database.Raw())
 		platformOpsStore = platformops.NewStore(database.Raw())
+		feedbackStore = feedback.NewPostgresStore(database.Raw())
 		ledgerStore = ledger.NewPostgresStoreWithOutbox(database.Raw(), outboxStore)
 	}
 	scheduleStore := schedules.NewStore()
@@ -528,6 +532,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		Outbox:               outboxStore,
 		PlatformOps:          platformOpsStore,
 		UserControl:          userControlStore,
+		Feedback:             feedbackStore,
 	}
 }
 

@@ -11,8 +11,11 @@ import (
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/auth"
+	"kredit/internal/disputes"
+	"kredit/internal/ledger"
 	"kredit/internal/notifications"
 	"kredit/internal/platformops"
+	"kredit/internal/support"
 
 	"github.com/google/uuid"
 )
@@ -294,6 +297,210 @@ func (s *Server) operationsSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditPlatformRead(r, user.ID, "operations.reference.searched", "reference", query)
 	writeJSON(w, http.StatusOK, map[string]any{"results": items})
+}
+
+func (s *Server) operationsUsers(w http.ResponseWriter, r *http.Request) {
+	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionSupportSearch)
+	if !ok {
+		return
+	}
+	items, err := s.runtime.PlatformOps.Users(r.Context(), r.URL.Query().Get("q"), queryLimit(r))
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "users_unavailable", "users could not be loaded")
+		return
+	}
+	s.auditPlatformRead(r, user.ID, "operations.users.viewed", "user_directory", "")
+	writeJSON(w, http.StatusOK, map[string]any{"users": items})
+}
+
+func (s *Server) operationsOrganizations(w http.ResponseWriter, r *http.Request) {
+	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionSupportSearch)
+	if !ok {
+		return
+	}
+	items, err := s.runtime.PlatformOps.Organizations(r.Context(), r.URL.Query().Get("q"), queryLimit(r))
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "organizations_unavailable", "businesses could not be loaded")
+		return
+	}
+	s.auditPlatformRead(r, user.ID, "operations.organizations.viewed", "organization_directory", "")
+	writeJSON(w, http.StatusOK, map[string]any{"organizations": items})
+}
+
+func (s *Server) operationsMoney(w http.ResponseWriter, r *http.Request) {
+	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionReviewCompliance)
+	if !ok {
+		return
+	}
+	summary, activity, err := s.runtime.PlatformOps.Money(r.Context(), queryLimit(r))
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "money_unavailable", "platform money activity could not be loaded")
+		return
+	}
+	s.auditPlatformRead(r, user.ID, "operations.money.viewed", "platform_money", "")
+	writeJSON(w, http.StatusOK, map[string]any{"summary": summary, "activity": activity})
+}
+
+func (s *Server) operationsCases(w http.ResponseWriter, r *http.Request) {
+	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManageCases)
+	if !ok {
+		return
+	}
+	items, err := s.runtime.PlatformOps.Cases(r.Context(), r.URL.Query().Get("state"), queryLimit(r))
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "cases_unavailable", "support cases could not be loaded")
+		return
+	}
+	s.auditPlatformRead(r, user.ID, "operations.cases.viewed", "support_case", "")
+	writeJSON(w, http.StatusOK, map[string]any{"cases": items})
+}
+
+func (s *Server) operationsDisputes(w http.ResponseWriter, r *http.Request) {
+	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionReviewDisputes)
+	if !ok {
+		return
+	}
+	items, err := s.runtime.PlatformOps.Disputes(r.Context(), r.URL.Query().Get("state"), queryLimit(r))
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "disputes_unavailable", "disputes could not be loaded")
+		return
+	}
+	s.auditPlatformRead(r, user.ID, "operations.disputes.viewed", "dispute", "")
+	writeJSON(w, http.StatusOK, map[string]any{"disputes": items})
+}
+
+func (s *Server) transitionOperationsCase(w http.ResponseWriter, r *http.Request) {
+	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManageCases)
+	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
+		return
+	}
+	if _, err := uuid.Parse(r.PathValue("caseID")); err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_case", "case ID must be valid")
+		return
+	}
+	var input struct {
+		State string `json:"state"`
+		Note  string `json:"note"`
+	}
+	if !decodeJSONRequest(w, r, &input) {
+		return
+	}
+	item, event, err := s.runtime.Support.Transition(r.PathValue("caseID"), user.ID, support.State(strings.ToUpper(strings.TrimSpace(input.State))), strings.TrimSpace(input.Note))
+	if err != nil {
+		writeProblem(w, http.StatusConflict, "case_transition_failed", err.Error())
+		return
+	}
+	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: item.OrganizationID, Action: "operations.case.transitioned", ResourceType: "support_case", ResourceID: item.ID, Outcome: "success", Severity: "notice", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"state": string(item.State)}})
+	writeJSON(w, http.StatusOK, map[string]any{"case": item, "event": event})
+}
+
+func (s *Server) decideOperationsDispute(w http.ResponseWriter, r *http.Request) {
+	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionReviewDisputes)
+	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
+		return
+	}
+	if _, err := uuid.Parse(r.PathValue("disputeID")); err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_dispute", "dispute ID must be valid")
+		return
+	}
+	var input struct {
+		Outcome               string `json:"outcome"`
+		ValidPrincipalKobo    int64  `json:"valid_principal_kobo"`
+		AdjustmentKobo        int64  `json:"adjustment_kobo"`
+		RemainingDisputedKobo int64  `json:"remaining_disputed_kobo"`
+		Reason                string `json:"reason"`
+	}
+	if !decodeJSONRequest(w, r, &input) {
+		return
+	}
+	item, decision, err := s.runtime.Disputes.Decide(disputes.DecideInput{DisputeID: r.PathValue("disputeID"), ReviewerID: user.ID, Outcome: strings.TrimSpace(input.Outcome), ValidPrincipalKobo: ledger.Money(input.ValidPrincipalKobo), AdjustmentKobo: ledger.Money(input.AdjustmentKobo), RemainingDisputedKobo: ledger.Money(input.RemainingDisputedKobo), Reason: strings.TrimSpace(input.Reason)})
+	if err != nil {
+		writeProblem(w, http.StatusConflict, "dispute_decision_failed", err.Error())
+		return
+	}
+	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: item.SupplierOrganizationID, Action: "operations.dispute.decided", ResourceType: "dispute", ResourceID: item.ID, Outcome: "success", Severity: "high", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"outcome": decision.Outcome}})
+	writeJSON(w, http.StatusOK, map[string]any{"dispute": item, "decision": decision})
+}
+
+func (s *Server) operationsTeam(w http.ResponseWriter, r *http.Request) {
+	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionBreakGlass)
+	if !ok {
+		return
+	}
+	items, err := s.runtime.PlatformOps.Team(r.Context())
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "team_unavailable", "admin access could not be loaded")
+		return
+	}
+	s.auditPlatformRead(r, user.ID, "operations.team.viewed", "platform_role_assignment", "")
+	writeJSON(w, http.StatusOK, map[string]any{"members": items})
+}
+
+func (s *Server) grantOperationsRole(w http.ResponseWriter, r *http.Request) {
+	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionBreakGlass)
+	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
+		return
+	}
+	if _, err := uuid.Parse(r.PathValue("userID")); err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_user", "user ID must be valid")
+		return
+	}
+	var input struct {
+		Role      string `json:"role"`
+		Reason    string `json:"reason"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	if !decodeJSONRequest(w, r, &input) {
+		return
+	}
+	role := access.PlatformRole(strings.TrimSpace(input.Role))
+	if !role.Valid() {
+		writeProblem(w, http.StatusBadRequest, "invalid_platform_role", "choose a valid admin role")
+		return
+	}
+	var expires *time.Time
+	if strings.TrimSpace(input.ExpiresAt) != "" {
+		parsed, err := time.Parse(time.RFC3339, input.ExpiresAt)
+		if err != nil || !parsed.After(time.Now()) {
+			writeProblem(w, http.StatusBadRequest, "invalid_role_expiry", "expiry must be a future date and time")
+			return
+		}
+		expires = &parsed
+	}
+	item, err := s.runtime.PlatformOps.GrantRole(r.Context(), user.ID, r.PathValue("userID"), string(role), input.Reason, expires)
+	if err != nil {
+		writeProblem(w, http.StatusConflict, "role_grant_failed", err.Error())
+		return
+	}
+	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "operations.role.granted", ResourceType: "platform_role_assignment", ResourceID: item.AssignmentID, Outcome: "success", Severity: "high", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"target_user_id": item.UserID, "role": item.Role, "reason": strings.TrimSpace(input.Reason)}})
+	writeJSON(w, http.StatusOK, map[string]any{"member": item})
+}
+
+func (s *Server) revokeOperationsRole(w http.ResponseWriter, r *http.Request) {
+	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionBreakGlass)
+	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
+		return
+	}
+	if _, err := uuid.Parse(r.PathValue("assignmentID")); err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_role_assignment", "role assignment ID must be valid")
+		return
+	}
+	var input struct {
+		Reason string `json:"reason"`
+	}
+	if !decodeJSONRequest(w, r, &input) {
+		return
+	}
+	if length := len(strings.TrimSpace(input.Reason)); length < 8 || length > 1000 {
+		writeProblem(w, http.StatusBadRequest, "role_reason_required", "reason must be between 8 and 1000 characters")
+		return
+	}
+	if err := s.runtime.PlatformOps.RevokeRole(r.Context(), user.ID, r.PathValue("assignmentID")); err != nil {
+		writeProblem(w, http.StatusConflict, "role_revoke_failed", err.Error())
+		return
+	}
+	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "operations.role.revoked", ResourceType: "platform_role_assignment", ResourceID: r.PathValue("assignmentID"), Outcome: "success", Severity: "high", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"reason": strings.TrimSpace(input.Reason)}})
+	writeJSON(w, http.StatusOK, map[string]any{"revoked": true})
 }
 
 func (s *Server) operationsAudit(w http.ResponseWriter, r *http.Request) {

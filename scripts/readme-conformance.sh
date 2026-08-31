@@ -8,7 +8,7 @@ failures=0
 require_file() { if [[ ! -f "$1" ]]; then printf 'missing required file: %s\n' "$1" >&2; failures=$((failures+1)); fi; }
 require_text() { local file="$1" text="$2"; if ! grep -Fq -- "$text" "$file"; then printf 'missing required contract evidence: %s in %s\n' "$text" "$file" >&2; failures=$((failures+1)); fi; }
 
-for file in README.md IMPLEMENTATION_STATUS.md CHANGELOG.md docs/api/openapi.yaml docs/threat-model.md docs/data-map.md docs/product/open-questions.md docs/product/readme-completion-plan.md docs/testing/test-matrix.md docs/release/readiness-checklist.md docs/operations/readme-gap-audit.md; do require_file "$file"; done
+for file in README.md IMPLEMENTATION_STATUS.md CHANGELOG.md docs/api/openapi.yaml docs/threat-model.md docs/data-map.md docs/product/open-questions.md docs/product/readme-completion-plan.md docs/testing/test-matrix.md docs/release/readiness-checklist.md docs/release/go-live-runbook.md docs/operations/readme-gap-audit.md; do require_file "$file"; done
 require_file docs/product/readme-completion-traceability.md
 require_file docs/product/world-class-product-standard.md
 require_file web/tests/product-quality.spec.ts
@@ -16,9 +16,11 @@ require_file web/src/routes/+error.svelte
 require_file web/src/lib/seo.ts
 require_file web/src/lib/components/PortalNav.svelte
 require_file web/src/lib/components/ProtectedActionDialog.svelte
-for asset in web/static/og.png web/static/icon-192.png web/static/icon-512.png web/static/apple-touch-icon.png web/static/manifest.webmanifest web/static/robots.txt web/static/sitemap.xml; do require_file "$asset"; done
+for asset in web/static/og.png web/static/icon-192.png web/static/icon-512.png web/static/apple-touch-icon.png web/static/manifest.webmanifest; do require_file "$asset"; done
+require_file web/src/routes/robots.txt/+server.ts
+require_file web/src/routes/sitemap.xml/+server.ts
 
-for command in dev build test test:unit test:integration test:e2e test:race test:fuzz lint security generate api:lint readme:check plan:check db:migrate db:rollback db:reset db:seed db:check data:inventory:generate data:inventory:check openapi:generate sqlc:generate web:check web:test ci; do require_text Taskfile.yml "  ${command}:"; done
+for command in dev build test test:unit test:integration test:e2e test:race test:fuzz lint audit security generate api:lint readme:check plan:check db:migrate db:rollback db:reset db:seed db:check data:inventory:generate data:inventory:check openapi:generate sqlc:generate web:check web:test ci; do require_text Taskfile.yml "  ${command}:"; done
 
 for command in api worker migrate seed reconcile provider-simulator; do require_file "cmd/${command}/main.go"; done
 
@@ -33,7 +35,7 @@ routes=(
   'app/settings/notifications/+page.svelte' 'app/settings/privacy/+page.svelte' 'recover/+page.svelte' 'admin/recovery/+page.svelte' 'admin/privacy/+page.svelte'
   'buyer/+page.svelte' 'buyer/requests/+page.svelte' 'buyer/obligations/+page.svelte' 'buyer/obligations/[id]/+page.svelte' 'buyer/trade-lines/+page.svelte' 'buyer/history/+page.svelte' 'buyer/mandates/+page.svelte' 'buyer/disputes/+page.svelte' 'buyer/settings/+page.svelte'
   'c/[token]/+page.svelte' 'pay/[token]/+page.svelte' 'receipt/[public_token]/+page.svelte'
-  'admin/+page.svelte' 'admin/search/+page.svelte' 'admin/cases/[id]/+page.svelte' 'admin/disputes/[id]/+page.svelte' 'admin/provider-events/+page.svelte' 'admin/jobs/+page.svelte' 'admin/audit/+page.svelte'
+  'admin/+page.svelte' 'admin/users/+page.svelte' 'admin/organizations/+page.svelte' 'admin/money/+page.svelte' 'admin/search/+page.svelte' 'admin/cases/+page.svelte' 'admin/cases/[id]/+page.svelte' 'admin/disputes/+page.svelte' 'admin/disputes/[id]/+page.svelte' 'admin/provider-events/+page.svelte' 'admin/jobs/+page.svelte' 'admin/team/+page.svelte' 'admin/audit/+page.svelte'
   'admin/analytics/+page.svelte'
 )
 for route in "${routes[@]}"; do require_file "web/src/routes/${route}"; done
@@ -66,6 +68,7 @@ require_file docs/product/analytics-event-catalog.md
 require_file docs/product/pilot-scorecard.md
 require_file docs/runbooks/pilot-scorecard.md
 require_text api/openapi.yaml '/ops/analytics/scorecard:'
+for route in '/ops/users:' '/ops/organizations:' '/ops/money:' '/ops/cases:' '/ops/disputes:' '/ops/team:'; do require_text api/openapi.yaml "  ${route}"; done
 require_file internal/onboarding/store.go
 require_file internal/onboarding/postgres.go
 require_text internal/web/server.go '/onboarding/settlement'

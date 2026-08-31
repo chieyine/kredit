@@ -40,6 +40,19 @@ body {
 	-webkit-font-smoothing: antialiased;
 }
 
+/* Low-data mode keeps every task available while removing non-essential effects. */
+html.low-data *,
+html.low-data *::before,
+html.low-data *::after {
+	animation: none !important;
+	transition: none !important;
+	backdrop-filter: none !important;
+}
+html.low-data .site-header,
+html.low-data .mobile-nav { background: var(--color-background); }
+html.low-data .records article,
+html.low-data .workspace article { box-shadow: none !important; }
+
 html { scroll-behavior: smooth; scroll-padding-top: 6rem; }
 
 ::selection { background: #cfd4ff; color: var(--color-foreground); }

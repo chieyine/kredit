@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"strings"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
@@ -11,6 +12,7 @@ import (
 type supportCaseRequest struct {
 	SubjectType string `json:"subject_type"`
 	SubjectID   string `json:"subject_id"`
+	Message     string `json:"message"`
 	BreakGlass  bool   `json:"break_glass"`
 }
 
@@ -38,10 +40,23 @@ func (s *Server) openSupportCase(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusForbidden, "break_glass_forbidden", "break-glass support access requires an approved platform support role")
 		return
 	}
+	note := strings.TrimSpace(input.Message)
+	if len(note) > 2000 {
+		writeProblem(w, http.StatusUnprocessableEntity, "support_message_invalid", "Your message must be 2,000 characters or less.")
+		return
+	}
 	item, err := s.runtime.Support.Open(input.SubjectType, input.SubjectID, user.ID, organizationID, input.BreakGlass)
 	if err != nil {
 		writeProblem(w, http.StatusUnprocessableEntity, "support_case_invalid", err.Error())
 		return
+	}
+	if note != "" {
+		updated, _, transitionErr := s.runtime.Support.Transition(item.ID, user.ID, support.Open, note)
+		if transitionErr != nil {
+			writeProblem(w, http.StatusServiceUnavailable, "support_case_invalid", "Your request could not be saved.")
+			return
+		}
+		item = updated
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "support.case_opened", ResourceType: "support_case", ResourceID: item.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context())})
 	writeJSON(w, http.StatusCreated, map[string]any{"case": item, "events": s.runtime.Support.Timeline(item.ID)})

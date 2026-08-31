@@ -146,8 +146,8 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		// These routes mutate financial state or create durable authority and
 		// therefore must be safe to replay after a client timeout.
 		"/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
-		"/onboarding/", "/notification-preferences", "/recovery-codes", "/account-recovery/", "/privacy-requests",
-		"/ops/commands",
+		"/onboarding/", "/notification-preferences", "/recovery-codes", "/account-recovery/", "/privacy-requests", "/support-cases", "/product-feedback",
+		"/ops/commands", "/ops/cases/", "/ops/team/",
 	} {
 		if strings.Contains(path, suffix) {
 			return true
@@ -195,6 +195,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/auth/logout", s.logout)
 	s.mux.HandleFunc("GET /api/v1/secure-link", s.resolveSecureLink)
 	s.mux.HandleFunc("GET /api/v1/me", s.me)
+	s.mux.HandleFunc("POST /api/v1/me/product-feedback", s.submitProductFeedback)
 	s.mux.HandleFunc("POST /api/v1/mfa/totp/enroll", s.enrollTOTP)
 	s.mux.HandleFunc("POST /api/v1/mfa/totp/verify", s.verifyTOTP)
 	s.mux.HandleFunc("POST /api/v1/me/recovery-codes/regenerate", s.regenerateRecoveryCodes)
@@ -332,6 +333,16 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/ops/commands", s.executeOperationsCommand)
 	s.mux.HandleFunc("GET /api/v1/ops/diagnostics", s.operationsDiagnostics)
 	s.mux.HandleFunc("GET /api/v1/ops/search", s.operationsSearch)
+	s.mux.HandleFunc("GET /api/v1/ops/users", s.operationsUsers)
+	s.mux.HandleFunc("GET /api/v1/ops/organizations", s.operationsOrganizations)
+	s.mux.HandleFunc("GET /api/v1/ops/money", s.operationsMoney)
+	s.mux.HandleFunc("GET /api/v1/ops/cases", s.operationsCases)
+	s.mux.HandleFunc("PATCH /api/v1/ops/cases/{caseID}", s.transitionOperationsCase)
+	s.mux.HandleFunc("GET /api/v1/ops/disputes", s.operationsDisputes)
+	s.mux.HandleFunc("POST /api/v1/ops/disputes/{disputeID}/decide", s.decideOperationsDispute)
+	s.mux.HandleFunc("GET /api/v1/ops/team", s.operationsTeam)
+	s.mux.HandleFunc("POST /api/v1/ops/team/{userID}/roles", s.grantOperationsRole)
+	s.mux.HandleFunc("DELETE /api/v1/ops/team/roles/{assignmentID}", s.revokeOperationsRole)
 	s.mux.HandleFunc("GET /api/v1/ops/audit", s.operationsAudit)
 	s.mux.HandleFunc("GET /api/v1/ops/cases/{caseID}", s.operationsCase)
 	s.mux.HandleFunc("GET /api/v1/ops/disputes/{disputeID}", s.operationsDispute)

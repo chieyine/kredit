@@ -92,6 +92,18 @@ func TestProductionRejectsMockProviders(t *testing.T) {
 	}
 }
 
+func TestProductionRequiresApprovedRetentionAndPilotEnablement(t *testing.T) {
+	cfg := Config{Environment: "production", Version: "1", APIListenAddr: ":8080", Currency: "NGN", MoneyUnit: "kobo", CollectionProvider: "provider"}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "FEATURE_APPROVED_RETENTION_POLICY") {
+		t.Fatalf("expected approved retention gate, got %v", err)
+	}
+	cfg.ApprovedRetentionPolicy = true
+	cfg.RetentionApprovalReference = "retention-approval"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "FEATURE_PRODUCTION_PILOT") {
+		t.Fatalf("expected production pilot gate, got %v", err)
+	}
+}
+
 func TestValidateProductionURLRequiresTLS(t *testing.T) {
 	if err := validateProductionURL("PUBLIC_BASE_URL", "http://app.example.com"); err == nil {
 		t.Fatal("expected HTTPS validation error")

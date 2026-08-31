@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -f .env ]]; then
-	set -a
-	source .env
-	set +a
-fi
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root_dir"
+source "$root_dir/scripts/load-env.sh"
+load_env_defaults "$root_dir/.env"
 
 if [[ "${ALLOW_DB_RESET:-false}" != "true" ]]; then
   printf '%s\n' 'Refusing reset. Set ALLOW_DB_RESET=true for an explicit local reset.' >&2

@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { tick } from 'svelte';
 
 	type PortalLink = [string, string];
 	type MobileLink = [string, string, string];
+	type MoreLink = [string, string, string?];
 
 	let {
 		label,
@@ -19,7 +21,7 @@
 		homeHref: string;
 		links: PortalLink[];
 		mobilePrimary?: MobileLink[];
-		mobileMore?: PortalLink[];
+		mobileMore?: MoreLink[];
 		dark?: boolean;
 		onsearch?: () => void;
 		onsignout?: () => void;
@@ -28,6 +30,8 @@
 
 	let open = $state(false);
 	let moreOpen = $state(false);
+	let moreTrigger: HTMLButtonElement | null = null;
+	let closeButton = $state<HTMLButtonElement | null>(null);
 	const menuID = `portal-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 	const moreID = `${menuID}-more`;
 	const hasMobileBar = $derived(mobilePrimary.length > 0);
@@ -37,13 +41,20 @@
 		return page.url.pathname === href || page.url.pathname.startsWith(`${href}/`);
 	}
 
-	function closeMenus() {
+	function closeMenus(restoreFocus = false) {
 		open = false;
 		moreOpen = false;
+		if (restoreFocus) void tick().then(() => moreTrigger?.focus());
+	}
+
+	function openMore(event: MouseEvent) {
+		moreTrigger = event.currentTarget as HTMLButtonElement;
+		moreOpen = true;
+		void tick().then(() => closeButton?.focus());
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') closeMenus();
+		if (event.key === 'Escape' && moreOpen) closeMenus(true);
 	}
 
 	$effect(() => {
@@ -68,14 +79,14 @@
 		{#if hasMobileBar}
 			<div class="desktop-primary">
 				{#each mobilePrimary as [linkLabel, href]}
-					<a {href} aria-current={current(href) ? 'page' : undefined} onclick={closeMenus}>{linkLabel}</a>
+					<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>{linkLabel}</a>
 				{/each}
-				<button type="button" class:active={moreOpen || mobileMore.some(([, href]) => current(href))} aria-controls={moreID} aria-expanded={moreOpen} onclick={() => (moreOpen = true)}>More <span aria-hidden="true">↓</span></button>
+				<button type="button" class:active={moreOpen || mobileMore.some(([, href]) => current(href))} aria-controls={moreID} aria-expanded={moreOpen} onclick={openMore}>More <span aria-hidden="true">↓</span></button>
 			</div>
 		{:else}
 			<div class="portal-links">
 				{#each links as [linkLabel, href]}
-					<a {href} aria-current={current(href) ? 'page' : undefined} onclick={closeMenus}>{linkLabel}</a>
+					<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>{linkLabel}</a>
 				{/each}
 			</div>
 		{/if}
@@ -89,33 +100,35 @@
 {#if hasMobileBar}
 	<div class="mobile-nav" aria-label={`${label} main pages`}>
 		{#each mobilePrimary as [linkLabel, href, icon]}
-			<a {href} aria-current={current(href) ? 'page' : undefined} onclick={closeMenus}>
+			<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>
 				<span class="mobile-icon" data-icon={icon} aria-hidden="true"></span>
 				<span>{linkLabel}</span>
 			</a>
 		{/each}
-		<button type="button" class:active={moreOpen || mobileMore.some(([, href]) => current(href))} aria-controls={moreID} aria-expanded={moreOpen} onclick={() => (moreOpen = true)}>
+		<button type="button" class:active={moreOpen || mobileMore.some(([, href]) => current(href))} aria-controls={moreID} aria-expanded={moreOpen} onclick={openMore}>
 			<span class="mobile-icon" data-icon="more" aria-hidden="true"></span>
 			<span>More</span>
 		</button>
 	</div>
 
 	{#if moreOpen}
-		<button class="sheet-backdrop" type="button" aria-label="Close more pages" onclick={() => (moreOpen = false)}></button>
+		<button class="sheet-backdrop" type="button" aria-label="Close more pages" onclick={() => closeMenus(true)}></button>
 		<div class="more-sheet" id={moreID} role="dialog" aria-modal="true" aria-label="More pages">
 			<header>
-				<div><span>More</span><strong>{label}</strong></div>
-				<button type="button" aria-label="Close more pages" onclick={() => (moreOpen = false)}>×</button>
+				<div><span>Choose a page</span><strong id={`${moreID}-title`}>{label}</strong></div>
+				<button bind:this={closeButton} type="button" aria-label="Close more pages" onclick={() => closeMenus(true)}>×</button>
 			</header>
 			<div class="sheet-content">
 				<div class="more-links" role="navigation" aria-label="More account pages" data-sveltekit-preload-data="tap">
-					{#each mobileMore as [linkLabel, href]}
-						<a {href} aria-current={current(href) ? 'page' : undefined} onclick={closeMenus}>
+					{#each mobileMore as [linkLabel, href, group], index}
+						{#if group && (index === 0 || mobileMore[index - 1][2] !== group)}<p class="more-group">{group}</p>{/if}
+						<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>
 							<span>{linkLabel}</span><span aria-hidden="true">→</span>
 						</a>
 					{/each}
 				</div>
 				<div class="sheet-actions">
+					{#if onsearch}<button type="button" onclick={() => { closeMenus(); onsearch?.(); }}>Search this account</button>{/if}
 					{#if onsignout}<button class="mobile-sign-out" type="button" onclick={onsignout}>Sign out</button>{/if}
 				</div>
 			</div>
@@ -133,7 +146,7 @@
 	.desktop-primary{display:flex;align-items:center;gap:.1rem;min-width:0}.desktop-primary a,.desktop-primary button{display:inline-flex;align-items:center;gap:.45rem;min-height:2.75rem;padding:.15rem .78rem;border:0;background:transparent;color:#aaa9a5;font:inherit;font-size:.84rem;font-weight:680;text-decoration:none;white-space:nowrap;cursor:pointer}.desktop-primary a:hover,.desktop-primary button:hover{color:#fff}.desktop-primary a[aria-current='page'],.desktop-primary button.active{color:#fff;background:#2738d6}.desktop-primary button span{color:#ff8b70}
 	.mobile-nav{display:none}
 	.sheet-backdrop{position:fixed;z-index:60;inset:0;display:block;width:100%;height:100%;border:0;background:rgba(23,24,27,.46);cursor:pointer}.more-sheet{position:fixed;z-index:61;top:3.65rem;right:0;bottom:0;display:block;width:min(26rem,calc(100vw - 2rem));overflow:hidden;border-left:1px solid #cec9bf;border-top:4px solid #2738d6;background:#faf8f2;box-shadow:-24px 0 70px rgba(23,24,27,.2);animation:drawer-in .22s cubic-bezier(.22,.8,.28,1)}
-	.more-sheet header{display:flex;align-items:center;justify-content:space-between;padding:1.05rem 1.25rem;border-bottom:1px solid #d7d2c8}.more-sheet header div{display:flex;flex-direction:column;gap:.14rem}.more-sheet header span{color:#2738d6;font-size:.68rem;font-weight:850;letter-spacing:.14em;text-transform:uppercase}.more-sheet header strong{font-family:Georgia,'Times New Roman',serif;font-size:1.45rem}.more-sheet header button{display:grid;place-items:center;width:2.75rem;height:2.75rem;border:1px solid #b8b4ab;background:transparent;color:#17181b;font-size:1.6rem;cursor:pointer}.sheet-content{max-height:calc(100vh - 8.8rem);overflow-y:auto;padding:.35rem 1.25rem 1.4rem}.more-links{display:grid}.more-links a{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:3.6rem;padding:.35rem .1rem;border-bottom:1px solid #d7d2c8;color:#17181b;font-size:.92rem;font-weight:740;text-decoration:none}.more-links a span:last-child{color:#ff6848;font-size:1rem}.more-links a[aria-current='page']{color:#2738d6}.sheet-actions{display:flex;padding-top:1rem}.sheet-actions button{width:100%;min-height:3.2rem;padding:.65rem;border:1px solid #17181b;background:transparent;color:#17181b;font:inherit;font-size:.82rem;font-weight:780;cursor:pointer}.sheet-actions .mobile-sign-out{border-color:#17181b;background:#17181b;color:#fff}
+	.more-sheet header{display:flex;align-items:center;justify-content:space-between;padding:1.05rem 1.25rem;border-bottom:1px solid #d7d2c8}.more-sheet header div{display:flex;flex-direction:column;gap:.14rem}.more-sheet header span{color:#2738d6;font-size:.68rem;font-weight:850;letter-spacing:.14em;text-transform:uppercase}.more-sheet header strong{font-family:Georgia,'Times New Roman',serif;font-size:1.45rem}.more-sheet header button{display:grid;place-items:center;width:2.75rem;height:2.75rem;border:1px solid #b8b4ab;background:transparent;color:#17181b;font-size:1.6rem;cursor:pointer}.sheet-content{max-height:calc(100vh - 8.8rem);overflow-y:auto;padding:.35rem 1.25rem 1.4rem}.more-links{display:grid}.more-group{margin:1.1rem 0 .15rem;color:#6e6b65;font-size:.66rem;font-weight:850;letter-spacing:.12em;text-transform:uppercase}.more-links a{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:3.6rem;padding:.35rem .1rem;border-bottom:1px solid #d7d2c8;color:#17181b;font-size:.92rem;font-weight:740;text-decoration:none}.more-links a span:last-child{color:#ff6848;font-size:1rem}.more-links a[aria-current='page']{color:#2738d6}.sheet-actions{display:flex;gap:.5rem;padding-top:1rem}.sheet-actions button{width:100%;min-height:3.2rem;padding:.65rem;border:1px solid #17181b;background:transparent;color:#17181b;font:inherit;font-size:.82rem;font-weight:780;cursor:pointer}.sheet-actions .mobile-sign-out{border-color:#17181b;background:#17181b;color:#fff}
 
 	@media(max-width:760px){
 		nav{position:sticky;flex-wrap:wrap;padding:.72rem 1rem}.account-label{display:block;margin-left:auto}.has-mobile-bar .portal-menu{display:none}.hidden-mobile-toggle{display:none!important}

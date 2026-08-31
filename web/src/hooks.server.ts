@@ -1,5 +1,8 @@
 import { env } from '$env/dynamic/private';
 import type { Handle } from '@sveltejs/kit';
+import { assertLaunchWebConfig } from '$lib/server/legal-config';
+
+assertLaunchWebConfig();
 
 // Keep browser cookies first-party while the API remains an internal service.
 // The same-origin proxy is used by the production Node adapter; Vite's proxy

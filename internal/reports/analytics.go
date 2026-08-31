@@ -29,6 +29,16 @@ type Reconciliation struct {
 	Status      string `json:"status"`
 }
 
+type FeedbackSummary struct {
+	Total        int64   `json:"total"`
+	Yes          int64   `json:"yes"`
+	Partly       int64   `json:"partly"`
+	No           int64   `json:"no"`
+	Seller       int64   `json:"seller"`
+	Buyer        int64   `json:"buyer"`
+	ClearPercent float64 `json:"clear_percent"`
+}
+
 type PilotScorecard struct {
 	GeneratedAt      time.Time        `json:"generated_at"`
 	From             time.Time        `json:"from"`
@@ -42,6 +52,7 @@ type PilotScorecard struct {
 	Drivers          []Metric         `json:"drivers"`
 	Guardrails       []Metric         `json:"guardrails"`
 	Funnel           map[string]int64 `json:"funnel"`
+	Feedback         FeedbackSummary  `json:"feedback"`
 	Reconciliation   []Reconciliation `json:"reconciliation"`
 	ReconciliationOK bool             `json:"reconciliation_ok"`
 }
@@ -65,6 +76,12 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 		return PilotScorecard{}, err
 	}
 	result.LatestEventAt = latest
+	if err := s.pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE metadata->>'answer'='yes'),count(*) FILTER(WHERE metadata->>'answer'='partly'),count(*) FILTER(WHERE metadata->>'answer'='no'),count(*) FILTER(WHERE metadata->>'area'='seller'),count(*) FILTER(WHERE metadata->>'area'='buyer') FROM app.analytics_events WHERE name='feedback.clarity_submitted' AND occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=$3)`, from, to, orgHash).Scan(&result.Feedback.Total, &result.Feedback.Yes, &result.Feedback.Partly, &result.Feedback.No, &result.Feedback.Seller, &result.Feedback.Buyer); err != nil {
+		return PilotScorecard{}, fmt.Errorf("scorecard feedback: %w", err)
+	}
+	if result.Feedback.Total > 0 {
+		result.Feedback.ClearPercent = 100 * float64(result.Feedback.Yes) / float64(result.Feedback.Total)
+	}
 
 	queries := []struct {
 		set                                       *([]Metric)
