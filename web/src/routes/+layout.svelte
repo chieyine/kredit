@@ -18,9 +18,8 @@
 	const canonical = $derived(SITE_URL + normalizedPath);
 	const routeArticle = $derived((page.data as any)?.article);
 	const routeSEO = $derived((page.data as any)?.seo);
-	const legalActive = $derived(Boolean((page.data as any)?.legal?.active));
 	const seo = $derived(routeArticle ? { title: routeArticle.title, description: routeArticle.description, type: 'article' as const, published: routeArticle.published, modified: routeArticle.modified, wordCount: routeArticle.wordCount, category: routeArticle.category } : routeSEO ?? seoForPath(normalizedPath));
-	const indexable = $derived(!privateShell && (!nonIndexablePaths.has(normalizedPath) || legalActive) && page.status < 400);
+	const indexable = $derived(!privateShell && !nonIndexablePaths.has(normalizedPath) && page.status < 400);
 	const organizationSchema = {
 		'@context': 'https://schema.org',
 		'@type': 'Organization',

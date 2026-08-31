@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 
 	const links = [
 		['How it works', '/how-it-works'],
@@ -8,9 +9,24 @@
 		['Price', '/pricing']
 	];
 
-	function closeMobileMenu(event: MouseEvent) {
+	let menuOpen = $state(true);
+
+	onMount(() => {
+		const query = window.matchMedia('(min-width: 721px)');
+		const sync = () => {
+			menuOpen = query.matches;
+		};
+		sync();
+		query.addEventListener('change', sync);
+		return () => query.removeEventListener('change', sync);
+	});
+
+	function closeMobileMenu(event: MouseEvent | undefined = undefined) {
 		if (typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches) {
-			(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
+			menuOpen = false;
+			if (event && event.currentTarget) {
+				(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
+			}
 		}
 	}
 </script>
@@ -20,7 +36,7 @@
 		<a class="wordmark" href="/" aria-label="Kredit home" onclick={closeMobileMenu}>
 			<span>K</span><b>Kredit</b>
 		</a>
-		<details class="site-menu-disclosure">
+		<details class="site-menu-disclosure" bind:open={menuOpen}>
 			<summary><span aria-hidden="true">☰</span>Menu</summary>
 			<div id="public-navigation" class="site-menu">
 				<div class="nav-links">
