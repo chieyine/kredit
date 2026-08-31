@@ -177,6 +177,26 @@ test('buyer can cancel an active mandate', async ({ page }) => {
 	await expect.poll(() => cancelled).toBe(true);
 });
 
+test('mobile customer navigation keeps important pages below and every other page in one menu', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.route('**/api/v1/buyer/mandates', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mandates: [] }) }));
+	await page.goto('/buyer/mandates');
+	const account = page.getByRole('navigation', { name: 'Customer account' });
+	await expect(account.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
+	const mainPages = page.getByRole('navigation', { name: 'Customer account main pages' });
+	await expect(mainPages.getByRole('link')).toHaveCount(4);
+	await expect(mainPages.getByRole('button')).toHaveCount(0);
+	await account.getByRole('button', { name: 'Menu', exact: true }).click();
+	await expect(page.getByRole('dialog', { name: 'Customer account menu' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Sales and payments' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Messages and choices' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Account and help' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(7);
+	await page.getByRole('link', { name: 'Get help' }).click();
+	await expect(page).toHaveURL(/\/legal\/complaints$/);
+	await expect(page.getByRole('dialog', { name: 'Customer account menu' })).toHaveCount(0);
+});
+
 test('public receipt renders only the approved projection', async ({ page }) => {
 	await page.route('**/api/v1/public/receipts/signed-token', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ receipt: { reference: 'payment-1', amount_kobo: 12500000, currency: 'NGN', source_type: 'buyer_payment_claim', state: 'recognized', paid_at: '2026-08-21T10:00:00Z', recognized_at: '2026-08-21T10:05:00Z' } }) }));
 	await page.goto('/receipt/signed-token');

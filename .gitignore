@@ -9,6 +9,8 @@ node_modules/
 web/.svelte-kit/
 web/build/
 web/.vite/
+.vercel/
+web/.vercel/
 *.tsbuildinfo
 
 # Local configuration and secrets
