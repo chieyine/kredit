@@ -53,7 +53,7 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
           go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
           go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.4.0
-      - uses: aquasecurity/setup-trivy@v0.2.3
+      - uses: aquasecurity/setup-trivy@v0.2.6
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
