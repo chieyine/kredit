@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+
 	let stage = $state(0);
 	let amount = $state(500_000);
+	let interactive = $state(false);
 	const amounts = [250_000, 500_000, 1_200_000];
 	const stages = [
 		{ role: 'Seller', title: 'Write down the sale', action: 'Send to my customer' },
@@ -17,6 +20,7 @@
 	function money(value: number) { return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value); }
 	function next() { if (stage < stages.length - 1) stage += 1; }
 	function restart() { stage = 0; }
+	onMount(() => { interactive = true; });
 </script>
 
 <svelte:head><meta name="theme-color" content="#17181b" /></svelte:head>
@@ -24,7 +28,7 @@
 <main class="demo-page">
 	<section class="demo-intro shell" aria-labelledby="demo-title">
 		<div><p class="eyebrow"><span></span> Try Kredit yourself</p><h1 id="demo-title">See a credit sale<br /><em>from start to payment.</em></h1></div>
-		<div class="intro-copy"><p>Take both sides of a sample sale. You will see exactly what the seller and customer see.</p><div class="demo-promise"><b>No sign-in</b><b>No real money</b><b>About 60 seconds</b></div></div>
+		<div class="intro-copy"><p>Take both sides of a sample sale. This guided example shows the steps for the seller and customer.</p><div class="demo-promise"><b>No sign-in</b><b>No real money</b><b>About 60 seconds</b></div></div>
 	</section>
 
 	<section class="experience" aria-label="Interactive Kredit demonstration">
@@ -50,7 +54,7 @@
 
 				<div class="product-frame" class:complete={stage === 5}>
 					<div class="product-bar"><a href="/" aria-label="Kredit home"><span>K</span>Kredit</a><b>{current.role} view</b></div>
-					{#if stage === 0}<div class="amount-choice"><p>Choose a sample amount</p><div>{#each amounts as option}<button class:chosen={amount === option} onclick={() => amount = option}>{money(option)}</button>{/each}</div></div>{/if}
+					{#if stage === 0}<div class="amount-choice"><p>Choose a sample amount</p><div>{#each amounts as option}<button disabled={!interactive} class:chosen={amount === option} onclick={() => amount = option}>{money(option)}</button>{/each}</div></div>{/if}
 					<div class="deal-head"><div><small>Customer</small><h3>Adebayo Stores</h3></div><span class:accepted={stage >= 2}>{stage === 0 ? 'Not sent' : stage === 1 ? 'Waiting for you' : 'Accepted'}</span></div>
 					{#if stage === 1}<div class="plain-notice"><b>Please check before you accept</b><span>The seller cannot quietly change these details after you say yes.</span></div>{/if}
 					<div class="deal-facts"><div><small>Goods</small><strong>40 cartons of cooking oil</strong></div><div><small>Total to pay</small><strong>{money(amount)}</strong></div><div><small>Pay before</small><strong>18 September 2026</strong></div><div><small>Extra time</small><strong>3 days</strong></div></div>
@@ -58,7 +62,7 @@
 					{#if stage >= 3}<div class="record-line"><span>✓</span><div><b>Goods released</b><small>Delivery note saved by Kora Wholesale</small></div></div>{/if}
 					{#if stage >= 4}<div class="record-line"><span>✓</span><div><b>Goods received</b><small>Customer confirmed · No problem reported</small></div></div>{/if}
 					{#if stage >= 4}<div class="balance-card"><div><small>{stage === 5 ? 'Money left to pay' : 'Current balance'}</small><strong>{stage === 5 ? money(balance) : money(amount)}</strong></div><span>{stage === 5 ? `Payment of ${money(payment)} recorded` : `Sample payment: ${money(payment)}`}</span></div>{/if}
-					{#if stage < 5}<button class="next-action" onclick={next}>{current.action}<span aria-hidden="true">→</span></button>
+					{#if stage < 5}<button class="next-action" disabled={!interactive} onclick={next}>{current.action}<span aria-hidden="true">→</span></button>
 					{:else}<div class="finish-panel" aria-live="polite"><span class="finish-check">✓</span><div><small>SAMPLE COMPLETE</small><h3>Everyone sees {money(balance)} left.</h3><p>One sale. One balance. Every important step kept together.</p></div></div>{/if}
 				</div>
 				<div class="stage-footer">{#if stage > 0}<button class="restart" onclick={restart}>Start again</button>{/if}{#if stage === 5}<a class="start-real" href="/app">Add my first real sale <span>↗</span></a>{:else}<span>Your choices stay on this device.</span>{/if}</div>
@@ -67,7 +71,7 @@
 	</section>
 
 	<section class="after-demo shell">
-		<div><p class="eyebrow"><span></span> What just happened?</p><h2>Six small answers stopped one big argument.</h2></div>
+		<div><p class="eyebrow"><span></span> What just happened?</p><h2>The details worth keeping together.</h2></div>
 		<div class="answers"><p><span>01</span><b>What goods?</b>40 cartons of cooking oil.</p><p><span>02</span><b>How much?</b>{money(amount)}.</p><p><span>03</span><b>Who agreed?</b>The customer accepted.</p><p><span>04</span><b>Did goods arrive?</b>Both sides confirmed.</p><p><span>05</span><b>What was paid?</b>{money(payment)}.</p><p><span>06</span><b>What is left?</b>{money(balance)}.</p></div>
 		<a class="final-cta" href="/app">Start with one customer <span aria-hidden="true">↗</span></a>
 	</section>

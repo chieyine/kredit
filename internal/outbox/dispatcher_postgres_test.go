@@ -38,11 +38,20 @@ func TestDispatcherPublishesCommittedEventOnce(t *testing.T) {
 	}
 	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM app.outbox_events WHERE id=$1::uuid`, id) }()
 	calls := 0
-	dispatcher := NewDispatcher(store, PublishFunc(func(context.Context, Event) error { calls++; return nil }))
+	dispatcher := NewDispatcher(store, PublishFunc(func(_ context.Context, event Event) error {
+		if event.ID == id {
+			calls++
+		}
+		return nil
+	}))
 	dispatcher.now = func() time.Time { return time.Now().UTC() }
-	published, err := dispatcher.DispatchOnce(ctx, 100)
-	if err != nil || published < 1 || calls < 1 {
-		t.Fatalf("dispatch failed: published=%d calls=%d err=%v", published, calls, err)
+	for batch := 0; batch < 100 && calls == 0; batch++ {
+		if _, err := dispatcher.DispatchOnce(ctx, 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("target event delivered %d times", calls)
 	}
 	var state string
 	if err := pool.QueryRow(ctx, `SELECT state FROM app.outbox_events WHERE id=$1::uuid`, id).Scan(&state); err != nil || state != "published" {

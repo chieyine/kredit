@@ -8,6 +8,228 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /ops/capabilities:
+    get:
+      operationId: adminCapabilities
+      summary: List effective administrator permissions
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/approval-inbox:
+    get:
+      operationId: adminApprovalInbox
+      summary: List open reviews allowed by the actor role
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 2000 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/review-assignments:
+    post:
+      operationId: assignAdminReview
+      summary: Record review ownership, deadline and reason
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminReviewAssignment'
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/admin-changes:
+    get:
+      operationId: listAdminChanges
+      summary: List immutable financial proposals
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 2000 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+    post:
+      operationId: proposeAdminChange
+      summary: Propose a correction or repayment-date amendment
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminChangeProposal'
+      responses:
+        '201':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/admin-changes/{changeID}/decision:
+    post:
+      operationId: decideAdminChange
+      summary: Independently approve, reject or cancel an exact proposal
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      parameters:
+        - { name: changeID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminChangeDecision'
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/change-context:
+    get:
+      operationId: adminChangeContext
+      summary: Load current balances and instalments using an obligation or credit reference
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 2000 } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/change-history:
+    get:
+      operationId: adminChangeHistory
+      summary: Search retained change history and export a page as CSV
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 2000 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+        - { name: kind, in: query, schema: { type: string } }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv], default: json } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/business-policies/preview:
+    post:
+      operationId: previewBusinessPolicy
+      summary: Estimate policy impact using current persisted records
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessPolicyPreviewInput'
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/attention:
+    get:
+      operationId: adminAttention
+      summary: Count role-authorized work needing attention
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /ops/attention/details:
+    get:
+      operationId: adminAttentionDetails
+      summary: List up to 100 failed notices, uncertain debits and expiring mandates
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /buyer/amendments:
+    get:
+      operationId: buyerScheduleAmendments
+      summary: List repayment-date proposals and outcomes for the authenticated buyer
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
+  /buyer/amendments/{changeID}/decision:
+    post:
+      operationId: decideBuyerAmendment
+      summary: Accept or reject exact independently approved repayment dates
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      parameters:
+        - { name: changeID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminChangeDecision'
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: Role, buyer identity, or recent verification required }
+        '409': { description: Stale, expired, conflicted, or invalid proposal }
+        '503': { description: Persistence unavailable }
   /healthz:
     get:
       security: []
@@ -283,6 +505,17 @@ paths:
       summary: Submit a provider-hosted KYB reference after recent MFA
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProviderReferenceRequest' } } } }
       responses: { '200': { description: Provider review state recorded. } }
+  /organizations/{organizationID}/onboarding/kyb/reconcile:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    post:
+      operationId: reconcileSupplierKYB
+      summary: Poll the identity provider and apply its authoritative KYB state after recent MFA
+      responses:
+        '200': { description: Provider status reconciled idempotently. }
+        '409': { description: KYB has not been submitted or the provider state is unsupported. }
+        '503': { description: Provider lookup is temporarily unavailable. }
   /organizations/{organizationID}/onboarding/settlement:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
@@ -652,9 +885,18 @@ paths:
       operationId: authorizeCreditMandate
       parameters:
         - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount_ceiling_kobo: {type: integer, format: int64, minimum: 1}
       responses:
         '200':
-          description: Mandate authorized.
+          description: Existing suitable mandate or pending hosted authorization. The mandate is active only after provider confirmation.
   /buyer/credit-requests/{requestID}/accept:
     post:
       operationId: acceptCreditRequest
@@ -905,6 +1147,8 @@ paths:
   /organizations/{organizationID}/credit-requests/{requestID}/schedule:
     post:
       operationId: createRepaymentSchedule
+      deprecated: true
+      description: Accepted repayment schedules are immutable. A replacement requires a separate buyer-accepted amendment workflow, which is currently unavailable.
       parameters:
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/RequestID'
@@ -915,8 +1159,8 @@ paths:
             schema:
               $ref: '#/components/schemas/ScheduleInput'
       responses:
-        '201':
-          description: Repayment schedule created.
+        '409':
+          description: accepted_schedule_locked; existing accepted terms cannot be replaced.
     get:
       operationId: getRepaymentSchedule
       parameters:
@@ -1194,6 +1438,57 @@ paths:
       responses:
         '200':
           description: Provider state reconciled.
+  /webhooks/mono:
+    post:
+      operationId: receiveMonoWebhook
+      security: []
+      description: Authenticate the Mono shared-secret header, discard sensitive fields, and durably enqueue reconciliation. Also available at /webhooks/mono outside the API prefix.
+      parameters:
+        - name: mono-webhook-secret
+          in: header
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '200': {description: Receipt saved for asynchronous processing.}
+        '401': {description: Invalid authentication or payload.}
+        '503': {description: Disabled or unavailable; retry delivery.}
+  /buyer/businesses/{businessID}/repayment-customer:
+    post:
+      operationId: createRepaymentCustomer
+      description: Register the business owner's repayment customer with consent. Requires recent MFA, CSRF, and an idempotency key. BVN is sent directly to the provider and is never persisted or returned. Registration is not verification or trade-credit acceptance.
+      parameters:
+        - name: businessID
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, email, phone, address, bvn, consent_version]
+              properties:
+                first_name: {type: string}
+                last_name: {type: string}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string, maxLength: 100}
+                bvn: {type: string, pattern: '^[0-9]{11}$', writeOnly: true}
+                consent_version: {type: string}
+      responses:
+        '201': {description: Registered; only registration status returned.}
+        '200': {description: Already registered.}
+        '403': {description: Recent MFA or CSRF required.}
+        '404': {description: Business not owned by the authenticated user.}
+        '409': {description: Provider registration not confirmed.}
+        '503': {description: Mono sandbox not configured.}
   /webhooks/collection/{provider}:
     post:
       security: []
@@ -1210,8 +1505,21 @@ paths:
             schema:
               $ref: '#/components/schemas/CollectionWebhook'
       responses:
-        '200':
-          description: Webhook accepted idempotently.
+        '202':
+          description: Callback authenticated as a reconciliation signal; no financial state is accepted from callback fields.
+  /buyer/schedule-items/{itemID}/collection-notice/acknowledge:
+    post:
+      operationId: acknowledgeCollectionNotice
+      summary: Record an authenticated buyer acknowledgement of a delivered pre-debit notice
+      parameters:
+        - name: itemID
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '204': {description: Notice acknowledged idempotently.}
+        '404': {description: Schedule item is not owned by the authenticated buyer.}
   /organizations/{organizationID}/credit-requests/{requestID}/disputes:
     post:
       operationId: openDispute
@@ -1329,6 +1637,136 @@ paths:
       responses:
         '200':
           description: Audited operational action history.
+  /webhooks/notifications/{channel}:
+    post:
+      security: []
+      operationId: notificationDeliveryReceipt
+      summary: Record authenticated delivery evidence from the configured notification connector
+      description: X-Notification-Signature is the hex HMAC-SHA256 of the exact request body using the channel connector token. Receipt IDs deduplicate per channel. A send acknowledgment is not delivery evidence. Connectors retry 409 when a sent message is not yet committed.
+      parameters:
+        - name: channel
+          in: path
+          required: true
+          schema: { type: string, enum: [email, sms, whatsapp] }
+        - name: X-Notification-Signature
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id, notification_event_id, message_id, delivered_at]
+              properties:
+                event_id: { type: string, maxLength: 200 }
+                notification_event_id: { type: string }
+                message_id: { type: string }
+                delivered_at: { type: string, format: date-time }
+      responses:
+        '200': { description: Delivery receipt recorded or exact replay acknowledged }
+        '401': { description: Missing or invalid connector signature }
+        '409': { description: Conflicting receipt or matching sent message unavailable }
+  /pricing:
+    get:
+      operationId: publicPricing
+      security: []
+      summary: Current supplier fee rates for new offers; existing offers retain their recorded rates
+      responses:
+        '200':
+          description: Current rates; response must not be cached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeeTerms'
+        '503': { description: Pricing unavailable }
+  /ops/business-policies:
+    get:
+      operationId: businessPolicies
+      summary: Current settings, field definitions, last 100 changes and immutable decision history
+      responses:
+        '200': { description: Current revision, catalog, deployment boundaries and history; no secrets }
+        '403': { description: Platform administrator role and MFA required }
+        '503': { description: Policy persistence unavailable }
+    post:
+      operationId: proposeBusinessPolicy
+      summary: Propose a complete policy snapshot for independent approval
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, base_revision, values, reason, effective_at]
+              properties:
+                id: { type: string, format: uuid }
+                base_revision: { type: integer, format: int64, minimum: 0 }
+                values: { $ref: '#/components/schemas/BusinessPolicyValues' }
+                reason: { type: string, minLength: 8, maxLength: 2000 }
+                effective_at: { type: string, format: date-time }
+      responses:
+        '201': { description: Proposal recorded without changing active settings }
+        '403': { description: Platform administrator role, fresh MFA and CSRF required }
+        '409': { description: Invalid values, conflicting identifier, stale revision or outstanding change }
+  /ops/business-policies/{changeID}/decision:
+    post:
+      operationId: decideBusinessPolicy
+      parameters:
+        - name: changeID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, reason]
+              properties:
+                action: { type: string, enum: [approve, reject, cancel] }
+                reason: { type: string, minLength: 8, maxLength: 2000 }
+      responses:
+        '200': { description: Decision recorded; approved policy becomes effective at its scheduled time }
+        '403': { description: Platform administrator role, fresh MFA and CSRF required }
+        '409': { description: Self approval, outdated proposal, expired date or invalid transition }
+  /ops/financial-reconciliation:
+    get:
+      operationId: financialReviews
+      summary: Open financial differences with ownership and immutable review history
+      responses:
+        '200': { description: Open reconciliation cases, with monetary values as decimal kobo strings }
+        '403': { description: Provider operations permission and MFA required }
+        '503': { description: Financial records unavailable }
+  /ops/financial-reconciliation/{caseID}/decision:
+    post:
+      operationId: decideFinancialReview
+      parameters:
+        - name: caseID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, reason]
+              properties:
+                action: { type: string, enum: [claim, resolve] }
+                reason: { type: string, minLength: 8, maxLength: 2000 }
+      responses:
+        '200': { description: Review claimed or resolved with immutable evidence }
+        '403': { description: Provider operations permission, MFA and CSRF required }
+        '409': { description: Ownership conflict or financial records still disagree }
   /webhooks/messaging/whatsapp:
     post:
       security: []
@@ -1681,7 +2119,7 @@ paths:
               type: object
               required: [role, reason]
               properties:
-                role: { type: string, enum: [support_agent, compliance_reviewer, dispute_reviewer, platform_admin] }
+                role: { type: string, enum: [support_agent, compliance_reviewer, dispute_reviewer, platform_admin, finance_operator, policy_manager, approver, access_administrator] }
                 reason: { type: string, minLength: 8, maxLength: 1000 }
                 expires_at: { type: string, format: date-time }
       responses:
@@ -1724,7 +2162,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/OrganizationID'
       responses:
-        '200': { description: Fee report }
+        '200':
+          description: Base and collection fees, waived_fees_kobo, and total_fees_kobo net of waivers; negative net totals represent a credit. by_obligation contains the same breakdown.
+        '503': {description: Fee balances could not be loaded reliably.}
   /organizations/{organizationID}/reports/exports:
     post:
       operationId: exportReceivables
@@ -1747,7 +2187,7 @@ paths:
                 required: [completed_obligations, active_obligations, obligations, score]
                 properties:
                   generated_at: {type: string, format: date-time}
-                  verified_since: {type: string, format: date-time, nullable: true}
+                  verified_since: {type: string, format: date-time, nullable: true, description: Omitted until an authoritative identity-verification date is available; agreement activation is not verification.}
                   active_obligations: {type: integer}
                   completed_obligations: {type: integer}
                   total_completed_principal_kobo: {type: integer}
@@ -2129,6 +2569,86 @@ components:
         type: string
         minLength: 64
   schemas:
+    AdminChangeProposal:
+      type: object
+      additionalProperties: false
+      required: [id, obligation_id, kind, reason, values, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        obligation_id: { type: string, format: uuid }
+        kind: { type: string, enum: [write_off, fee_waiver, schedule_amendment] }
+        reason: { type: string, minLength: 8, maxLength: 2000 }
+        expires_at: { type: string, format: date-time, description: Within 30 days of submission. }
+        values:
+          type: object
+          additionalProperties: false
+          required: [amount_kobo, dates]
+          properties:
+            amount_kobo: { type: integer, format: int64, minimum: 0 }
+            dates:
+              type: array
+              maxItems: 60
+              items:
+                type: object
+                additionalProperties: false
+                required: [item_id, due_at]
+                properties:
+                  item_id: { type: string, format: uuid }
+                  due_at: { type: string, format: date-time }
+    AdminChangeDecision:
+      type: object
+      additionalProperties: false
+      required: [action, reason]
+      properties:
+        action: { type: string, enum: [approve, reject, cancel, accept] }
+        reason: { type: string, minLength: 8, maxLength: 2000 }
+    AdminReviewAssignment:
+      type: object
+      additionalProperties: false
+      required: [kind, id, owner_id, due_at, reason]
+      properties:
+        kind: { type: string, enum: [policy, financial_change, financial_review, dispute, recovery, privacy, support] }
+        id: { type: string, format: uuid }
+        owner_id: { type: string, description: Active authorized reviewer UUID or empty to unassign. }
+        due_at: { type: string, format: date-time }
+        reason: { type: string, minLength: 8, maxLength: 2000 }
+    BusinessPolicyPreviewInput:
+      type: object
+      additionalProperties: false
+      required: [base_revision, values]
+      properties:
+        base_revision: { type: integer, format: int64, minimum: 0 }
+        values: { $ref: '#/components/schemas/BusinessPolicyValues' }
+    FeeTerms:
+      type: object
+      required: [policy_revision, base_bps, collection_bps]
+      properties:
+        policy_revision: { type: integer, format: int64 }
+        base_bps: { type: integer, minimum: 0, maximum: 1000 }
+        collection_bps: { type: integer, minimum: 0, maximum: 1000 }
+    BusinessPolicyValues:
+      type: object
+      additionalProperties: false
+      required: [collections_enabled, automatic_collection, automatic_retry, payment_claims, notice_hours, max_retries, max_suppliers, max_buyers, max_principal_kobo, max_exposure_kobo, max_drawdowns_per_day, enhanced_review_kobo, correction_threshold_kobo, base_fee_bps, collection_fee_bps, allowed_industries, upcoming_notice_days, mandate_notice_days]
+      properties:
+        collections_enabled: { type: boolean }
+        automatic_collection: { type: boolean }
+        automatic_retry: { type: boolean }
+        payment_claims: { type: boolean }
+        notice_hours: { type: integer, minimum: 1, maximum: 720 }
+        max_retries: { type: integer, minimum: 1, maximum: 10 }
+        max_suppliers: { type: integer, minimum: 0, maximum: 1000000000 }
+        max_buyers: { type: integer, minimum: 0, maximum: 1000000000 }
+        max_principal_kobo: { type: integer, format: int64, minimum: 0, maximum: 9000000000000000 }
+        max_exposure_kobo: { type: integer, format: int64, minimum: 0, maximum: 9000000000000000 }
+        max_drawdowns_per_day: { type: integer, minimum: 0, maximum: 1000000 }
+        enhanced_review_kobo: { type: integer, format: int64, minimum: 0, maximum: 9000000000000000 }
+        correction_threshold_kobo: { type: integer, minimum: 1, maximum: 1000000 }
+        base_fee_bps: { type: integer, minimum: 0, maximum: 1000 }
+        collection_fee_bps: { type: integer, minimum: 0, maximum: 1000 }
+        allowed_industries: { type: string, maxLength: 2000 }
+        upcoming_notice_days: { type: integer, minimum: 1, maximum: 30 }
+        mandate_notice_days: { type: integer, minimum: 1, maximum: 90 }
     OperationsCommandInput:
       type: object
       required: [command_type, target_type, target_id, reason, expected_version]
@@ -2209,6 +2729,7 @@ components:
       type: object
       required: [buyer_user_id, buyer_business_id, buyer_legal_name, principal_kobo, goods_description, due_date, collection_at]
       properties:
+        collection_policy: {type: string, enum: [STANDARD, GRACE, IMMEDIATE]}
         buyer_user_id: {type: string}
         buyer_business_id: {type: string}
         buyer_legal_name: {type: string}
@@ -2236,7 +2757,7 @@ components:
               due_date: {type: string, format: date}
     CreditAcceptRequest:
       type: object
-      required: [agreement_version_id, agreement_hash, mandate_provider_id]
+      required: [agreement_version_id, agreement_hash]
       properties:
         agreement_version_id: {type: string}
         agreement_hash: {type: string}
@@ -2245,6 +2766,7 @@ components:
       type: object
       required: [expected_version, principal_kobo, goods_description, due_date, collection_at]
       properties:
+        collection_policy: {type: string, enum: [STANDARD, GRACE, IMMEDIATE]}
         expected_version: {type: integer, format: int64, minimum: 1}
         principal_kobo: {type: integer, format: int64, minimum: 1}
         goods_description: {type: string}
@@ -2420,12 +2942,13 @@ components:
         remaining_disputed_kobo: {type: integer, format: int64, minimum: 0}
         reason: {type: string}
     OperationInput:
+      description: Individual and cumulative write-offs plus fee waivers below 1000000 kobo per obligation are supported. Larger corrections remain blocked pending a verified approval workflow.
       type: object
       required: [amount_kobo, reason]
       properties:
-        amount_kobo: {type: integer, format: int64, minimum: 1}
+        amount_kobo: {type: integer, format: int64, minimum: 1, maximum: 999999}
         reason: {type: string}
-        approved_by: {type: string}
+        approved_by: {type: string, const: "", deprecated: true, description: Caller-asserted approval is rejected. Verified dual approval is not yet available.}
     WhatsAppWebhook:
       type: object
       required: [id, from, text, signature]

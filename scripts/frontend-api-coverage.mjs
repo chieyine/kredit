@@ -6,7 +6,13 @@ import { spawnSync } from 'node:child_process';
 
 const root = resolve(import.meta.dirname, '..');
 const server = readFileSync(resolve(root, 'internal/web/server.go'), 'utf8');
-const listing = spawnSync('rg', ['--files', 'web/src', '-g', '!web/src/lib/api/generated/**'], { cwd: root, encoding: 'utf8' });
+let listing = spawnSync('rg', ['--files', 'web/src', '-g', '!web/src/lib/api/generated/**'], { cwd: root, encoding: 'utf8' });
+if (listing.status !== 0) {
+	listing = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'web/src/**', ':(exclude)web/src/lib/api/generated/**'], {
+		cwd: root,
+		encoding: 'utf8'
+	});
+}
 if (listing.status !== 0) throw new Error(listing.stderr || 'Could not list frontend files.');
 const frontend = listing.stdout.trim().split('\n').filter(Boolean).map((file) => readFileSync(resolve(root, file), 'utf8')).join('\n');
 
@@ -30,6 +36,10 @@ const noSeparateScreen = new Map([
 	['GET /api/v1/buyer/credit-requests/{id}/agreement', 'included in the full buyer sale response'],
 	['GET /api/v1/buyer/credit-requests/{id}/payments', 'included on the buyer obligation screen'],
 	['GET /api/v1/buyer/credit-requests/{id}/schedule', 'included on the buyer obligation screen'],
+	['POST /webhooks/mono', 'provider-to-server webhook'],
+	['POST /api/v1/webhooks/mono', 'provider-to-server webhook'],
+	['POST /api/v1/webhooks/notifications/{id}', 'provider-to-server webhook'],
+	['POST /api/v1/buyer/businesses/{id}/repayment-customer', 'provider customer setup behind authorization session'],
 	['GET /api/v1/organizations/{id}', 'the organisation list already returns each full business record']
 ]);
 
@@ -44,6 +54,7 @@ const coveredThroughComponent = new Map([
 	['POST /api/v1/organizations/{id}/onboarding/contacts/verify', 'web/src/routes/app/onboarding/+page.svelte'],
 	['PATCH /api/v1/organizations/{id}/onboarding/representative', 'web/src/routes/app/onboarding/+page.svelte'],
 	['POST /api/v1/organizations/{id}/onboarding/kyb', 'web/src/routes/app/onboarding/+page.svelte'],
+	['POST /api/v1/organizations/{id}/onboarding/kyb/reconcile', 'web/src/routes/app/onboarding/+page.svelte'],
 	['POST /api/v1/organizations/{id}/onboarding/consents', 'web/src/routes/app/onboarding/+page.svelte'],
 	['POST /api/v1/buyer/mandates/{id}/cancel', 'web/src/routes/buyer/mandates/+page.svelte'],
 	['POST /api/v1/buyer/mandates/{id}/restore', 'web/src/routes/buyer/mandates/+page.svelte'],

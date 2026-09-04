@@ -10,15 +10,11 @@ bash scripts/readme-conformance.sh
 bash scripts/implementation-plan-conformance-test.sh
 bash scripts/load-env-test.sh
 pnpm run audit
-format_output="$(gofmt -l .)"
-if [[ -n "$format_output" ]]; then
-  printf '%s\n' "$format_output"
-  printf '%s\n' 'Go files require formatting.' >&2
-  exit 1
-fi
 go test ./...
 go test -race ./internal/collections ./internal/credit ./internal/payments ./internal/reports
-go vet ./...
+# lint.sh runs gofmt, go vet and golangci-lint, and fails closed when the linter
+# is missing. Calling it here is what makes .golangci.yml enforceable.
+bash scripts/lint.sh
 bash scripts/security.sh
 
 if [[ ! -d web/node_modules ]]; then

@@ -32,7 +32,12 @@ func (s *Server) reportReceivables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = s.runtime.Reports.Track("report.receivables.viewed", orgID, "supplier receivables reporting", nil)
-	writeJSON(w, 200, s.runtime.Reports.ReceivablesForSupplier(orgID))
+	report, err := s.runtime.Reports.ReceivablesForSupplier(r.Context(), orgID)
+	if err != nil {
+		writeProblem(w, 503, "report_unavailable", "Financial report could not be loaded")
+		return
+	}
+	writeJSON(w, 200, report)
 }
 
 func (s *Server) providerStatus(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +73,12 @@ func (s *Server) reportAgeing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = s.runtime.Reports.Track("report.ageing.viewed", orgID, "supplier ageing reporting", nil)
-	writeJSON(w, 200, s.runtime.Reports.AgeingForSupplier(orgID))
+	report, err := s.runtime.Reports.AgeingForSupplier(r.Context(), orgID)
+	if err != nil {
+		writeProblem(w, 503, "report_unavailable", "Financial report could not be loaded")
+		return
+	}
+	writeJSON(w, 200, report)
 }
 func (s *Server) reportFees(w http.ResponseWriter, r *http.Request) {
 	orgID, err := pathID(r, "organizationID")
@@ -80,7 +90,12 @@ func (s *Server) reportFees(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = s.runtime.Reports.Track("report.fees.viewed", orgID, "supplier fee reporting", nil)
-	writeJSON(w, 200, s.runtime.Reports.FeesForSupplier(orgID))
+	report, err := s.runtime.Reports.FeesForSupplier(r.Context(), orgID)
+	if err != nil {
+		writeProblem(w, 503, "fee_report_unavailable", "Fee report could not be loaded")
+		return
+	}
+	writeJSON(w, 200, report)
 }
 func (s *Server) exportReceivables(w http.ResponseWriter, r *http.Request) {
 	orgID, err := pathID(r, "organizationID")
@@ -103,9 +118,9 @@ func (s *Server) exportReceivables(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 422, "export_format_invalid", "only csv exports are supported")
 		return
 	}
-	data, err := s.runtime.Reports.ExportReceivablesCSV(orgID)
+	data, err := s.runtime.Reports.ExportReceivablesCSV(r.Context(), orgID)
 	if err != nil {
-		writeProblem(w, 500, "export_failed", err.Error())
+		writeProblem(w, 503, "export_failed", "Financial export could not be prepared")
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "report.exported", ResourceType: "report", ResourceID: "receivables", Outcome: "success", RequestID: requestIDFromContext(r.Context())})
@@ -120,7 +135,11 @@ func (s *Server) buyerHistory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h := s.runtime.Reports.HistoryForBuyer(user.ID)
+	h, err := s.runtime.Reports.HistoryForBuyer(r.Context(), user.ID)
+	if err != nil {
+		writeProblem(w, 503, "report_unavailable", "Financial history could not be loaded")
+		return
+	}
 	h.Shareable = false
 	_, _ = s.runtime.Reports.Track("history.viewed", user.ID, "buyer factual history", nil)
 	writeJSON(w, 200, h)
@@ -140,7 +159,11 @@ func (s *Server) supplierCustomerHistory(w http.ResponseWriter, r *http.Request)
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	h := s.runtime.Reports.HistoryForSupplierBuyer(orgID, buyerID)
+	h, err := s.runtime.Reports.HistoryForSupplierBuyer(r.Context(), orgID, buyerID)
+	if err != nil {
+		writeProblem(w, 503, "report_unavailable", "Financial history could not be loaded")
+		return
+	}
 	h.Shareable = false
 	writeJSON(w, 200, h)
 }
@@ -159,7 +182,12 @@ func (s *Server) supplierCustomerStatement(w http.ResponseWriter, r *http.Reques
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	writeJSON(w, 200, s.runtime.Reports.CustomerStatement(orgID, buyerID))
+	report, err := s.runtime.Reports.CustomerStatement(r.Context(), orgID, buyerID)
+	if err != nil {
+		writeProblem(w, 503, "report_unavailable", "Financial report could not be loaded")
+		return
+	}
+	writeJSON(w, 200, report)
 }
 
 func (s *Server) openCorrection(w http.ResponseWriter, r *http.Request) {
@@ -178,12 +206,16 @@ func (s *Server) openCorrection(w http.ResponseWriter, r *http.Request) {
 	orgID := ""
 	lookupType, lookupID := in.SubjectType, in.SubjectID
 	if lookupType == "payment" {
-		if payment, paymentErr := s.runtime.Payments.Get(lookupID); paymentErr == nil && payment.BuyerUserID == user.ID {
+		if payment, paymentErr := s.runtime.getPayment(r.Context(), lookupID); paymentErr == nil && payment.BuyerUserID == user.ID {
 			lookupType, lookupID = "obligation", payment.ObligationID
 		}
 	}
 	if lookupType == "obligation" || lookupType == "credit_request" {
-		for _, v := range s.runtime.Credit.ListForBuyer(user.ID) {
+		financialRows1, readErr1 := s.runtime.readCreditForBuyer(r.Context(), user.ID)
+		if financialReadError(w, readErr1) {
+			return
+		}
+		for _, v := range financialRows1 {
 			if (lookupType == "credit_request" && v.Request.ID == lookupID) || (lookupType == "obligation" && v.Obligation != nil && v.Obligation.ID == lookupID) {
 				orgID = v.Request.SupplierOrganizationID
 				break
@@ -260,13 +292,17 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "history.correction.decided", ResourceType: "correction", ResourceID: id, Outcome: in.Outcome, RequestID: requestIDFromContext(r.Context())})
 	lookupType, lookupID := correction.SubjectType, correction.SubjectID
 	if lookupType == "payment" {
-		if payment, paymentErr := s.runtime.Payments.Get(lookupID); paymentErr == nil {
+		if payment, paymentErr := s.runtime.getPayment(r.Context(), lookupID); paymentErr == nil {
 			lookupType, lookupID = "obligation", payment.ObligationID
 		}
 	}
-	for _, view := range s.runtime.Credit.ListForSupplier(orgID) {
+	financialRows2, readErr2 := s.runtime.readCreditForSupplier(r.Context(), orgID)
+	if financialReadError(w, readErr2) {
+		return
+	}
+	for _, view := range financialRows2 {
 		if (lookupType == "credit_request" && view.Request.ID == lookupID) || (lookupType == "obligation" && view.Obligation != nil && view.Obligation.ID == lookupID) {
-			_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "correction-notice-" + id, Type: "history.correction.updated", RecipientID: view.Request.BuyerUserID, OrganizationID: orgID, Priority: notifications.PriorityRoutine, Reference: id, NextAction: "Review your factual history"})
+			_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "correction-notice-" + id, Type: "history.correction.updated", RecipientID: view.Request.BuyerUserID, OrganizationID: orgID, Priority: notifications.PriorityRoutine, Reference: id, NextAction: "Review your factual history"})
 			break
 		}
 	}

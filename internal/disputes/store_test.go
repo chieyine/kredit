@@ -34,14 +34,14 @@ func TestPartialDisputeBlocksContestedAmountAndRecordsAdjustment(t *testing.T) {
 	}
 }
 
-func TestFullBlockStopsUntilDecision(t *testing.T) {
+func TestCallerCannotEscalateDisputeToFullBlock(t *testing.T) {
 	snapshot := ObligationSnapshot{OutstandingKobo: 500}
 	store := NewStore(func(_ string) (ObligationSnapshot, error) { return snapshot, nil }, ledger.NewStore(), func(string, ledger.Money) error { return nil })
 	if _, err := store.Open(OpenInput{ObligationID: "obl", OpenedBy: "buyer", DisputedAmountKobo: 100, Reason: "not received", CollectionEffect: EffectFullBlock}); err != nil {
 		t.Fatal(err)
 	}
 	blocked, _ := store.BlockedAmount("obl")
-	if blocked != 500 {
+	if blocked != 100 {
 		t.Fatalf("blocked=%d", blocked)
 	}
 }

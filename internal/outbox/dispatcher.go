@@ -2,6 +2,8 @@ package outbox
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -21,8 +23,8 @@ func (f PublishFunc) Publish(ctx context.Context, event Event) error {
 
 // Dispatcher drains transactionally-created outbox rows. A row is marked
 // published only after the downstream durable transport accepts it; failures
-// receive bounded exponential backoff and expired claims are recovered by
-// Store.Claim.
+// receive bounded exponential backoff with jitter and expired claims are
+// recovered by Store.Claim.
 type Dispatcher struct {
 	store     *Store
 	publisher Publisher
@@ -45,6 +47,11 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, limit int) (int, error) {
 	var dispatchErr error
 	for _, event := range events {
 		if err := d.publisher.Publish(ctx, event); err != nil {
+			if event.Attempts >= 10 {
+				markErr := d.store.MarkFailed(ctx, event.ID, fmt.Sprintf("dead_letter: max retries reached: %v", err), d.now().Add(24*time.Hour))
+				dispatchErr = errors.Join(dispatchErr, fmt.Errorf("outbox event %s reached max retries: %w", event.ID, err), markErr)
+				continue
+			}
 			delay := retryDelay(event.Attempts + 1)
 			markErr := d.store.MarkFailed(ctx, event.ID, err.Error(), d.now().Add(delay))
 			dispatchErr = errors.Join(dispatchErr, fmt.Errorf("publish outbox event %s: %w", event.ID, err), markErr)
@@ -66,5 +73,10 @@ func retryDelay(attempt int) time.Duration {
 	if attempt > 8 {
 		attempt = 8
 	}
-	return time.Duration(1<<(attempt-1)) * 5 * time.Second
+	base := time.Duration(1<<(attempt-1)) * 5 * time.Second
+	var jitterBytes [2]byte
+	_, _ = rand.Read(jitterBytes[:])
+	fraction := float64(binary.BigEndian.Uint16(jitterBytes[:])) / 65535.0
+	jitter := time.Duration(float64(base) * 0.25 * fraction)
+	return base + jitter
 }

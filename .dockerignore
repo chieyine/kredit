@@ -7,3 +7,12 @@ web/build
 coverage
 *.log
 .env
+.env.*
+!.env.example
+.data
+.pnpm-store
+**/*.pem
+**/*.key
+web/test-results
+web/test-results-*
+web/playwright-report

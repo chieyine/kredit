@@ -10,7 +10,7 @@ inventory="docs/compliance/data-inventory.tsv"
 expected="$(mktemp)"
 actual="$(mktemp)"
 trap 'rm -f "$expected" "$actual"' EXIT
-psql "$DATABASE_URL" -A -F $'\t' -t -c "SELECT c.table_schema,c.table_name,c.column_name FROM information_schema.columns c JOIN information_schema.tables t USING(table_schema,table_name) WHERE t.table_type='BASE TABLE' AND c.table_schema IN ('app','ledger','river') ORDER BY 1,2,c.ordinal_position" > "$expected"
+psql "$DATABASE_URL" -A -F $'\t' -t -c "SELECT c.table_schema,c.table_name,c.column_name FROM information_schema.columns c JOIN information_schema.tables t USING(table_schema,table_name) WHERE t.table_type='BASE TABLE' AND c.table_schema IN ('app','ledger','river','jobs') ORDER BY 1,2,c.ordinal_position" > "$expected"
 tail -n +2 "$inventory" | cut -f1-3 > "$actual"
 if ! diff -u "$expected" "$actual"; then
   printf 'data inventory does not cover the current production schema; regenerate and review it\n' >&2

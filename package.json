@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.17.0",
   "engines": {
-    "node": ">=24.11.0 <25"
+    "node": ">=24.20.0 <25"
   },
   "scripts": {
 	"audit": "node scripts/repository-audit.mjs && node scripts/product-contract-sync.mjs && node scripts/frontend-api-coverage.mjs && node --experimental-strip-types scripts/content-audit.mjs",

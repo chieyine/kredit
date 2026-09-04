@@ -264,6 +264,9 @@ func (s *Store) ChangeRole(organizationID, actorUserID, targetUserID string, rol
 	if target == nil {
 		return Membership{}, errors.New("membership not found")
 	}
+	if target.Role == access.RoleOwner {
+		return Membership{}, errors.New("owner role cannot be changed")
+	}
 	if target.UserID == actorUserID {
 		return Membership{}, errors.New("members cannot change their own role")
 	}
@@ -290,6 +293,9 @@ func (s *Store) ChangeStatus(organizationID, actorUserID, targetUserID, status s
 	}
 	if target.Role == access.RoleOwner {
 		return Membership{}, errors.New("the owner membership cannot be suspended or removed")
+	}
+	if target.Role == access.RoleOwner {
+		return Membership{}, errors.New("owner role cannot be changed")
 	}
 	if target.UserID == actorUserID {
 		return Membership{}, errors.New("members cannot change their own access status")

@@ -109,6 +109,7 @@ type Service interface {
 	RecordContactVerified(organizationID, actorUserID, channel string) (Profile, Summary, error)
 	SubmitKYB(organizationID, actorUserID, providerReference string, expectedVersion int64) (Profile, Summary, error)
 	RecordKYBDecision(organizationID, actorUserID, state, reason string, expiresAt time.Time) (Profile, Summary, error)
+	RecordKYBDecisionForReference(organizationID, actorUserID, providerReference string, expectedVersion int64, state, reason string, expiresAt time.Time) (Profile, Summary, error)
 	UpdateSettlement(organizationID, actorUserID string, input SettlementInput) (Profile, Summary, error)
 	RecordSettlementDecision(organizationID, actorUserID, state, reason string) (Profile, Summary, error)
 	UpdateBilling(organizationID, actorUserID string, input BillingInput) (Profile, Summary, error)
@@ -198,11 +199,12 @@ func (s *Store) UpdateRepresentative(org, actor string, in RepresentativeInput) 
 }
 func (s *Store) RecordContactVerified(org, actor, channel string) (Profile, Summary, error) {
 	return s.mutate(org, actor, "contact.verified", 0, func(p *Profile) error {
-		if channel == "email" {
+		switch channel {
+		case "email":
 			p.OwnerEmailVerifiedAt = s.now()
-		} else if channel == "phone" {
+		case "phone":
 			p.OwnerPhoneVerifiedAt = s.now()
-		} else {
+		default:
 			return errors.New("contact channel must be email or phone")
 		}
 		return nil
@@ -219,12 +221,19 @@ func (s *Store) SubmitKYB(org, actor, ref string, expected int64) (Profile, Summ
 	})
 }
 func (s *Store) RecordKYBDecision(org, actor, state, reason string, expires time.Time) (Profile, Summary, error) {
-	return s.mutate(org, actor, "kyb.decision", 0, func(p *Profile) error {
+	return s.RecordKYBDecisionForReference(org, actor, "", 0, state, reason, expires)
+}
+
+func (s *Store) RecordKYBDecisionForReference(org, actor, providerReference string, expectedVersion int64, state, reason string, expires time.Time) (Profile, Summary, error) {
+	return s.mutate(org, actor, "kyb.decision", expectedVersion, func(p *Profile) error {
 		if state != "provider_review" && state != "approved" && state != "rejected" && state != "expired" {
 			return errors.New("invalid KYB provider state")
 		}
 		if p.KYBProviderReference == "" {
 			return errors.New("KYB has not been submitted")
+		}
+		if providerReference != "" && p.KYBProviderReference != providerReference {
+			return errors.New("KYB provider reference changed; refresh before applying the result")
 		}
 		p.KYBState, p.KYBReasonCode, p.KYBDecidedAt, p.KYBExpiresAt = state, strings.TrimSpace(reason), s.now(), expires
 		return nil
@@ -300,7 +309,7 @@ func (s *Store) SyncSecurity(org, actor string, ownerMFA, financeMFA bool) (Prof
 	return s.mutate(org, actor, "security.synced", 0, func(p *Profile) error {
 		if ownerMFA && p.OwnerMFAVerifiedAt.IsZero() {
 			p.OwnerMFAVerifiedAt = s.now()
-		} else {
+		} else if !ownerMFA {
 			p.OwnerMFAVerifiedAt = time.Time{}
 		}
 		p.FinanceMFAComplete = financeMFA
@@ -339,7 +348,7 @@ func summarize(p Profile, now time.Time) Summary {
 		{Code: "kyb_approved", Label: "Business verification approved", Complete: kybApproved, ManagePath: "/app/onboarding"},
 		{Code: "settlement_verified", Label: "Settlement destination verified", Complete: p.SettlementState == "verified", ManagePath: "/app/settings/settlement"},
 		{Code: "billing_configured", Label: "Billing method configured", Complete: p.BillingState == "configured", ManagePath: "/app/settings/billing"},
-		{Code: "credit_policy", Label: "Default credit policy configured", Complete: p.DefaultCreditPolicyUpdatedAt.IsZero() == false, ManagePath: "/app/settings/credit-policy"},
+		{Code: "credit_policy", Label: "Default credit policy configured", Complete: !p.DefaultCreditPolicyUpdatedAt.IsZero(), ManagePath: "/app/settings/credit-policy"},
 		{Code: "current_consents", Label: "Current terms and privacy accepted", Complete: p.TermsVersion == CurrentTermsVersion && p.PrivacyVersion == CurrentPrivacyVersion, ManagePath: "/app/onboarding"},
 		{Code: "owner_mfa", Label: "Owner MFA active", Complete: !p.OwnerMFAVerifiedAt.IsZero(), ManagePath: "/app/settings/security"},
 		{Code: "finance_mfa", Label: "Every active finance user has MFA", Complete: p.FinanceMFAComplete, ManagePath: "/app/team"},

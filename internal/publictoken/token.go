@@ -31,6 +31,9 @@ func Issue(key, purpose, id string, expires time.Time) (string, error) {
 }
 
 func Parse(key, token, purpose string, now time.Time) (string, error) {
+	if key == "" || purpose == "" || len(token) > 8192 {
+		return "", errors.New("invalid token configuration")
+	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 2 {
 		return "", errors.New("invalid token")

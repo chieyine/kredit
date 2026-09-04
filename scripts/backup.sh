@@ -2,12 +2,15 @@
 set -euo pipefail
 umask 077
 
-: "${DATABASE_URL:?DATABASE_URL is required}"
+backup_database_url="${BACKUP_DATABASE_URL:-${DATABASE_DIRECT_URL:-${DATABASE_URL:-}}}"
+: "${backup_database_url:?BACKUP_DATABASE_URL, DATABASE_DIRECT_URL, or DATABASE_URL is required}"
 backup_dir="${BACKUP_DIR:-$PWD/.tmp/backups}"
 mkdir -p "$backup_dir"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 output="$backup_dir/kredit-$timestamp.dump"
-pg_dump --format=custom --no-owner --no-privileges --file="$output" "$DATABASE_URL"
+# Runtime credentials are RLS-scoped and cannot produce a complete dump.
+# Prefer the explicitly configured backup or migration-owner connection.
+pg_dump --format=custom --no-owner --no-privileges --file="$output" "$backup_database_url"
 chmod 600 "$output"
 if command -v sha256sum >/dev/null 2>&1; then
   sha256sum "$output" > "$output.sha256"

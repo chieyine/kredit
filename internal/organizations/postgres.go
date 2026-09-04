@@ -175,7 +175,7 @@ func (s *PostgresStore) Membership(organizationID, userID string) (Membership, b
 		SELECT id::text, organization_id::text, user_id::text, role, status,
 		       COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
 		       COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at
-		FROM app.memberships WHERE organization_id = $1 AND user_id = $2 AND status <> 'removed'`, organizationID, userID).Scan(membershipScanArgs(&membership)...)
+		FROM app.memberships WHERE organization_id = $1 AND user_id = $2 AND status = 'active'`, organizationID, userID).Scan(membershipScanArgs(&membership)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Membership{}, false
 	}
@@ -326,7 +326,7 @@ func (s *PostgresStore) ChangeRole(organizationID, actorUserID, targetUserID str
 	var membership Membership
 	err = tx.QueryRow(context.Background(), `
 		UPDATE app.memberships SET role = $3
-		WHERE organization_id = $1 AND user_id = $2 AND status = 'active' AND user_id <> $4
+		WHERE organization_id = $1 AND user_id = $2 AND status = 'active' AND role <> 'owner' AND user_id <> $4
 		RETURNING id::text, organization_id::text, user_id::text, role, status,
 		          COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
 		          COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at`, organizationID, targetUserID, role, actorUserID).Scan(membershipScanArgs(&membership)...)
@@ -413,4 +413,37 @@ func newUUID() string {
 		return value.String()
 	}
 	return uuid.New().String()
+}
+
+func (s *PostgresStore) ReadMembers(organizationID string) ([]Membership, error) {
+	tx, err := s.beginTenantTx("", organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	rows, err := tx.Query(context.Background(), `
+		SELECT id::text, organization_id::text, user_id::text, role, status,
+		       COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
+		       COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at
+		FROM app.memberships WHERE organization_id = $1 ORDER BY created_at`, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]Membership, 0)
+	for rows.Next() {
+		var membership Membership
+		if err := rows.Scan(membershipScanArgs(&membership)...); err != nil {
+			return nil, err
+		}
+		result = append(result, membership)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err = tx.Commit(context.Background()); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

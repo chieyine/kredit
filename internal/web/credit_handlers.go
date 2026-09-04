@@ -17,12 +17,12 @@ import (
 	"kredit/internal/notifications"
 	"kredit/internal/operations"
 	"kredit/internal/payments"
-	"kredit/internal/schedules"
 	"kredit/internal/tradelines"
 	"kredit/internal/whatsapp"
 )
 
 type creditRequestInput struct {
+	CollectionPolicy    string    `json:"collection_policy,omitempty"`
 	BuyerUserID         string    `json:"buyer_user_id"`
 	BuyerBusinessID     string    `json:"buyer_business_id"`
 	BuyerLegalName      string    `json:"buyer_legal_name"`
@@ -44,6 +44,7 @@ type creditRequestInput struct {
 	} `json:"custom_schedule_items"`
 }
 type creditDraftUpdateInput struct {
+	CollectionPolicy    string    `json:"collection_policy,omitempty"`
 	ExpectedVersion     int64     `json:"expected_version"`
 	PrincipalKobo       int64     `json:"principal_kobo"`
 	GoodsDescription    string    `json:"goods_description"`
@@ -82,23 +83,6 @@ type paymentInput struct {
 	ProviderReference string    `json:"provider_reference"`
 	PaidAt            time.Time `json:"paid_at"`
 	IdempotencyKey    string    `json:"idempotency_key"`
-}
-type scheduleInput struct {
-	ScheduleType         string    `json:"schedule_type"`
-	Count                int       `json:"count"`
-	InstalmentAmountKobo int64     `json:"instalment_amount_kobo"`
-	StartDate            time.Time `json:"start_date"`
-	DueHour              int       `json:"due_hour"`
-	DueMinute            int       `json:"due_minute"`
-	Timezone             string    `json:"timezone"`
-	GraceHours           int       `json:"grace_hours"`
-	Cadence              string    `json:"cadence"`
-	MonthEndPolicy       string    `json:"month_end_policy"`
-	AllocationPolicy     string    `json:"allocation_policy"`
-	CustomItems          []struct {
-		AmountKobo int64     `json:"amount_kobo"`
-		DueDate    time.Time `json:"due_date"`
-	} `json:"custom_items"`
 }
 type tradeLineLimitInput struct {
 	ExpectedVersion   int64 `json:"expected_version"`
@@ -153,7 +137,7 @@ func (s *Server) createCreditRequest(w http.ResponseWriter, r *http.Request) {
 	for _, item := range in.CustomScheduleItems {
 		customSchedule = append(customSchedule, credit.ScheduleTerm{AmountKobo: ledger.Money(item.AmountKobo), DueDate: item.DueDate})
 	}
-	req, err := s.runtime.Credit.Create(credit.CreateInput{SupplierOrganizationID: orgID, SupplierLegalName: org.LegalName, SupplierTradingName: org.TradingName, BuyerUserID: in.BuyerUserID, BuyerBusinessID: in.BuyerBusinessID, BuyerLegalName: in.BuyerLegalName, BuyerTradingName: in.BuyerTradingName, PrincipalKobo: creditMoney(in.PrincipalKobo), GoodsDescription: in.GoodsDescription, InvoiceReference: in.InvoiceReference, InvoiceDocumentHash: in.InvoiceDocumentHash, DueDate: in.DueDate, GraceHours: in.GraceHours, CollectionAt: in.CollectionAt, ScheduleType: in.ScheduleType, ScheduleCount: in.ScheduleCount, ScheduleCadence: in.ScheduleCadence, MonthEndPolicy: in.MonthEndPolicy, CustomScheduleItems: customSchedule, CreatedBy: user.ID})
+	req, err := s.runtime.Credit.Create(credit.CreateInput{CollectionPolicy: in.CollectionPolicy, SupplierOrganizationID: orgID, SupplierLegalName: org.LegalName, SupplierTradingName: org.TradingName, BuyerUserID: in.BuyerUserID, BuyerBusinessID: in.BuyerBusinessID, BuyerLegalName: in.BuyerLegalName, BuyerTradingName: in.BuyerTradingName, PrincipalKobo: creditMoney(in.PrincipalKobo), GoodsDescription: in.GoodsDescription, InvoiceReference: in.InvoiceReference, InvoiceDocumentHash: in.InvoiceDocumentHash, DueDate: in.DueDate, GraceHours: in.GraceHours, CollectionAt: in.CollectionAt, ScheduleType: in.ScheduleType, ScheduleCount: in.ScheduleCount, ScheduleCadence: in.ScheduleCadence, MonthEndPolicy: in.MonthEndPolicy, CustomScheduleItems: customSchedule, CreatedBy: user.ID})
 	if err != nil {
 		writeProblem(w, 422, "credit_request_invalid", err.Error())
 		return
@@ -170,7 +154,11 @@ func (s *Server) listCreditRequests(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadOrganization); !ok {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"requests": s.runtime.Credit.ListForSupplier(orgID)})
+	financialRows1, readErr1 := s.runtime.readCreditForSupplier(r.Context(), orgID)
+	if financialReadError(w, readErr1) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"requests": financialRows1})
 }
 func (s *Server) getCreditRequest(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
@@ -208,7 +196,7 @@ func (s *Server) updateDraftCreditRequest(w http.ResponseWriter, r *http.Request
 	for _, item := range in.CustomScheduleItems {
 		customSchedule = append(customSchedule, credit.ScheduleTerm{AmountKobo: ledger.Money(item.AmountKobo), DueDate: item.DueDate})
 	}
-	request, err := s.runtime.Credit.UpdateDraft(id, user.ID, credit.UpdateDraftInput{ExpectedVersion: in.ExpectedVersion, PrincipalKobo: ledger.Money(in.PrincipalKobo), GoodsDescription: in.GoodsDescription, InvoiceReference: in.InvoiceReference, InvoiceDocumentHash: in.InvoiceDocumentHash, DueDate: in.DueDate, GraceHours: in.GraceHours, CollectionAt: in.CollectionAt, ScheduleType: in.ScheduleType, ScheduleCount: in.ScheduleCount, ScheduleCadence: in.ScheduleCadence, MonthEndPolicy: in.MonthEndPolicy, CustomScheduleItems: customSchedule})
+	request, err := s.runtime.Credit.UpdateDraft(id, user.ID, credit.UpdateDraftInput{CollectionPolicy: in.CollectionPolicy, ExpectedVersion: in.ExpectedVersion, PrincipalKobo: ledger.Money(in.PrincipalKobo), GoodsDescription: in.GoodsDescription, InvoiceReference: in.InvoiceReference, InvoiceDocumentHash: in.InvoiceDocumentHash, DueDate: in.DueDate, GraceHours: in.GraceHours, CollectionAt: in.CollectionAt, ScheduleType: in.ScheduleType, ScheduleCount: in.ScheduleCount, ScheduleCadence: in.ScheduleCadence, MonthEndPolicy: in.MonthEndPolicy, CustomScheduleItems: customSchedule})
 	if err != nil {
 		writeProblem(w, http.StatusConflict, "credit_update_failed", err.Error())
 		return
@@ -311,7 +299,11 @@ func (s *Server) listBuyerCreditRequests(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"requests": s.runtime.Credit.ListForBuyer(user.ID)})
+	financialRows2, readErr2 := s.runtime.readCreditForBuyer(r.Context(), user.ID)
+	if financialReadError(w, readErr2) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"requests": financialRows2})
 }
 func (s *Server) getBuyerAgreement(w http.ResponseWriter, r *http.Request) {
 	_, user, ok := s.requireAuth(w, r)
@@ -404,12 +396,19 @@ func (s *Server) authorizeCreditMandate(w http.ResponseWriter, r *http.Request) 
 		writeProblem(w, http.StatusNotFound, "credit_request_not_found", "credit request was not found")
 		return
 	}
-	v, err := s.runtime.Credit.AuthorizeMandate(context.Background(), id, user.ID)
+	var options mandates.AuthorizationOptions
+	if r.ContentLength != 0 {
+		if err := decodeJSON(w, r, &options); err != nil {
+			writeProblem(w, 400, "invalid_mandate_options", "mandate options are invalid")
+			return
+		}
+	}
+	v, err := s.runtime.Credit.AuthorizeMandate(r.Context(), id, user.ID, options)
 	if err != nil {
 		writeProblem(w, 409, "mandate_authorization_failed", err.Error())
 		return
 	}
-	s.auditCredit(user.ID, "", "mandate.authorized", id)
+	s.auditCredit(user.ID, "", "mandate.authorization_requested", id)
 	writeJSON(w, 200, v)
 }
 func (s *Server) acceptCreditRequest(w http.ResponseWriter, r *http.Request) {
@@ -520,18 +519,29 @@ func (s *Server) recordPayment(w http.ResponseWriter, r *http.Request) {
 	if in.SourceType == "" {
 		in.SourceType = payments.SourceVoluntary
 	}
+	if in.SourceType == payments.SourceCollected {
+		writeProblem(w, http.StatusUnprocessableEntity, "payment_source_invalid", "collection payments can only be recorded from a verified provider collection")
+		return
+	}
 	v, err := s.runtime.Credit.GetForSupplier(requestID, orgID)
 	if err != nil || v.Obligation == nil {
 		writeProblem(w, 404, "obligation_not_found", "active obligation was not found")
 		return
 	}
-	p, a, err := s.runtime.Payments.Record(payments.RecordInput{ObligationID: v.Obligation.ID, SourceType: in.SourceType, AmountKobo: ledger.Money(in.AmountKobo), Currency: in.Currency, Provider: in.Provider, ProviderReference: in.ProviderReference, PaidAt: in.PaidAt, RecordedBy: user.ID, IdempotencyKey: in.IdempotencyKey})
+	recorder, ok := s.runtime.Payments.(interface {
+		RecordContext(context.Context, payments.RecordInput) (payments.Payment, payments.Allocation, error)
+	})
+	if !ok {
+		writeProblem(w, 503, "payment_unavailable", "payment service does not support request cancellation")
+		return
+	}
+	p, a, err := recorder.RecordContext(r.Context(), payments.RecordInput{ObligationID: v.Obligation.ID, SourceType: in.SourceType, AmountKobo: ledger.Money(in.AmountKobo), Currency: in.Currency, Provider: in.Provider, ProviderReference: in.ProviderReference, PaidAt: in.PaidAt, RecordedBy: user.ID, IdempotencyKey: in.IdempotencyKey})
 	if err != nil {
 		writeProblem(w, 409, "payment_record_failed", err.Error())
 		return
 	}
 	s.auditCredit(user.ID, orgID, "payment.recorded", p.ID)
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "payment-recorded:" + p.ID, Type: "PaymentRecorded", RecipientID: p.BuyerUserID, Priority: notifications.PriorityRoutine, AmountKobo: int64(p.AmountKobo), Currency: p.Currency, Reference: p.ID, NextAction: "Review your payment history", SecurePath: "/buyer/credit-requests/" + requestID})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-recorded:" + p.ID, Type: "PaymentRecorded", RecipientID: p.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(p.AmountKobo), Currency: p.Currency, Reference: p.ID, NextAction: "Review your payment history", SecurePath: "/buyer/credit-requests/" + requestID})
 	response := map[string]any{"payment": p, "allocation": a}
 	if token, issueErr := s.issuePublicToken("receipt", p.ID, 365*24*time.Hour); issueErr == nil {
 		response["receipt_url"] = strings.TrimRight(s.config.PublicBaseURL, "/") + "/receipt/" + token
@@ -550,7 +560,11 @@ func (s *Server) listPayments(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payments": s.runtime.Payments.List(v.Obligation.ID), "outstanding_kobo": v.Obligation.OutstandingKobo})
+	financialRows3, readErr3 := s.runtime.readPayments(r.Context(), v.Obligation.ID)
+	if financialReadError(w, readErr3) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"payments": financialRows3, "outstanding_kobo": v.Obligation.OutstandingKobo})
 }
 
 func (s *Server) reconcilePayments(w http.ResponseWriter, r *http.Request) {
@@ -564,7 +578,14 @@ func (s *Server) reconcilePayments(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	rebuilt, err := s.runtime.Payments.Rebuild(v.Obligation.ID)
+	rebuilder, ok := s.runtime.Payments.(interface {
+		RebuildContext(context.Context, string) (ledger.Money, error)
+	})
+	if !ok {
+		writeProblem(w, 503, "payment_unavailable", "payment service does not support request cancellation")
+		return
+	}
+	rebuilt, err := rebuilder.RebuildContext(r.Context(), v.Obligation.ID)
 	if err != nil {
 		writeProblem(w, 409, "reconciliation_failed", err.Error())
 		return
@@ -572,7 +593,11 @@ func (s *Server) reconcilePayments(w http.ResponseWriter, r *http.Request) {
 	if refreshed, refreshErr := s.runtime.Credit.GetForSupplier(requestID, orgID); refreshErr == nil && refreshed.Obligation != nil {
 		v = refreshed
 	}
-	paymentsForObligation := s.runtime.Payments.List(v.Obligation.ID)
+	financialRows4, readErr4 := s.runtime.readPayments(r.Context(), v.Obligation.ID)
+	if financialReadError(w, readErr4) {
+		return
+	}
+	paymentsForObligation := financialRows4
 	transactions := []ledger.Transaction{}
 	for _, payment := range paymentsForObligation {
 		posted, err := s.runtime.Ledger.GetByReference(payment.ID)
@@ -608,12 +633,20 @@ func (s *Server) reversePayment(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	p, err := s.runtime.Payments.Get(paymentID)
+	contextPayments, ok := s.runtime.Payments.(interface {
+		GetContext(context.Context, string) (payments.Payment, error)
+		ReverseContext(context.Context, string, string, string) (payments.Payment, error)
+	})
+	if !ok {
+		writeProblem(w, 503, "payment_unavailable", "payment service does not support request cancellation")
+		return
+	}
+	p, err := contextPayments.GetContext(r.Context(), paymentID)
 	if err != nil || p.ObligationID != v.Obligation.ID {
 		writeProblem(w, 404, "payment_not_found", "payment was not found")
 		return
 	}
-	p, err = s.runtime.Payments.Reverse(paymentID, user.ID, in.Reason)
+	p, err = contextPayments.ReverseContext(r.Context(), paymentID, user.ID, in.Reason)
 	if err != nil {
 		writeProblem(w, 409, "payment_reversal_failed", err.Error())
 		return
@@ -633,7 +666,11 @@ func (s *Server) listBuyerPayments(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payments": s.runtime.Payments.List(v.Obligation.ID), "outstanding_kobo": v.Obligation.OutstandingKobo})
+	financialRows5, readErr5 := s.runtime.readPayments(r.Context(), v.Obligation.ID)
+	if financialReadError(w, readErr5) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"payments": financialRows5, "outstanding_kobo": v.Obligation.OutstandingKobo})
 }
 func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 	_, user, ok := s.requireAuth(w, r)
@@ -646,8 +683,23 @@ func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "Obligation was not found")
 		return
 	}
-	_, items, _ := s.runtime.Schedules.GetForObligation(obligationID)
-	writeJSON(w, 200, map[string]any{"view": view, "payments": s.runtime.Payments.List(obligationID), "schedule_items": items, "disputes": s.runtime.Disputes.ListForObligation(obligationID), "payment_claims": s.runtime.PaymentClaims.ListForObligation(r.Context(), obligationID)})
+	_, items, scheduleErr := s.runtime.Schedules.GetForObligation(obligationID)
+	if financialReadError(w, scheduleErr) {
+		return
+	}
+	financialRows6, readErr6 := s.runtime.readPayments(r.Context(), obligationID)
+	if financialReadError(w, readErr6) {
+		return
+	}
+	financialRows7, readErr7 := s.runtime.readDisputesForObligation(obligationID)
+	if financialReadError(w, readErr7) {
+		return
+	}
+	financialRows8, readErr8 := s.runtime.readPaymentClaimsForObligation(r.Context(), obligationID)
+	if financialReadError(w, readErr8) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"view": view, "payments": financialRows6, "schedule_items": items, "disputes": financialRows7, "payment_claims": financialRows8})
 }
 
 func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request) {
@@ -673,8 +725,7 @@ func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createSchedule(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
 	requestID, _ := pathID(r, "requestID")
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)
-	if !ok {
+	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial); !ok {
 		return
 	}
 	if !s.requireCSRF(w, r) {
@@ -685,34 +736,9 @@ func (s *Server) createSchedule(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	var in scheduleInput
-	if err := decodeJSON(w, r, &in); err != nil {
-		writeProblem(w, 400, "invalid_request", err.Error())
-		return
-	}
-	custom := make([]schedules.CustomItem, 0, len(in.CustomItems))
-	for _, item := range in.CustomItems {
-		custom = append(custom, schedules.CustomItem{AmountKobo: ledger.Money(item.AmountKobo), DueDate: item.DueDate})
-	}
-	if _, existingItems, existingErr := s.runtime.Schedules.GetForObligation(v.Obligation.ID); existingErr == nil {
-		for _, item := range existingItems {
-			if item.AllocatedKobo > 0 {
-				writeProblem(w, 409, "schedule_locked", "schedule has allocated payments")
-				return
-			}
-		}
-		if err := s.runtime.Schedules.DeleteIfEmpty(v.Obligation.ID); err != nil {
-			writeProblem(w, 409, "schedule_locked", err.Error())
-			return
-		}
-	}
-	schedule, items, err := s.runtime.Schedules.Create(schedules.CreateInput{ObligationID: v.Obligation.ID, PrincipalKobo: v.Obligation.PrincipalKobo, ScheduleType: in.ScheduleType, Count: in.Count, InstalmentAmountKobo: ledger.Money(in.InstalmentAmountKobo), StartDate: in.StartDate, DueHour: in.DueHour, DueMinute: in.DueMinute, Timezone: in.Timezone, GraceHours: in.GraceHours, Cadence: in.Cadence, MonthEndPolicy: in.MonthEndPolicy, CustomItems: custom, AllocationPolicy: in.AllocationPolicy})
-	if err != nil {
-		writeProblem(w, 422, "schedule_invalid", err.Error())
-		return
-	}
-	s.auditCredit(user.ID, orgID, "repayment.schedule.created", schedule.ID)
-	writeJSON(w, 201, map[string]any{"schedule": schedule, "items": items})
+	// Activation derives the schedule from the accepted agreement. Replacing it
+	// here would bypass the buyer's acceptance and could accelerate a bank debit.
+	writeProblem(w, 409, "accepted_schedule_locked", "Accepted payment dates require independent review and buyer acceptance through the financial-change workflow. Contact support to request an amendment.")
 }
 
 func (s *Server) getBuyerSchedule(w http.ResponseWriter, r *http.Request) {
@@ -754,7 +780,7 @@ func (s *Server) createTradeLine(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusServiceUnavailable, "mandate_verification_unavailable", "trade-line mandate verification is unavailable")
 		return
 	}
-	mandate, err := resolver.ResolveTradeLineMandate(r.Context(), in.MandateID, in.BuyerUserID, in.BuyerBusinessID)
+	mandate, err := resolver.ResolveTradeLineMandate(r.Context(), in.MandateID, in.BuyerUserID, in.BuyerBusinessID, orgID)
 	if err != nil || mandate.Status != mandates.Active {
 		writeProblem(w, http.StatusUnprocessableEntity, "mandate_inactive", "an active mandate owned by the selected buyer business is required")
 		return
@@ -776,7 +802,11 @@ func (s *Server) listTradeLines(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadOrganization); !ok {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"trade_lines": s.runtime.TradeLines.ListForSupplier(orgID)})
+	financialRows9, readErr9 := s.runtime.readTradeLinesForSupplier(orgID)
+	if financialReadError(w, readErr9) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"trade_lines": financialRows9})
 }
 func (s *Server) getTradeLine(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
@@ -848,7 +878,7 @@ func (s *Server) reserveDrawdown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditCredit(user.ID, orgID, "trade_line.drawdown_reserved", drawdown.ID)
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-confirmation-required:" + drawdown.ID, Type: "TradeLineDrawdownConfirmationRequired", RecipientID: updated.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Review and confirm the exact purchase terms", SecurePath: "/buyer/trade-lines"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-confirmation-required:" + drawdown.ID, Type: "TradeLineDrawdownConfirmationRequired", RecipientID: updated.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Review and confirm the exact purchase terms", SecurePath: "/buyer/trade-lines"})
 	writeJSON(w, 201, map[string]any{"drawdown": drawdown, "reservation": reservation, "trade_line": updated})
 }
 func (s *Server) confirmDrawdown(w http.ResponseWriter, r *http.Request) {
@@ -874,8 +904,8 @@ func (s *Server) confirmDrawdown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditCredit(user.ID, "", "trade_line.drawdown_confirmed", drawdown.ID)
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-confirmed:" + drawdown.ID, Type: "TradeLineDrawdownConfirmed", RecipientID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Release the goods only when ready", SecurePath: "/app/trade-lines/" + line.ID})
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-safe-to-release:" + drawdown.ID, Type: "TradeLineDrawdownSafeToRelease", RecipientID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Record release evidence when the goods leave", SecurePath: "/app/trade-lines/" + line.ID})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-confirmed:" + drawdown.ID, Type: "TradeLineDrawdownConfirmed", OrganizationID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Release the goods only when ready", SecurePath: "/app/trade-lines/" + line.ID})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-safe-to-release:" + drawdown.ID, Type: "TradeLineDrawdownSafeToRelease", OrganizationID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Record release evidence when the goods leave", SecurePath: "/app/trade-lines/" + line.ID})
 	writeJSON(w, 200, map[string]any{"drawdown": drawdown, "trade_line": line})
 }
 func (s *Server) releaseDrawdown(w http.ResponseWriter, r *http.Request) {
@@ -912,8 +942,8 @@ func (s *Server) releaseDrawdown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditCredit(user.ID, orgID, "trade_line.drawdown_goods_released", drawdown.ID)
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-released:" + drawdown.ID, Type: "TradeLineDrawdownGoodsReleased", RecipientID: updated.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Confirm receipt or report an issue", SecurePath: "/buyer/trade-lines"})
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-receipt-required:" + drawdown.ID, Type: "TradeLineDrawdownReceiptRequired", RecipientID: updated.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Record whether the goods arrived without an issue", SecurePath: "/buyer/trade-lines"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-released:" + drawdown.ID, Type: "TradeLineDrawdownGoodsReleased", RecipientID: updated.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Confirm receipt or report an issue", SecurePath: "/buyer/trade-lines"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-receipt-required:" + drawdown.ID, Type: "TradeLineDrawdownReceiptRequired", RecipientID: updated.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Record whether the goods arrived without an issue", SecurePath: "/buyer/trade-lines"})
 	writeJSON(w, 200, map[string]any{"drawdown": drawdown, "trade_line": updated})
 }
 
@@ -947,10 +977,10 @@ func (s *Server) receiptDrawdown(w http.ResponseWriter, r *http.Request) {
 		eventType = "TradeLineDrawdownReceiptIssueReported"
 	}
 	s.auditCredit(user.ID, line.SupplierOrganizationID, action, drawdown.ID)
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-receipt:" + drawdown.ID + ":" + in.State, Type: eventType, RecipientID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Review the drawdown status", SecurePath: "/app/trade-lines/" + line.ID})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-receipt:" + drawdown.ID + ":" + in.State, Type: eventType, OrganizationID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Review the drawdown status", SecurePath: "/app/trade-lines/" + line.ID})
 	if in.State == "no_issue" {
 		s.auditCredit(user.ID, line.SupplierOrganizationID, "trade_line.drawdown_obligation_activated", drawdown.ID)
-		_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-receipt-confirmed:" + drawdown.ID, Type: "TradeLineDrawdownReceiptConfirmed", RecipientID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "The obligation and schedule are now active", SecurePath: "/app/trade-lines/" + line.ID})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-receipt-confirmed:" + drawdown.ID, Type: "TradeLineDrawdownReceiptConfirmed", OrganizationID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "The obligation and schedule are now active", SecurePath: "/app/trade-lines/" + line.ID})
 	}
 	writeJSON(w, 200, map[string]any{"drawdown": drawdown, "trade_line": line})
 }
@@ -971,13 +1001,13 @@ func (s *Server) cancelDrawdown(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "trade_line_not_found", "trade line was not found")
 		return
 	}
-	drawdown, updated, err := s.runtime.TradeLines.CancelDrawdown(drawdownID, user.ID)
+	drawdown, updated, err := s.runtime.TradeLines.CancelDrawdown(line.ID, drawdownID, user.ID)
 	if err != nil {
 		writeProblem(w, 409, "drawdown_cancel_failed", err.Error())
 		return
 	}
 	s.auditCredit(user.ID, orgID, "trade_line.drawdown_cancelled", drawdown.ID)
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-cancelled:" + drawdown.ID, Type: "TradeLineDrawdownCancelled", RecipientID: updated.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Review the released trade-line capacity", SecurePath: "/buyer/trade-lines"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-cancelled:" + drawdown.ID, Type: "TradeLineDrawdownCancelled", RecipientID: updated.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Review the released trade-line capacity", SecurePath: "/buyer/trade-lines"})
 	writeJSON(w, 200, map[string]any{"drawdown": drawdown, "trade_line": updated})
 }
 
@@ -996,13 +1026,13 @@ func (s *Server) cancelBuyerDrawdown(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusNotFound, "trade_line_not_found", "trade line was not found")
 		return
 	}
-	drawdown, updated, err := s.runtime.TradeLines.CancelDrawdown(drawdownID, user.ID)
+	drawdown, updated, err := s.runtime.TradeLines.CancelDrawdown(line.ID, drawdownID, user.ID)
 	if err != nil {
 		writeProblem(w, http.StatusConflict, "drawdown_cancel_failed", err.Error())
 		return
 	}
 	s.auditCredit(user.ID, line.SupplierOrganizationID, "trade_line.drawdown_cancelled", drawdown.ID)
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "drawdown-cancelled:" + drawdown.ID, Type: "TradeLineDrawdownCancelled", RecipientID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Review the released capacity", SecurePath: "/app/trade-lines/" + line.ID})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-cancelled:" + drawdown.ID, Type: "TradeLineDrawdownCancelled", OrganizationID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "Review the released capacity", SecurePath: "/app/trade-lines/" + line.ID})
 	writeJSON(w, http.StatusOK, map[string]any{"drawdown": drawdown, "trade_line": updated})
 }
 func (s *Server) suspendTradeLine(w http.ResponseWriter, r *http.Request) {
@@ -1172,13 +1202,6 @@ type evidenceInput struct {
 	DocumentID string `json:"document_id"`
 	Statement  string `json:"statement"`
 }
-type decisionInput struct {
-	Outcome               string `json:"outcome"`
-	ValidPrincipalKobo    int64  `json:"valid_principal_kobo"`
-	AdjustmentKobo        int64  `json:"adjustment_kobo"`
-	RemainingDisputedKobo int64  `json:"remaining_disputed_kobo"`
-	Reason                string `json:"reason"`
-}
 
 func (s *Server) collectionEligibility(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
@@ -1231,8 +1254,10 @@ func (s *Server) startCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auditCredit(user.ID, orgID, "collection.started", attempt.ID)
-	state, _ := s.runtime.Credit.CollectionState(v.Obligation.ID)
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "collection-submitted:" + attempt.ID, Type: "CollectionSubmitted", RecipientID: state.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(attempt.RequestedAmountKobo), Currency: state.Currency, Reference: attempt.ID, NextAction: "Review the collection status", SecurePath: "/buyer/credit-requests/" + requestID})
+	if s.runtime.Database == nil {
+		state, _ := s.runtime.Credit.CollectionState(v.Obligation.ID)
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "collection-submitted:" + attempt.ID, Type: "CollectionSubmitted", RecipientID: state.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(attempt.RequestedAmountKobo), Currency: state.Currency, Reference: attempt.ID, NextAction: "Review the collection status", SecurePath: "/buyer/credit-requests/" + requestID})
+	}
 	writeJSON(w, 202, map[string]any{"attempt": attempt})
 }
 
@@ -1247,7 +1272,11 @@ func (s *Server) listCollections(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"attempts": s.runtime.Collections.ListAttempts(v.Obligation.ID)})
+	financialRows10, readErr10 := s.runtime.readCollectionsAttempts(v.Obligation.ID)
+	if financialReadError(w, readErr10) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"attempts": financialRows10})
 }
 
 func (s *Server) retryCollection(w http.ResponseWriter, r *http.Request) {
@@ -1304,18 +1333,18 @@ func (s *Server) collectionWebhook(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_webhook", err.Error())
 		return
 	}
-	attempt, err := s.runtime.Collections.ProcessWebhook(r.Context(), event)
+	attempt, err := s.runtime.Collections.SignalWebhook(r.Context(), event)
 	if err != nil {
 		writeProblem(w, 400, "collection_webhook_rejected", err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"attempt": attempt})
+	writeJSON(w, 202, map[string]any{"attempt": attempt, "reconciliation_required": true})
 }
 
 func (s *Server) openDispute(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
 	requestID, _ := pathID(r, "requestID")
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
+	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageDisputes)
 	if !ok {
 		return
 	}
@@ -1412,7 +1441,11 @@ func (s *Server) listDisputes(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"disputes": s.runtime.Disputes.ListForOrganization(orgID)})
+	financialRows11, readErr11 := s.runtime.readDisputesForOrganization(orgID)
+	if financialReadError(w, readErr11) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"disputes": financialRows11})
 }
 func (s *Server) getDispute(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
@@ -1430,7 +1463,7 @@ func (s *Server) getDispute(w http.ResponseWriter, r *http.Request) {
 func (s *Server) addDisputeEvidence(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
 	disputeID, _ := pathID(r, "disputeID")
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
+	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageDisputes)
 	if !ok {
 		return
 	}
@@ -1457,31 +1490,14 @@ func (s *Server) addDisputeEvidence(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) decideDispute(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
-	disputeID, _ := pathID(r, "disputeID")
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)
+	_, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageDisputes)
 	if !ok {
 		return
 	}
 	if !s.requireCSRF(w, r) {
 		return
 	}
-	dispute, _, _, err := s.runtime.Disputes.Get(disputeID)
-	if err != nil || dispute.SupplierOrganizationID != orgID {
-		writeProblem(w, 404, "dispute_not_found", "dispute was not found")
-		return
-	}
-	var in decisionInput
-	if err := decodeJSON(w, r, &in); err != nil {
-		writeProblem(w, 400, "invalid_request", err.Error())
-		return
-	}
-	updated, decision, err := s.runtime.Disputes.Decide(disputes.DecideInput{DisputeID: disputeID, ReviewerID: user.ID, Outcome: in.Outcome, ValidPrincipalKobo: ledger.Money(in.ValidPrincipalKobo), AdjustmentKobo: ledger.Money(in.AdjustmentKobo), RemainingDisputedKobo: ledger.Money(in.RemainingDisputedKobo), Reason: in.Reason})
-	if err != nil {
-		writeProblem(w, 409, "dispute_decision_failed", err.Error())
-		return
-	}
-	s.auditCredit(user.ID, orgID, "dispute.decided", disputeID)
-	writeJSON(w, 200, map[string]any{"dispute": updated, "decision": decision})
+	writeProblem(w, http.StatusForbidden, "independent_review_required", "buyer disputes can only be decided by an independent dispute reviewer")
 }
 
 type operationInput struct {

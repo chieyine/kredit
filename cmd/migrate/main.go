@@ -17,9 +17,12 @@ import (
 )
 
 func main() {
-	databaseURL := os.Getenv("DATABASE_URL")
+	databaseURL := os.Getenv("DATABASE_DIRECT_URL")
 	if databaseURL == "" {
-		panic("DATABASE_URL is required for migrations")
+		databaseURL = os.Getenv("DATABASE_URL")
+	}
+	if databaseURL == "" {
+		panic("DATABASE_DIRECT_URL or DATABASE_URL is required for migrations")
 	}
 	root, err := os.Getwd()
 	if err != nil {
@@ -37,6 +40,19 @@ func main() {
 		panic(err)
 	}
 	migrationsDir := filepath.Join(root, "db", "migrations")
+	if len(os.Args) > 1 {
+		if len(os.Args) != 2 || os.Args[1] != "down" {
+			panic("usage: migrate [down]")
+		}
+		if os.Getenv("ALLOW_DB_ROLLBACK") != "true" || (os.Getenv("APP_ENV") != "development" && os.Getenv("APP_ENV") != "test") {
+			panic("rollback requires explicit authorization in development or test")
+		}
+		if err := goose.Down(db, migrationsDir); err != nil {
+			panic(err)
+		}
+		fmt.Println("one application migration rolled back")
+		return
+	}
 	if err := goose.Up(db, migrationsDir); err != nil {
 		panic(err)
 	}

@@ -125,7 +125,10 @@ func (s *Server) acceptBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusUnprocessableEntity, "buyer_onboarding_failed", err.Error())
 		return
 	}
-	setSessionCookies(w, s.config.Environment != "development", rawSessionToken)
+	if !setSessionCookies(w, s.config.Environment != "development", rawSessionToken) {
+		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "a secure session could not be established")
+		return
+	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "buyer.invitation.accepted", ResourceType: "buyer_invitation", ResourceID: portal.Business.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"authentication_level": session.AuthenticationLevel}})
 	writeJSON(w, http.StatusCreated, map[string]any{"user": user, "session": session, "portal": portal})
 }

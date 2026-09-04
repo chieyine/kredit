@@ -2,3 +2,8 @@ packages:
   - web
 allowBuilds:
   esbuild: true
+# Security fixes until upstream dependency ranges include the patched releases.
+# GHSA-pxg6-pf52-xh8x and GHSA-g7r4-m6w7-qqqr.
+overrides:
+  'cookie@<0.7.0': 0.7.2
+  'esbuild@>=0.27.3 <0.28.1': 0.28.1

@@ -185,3 +185,24 @@ func (p *ResilientProvider) success() {
 	p.openUntil = time.Time{}
 	p.halfOpenProbe = false
 }
+
+func (p *ResilientProvider) GetByReference(ctx context.Context, request Request) (Response, error) {
+	if err := p.allow(); err != nil {
+		return Response{}, err
+	}
+	var response Response
+	var err error
+	if provider, ok := p.inner.(ReferenceLookupProvider); ok {
+		response, err = provider.GetByReference(ctx, request)
+	} else if request.CollectionReference != "" {
+		response, err = p.inner.Get(ctx, request.CollectionReference)
+	} else {
+		err = errors.New("provider reference lookup is unavailable")
+	}
+	if err != nil {
+		p.failure(err)
+		return Response{}, err
+	}
+	p.success()
+	return response, nil
+}

@@ -3,6 +3,7 @@ package idempotency
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestMemoryStoreRejectsKeyReuseWithDifferentRequest(t *testing.T) {
@@ -35,5 +36,17 @@ func TestMemoryStoreValidatesCompletionAndReplaysExactResponse(t *testing.T) {
 	record, existing, err := store.Reserve(ctx, "payments", "key-1", "hash-1")
 	if err != nil || !existing || record.Status != 201 || string(record.ResponseBody) != string(body) || record.CompletedAt.IsZero() {
 		t.Fatalf("unexpected replay: existing=%v record=%+v err=%v", existing, record, err)
+	}
+}
+
+func TestUnfinishedReservationDoesNotExpireIntoAnotherMutation(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+	_, _, _ = s.Reserve(ctx, "payment", "key", "hash")
+	r := s.records["payment\x00key"]
+	r.ExpiresAt = time.Now().Add(-time.Hour)
+	s.records["payment\x00key"] = r
+	if _, existing, err := s.Reserve(ctx, "payment", "key", "hash"); err != nil || !existing {
+		t.Fatalf("uncertain request was reopened: %v %v", existing, err)
 	}
 }

@@ -67,3 +67,11 @@ scenario can be traced without relying on a display name.
 | `ACC-QLT-001` | product quality | every indexable route has unique canonical search/social metadata and valid structured data | browser, CI |
 | `ACC-QLT-002` | product quality | public routes have no mobile overflow or serious/critical automated WCAG defects | browser, CI |
 | `ACC-QLT-003` | product quality | private/draft routes are noindex, private HTML is no-store, sitemap/robots exclude them, and 404/PWA assets remain valid | browser, CI |
+
+## Mono Sweep backend extension
+
+See [scenario evidence](mono-sweep-evidence.md) for local financial/contract coverage and the mandatory outstanding Mono sandbox acceptance gate.
+
+## Direct code review regressions
+
+See [the review record](code-review-2026-09-02.md) for concurrency, stale eligibility, payment reversal/forgiveness, atomic claim confirmation, notification delivery, recurring jobs, exact-money and disclosure tests, together with explicit coverage limits.

@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	database, err := db.Open(context.Background(), databaseURL)
+	database, err := db.OpenAsRole(context.Background(), databaseURL, "kredit_worker")
 	if err != nil {
 		fail(err)
 	}
@@ -42,9 +42,9 @@ func main() {
 }
 
 func databaseURLFromEnv(getenv func(string) string) (string, error) {
-	databaseURL := strings.TrimSpace(getenv("DATABASE_URL"))
+	databaseURL := strings.TrimSpace(getenv("RIVER_DATABASE_URL"))
 	if databaseURL == "" {
-		return "", fmt.Errorf("DATABASE_URL is required for reconciliation")
+		return "", fmt.Errorf("RIVER_DATABASE_URL is required for reconciliation")
 	}
 	return databaseURL, nil
 }

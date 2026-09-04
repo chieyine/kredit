@@ -6,6 +6,9 @@ import (
 	"errors"
 	"strings"
 
+	"kredit/internal/businesspolicy"
+	"kredit/internal/db"
+
 	"kredit/internal/identifier"
 	"kredit/internal/ledger"
 	"kredit/internal/outbox"
@@ -46,8 +49,9 @@ func (s *PostgresStore) adjust(actor, org, obligation string, amount ledger.Mone
 	if approvedBy == actor && approvedBy != "" {
 		return Action{}, errors.New("approval must be performed by a different user")
 	}
-	if amount >= highValueThreshold && approvedBy == "" {
-		return Action{}, errors.New("high-value operation requires separate approval")
+
+	if strings.TrimSpace(approvedBy) != "" {
+		return Action{}, errors.New("a caller-supplied approver is not evidence of approval")
 	}
 	actionID := identifier.FromKey("operation:"+kind+":"+obligation, key)
 	ctx := context.Background()
@@ -56,10 +60,24 @@ func (s *PostgresStore) adjust(actor, org, obligation string, amount ledger.Mone
 		return Action{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if existing, found, err := loadOperationTx(ctx, tx, actionID); err != nil {
+
+	action, err := s.adjustTx(ctx, tx, actor, org, obligation, amount, reason, approvedBy, kind, actionID, false)
+	if err != nil {
 		return Action{}, err
-	} else if found {
-		return existing, nil
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Action{}, err
+	}
+	if kind == "write_off" && s.invalidate != nil {
+		s.invalidate(obligation)
+	}
+	return action, nil
+}
+
+// verified is reachable only through the stored, independent approval transaction.
+func (s *PostgresStore) adjustTx(ctx context.Context, tx pgx.Tx, actor, org, obligation string, amount ledger.Money, reason, approvedBy, kind, actionID string, verified bool) (Action, error) {
+	if err := db.SetObligationContext(ctx, tx, obligation); err != nil {
+		return Action{}, err
 	}
 	var requestID, supplierID string
 	var outstanding, principal, baseFee ledger.Money
@@ -72,14 +90,37 @@ func (s *PostgresStore) adjust(actor, org, obligation string, amount ledger.Mone
 	if supplierID != org {
 		return Action{}, errors.New("obligation does not belong to organisation")
 	}
-	if approvedBy != "" {
-		var exists bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.users WHERE id=$1::uuid)`, approvedBy).Scan(&exists); err != nil || !exists {
-			return Action{}, errors.New("approver was not found")
+	if existing, found, err := loadOperationTx(ctx, tx, actionID); err != nil {
+		return Action{}, err
+	} else if found {
+		if existing.ActorUserID != actor || existing.OrganizationID != org || existing.AmountKobo != amount || existing.Reason != strings.TrimSpace(reason) || existing.ApprovedBy != approvedBy {
+			return Action{}, errors.New("idempotency key was reused for a different operation")
 		}
+		return existing, nil
 	}
+	policy, err := businesspolicy.ReadTx(ctx, tx)
+	if err != nil {
+		return Action{}, err
+	}
+	threshold := min(highValueThreshold, ledger.Money(policy.Values.CorrectionThreshold))
+	if !verified && amount >= threshold {
+		return Action{}, errors.New("operation reaches the configured approval threshold")
+	}
+	var adjusted int64
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM((metadata->>'amount_kobo')::bigint),0) FROM app.operation_actions WHERE resource_id=$1::uuid AND action IN ('write_off','fee_waiver')`, obligation).Scan(&adjusted); err != nil {
+		return Action{}, err
+	}
+	if !verified && adjusted >= int64(threshold-amount) {
+		return Action{}, errors.New("cumulative corrections require a proposal in Admin Financial changes")
+	}
+
 	if kind == "write_off" && amount > outstanding {
 		return Action{}, errors.New("write-off exceeds outstanding balance")
+	}
+	if kind == "write_off" {
+		if err := db.GuardUnreservedReduction(ctx, tx, obligation, int64(outstanding-amount)); err != nil {
+			return Action{}, err
+		}
 	}
 	if kind == "fee_waiver" {
 		var prior ledger.Money
@@ -90,15 +131,22 @@ func (s *PostgresStore) adjust(actor, org, obligation string, amount ledger.Mone
 		if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(amount_kobo),0) FROM app.fees WHERE obligation_id=$1::uuid AND state='accrued'`, obligation).Scan(&collectionFees); err != nil {
 			return Action{}, err
 		}
-		if amount > baseFee+collectionFees-prior {
+		totalFees, err := ledger.CheckedAdd(baseFee, collectionFees)
+		if err != nil {
+			return Action{}, errors.New("accrued fees overflow")
+		}
+		if prior > totalFees || amount > totalFees-prior {
 			return Action{}, errors.New("fee waiver exceeds accrued fees")
 		}
 	}
-	ledgerID, err := postOperationLedgerTx(ctx, tx, kind, obligation, "operation:"+kind+":"+key, amount)
+	ledgerID, err := postOperationLedgerTx(ctx, tx, kind, obligation, "operation:"+actionID, amount)
 	if err != nil {
 		return Action{}, err
 	}
 	if kind == "write_off" {
+		if err := db.ReduceSchedulePrincipalTx(ctx, tx, obligation, outstanding, amount, false); err != nil {
+			return Action{}, err
+		}
 		if err := updateOperationBalanceTx(ctx, tx, requestID, obligation, outstanding-amount, principal); err != nil {
 			return Action{}, err
 		}
@@ -110,15 +158,9 @@ func (s *PostgresStore) adjust(actor, org, obligation string, amount ledger.Mone
 	}
 	if s.outbox != nil {
 		payload, _ := json.Marshal(action)
-		if _, err := s.outbox.AppendTx(ctx, tx, outbox.Event{AggregateType: "obligation", AggregateID: obligation, EventType: "operation." + kind, Payload: payload, IdempotencyKey: "operation:" + kind + ":" + key}); err != nil {
+		if _, err := s.outbox.AppendTx(ctx, tx, outbox.Event{AggregateType: "obligation", AggregateID: obligation, EventType: "operation." + kind, Payload: payload, IdempotencyKey: "operation:" + actionID}); err != nil {
 			return Action{}, err
 		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Action{}, err
-	}
-	if kind == "write_off" && s.invalidate != nil {
-		s.invalidate(obligation)
 	}
 	return action, nil
 }
@@ -207,12 +249,20 @@ func (s *PostgresStore) ListForOrganization(org string) []Action {
 		return []Action{}
 	}
 	defer rows.Close()
-	out := []Action{}
+	ids := []string{}
 	for rows.Next() {
 		var id string
 		if rows.Scan(&id) != nil {
 			return []Action{}
 		}
+		ids = append(ids, id)
+	}
+	if rows.Err() != nil {
+		return []Action{}
+	}
+	rows.Close()
+	out := []Action{}
+	for _, id := range ids {
 		tx, e := s.pool.Begin(context.Background())
 		if e != nil {
 			return []Action{}
@@ -229,3 +279,7 @@ func (s *PostgresStore) ListForOrganization(org string) []Action {
 	}
 	return out
 }
+
+// Reduce the latest unpaid instalments first while retaining payment allocations
+// and paid-item references needed for reversals. The accepted agreement and the
+// operation audit retain the original commitment.

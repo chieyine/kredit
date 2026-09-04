@@ -14,6 +14,14 @@ import (
 // checking only the ledger and job tables; a migrated-but-partial database
 // must never be reported as ready.
 var RequiredPersistenceObjects = []string{
+	"app.request_rate_limits",
+	"app.admin_review_queue", "app.admin_change_history", "app.admin_change_requests", "app.admin_change_events", "app.admin_review_assignments", "app.admin_assignment_events",
+	"app.business_policy_defaults", "app.business_policy_changes", "app.business_policy_events",
+	"app.notification_delivery_receipts",
+	"app.collection_notice_acknowledgements",
+	"app.financial_review_cases",
+	"app.financial_review_events",
+	"app.financial_discrepancies",
 	"app.users",
 	"app.sessions",
 	"app.otp_challenges",
@@ -55,6 +63,8 @@ var RequiredPersistenceObjects = []string{
 	"app.drawdown_reservations",
 	"app.collection_reservations",
 	"app.collection_attempts",
+	"app.collection_events",
+	"app.provider_customer_bindings",
 	"app.collection_aggregate_snapshots",
 	"app.collection_attempt_index",
 	"app.collection_provider_events",
@@ -90,6 +100,12 @@ var RequiredPersistenceObjects = []string{
 // PostgreSQL authentication adapter. A complete table set without these
 // functions would still fail at runtime.
 var RequiredPersistenceFunctions = []string{
+	"app.touch_session(uuid,timestamptz)", "app.sync_drawdown_exposure()", "app.record_rate_limit_attempt(bytea,interval)", "app.prune_rate_limits(interval)",
+	"app.has_admin_role(uuid,text[])", "app.admin_actor_name(uuid)", "app.admin_policy_impact(jsonb)", "app.admin_attention(uuid,text[])", "app.admin_attention_details()", "app.is_active_policy_admin(uuid)", "app.business_policy()", "app.guard_offer_policy()", "app.guard_exposure_policy()",
+	"app.guard_collection_notice()",
+	"app.capture_financial_notice()",
+	"app.guard_collection_reservation()",
+	"app.guard_manual_payment_reservations()",
 	"app.find_or_create_user(text,text,timestamptz)",
 	"app.session_by_token_hash(bytea)",
 	"app.organization_count()",
@@ -99,10 +115,18 @@ var RequiredPersistenceFunctions = []string{
 	"app.credit_snapshot_by_id(text)",
 	"app.credit_snapshot_by_obligation(text)",
 	"app.payment_mandate_by_provider(text,text)",
-	"app.trade_line_mandate(uuid,uuid,uuid)",
+	"app.trade_line_mandate(uuid,uuid,uuid,uuid)",
+	"app.delete_expired_idempotency_record(text,text)",
 }
 
 var RequiredPersistenceColumns = []string{
+	"app.mfa_methods.failed_attempts", "app.mfa_methods.locked_until", "app.notifications.priority", "app.notifications.supplier_organization_id", "app.sessions.last_seen_at",
+	"app.credit_requests.fee_terms", "app.drawdowns.fee_terms",
+	"app.operations_commands.request_hash",
+	"app.payment_mandates.metadata",
+	"app.payment_mandates.supplier_organization_id",
+	"app.collection_reservations.mandate_id",
+	"app.collection_attempts.next_retry_at",
 	"app.otp_challenges.target_ciphertext",
 	"app.buyer_invitations.target_ciphertext",
 	"app.payment_mandates.primary_account_token_ciphertext",
@@ -161,6 +185,13 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	sort.Strings(missing)
 	if len(missing) > 0 {
 		return fmt.Errorf("database persistence contract is incomplete (missing: %v)", missing)
+	}
+	var version int64
+	if err := p.inner.QueryRow(ctx, `SELECT COALESCE(MAX(version_id),0) FROM (SELECT DISTINCT ON(version_id) version_id,is_applied FROM public.goose_db_version ORDER BY version_id,id DESC) v WHERE is_applied`).Scan(&version); err != nil {
+		return fmt.Errorf("check required migration version: %w", err)
+	}
+	if version < 80 {
+		return fmt.Errorf("database migrations are incomplete: version %d, require at least 80", version)
 	}
 	return nil
 }

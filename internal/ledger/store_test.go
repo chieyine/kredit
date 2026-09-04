@@ -61,4 +61,50 @@ func TestMoneyArithmeticRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestVerifyChain(t *testing.T) {
+	tx1 := Transaction{
+		ID:             "tx-1",
+		EventType:      "principal_activated",
+		ReferenceType:  "obligation",
+		ReferenceID:    "ob-1",
+		IdempotencyKey: "key-1",
+		EffectiveAt:    time.Unix(1000, 0),
+		Postings: []Posting{
+			{Account: AccountTradeReceivable, Debit: 1000},
+			{Account: AccountPrincipalOriginated, Credit: 1000},
+		},
+	}
+	tx2 := Transaction{
+		ID:             "tx-2",
+		EventType:      "payment_recognized",
+		ReferenceType:  "payment",
+		ReferenceID:    "pay-1",
+		IdempotencyKey: "key-2",
+		EffectiveAt:    time.Unix(2000, 0),
+		Postings: []Posting{
+			{Account: AccountVoluntarySettlement, Debit: 500},
+			{Account: AccountTradeReceivable, Credit: 500},
+		},
+	}
+	hash1 := VerifyChain([]Transaction{tx1, tx2})
+	if hash1 == "" {
+		t.Fatal("expected non-empty chain hash")
+	}
+	hash2 := VerifyChain([]Transaction{tx1, tx2})
+	if hash1 != hash2 {
+		t.Fatal("expected deterministic hash chain")
+	}
+
+	// Tampered posting amount must change hash
+	tx2Tampered := tx2
+	tx2Tampered.Postings = []Posting{
+		{Account: AccountVoluntarySettlement, Debit: 600},
+		{Account: AccountTradeReceivable, Credit: 600},
+	}
+	hashTampered := VerifyChain([]Transaction{tx1, tx2Tampered})
+	if hash1 == hashTampered {
+		t.Fatal("expected tampered posting to change hash")
+	}
+}
+
 func now() time.Time { return time.Now().UTC() }

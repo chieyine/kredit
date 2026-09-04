@@ -191,7 +191,7 @@ test('mobile customer navigation keeps important pages below and every other pag
 	await expect(page.getByRole('heading', { name: 'Sales and payments' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Messages and choices' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Account and help' })).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(7);
+	await expect(page.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(8);
 	await page.getByRole('link', { name: 'Get help' }).click();
 	await expect(page).toHaveURL(/\/legal\/complaints$/);
 	await expect(page.getByRole('dialog', { name: 'Customer account menu' })).toHaveCount(0);

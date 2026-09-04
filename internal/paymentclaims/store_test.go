@@ -40,3 +40,25 @@ func TestClaimHoldExpiresAndDecisionRequiresPayment(t *testing.T) {
 		t.Fatalf("expired hold=%d", got)
 	}
 }
+
+func TestClaimRetryRejectsChangedOwnerAndIntent(t *testing.T) {
+	store := NewStore(func(id string) (ObligationSnapshot, error) {
+		return ObligationSnapshot{ID: id, BuyerUserID: "buyer", OutstandingKobo: 10000, Currency: "NGN"}, nil
+	})
+	input := CreateInput{ObligationID: "debt", BuyerUserID: "buyer", AmountKobo: 2500, TransferReference: "bank", IdempotencyKey: "key"}
+	first, err := store.Create(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, err := store.Create(context.Background(), input)
+	if err != nil || retry.ID != first.ID {
+		t.Fatalf("retry=%+v %v", retry, err)
+	}
+	for _, mutate := range []func(*CreateInput){func(i *CreateInput) { i.AmountKobo++ }, func(i *CreateInput) { i.BuyerUserID = "other" }, func(i *CreateInput) { i.ObligationID = "other" }, func(i *CreateInput) { i.TransferReference = "other" }} {
+		altered := input
+		mutate(&altered)
+		if _, err := store.Create(context.Background(), altered); err == nil {
+			t.Fatal("changed claim accepted")
+		}
+	}
+}

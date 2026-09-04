@@ -13,7 +13,6 @@ import (
 	"kredit/internal/identity"
 	"kredit/internal/notifications"
 	"kredit/internal/onboarding"
-	"kredit/internal/organizations"
 )
 
 type representativeRequest struct {
@@ -102,7 +101,13 @@ func (s *Server) requestOnboardingContactOTP(w http.ResponseWriter, r *http.Requ
 		writeProblem(w, 422, "contact_verification_failed", err.Error())
 		return
 	}
-	_ = s.runtime.Notifications.SendOTP(r.Context(), in.Identifier, in.Channel, code)
+	// A swallowed delivery failure returns 202 for a code that never arrives and
+	// leaves the supplier stuck on an onboarding step with no way to know why.
+	// The login OTP route already reports this; report it here too.
+	if err := s.runtime.Notifications.SendOTP(r.Context(), in.Identifier, in.Channel, code); err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "verification code delivery is unavailable")
+		return
+	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "supplier.onboarding.contact_verification_requested", ResourceType: "supplier_onboarding", ResourceID: orgID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"channel": in.Channel}})
 	payload := map[string]any{"challenge_id": challenge.ID, "expires_at": challenge.ExpiresAt}
 	if s.config.Environment == "development" {
@@ -183,13 +188,48 @@ func (s *Server) submitSupplierKYB(w http.ResponseWriter, r *http.Request) {
 	}
 	p, sum, err := s.runtime.Onboarding.SubmitKYB(orgID, user.ID, verification.ProviderID, in.ExpectedVersion)
 	if err == nil && (verification.State == "verified" || verification.State == "approved") {
-		p, sum, err = s.runtime.Onboarding.RecordKYBDecision(orgID, user.ID, "approved", "provider_approved", verification.ExpiresAt)
+		p, sum, err = s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, p.KYBProviderReference, p.Version, "approved", "provider_approved", verification.ExpiresAt)
 	} else if err == nil && verification.State == "rejected" {
-		p, sum, err = s.runtime.Onboarding.RecordKYBDecision(orgID, user.ID, "rejected", "provider_rejected", verification.ExpiresAt)
+		p, sum, err = s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, p.KYBProviderReference, p.Version, "rejected", "provider_rejected", verification.ExpiresAt)
 	} else if err == nil && verification.State != "submitted" {
-		p, sum, err = s.runtime.Onboarding.RecordKYBDecision(orgID, user.ID, "provider_review", "", verification.ExpiresAt)
+		p, sum, err = s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, p.KYBProviderReference, p.Version, "provider_review", "", verification.ExpiresAt)
 	}
 	s.finishOnboardingChange(w, r, user, orgID, "supplier.onboarding.kyb.submitted", p, sum, err)
+}
+
+func (s *Server) reconcileSupplierKYB(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := pathID(r, "organizationID")
+	session, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageOrganization)
+	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
+		return
+	}
+	profile, _, err := s.runtime.Onboarding.Get(orgID)
+	if err != nil || strings.TrimSpace(profile.KYBProviderReference) == "" {
+		writeProblem(w, http.StatusConflict, "kyb_not_submitted", "business verification has not been submitted")
+		return
+	}
+	verification, err := s.runtime.Identity.GetVerification(r.Context(), profile.KYBProviderReference)
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "kyb_provider_unavailable", "business verification status is temporarily unavailable")
+		return
+	}
+	if verification.ProviderID != profile.KYBProviderReference || verification.SubjectID != orgID {
+		writeProblem(w, http.StatusConflict, "kyb_provider_identity_mismatch", "the provider result does not match this business verification")
+		return
+	}
+	state, reason := "provider_review", ""
+	switch strings.ToLower(strings.TrimSpace(verification.State)) {
+	case "verified", "approved":
+		state, reason = "approved", "provider_approved"
+	case "rejected", "failed":
+		state, reason = "rejected", "provider_rejected"
+	case "pending", "submitted", "in_review", "provider_review":
+	default:
+		writeProblem(w, http.StatusConflict, "kyb_provider_state_invalid", "the provider returned an unsupported verification state")
+		return
+	}
+	updated, summary, err := s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, profile.KYBProviderReference, profile.Version, state, reason, verification.ExpiresAt)
+	s.finishOnboardingChange(w, r, user, orgID, "supplier.onboarding.kyb.reconciled", updated, summary, err)
 }
 func (s *Server) updateSupplierSettlement(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
@@ -293,13 +333,13 @@ func (s *Server) finishOnboardingChange(w http.ResponseWriter, r *http.Request, 
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: action, ResourceType: "supplier_onboarding", ResourceID: orgID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"readiness_state": sum.State}})
 	if strings.Contains(action, "settlement") || strings.Contains(action, "billing") {
-		_, _ = s.runtime.Notifications.Emit(context.Background(), notifications.Event{ID: action + ":" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierSensitiveSettingChanged", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: action, NextAction: "Review the change in supplier settings.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(context.Background(), notifications.Event{ID: action + ":" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierSensitiveSettingChanged", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: action, NextAction: "Review the change in supplier settings.", SecurePath: "/app/onboarding"})
 	}
 	if strings.Contains(action, "kyb") {
-		_, _ = s.runtime.Notifications.Emit(context.Background(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(context.Background(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/app/onboarding"})
 	}
 	if sum.Ready && p.ReadinessChangedAt.Equal(p.UpdatedAt) {
-		_, _ = s.runtime.Notifications.Emit(context.Background(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(context.Background(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/app/onboarding"})
 	}
 	writeJSON(w, 200, map[string]any{"profile": p, "readiness": sum})
 }
@@ -353,11 +393,3 @@ func (s *Server) requireSupplierReady(w http.ResponseWriter, organizationID, act
 }
 
 func ownerContactEvidence(user auth.User) (bool, bool) { return user.Email != "", user.Phone != "" }
-func activeFinanceMembers(members []organizations.Membership) bool {
-	for _, m := range members {
-		if m.Status == "active" && m.Role == access.RoleFinance {
-			return true
-		}
-	}
-	return false
-}

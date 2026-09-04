@@ -2,7 +2,7 @@
 	import { articleCategoryDetails, articles, articleCategories } from '$lib/blog/articles';
 	import { jsonLd } from '$lib/seo';
 	let query=$state(''),category=$state('All guides');
-	const posts = articles.map((article,index)=>({href:`/blog/${article.slug}`,title:article.title,excerpt:article.description,date:new Date(`${article.published}T12:00:00`).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'}),minutes:article.readingMinutes,issue:String(index+1).padStart(3,'0'),category:article.category}));
+	const posts = articles.map((article,index)=>({href:`/blog/${article.slug}`,title:article.title,excerpt:article.description,date:new Date(`${article.modified}T12:00:00`).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'}),minutes:article.readingMinutes,issue:String(index+1).padStart(3,'0'),category:article.category}));
 	const featured = posts[0];
 	const topics = articleCategories.map(category => ({ category, ...articleCategoryDetails[category], count: articles.filter(article => article.category === category).length }));
 	const visiblePosts=$derived(posts.filter(post=>(category==='All guides'||post.category===category)&&`${post.title} ${post.excerpt} ${post.category}`.toLowerCase().includes(query.trim().toLowerCase())));
@@ -14,11 +14,11 @@
 
 <header class="playbook-head">
 	<div><p class="eyebrow">Helpful guides</p><h1>Simple advice for selling on credit.</h1></div>
-	<p>Short, useful guides for sellers and the customers who buy from them. No big finance words.</p>
+	<p>Short, useful guides for sellers and the customers who buy from them. From setting a credit limit to checking the last payment.</p>
 </header>
 
 <section class="featured">
-	<div class="feature-mark" aria-hidden="true"><span>GUIDE</span><strong>01</strong><i>T</i></div>
+	<div class="feature-mark" aria-hidden="true"><span>GUIDE</span><strong>01</strong><i>K</i></div>
 	<a href={featured.href}>
 		<div class="meta"><span>{featured.date}</span><span>{featured.minutes} minute read</span></div>
 		<h2>{featured.title}</h2>
@@ -27,16 +27,16 @@
 	</a>
 </section>
 
-<nav class="topic-nav" aria-label="Browse guide categories"><p class="eyebrow">Browse one topic</p><div>{#each topics as topic}<a href={`/blog/topic/${topic.slug}`}><span>{topic.count} guides</span><strong>{topic.category}</strong><i aria-hidden="true">→</i></a>{/each}</div></nav>
+<nav class="topic-nav" aria-label="Browse guide categories"><p class="eyebrow">Browse one topic</p><div>{#each topics as topic}<a href={`/blog/topic/${topic.slug}`}><span>{topic.count} {topic.count === 1 ? 'guide' : 'guides'}</span><strong>{topic.category}</strong><i aria-hidden="true">→</i></a>{/each}</div></nav>
 
-<section class="library" aria-labelledby="library-title"><div><p class="eyebrow">100 in-depth guides</p><h2 id="library-title">Find the answer you need.</h2></div><div class="filters"><label>Search guides<input type="search" value={query} oninput={(event)=>query=event.currentTarget.value} placeholder="For example: late payment" /></label><label>Topic<select value={category} onchange={(event)=>category=event.currentTarget.value}><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}>{item}</option>{/each}</select></label></div></section>
+<section class="library" aria-labelledby="library-title"><div><p class="eyebrow">{articles.length} guides</p><h2 id="library-title">Find the answer you need.</h2></div><div class="filters"><label>Search guides<input type="search" value={query} oninput={(event)=>query=event.currentTarget.value} placeholder="For example: late payment" /></label><label>Topic<select value={category} onchange={(event)=>category=event.currentTarget.value}><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}>{item}</option>{/each}</select></label></div></section>
 <section class="archive" aria-labelledby="archive-title">
-	<div class="archive-head"><p id="archive-title">{visiblePosts.length} helpful guides</p><span>Guide / Reading time</span></div>
+	<div class="archive-head"><p id="archive-title">{visiblePosts.length} helpful {visiblePosts.length === 1 ? 'guide' : 'guides'}</p><span>Guide / Reading time</span></div>
 	{#each visiblePosts as post}
 		<a class="post-row" href={post.href}>
 			<span class="issue">{post.issue}</span>
 			<div><small>{post.category}</small><h2>{post.title}</h2><p>{post.excerpt}</p></div>
-			<span class="post-meta">{post.minutes} min<br />{post.date}</span>
+			<span class="post-meta">{post.minutes} min<br />Updated {post.date}</span>
 			<i aria-hidden="true">↗</i>
 		</a>
 	{:else}<div class="no-results"><h2>No guide matches that search.</h2><p>Try a shorter word such as “payment”, “customer” or “credit”.</p><button onclick={()=>{query='';category='All guides'}}>Show every guide</button></div>

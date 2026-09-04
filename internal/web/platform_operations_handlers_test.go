@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -66,23 +67,33 @@ func TestPlatformOperationsRequiresRoleAndStepUp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.Auth.VerifyTOTP(user.ID, auth.TOTPCode(method.Secret, time.Now().UTC())); err != nil {
-		t.Fatal(err)
-	}
-	if err := runtime.Auth.ElevateSession(token); err != nil {
+	_, rotatedToken, err := runtime.Auth.StepUpSession(token, auth.TOTPCode(method.Secret, time.Now().UTC()))
+	if err != nil {
 		t.Fatal(err)
 	}
 	response = httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request.Clone(ctx))
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("pre-step-up session remained usable: %d", response.Code)
+	}
+	token = rotatedToken
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/ops/overview", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "queued_jobs") {
 		t.Fatalf("authorized status=%d body=%s", response.Code, response.Body.String())
 	}
 	for _, path := range []string{
+		"/api/v1/ops/metrics",
+		"/api/v1/ops/metrics/prometheus",
 		"/api/v1/ops/users",
 		"/api/v1/ops/organizations",
 		"/api/v1/ops/money",
 		"/api/v1/ops/cases",
 		"/api/v1/ops/disputes",
+		"/api/v1/ops/business-policies",
+		"/api/v1/ops/capabilities", "/api/v1/ops/approval-inbox", "/api/v1/ops/admin-changes", "/api/v1/ops/change-history", "/api/v1/ops/change-history?format=csv", "/api/v1/ops/attention", "/api/v1/ops/attention/details", "/api/v1/buyer/amendments",
 		"/api/v1/ops/team",
 		"/api/v1/ops/jobs",
 		"/api/v1/ops/provider-events",
@@ -98,4 +109,39 @@ func TestPlatformOperationsRequiresRoleAndStepUp(t *testing.T) {
 			t.Fatalf("%s status=%d body=%s", path, response.Code, response.Body.String())
 		}
 	}
+	currentPolicy, err := runtime.BusinessPolicies.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentPolicy.Values.UpcomingNoticeDays = 4
+	previewBody, _ := json.Marshal(map[string]any{"base_revision": currentPolicy.Revision, "values": currentPolicy.Values})
+	previewRequest := httptest.NewRequest(http.MethodPost, "/api/v1/ops/business-policies/preview", strings.NewReader(string(previewBody)))
+	previewRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	previewResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(previewResponse, previewRequest)
+	if previewResponse.Code != 200 || !strings.Contains(previewResponse.Body.String(), "due_instalments") {
+		t.Fatalf("policy impact preview: %d %s", previewResponse.Code, previewResponse.Body.String())
+	}
+	// New specialist roles can open their work but do not inherit unrelated powers.
+	for _, c := range []struct{ role, allow, deny string }{
+		{"finance_operator", "/api/v1/ops/admin-changes", "/api/v1/ops/team"},
+		{"policy_manager", "/api/v1/ops/business-policies", "/api/v1/ops/admin-changes"},
+		{"approver", "/api/v1/ops/business-policies", "/api/v1/ops/team"},
+		{"access_administrator", "/api/v1/ops/team", "/api/v1/ops/admin-changes"},
+		{"support_agent", "/api/v1/ops/approval-inbox", "/api/v1/ops/change-context?q=anything"},
+	} {
+		if _, err = database.Raw().Exec(ctx, `UPDATE app.platform_role_assignments SET role=$2 WHERE user_id=$1::uuid`, user.ID, c.role); err != nil {
+			t.Fatal(err)
+		}
+		for path, want := range map[string]int{c.allow: 200, c.deny: 403} {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+			rec := httptest.NewRecorder()
+			server.Handler().ServeHTTP(rec, req)
+			if rec.Code != want {
+				t.Fatalf("%s %s got %d: %s", c.role, path, rec.Code, rec.Body.String())
+			}
+		}
+	}
+
 }

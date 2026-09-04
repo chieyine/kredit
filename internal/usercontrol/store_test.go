@@ -3,6 +3,7 @@ package usercontrol
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"testing"
 	"time"
 )
@@ -87,5 +88,35 @@ func TestRecoveryRateLimitCountsUnknownIdentifiers(t *testing.T) {
 	}
 	if len(s.rate[hex.EncodeToString(s.digest("shared-device"))]) != 7 {
 		t.Fatal("unknown-account attempts did not share the rate limiter")
+	}
+}
+
+func TestRecoveryApprovalDoesNotCommitWhenPrivateDeliveryFails(t *testing.T) {
+	s := NewStore("secret")
+	s.BindUser("owner", "owner@example.test", "")
+	codes, err := s.GenerateRecoveryCodes(context.Background(), "owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := s.RequestRecovery(context.Background(), "owner@example.test", "email", "device")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.AddRecoveryEvidence(context.Background(), id, "verified_phone", "proof")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err = s.AddRecoveryEvidence(context.Background(), id, "recovery_code", codes[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("provider unavailable")
+	s.SetRecoveryDelivery(func(context.Context, RecoveryRequest, string) error { return failure })
+	if _, token, err := s.ReviewRecovery(context.Background(), id, "reviewer", "approve", "verified", r.Version); !errors.Is(err, failure) || token != "" {
+		t.Fatalf("approval committed without delivery: token=%q err=%v", token, err)
+	}
+	stored, err := s.Recovery(context.Background(), id)
+	if err != nil || stored.State != RecoveryPendingReview {
+		t.Fatalf("state=%s err=%v", stored.State, err)
 	}
 }

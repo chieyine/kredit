@@ -55,6 +55,7 @@
 		});
 		const body = await response.json();
 		if (!response.ok) {
+			if (response.status < 500 && (body.title ?? body.code) !== 'idempotency_in_progress') acceptanceKey = '';
 			error = body.detail ?? 'We could not check your details.';
 			return;
 		}

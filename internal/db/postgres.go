@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +20,20 @@ type Pool struct {
 }
 
 func Open(ctx context.Context, databaseURL string) (*Pool, error) {
+	return open(ctx, databaseURL, "")
+}
+
+// OpenAsRole opens a pool whose PostgreSQL session is constrained to the
+// supplied NOLOGIN runtime role. The role is set as a startup parameter so no
+// query can run with the more privileged login role before SET ROLE executes.
+func OpenAsRole(ctx context.Context, databaseURL, runtimeRole string) (*Pool, error) {
+	if runtimeRole == "" {
+		return nil, errors.New("runtime database role is required")
+	}
+	return open(ctx, databaseURL, runtimeRole)
+}
+
+func open(ctx context.Context, databaseURL, runtimeRole string) (*Pool, error) {
 	if databaseURL == "" {
 		return nil, errors.New("database URL is required")
 	}
@@ -25,8 +41,20 @@ func Open(ctx context.Context, databaseURL string) (*Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse database URL: %w", err)
 	}
-	config.MaxConns = 20
-	config.MinConns = 2
+	maxConns := int32(20)
+	if val := os.Getenv("DATABASE_MAX_CONNS"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			maxConns = int32(n)
+		}
+	}
+	minConns := int32(2)
+	if val := os.Getenv("DATABASE_MIN_CONNS"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+			minConns = int32(n)
+		}
+	}
+	config.MaxConns = maxConns
+	config.MinConns = minConns
 	config.MaxConnLifetime = 30 * time.Minute
 	config.MaxConnIdleTime = 5 * time.Minute
 	config.HealthCheckPeriod = 30 * time.Second
@@ -37,7 +65,18 @@ func Open(ctx context.Context, databaseURL string) (*Pool, error) {
 	if config.ConnConfig.RuntimeParams == nil {
 		config.ConnConfig.RuntimeParams = make(map[string]string)
 	}
-	setRuntimeDefault(config.ConnConfig.RuntimeParams, "statement_timeout", "30000")
+	if runtimeRole != "" {
+		// The process-selected role wins over any role supplied in the URL.
+		// Component entrypoints pass constants, not deployment input.
+		config.ConnConfig.RuntimeParams["role"] = runtimeRole
+	}
+	stmtTimeout := "30000"
+	if val := os.Getenv("DATABASE_STATEMENT_TIMEOUT_MS"); val != "" {
+		if _, err := strconv.Atoi(val); err == nil {
+			stmtTimeout = val
+		}
+	}
+	setRuntimeDefault(config.ConnConfig.RuntimeParams, "statement_timeout", stmtTimeout)
 	setRuntimeDefault(config.ConnConfig.RuntimeParams, "lock_timeout", "5000")
 	setRuntimeDefault(config.ConnConfig.RuntimeParams, "idle_in_transaction_session_timeout", "30000")
 	pool, err := pgxpool.NewWithConfig(ctx, config)
@@ -47,6 +86,39 @@ func Open(ctx context.Context, databaseURL string) (*Pool, error) {
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
+	}
+	if runtimeRole != "" {
+		var sessionUser, currentUser string
+		var superuser, bypassRLS, databaseOwner, applicationObjectOwner bool
+		err = pool.QueryRow(ctx, `
+			SELECT session_user,
+			       current_user,
+			       session_role.rolsuper,
+			       session_role.rolbypassrls,
+			       EXISTS (SELECT 1 FROM pg_database d WHERE d.datname=current_database() AND d.datdba=session_role.oid),
+			       EXISTS (
+			           SELECT 1
+			           FROM pg_class c
+			           JOIN pg_namespace n ON n.oid=c.relnamespace
+			           WHERE c.relowner=session_role.oid
+			             AND n.nspname IN ('app','ledger','jobs')
+			       )
+			FROM pg_roles session_role
+			WHERE session_role.rolname=session_user`).Scan(
+			&sessionUser, &currentUser, &superuser, &bypassRLS, &databaseOwner, &applicationObjectOwner,
+		)
+		if err != nil {
+			pool.Close()
+			return nil, fmt.Errorf("verify postgres runtime role: %w", err)
+		}
+		if currentUser != runtimeRole {
+			pool.Close()
+			return nil, fmt.Errorf("postgres runtime role is %q, require %q", currentUser, runtimeRole)
+		}
+		if superuser || bypassRLS || databaseOwner || applicationObjectOwner {
+			pool.Close()
+			return nil, fmt.Errorf("postgres session user %q is privileged; a dedicated runtime login is required", sessionUser)
+		}
 	}
 	return &Pool{inner: pool}, nil
 }

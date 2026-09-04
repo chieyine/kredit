@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base32"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,27 @@ const (
 	AAL1 = "AAL1"
 	AAL2 = "AAL2"
 )
+
+const (
+	// A six-digit TOTP with a three-step acceptance window is brute-forceable
+	// given an authenticated AAL1 session and a shared per-IP request budget, so
+	// verification is throttled per account as well. The lock expires on its own
+	// so a legitimate user is never permanently shut out; account recovery
+	// remains the path when they cannot wait.
+	mfaMaxFailedAttempts = 5
+	mfaLockDuration      = 15 * time.Minute
+
+	// Sessions expire on both an absolute and an idle deadline, as README
+	// section 21.2 requires. Last-seen is refreshed at most once an interval so
+	// an idle deadline does not add a write to every authenticated request.
+	sessionAbsoluteLifetime = 30 * 24 * time.Hour
+	sessionIdleTimeout      = 14 * 24 * time.Hour
+	sessionIdleRefresh      = time.Hour
+)
+
+// ErrMFALocked reports that too many incorrect codes were submitted for this
+// account and verification is paused.
+var ErrMFALocked = errors.New("too many incorrect verification codes; try again later")
 
 type User struct {
 	ID                  string    `json:"id"`
@@ -51,16 +74,20 @@ type Session struct {
 	DeviceLabel         string    `json:"device_label,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
 	ExpiresAt           time.Time `json:"expires_at"`
+	LastSeenAt          time.Time `json:"last_seen_at,omitempty"`
 	RevokedAt           time.Time `json:"revoked_at,omitempty"`
 }
 
 type MFAMethod struct {
-	ID         string
-	UserID     string
-	Type       string
-	Secret     string
-	VerifiedAt time.Time
-	RevokedAt  time.Time
+	ID              string
+	UserID          string
+	Type            string
+	Secret          string
+	VerifiedAt      time.Time
+	RevokedAt       time.Time
+	FailedAttempts  int
+	LockedUntil     time.Time
+	LastUsedCounter int64
 }
 
 type Store struct {
@@ -72,12 +99,20 @@ type Store struct {
 	sessionTokens map[string]string
 	mfaMethods    map[string]*MFAMethod
 	tokenHashKey  []byte
+	otpHMACKey    []byte
 	now           func() time.Time
 }
 
 func NewStore(tokenHashKey string) *Store {
+	return NewStoreWithKeys(tokenHashKey, tokenHashKey)
+}
+
+func NewStoreWithKeys(tokenHashKey, otpHMACKey string) *Store {
 	if tokenHashKey == "" {
 		tokenHashKey = "development-only-change-me"
+	}
+	if otpHMACKey == "" {
+		otpHMACKey = "development-only-change-me"
 	}
 	return &Store{
 		users:         make(map[string]*User),
@@ -87,6 +122,7 @@ func NewStore(tokenHashKey string) *Store {
 		sessionTokens: make(map[string]string),
 		mfaMethods:    make(map[string]*MFAMethod),
 		tokenHashKey:  []byte(tokenHashKey),
+		otpHMACKey:    []byte(otpHMACKey),
 		now:           func() time.Time { return time.Now().UTC() },
 	}
 }
@@ -105,7 +141,7 @@ func (s *Store) RequestOTP(identifier, channel, purpose string) (OTPChallenge, s
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, existing := range s.challenges {
-		if existing.TargetHash == s.hashTarget(channel, identifier) && existing.Purpose == purpose && existing.ConsumedAt.IsZero() && now.Before(existing.ExpiresAt) && now.Sub(existing.LastSentAt) < 30*time.Second {
+		if existing.TargetHash == s.hashTarget(channel, identifier) && now.Before(existing.ExpiresAt) && now.Sub(existing.LastSentAt) < 30*time.Second {
 			return OTPChallenge{}, "", errors.New("otp resend cooldown active")
 		}
 	}
@@ -157,11 +193,12 @@ func (s *Store) VerifyAndAttachIdentifier(userID, challengeID, code, channel, id
 	if existing := s.usersByTarget[key]; existing != "" && existing != userID {
 		return errors.New("contact is already attached to another account")
 	}
-	if channel == "email" {
+	switch channel {
+	case "email":
 		user.Email = identifier
-	} else if channel == "phone" {
+	case "phone":
 		user.Phone = identifier
-	} else {
+	default:
 		return errors.New("contact channel must be email or phone")
 	}
 	s.usersByTarget[key] = userID
@@ -207,7 +244,7 @@ func (s *Store) verifyOTP(challengeID, code, deviceLabel, expectedChannel, expec
 	if err != nil {
 		return User{}, Session{}, "", err
 	}
-	session := Session{ID: newID(), UserID: user.ID, AuthenticationLevel: AAL1, DeviceLabel: strings.TrimSpace(deviceLabel), CreatedAt: now, ExpiresAt: now.Add(30 * 24 * time.Hour)}
+	session := Session{ID: newID(), UserID: user.ID, AuthenticationLevel: AAL1, DeviceLabel: strings.TrimSpace(deviceLabel), CreatedAt: now, ExpiresAt: now.Add(sessionAbsoluteLifetime), LastSeenAt: now}
 	s.sessions[session.ID] = &session
 	s.sessionTokens[s.hashToken(token)] = session.ID
 	return cloneUser(*user), session, token, nil
@@ -247,16 +284,30 @@ func (s *Store) UserByID(userID string) (User, error) {
 }
 
 func (s *Store) SessionFromToken(token string) (Session, User, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	sessionID := s.sessionTokens[s.hashToken(token)]
 	session, ok := s.sessions[sessionID]
-	if !ok || !session.RevokedAt.IsZero() || !s.now().Before(session.ExpiresAt) {
+	if !ok || !session.RevokedAt.IsZero() {
+		return Session{}, User{}, errors.New("session is invalid or expired")
+	}
+	now := s.now()
+	if !now.Before(session.ExpiresAt) {
+		return Session{}, User{}, errors.New("session is invalid or expired")
+	}
+	lastSeen := session.LastSeenAt
+	if lastSeen.IsZero() {
+		lastSeen = session.CreatedAt
+	}
+	if now.Sub(lastSeen) >= sessionIdleTimeout {
 		return Session{}, User{}, errors.New("session is invalid or expired")
 	}
 	user, ok := s.users[session.UserID]
 	if !ok || user.Status != "active" {
 		return Session{}, User{}, errors.New("user is inactive")
+	}
+	if now.Sub(lastSeen) >= sessionIdleRefresh {
+		session.LastSeenAt = now
 	}
 	return cloneSession(*session), cloneUser(*user), nil
 }
@@ -276,15 +327,10 @@ func (s *Store) RevokeSession(token string) error {
 func (s *Store) RevokeAllSessions(userID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	found := false
 	for _, session := range s.sessions {
 		if session.UserID == userID && session.RevokedAt.IsZero() {
 			session.RevokedAt = s.now()
-			found = true
 		}
-	}
-	if !found {
-		return nil
 	}
 	return nil
 }
@@ -294,6 +340,9 @@ func (s *Store) BeginTOTPEnrollment(userID string) (MFAMethod, error) {
 	defer s.mu.Unlock()
 	if _, ok := s.users[userID]; !ok {
 		return MFAMethod{}, errors.New("user not found")
+	}
+	if existing := s.mfaMethods[userID]; existing != nil && existing.RevokedAt.IsZero() && !existing.VerifiedAt.IsZero() {
+		return MFAMethod{}, errors.New("MFA is already enrolled; use account recovery to replace it")
 	}
 	secretBytes := make([]byte, 20)
 	if _, err := rand.Read(secretBytes); err != nil {
@@ -311,11 +360,72 @@ func (s *Store) VerifyTOTP(userID, code string) error {
 	if !ok || !method.RevokedAt.IsZero() {
 		return errors.New("mfa method is not enrolled")
 	}
-	if !validTOTP(method.Secret, strings.TrimSpace(code), s.now()) {
+	now := s.now()
+	if !method.LockedUntil.IsZero() && now.Before(method.LockedUntil) {
+		return ErrMFALocked
+	}
+	counter, matched := matchingTOTPCounter(method.Secret, strings.TrimSpace(code), now)
+	if !matched || (method.LastUsedCounter != 0 && counter <= method.LastUsedCounter) {
+		method.FailedAttempts++
+		if method.FailedAttempts >= mfaMaxFailedAttempts {
+			method.FailedAttempts = 0
+			method.LockedUntil = now.Add(mfaLockDuration)
+			return ErrMFALocked
+		}
 		return errors.New("mfa code is invalid")
 	}
-	method.VerifiedAt = s.now()
+	method.FailedAttempts, method.LockedUntil = 0, time.Time{}
+	method.VerifiedAt = now
+	method.LastUsedCounter = counter
 	return nil
+}
+
+func (s *Store) StepUpSession(token, code string) (Session, string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	oldHash := s.hashToken(token)
+	oldSessionID := s.sessionTokens[oldHash]
+	oldSession := s.sessions[oldSessionID]
+	if oldSession == nil || !oldSession.RevokedAt.IsZero() {
+		return Session{}, "", errors.New("session not found")
+	}
+	now := s.now()
+	lastSeen := oldSession.LastSeenAt
+	if lastSeen.IsZero() {
+		lastSeen = oldSession.CreatedAt
+	}
+	if !now.Before(oldSession.ExpiresAt) || now.Sub(lastSeen) >= sessionIdleTimeout {
+		return Session{}, "", errors.New("session not found")
+	}
+	method := s.mfaMethods[oldSession.UserID]
+	if method == nil || !method.RevokedAt.IsZero() {
+		return Session{}, "", errors.New("mfa method is not enrolled")
+	}
+	if !method.LockedUntil.IsZero() && now.Before(method.LockedUntil) {
+		return Session{}, "", ErrMFALocked
+	}
+	counter, matched := matchingTOTPCounter(method.Secret, strings.TrimSpace(code), now)
+	if !matched || (method.LastUsedCounter != 0 && counter <= method.LastUsedCounter) {
+		method.FailedAttempts++
+		if method.FailedAttempts >= mfaMaxFailedAttempts {
+			method.FailedAttempts = 0
+			method.LockedUntil = now.Add(mfaLockDuration)
+			return Session{}, "", ErrMFALocked
+		}
+		return Session{}, "", errors.New("mfa code is invalid or was already used")
+	}
+	newToken, err := randomToken()
+	if err != nil {
+		return Session{}, "", err
+	}
+	method.FailedAttempts, method.LockedUntil = 0, time.Time{}
+	method.VerifiedAt, method.LastUsedCounter = now, counter
+	oldSession.RevokedAt = now
+	delete(s.sessionTokens, oldHash)
+	newSession := Session{ID: newID(), UserID: oldSession.UserID, AuthenticationLevel: AAL2, MFAVerifiedAt: now, DeviceLabel: oldSession.DeviceLabel, CreatedAt: now, ExpiresAt: oldSession.ExpiresAt, LastSeenAt: now}
+	s.sessions[newSession.ID] = &newSession
+	s.sessionTokens[s.hashToken(newToken)] = newSession.ID
+	return cloneSession(newSession), newToken, nil
 }
 
 func (s *Store) ElevateSession(token string) error {
@@ -342,19 +452,53 @@ func (s *Store) IsMFAEnrolled(userID string) bool {
 	return ok && !method.VerifiedAt.IsZero() && method.RevokedAt.IsZero()
 }
 
+// NormalizeIdentifier produces the single stored form of a login identifier.
+// Email addresses are lowercased; telephone numbers are canonicalised to E.164.
 func NormalizeIdentifier(value string) string {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	if strings.Contains(normalized, "@") {
-		return normalized
+	trimmed := strings.TrimSpace(value)
+	if strings.Contains(trimmed, "@") {
+		return strings.ToLower(trimmed)
 	}
-	for _, separator := range []string{" ", "-", "(", ")"} {
-		normalized = strings.ReplaceAll(normalized, separator, "")
-	}
-	return normalized
+	return NormalizePhone(trimmed)
 }
 
+// NormalizePhone canonicalises a Nigerian number to E.164. 08012345678,
+// 8012345678, 2348012345678 and "+234 801 234 5678" are one person; storing
+// them as different identifiers creates duplicate accounts and splits the
+// buyer's trade history, which section 35.6 requires normalisation to prevent.
+// A number carrying an explicit country code other than 234 is preserved
+// as-dialled rather than guessed at. The function is idempotent: normalising an
+// already-normalised value returns it unchanged.
+func NormalizePhone(value string) string {
+	trimmed := strings.TrimSpace(value)
+	dialled := strings.HasPrefix(trimmed, "+")
+	var builder strings.Builder
+	for _, character := range trimmed {
+		if character >= '0' && character <= '9' {
+			builder.WriteRune(character)
+		}
+	}
+	digits := builder.String()
+	switch {
+	case digits == "":
+		return ""
+	case len(digits) == 13 && strings.HasPrefix(digits, nigeriaCallingCode):
+		return "+" + digits
+	case len(digits) == 11 && strings.HasPrefix(digits, "0"):
+		return "+" + nigeriaCallingCode + digits[1:]
+	case len(digits) == 10 && !dialled:
+		return "+" + nigeriaCallingCode + digits
+	case dialled:
+		return "+" + digits
+	default:
+		return digits
+	}
+}
+
+const nigeriaCallingCode = "234"
+
 func (s *Store) hashCode(code string) []byte {
-	mac := hmac.New(sha256.New, s.tokenHashKey)
+	mac := hmac.New(sha256.New, s.otpHMACKey)
 	_, _ = mac.Write([]byte(code))
 	return mac.Sum(nil)
 }
@@ -366,7 +510,7 @@ func (s *Store) hashToken(token string) string {
 }
 
 func (s *Store) hashTarget(channel, identifier string) string {
-	mac := hmac.New(sha256.New, s.tokenHashKey)
+	mac := hmac.New(sha256.New, s.otpHMACKey)
 	_, _ = mac.Write([]byte(targetKey(channel, identifier)))
 	return hex.EncodeToString(mac.Sum(nil))
 }
@@ -375,13 +519,14 @@ func targetKey(channel, identifier string) string {
 	return channel + ":" + NormalizeIdentifier(identifier)
 }
 
+// randomOTP draws a uniform six-digit code. Reducing a raw 32-bit draw modulo
+// 1e6 biases the low codes, so rejection sampling is used instead.
 func randomOTP() (string, error) {
-	var value [4]byte
-	if _, err := rand.Read(value[:]); err != nil {
+	value, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
 		return "", err
 	}
-	combined := uint32(value[0])<<24 | uint32(value[1])<<16 | uint32(value[2])<<8 | uint32(value[3])
-	return fmt.Sprintf("%06d", combined%1000000), nil
+	return fmt.Sprintf("%06d", value.Int64()), nil
 }
 
 func randomToken() (string, error) {
@@ -404,13 +549,38 @@ func cloneUser(user User) User             { return user }
 func cloneSession(session Session) Session { return session }
 func cloneMFA(method MFAMethod) MFAMethod  { return method }
 
+// validTOTP compares in constant time and refuses to match anything when the
+// stored secret cannot be decoded. Without the explicit format check a corrupt
+// or empty secret makes totp() return "", which an empty submitted code would
+// otherwise match - an authentication bypass.
 func validTOTP(secret, code string, now time.Time) bool {
-	for delta := int64(-1); delta <= 1; delta++ {
-		if totp(secret, now.Unix()/30+delta) == code {
-			return true
+	_, matched := matchingTOTPCounter(secret, code, now)
+	return matched
+}
+
+func matchingTOTPCounter(secret, code string, now time.Time) (int64, bool) {
+	code = strings.TrimSpace(code)
+	if len(code) != 6 {
+		return 0, false
+	}
+	for _, character := range code {
+		if character < '0' || character > '9' {
+			return 0, false
 		}
 	}
-	return false
+	var matchedCounter int64
+	matched := false
+	for delta := int64(-1); delta <= 1; delta++ {
+		candidate := totp(secret, now.Unix()/30+delta)
+		if candidate == "" {
+			return 0, false
+		}
+		if subtle.ConstantTimeCompare([]byte(candidate), []byte(code)) == 1 {
+			matched = true
+			matchedCounter = now.Unix()/30 + delta
+		}
+	}
+	return matchedCounter, matched
 }
 
 // TOTPCode returns the current six-digit code for a secret. It is provided for
@@ -435,4 +605,24 @@ func totp(secret string, counter int64) string {
 	offset := digest[len(digest)-1] & 0x0f
 	value := (uint32(digest[offset])&0x7f)<<24 | uint32(digest[offset+1])<<16 | uint32(digest[offset+2])<<8 | uint32(digest[offset+3])
 	return fmt.Sprintf("%06d", value%1000000)
+}
+
+// ResetAfterRecovery is wired only to completion of the independently reviewed,
+// two-factor recovery flow. It does not create an elevated session.
+func (s *Store) ResetAfterRecovery(userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.users[userID] == nil {
+		return errors.New("user not found")
+	}
+	now := s.now()
+	if m := s.mfaMethods[userID]; m != nil {
+		m.RevokedAt = now
+	}
+	for _, session := range s.sessions {
+		if session.UserID == userID {
+			session.RevokedAt = now
+		}
+	}
+	return nil
 }

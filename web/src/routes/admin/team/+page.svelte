@@ -112,7 +112,7 @@
 				{#if selectedUser}
 					<form class="grant-form" onsubmit={grant}>
 						<div class="selected"><small>Selected user</small><strong>{selectedUser.display_name}</strong><span>{selectedUser.identifier}</span></div>
-						<label>Role<select bind:value={role}><option value="support_agent">Support agent</option><option value="compliance_reviewer">Compliance reviewer</option><option value="dispute_reviewer">Dispute reviewer</option><option value="platform_admin">Platform administrator</option></select></label>
+						<label>Role<select bind:value={role}><option value="support_agent">Support agent</option><option value="compliance_reviewer">Compliance reviewer</option><option value="dispute_reviewer">Dispute reviewer</option><option value="finance_operator">Financial operator — propose corrections and date changes</option><option value="policy_manager">Policy manager — propose business policies</option><option value="approver">Approver — independently approve changes</option><option value="access_administrator">Access administrator — manage admin team</option><option value="platform_admin">Platform administrator</option></select></label>
 						<label>Access ends <small>optional</small><input type="datetime-local" bind:value={expires} /></label>
 						<label>Why are you giving access?<textarea bind:value={reason} minlength="8" maxlength="1000" rows="4" required></textarea></label>
 						<button class="primary" disabled={busy}>{busy ? 'Saving…' : 'Give this access'}</button>

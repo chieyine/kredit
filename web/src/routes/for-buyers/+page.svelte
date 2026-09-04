@@ -18,7 +18,7 @@
 	</section>
 
 	<section class="sequence-section">
-		<div class="shell"><div class="sequence-head"><p class="eyebrow inverse">No surprise money</p><h2>You must say yes first.</h2></div><ol>{#each sequence as step, index}<li><span>0{index + 1}</span><strong>{step}</strong></li>{/each}</ol></div>
+		<div class="shell"><div class="sequence-head"><p class="eyebrow inverse">Review before accepting</p><h2>You must say yes first.</h2></div><ol>{#each sequence as step, index}<li><span>0{index + 1}</span><strong>{step}</strong></li>{/each}</ol></div>
 	</section>
 
 	<section class="controls-section shell">
@@ -27,7 +27,7 @@
 	</section>
 
 	<section class="privacy-section">
-		<div class="shell privacy-layout"><div><p class="eyebrow inverse">Your details stay private</p><h2>People cannot see your payments.</h2></div><div><p>A shared receipt does not show your name or bank details.</p><p>Only you and the seller can see the full sale.</p><a href="/security">See how we keep it safe <span>↗</span></a></div></div>
+		<div class="shell privacy-layout"><div><p class="eyebrow inverse">Your details stay private</p><h2>Your payments are not public.</h2></div><div><p>A shared receipt does not show your name or bank details.</p><p>You, permitted seller staff and authorized Kredit staff can access the records needed for the sale or support. See the privacy notice for details.</p><a href="/security">See how we keep it safe <span>↗</span></a></div></div>
 	</section>
 
 	<section class="buyer-cta shell"><span>DID A SELLER INVITE YOU?</span><h2>Open the private link they sent.</h2><p>The link expires for your safety. If it no longer works, ask the seller to send a new one. Never share your code.</p><a href="/buyer">Continue safely <b>↗</b></a></section>

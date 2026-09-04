@@ -26,6 +26,14 @@ func TestPostgresRecoveryAndPrivacyControls(t *testing.T) {
 	buyer := "00000000-0000-7000-8000-000000000004"
 	_, _ = pool.Exec(ctx, `DELETE FROM app.account_recovery_events;DELETE FROM app.account_recovery_evidence;DELETE FROM app.account_recovery_requests;DELETE FROM app.account_recovery_codes;DELETE FROM app.privacy_exports;DELETE FROM app.processing_restrictions;DELETE FROM app.privacy_request_events;DELETE FROM app.privacy_requests;DELETE FROM app.legal_holds`)
 	s := NewPostgresStore(pool, "integration-secret")
+	var deliveredToken string
+	s.SetRecoveryDelivery(func(_ context.Context, r RecoveryRequest, token string) error {
+		if r.TargetUserID != owner {
+			t.Fatalf("recovery sent to wrong user: %s", r.TargetUserID)
+		}
+		deliveredToken = token
+		return nil
+	})
 	codes, err := s.GenerateRecoveryCodes(ctx, owner)
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +58,10 @@ func TestPostgresRecoveryAndPrivacyControls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID, err := s.CompleteRecovery(ctx, id, token)
+	if token == "" || deliveredToken != token {
+		t.Fatal("continuation token was not privately delivered")
+	}
+	userID, err := s.CompleteRecovery(ctx, id, deliveredToken)
 	if err != nil || userID != owner {
 		t.Fatalf("complete=%q err=%v", userID, err)
 	}

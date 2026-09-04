@@ -11,5 +11,11 @@ if [[ "${ALLOW_DB_ROLLBACK:-false}" != "true" ]]; then
   exit 1
 fi
 
-: "${DATABASE_URL:=postgres://kredit:kredit@localhost:5432/kredit?sslmode=disable}"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'DROP TABLE IF EXISTS app_meta; DROP TABLE IF EXISTS schema_migrations;'
+case "${APP_ENV:-}" in
+  development|test) ;;
+  *) printf '%s\n' 'Rollback requires APP_ENV=development or APP_ENV=test.' >&2; exit 1 ;;
+esac
+
+database_admin_url="${DATABASE_DIRECT_URL:-${DATABASE_URL:-}}"
+: "${database_admin_url:?DATABASE_DIRECT_URL or DATABASE_URL is required for rollback}"
+DATABASE_DIRECT_URL="$database_admin_url" go run ./cmd/migrate down

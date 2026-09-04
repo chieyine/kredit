@@ -103,7 +103,10 @@ func (s *Store) PendingScanIDs(ctx context.Context, limit int) ([]string, error)
 	if limit < 1 || limit > 500 {
 		return nil, errors.New("document scan limit must be between 1 and 500")
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id::text FROM app.documents WHERE scan_state='PENDING' ORDER BY created_at LIMIT $1`, limit)
+	if _, err := s.pool.Exec(ctx, `UPDATE app.documents SET scan_state='QUARANTINED',scanned_at=now(),scan_lease_until=NULL WHERE scan_state='PENDING' AND ((upload_completed_at IS NULL AND upload_expires_at<=now()) OR (scan_attempts>=5 AND (scan_lease_until IS NULL OR scan_lease_until<=now())))`); err != nil {
+		return nil, err
+	}
+	rows, err := s.pool.Query(ctx, `WITH claimed AS (SELECT id FROM app.documents WHERE scan_state='PENDING' AND upload_completed_at IS NOT NULL AND scan_attempts<5 AND (scan_lease_until IS NULL OR scan_lease_until<=now()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $1) UPDATE app.documents d SET scan_attempts=d.scan_attempts+1,scan_lease_until=now()+interval '5 minutes' FROM claimed WHERE d.id=claimed.id RETURNING d.id::text`, limit)
 	if err != nil {
 		return nil, err
 	}

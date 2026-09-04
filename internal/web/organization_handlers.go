@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
@@ -207,7 +208,7 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
 	}
 	membership, ok := s.runtime.Organizations.Membership(organizationID, user.ID)
-	if !ok || !access.Can(membership.Role, permission) {
+	if !ok || membership.Status != "active" || !access.Can(membership.Role, permission) {
 		s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "authorization.organization_denied", ResourceType: "organization", ResourceID: organizationID, Outcome: "denied", Severity: "warning", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"permission": string(permission)}})
 		writeProblem(w, http.StatusForbidden, "organization_forbidden", "you do not have access to this organization")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
@@ -224,7 +225,12 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 		if permission == access.PermissionManageFinancial {
 			scope = "settlement"
 		}
-		if blocked, _ := s.runtime.PlatformOps.ActiveHold(r.Context(), "supplier", organizationID, scope); blocked {
+		blocked, err := s.runtime.PlatformOps.ActiveHold(r.Context(), "supplier", organizationID, scope)
+		if err != nil {
+			writeProblem(w, http.StatusServiceUnavailable, "risk_hold_unavailable", "risk hold status could not be verified")
+			return auth.Session{}, auth.User{}, organizations.Membership{}, false
+		}
+		if blocked {
 			writeProblem(w, http.StatusLocked, "risk_hold_active", "this sensitive action is blocked by an active risk hold")
 			return auth.Session{}, auth.User{}, organizations.Membership{}, false
 		}
@@ -234,7 +240,7 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 		writeProblem(w, http.StatusLocked, "recovery_cooling_off", "Sensitive financial and administrative changes are blocked during account-recovery cooling-off.")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
 	}
-	if access.RequiresStepUp(permission) && session.AuthenticationLevel != auth.AAL2 {
+	if access.RequiresStepUp(permission) && (session.AuthenticationLevel != auth.AAL2 || session.MFAVerifiedAt.IsZero() || time.Since(session.MFAVerifiedAt) > 15*time.Minute) {
 		s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "authorization.step_up_required", ResourceType: "organization", ResourceID: organizationID, Outcome: "denied", Severity: "warning", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"permission": string(permission)}})
 		writeProblem(w, http.StatusForbidden, "step_up_required", "step-up authentication is required")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false

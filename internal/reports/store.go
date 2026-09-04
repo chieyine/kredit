@@ -28,9 +28,10 @@ import (
 // credit, payment, schedule, dispute and ledger state; they do not maintain a
 // second balance.
 type Source struct {
+	FeeWaivers    func(string) map[string]ledger.Money
 	SupplierViews func(string) []credit.View
 	BuyerViews    func(string) []credit.View
-	Payments      func(string) []payments.Payment
+	Payments      func(string) ([]payments.Payment, error)
 	Schedule      func(string) (schedules.Schedule, []schedules.Item, error)
 	Disputes      func(string) []disputes.Dispute
 	Now           func() time.Time
@@ -52,27 +53,29 @@ type Summary struct {
 }
 
 type ObligationRow struct {
-	ObligationID               string       `json:"obligation_id"`
-	CreditRequestID            string       `json:"credit_request_id"`
-	BuyerBusinessID            string       `json:"buyer_business_id"`
-	BuyerName                  string       `json:"buyer_name"`
-	PrincipalKobo              ledger.Money `json:"principal_kobo"`
-	OutstandingKobo            ledger.Money `json:"outstanding_kobo"`
-	BaseFeeKobo                ledger.Money `json:"base_fee_kobo"`
-	DueDate                    string       `json:"due_date"`
-	NextDueAt                  *time.Time   `json:"next_due_at,omitempty"`
-	PaymentStatus              string       `json:"payment_status"`
-	AgeingBucket               string       `json:"ageing_bucket"`
-	Overdue                    bool         `json:"overdue"`
-	LatePayment                bool         `json:"late_payment"`
-	DaysLate                   int64        `json:"days_late"`
-	VoluntaryPaidKobo          ledger.Money `json:"voluntary_paid_kobo"`
-	CollectedPaidKobo          ledger.Money `json:"collected_paid_kobo"`
-	CollectionFeesKobo         ledger.Money `json:"collection_fees_kobo"`
-	OpenDisputeCount           int64        `json:"open_dispute_count"`
-	MandateIssue               bool         `json:"mandate_issue"`
-	MandateCancelledWhileOwing bool         `json:"mandate_cancelled_while_owing"`
-	ActivatedAt                time.Time    `json:"activated_at"`
+	dueTodayKobo, dueWeekKobo, overdueKobo ledger.Money
+	ageingAmounts                          map[string]ledger.Money
+	ObligationID                           string       `json:"obligation_id"`
+	CreditRequestID                        string       `json:"credit_request_id"`
+	BuyerBusinessID                        string       `json:"buyer_business_id"`
+	BuyerName                              string       `json:"buyer_name"`
+	PrincipalKobo                          ledger.Money `json:"principal_kobo"`
+	OutstandingKobo                        ledger.Money `json:"outstanding_kobo"`
+	BaseFeeKobo                            ledger.Money `json:"base_fee_kobo"`
+	DueDate                                string       `json:"due_date"`
+	NextDueAt                              *time.Time   `json:"next_due_at,omitempty"`
+	PaymentStatus                          string       `json:"payment_status"`
+	AgeingBucket                           string       `json:"ageing_bucket"`
+	Overdue                                bool         `json:"overdue"`
+	LatePayment                            bool         `json:"late_payment"`
+	DaysLate                               int64        `json:"days_late"`
+	VoluntaryPaidKobo                      ledger.Money `json:"voluntary_paid_kobo"`
+	CollectedPaidKobo                      ledger.Money `json:"collected_paid_kobo"`
+	CollectionFeesKobo                     ledger.Money `json:"collection_fees_kobo"`
+	OpenDisputeCount                       int64        `json:"open_dispute_count"`
+	MandateIssue                           bool         `json:"mandate_issue"`
+	MandateCancelledWhileOwing             bool         `json:"mandate_cancelled_while_owing"`
+	ActivatedAt                            time.Time    `json:"activated_at"`
 }
 
 type Receivables struct {
@@ -90,6 +93,7 @@ type Ageing struct {
 }
 
 type Fees struct {
+	WaivedFeesKobo     ledger.Money    `json:"waived_fees_kobo"`
 	GeneratedAt        time.Time       `json:"generated_at"`
 	Currency           string          `json:"currency"`
 	BaseFeesKobo       ledger.Money    `json:"base_fees_kobo"`
@@ -99,6 +103,7 @@ type Fees struct {
 }
 
 type ObligationFee struct {
+	WaivedFeesKobo     ledger.Money `json:"waived_fees_kobo"`
 	ObligationID       string       `json:"obligation_id"`
 	BuyerName          string       `json:"buyer_name"`
 	BaseFeeKobo        ledger.Money `json:"base_fee_kobo"`
@@ -172,7 +177,7 @@ func NewStore(source Source) *Store {
 		source.BuyerViews = func(string) []credit.View { return nil }
 	}
 	if source.Payments == nil {
-		source.Payments = func(string) []payments.Payment { return nil }
+		source.Payments = func(string) ([]payments.Payment, error) { return nil, nil }
 	}
 	if source.Schedule == nil {
 		source.Schedule = func(string) (schedules.Schedule, []schedules.Item, error) {
@@ -185,42 +190,130 @@ func NewStore(source Source) *Store {
 	return &Store{source: source, events: []AnalyticsEvent{}}
 }
 
-func (s *Store) ReceivablesForSupplier(orgID string) Receivables {
-	rows := s.rows(s.source.SupplierViews(orgID))
+func (s *Store) ReceivablesForSupplier(ctx context.Context, orgID string) (Receivables, error) {
+	if err := ctx.Err(); err != nil {
+		return Receivables{}, err
+	}
+	if s.pool != nil {
+		snapshot, err := s.financialSnapshot(ctx, orgID, "")
+		if err != nil {
+			return Receivables{}, err
+		}
+		return snapshot.ReceivablesForSupplier(ctx, orgID)
+	}
+	rows, err := s.rows(s.source.SupplierViews(orgID))
+	if err != nil {
+		return Receivables{}, err
+	}
 	result := Receivables{GeneratedAt: s.source.Now(), Currency: "NGN", Rows: rows}
 	for _, row := range rows {
-		result.Summary.addAt(row, result.GeneratedAt)
+		if err := result.Summary.addAt(row, result.GeneratedAt); err != nil {
+			return Receivables{}, err
+		}
 	}
-	return result
+	return result, nil
 }
 
-func (s *Store) AgeingForSupplier(orgID string) Ageing {
-	receivables := s.ReceivablesForSupplier(orgID)
+func (s *Store) AgeingForSupplier(ctx context.Context, orgID string) (Ageing, error) {
+	if err := ctx.Err(); err != nil {
+		return Ageing{}, err
+	}
+	if s.pool != nil {
+		snapshot, err := s.financialSnapshot(ctx, orgID, "")
+		if err != nil {
+			return Ageing{}, err
+		}
+		return snapshot.AgeingForSupplier(ctx, orgID)
+	}
+	receivables, err := s.ReceivablesForSupplier(ctx, orgID)
+	if err != nil {
+		return Ageing{}, err
+	}
 	buckets := map[string]ledger.Money{"current": 0, "1_7": 0, "8_30": 0, "31_60": 0, "61_plus": 0, "paid": 0}
 	for _, row := range receivables.Rows {
-		buckets[row.AgeingBucket] += row.OutstandingKobo
+		for bucket, amount := range row.ageingAmounts {
+			buckets[bucket], err = ledger.CheckedAdd(buckets[bucket], amount)
+			if err != nil {
+				return Ageing{}, err
+			}
+		}
 	}
-	return Ageing{GeneratedAt: receivables.GeneratedAt, Currency: receivables.Currency, Buckets: buckets, Rows: receivables.Rows}
+	return Ageing{GeneratedAt: receivables.GeneratedAt, Currency: receivables.Currency, Buckets: buckets, Rows: receivables.Rows}, nil
 }
 
-func (s *Store) FeesForSupplier(orgID string) Fees {
-	rows := s.rows(s.source.SupplierViews(orgID))
+func (s *Store) FeesForSupplier(ctx context.Context, orgID string) (Fees, error) {
+	if err := ctx.Err(); err != nil {
+		return Fees{}, err
+	}
+	if s.pool != nil {
+		snapshot, err := s.financialSnapshot(ctx, orgID, "")
+		if err != nil {
+			return Fees{}, err
+		}
+		return snapshot.FeesForSupplier(ctx, orgID)
+	}
+	rows, err := s.rows(s.source.SupplierViews(orgID))
+	if err != nil {
+		return Fees{}, err
+	}
+	waivers := map[string]ledger.Money{}
+	if s.source.FeeWaivers != nil {
+		waivers = s.source.FeeWaivers(orgID)
+	}
 	result := Fees{GeneratedAt: s.source.Now(), Currency: "NGN", ByObligation: []ObligationFee{}}
 	for _, row := range rows {
-		fee := ObligationFee{ObligationID: row.ObligationID, BuyerName: row.BuyerName, BaseFeeKobo: row.BaseFeeKobo, CollectionFeesKobo: row.CollectionFeesKobo, TotalFeesKobo: row.BaseFeeKobo + row.CollectionFeesKobo}
-		result.BaseFeesKobo += fee.BaseFeeKobo
-		result.CollectionFeesKobo += fee.CollectionFeesKobo
+		fee := ObligationFee{ObligationID: row.ObligationID, BuyerName: row.BuyerName, BaseFeeKobo: row.BaseFeeKobo, CollectionFeesKobo: row.CollectionFeesKobo, WaivedFeesKobo: waivers[row.ObligationID]}
+		var err error
+		fee.TotalFeesKobo, err = ledger.CheckedAdd(fee.BaseFeeKobo, fee.CollectionFeesKobo)
+		if err != nil {
+			return Fees{}, err
+		}
+		if fee.WaivedFeesKobo < 0 || fee.WaivedFeesKobo > fee.TotalFeesKobo {
+			return Fees{}, errors.New("fee waivers exceed accrued fees")
+		}
+		fee.TotalFeesKobo, err = ledger.CheckedAdd(fee.TotalFeesKobo, -fee.WaivedFeesKobo)
+		if err != nil {
+			return Fees{}, err
+		}
+		for _, pair := range []struct {
+			total  *ledger.Money
+			amount ledger.Money
+		}{{&result.BaseFeesKobo, fee.BaseFeeKobo}, {&result.CollectionFeesKobo, fee.CollectionFeesKobo}, {&result.WaivedFeesKobo, fee.WaivedFeesKobo}, {&result.TotalFeesKobo, fee.TotalFeesKobo}} {
+			*pair.total, err = ledger.CheckedAdd(*pair.total, pair.amount)
+			if err != nil {
+				return Fees{}, err
+			}
+		}
 		result.ByObligation = append(result.ByObligation, fee)
 	}
-	result.TotalFeesKobo = result.BaseFeesKobo + result.CollectionFeesKobo
-	return result
+	return result, nil
 }
 
-func (s *Store) HistoryForBuyer(buyerID string) History {
+func (s *Store) HistoryForBuyer(ctx context.Context, buyerID string) (History, error) {
+	if err := ctx.Err(); err != nil {
+		return History{}, err
+	}
+	if s.pool != nil {
+		snapshot, err := s.financialSnapshot(ctx, "", buyerID)
+		if err != nil {
+			return History{}, err
+		}
+		return snapshot.HistoryForBuyer(ctx, buyerID)
+	}
 	return s.historyFromViews(s.source.BuyerViews(buyerID))
 }
 
-func (s *Store) HistoryForSupplierBuyer(orgID, buyerID string) History {
+func (s *Store) HistoryForSupplierBuyer(ctx context.Context, orgID, buyerID string) (History, error) {
+	if err := ctx.Err(); err != nil {
+		return History{}, err
+	}
+	if s.pool != nil {
+		snapshot, err := s.financialSnapshot(ctx, orgID, buyerID)
+		if err != nil {
+			return History{}, err
+		}
+		return snapshot.HistoryForSupplierBuyer(ctx, orgID, buyerID)
+	}
 	views := []credit.View{}
 	for _, view := range s.source.SupplierViews(orgID) {
 		if view.Request.BuyerUserID == buyerID {
@@ -230,32 +323,59 @@ func (s *Store) HistoryForSupplierBuyer(orgID, buyerID string) History {
 	return s.historyFromViews(views)
 }
 
-func (s *Store) CustomerStatement(orgID, buyerID string) Statement {
+func (s *Store) CustomerStatement(ctx context.Context, orgID, buyerID string) (Statement, error) {
+	if err := ctx.Err(); err != nil {
+		return Statement{}, err
+	}
+	if s.pool != nil {
+		snapshot, err := s.financialSnapshot(ctx, orgID, buyerID)
+		if err != nil {
+			return Statement{}, err
+		}
+		return snapshot.CustomerStatement(ctx, orgID, buyerID)
+	}
 	rows := []credit.View{}
 	for _, view := range s.source.SupplierViews(orgID) {
 		if view.Request.BuyerUserID == buyerID {
 			rows = append(rows, view)
 		}
 	}
-	result := Statement{GeneratedAt: s.source.Now(), Currency: "NGN", BuyerID: buyerID, Rows: s.rows(rows), Payments: []payments.Payment{}}
-	for _, row := range result.Rows {
-		result.Payments = append(result.Payments, s.source.Payments(row.ObligationID)...)
+	reportRows, err := s.rows(rows)
+	if err != nil {
+		return Statement{}, err
 	}
-	return result
+	result := Statement{GeneratedAt: s.source.Now(), Currency: "NGN", BuyerID: buyerID, Rows: reportRows, Payments: []payments.Payment{}}
+	for _, row := range result.Rows {
+		records, err := s.source.Payments(row.ObligationID)
+		if err != nil {
+			return Statement{}, err
+		}
+		result.Payments = append(result.Payments, records...)
+	}
+	return result, nil
 }
 
-func (s *Store) historyFromViews(views []credit.View) History {
-	rows := s.rows(views)
+func (s *Store) historyFromViews(views []credit.View) (History, error) {
+	rows, err := s.rows(views)
+	if err != nil {
+		return History{}, err
+	}
 	h := History{GeneratedAt: s.source.Now(), Obligations: rows, Shareable: false}
 	var lateDays int64
 	for _, row := range rows {
 		if row.OutstandingKobo > 0 {
 			h.ActiveObligations++
-			h.CurrentActivePrincipalKobo += row.OutstandingKobo
+			h.CurrentActivePrincipalKobo, err = ledger.CheckedAdd(h.CurrentActivePrincipalKobo, row.OutstandingKobo)
+			if err != nil {
+				return History{}, err
+			}
 		}
-		if row.PaymentStatus == "PAID" {
+		if row.PaymentStatus == "PAID" && row.VoluntaryPaidKobo <= row.PrincipalKobo && row.CollectedPaidKobo == row.PrincipalKobo-row.VoluntaryPaidKobo {
 			h.CompletedObligations++
-			h.TotalCompletedPrincipalKobo += row.PrincipalKobo
+			h.TotalCompletedPrincipalKobo, err = ledger.CheckedAdd(h.TotalCompletedPrincipalKobo, row.PrincipalKobo)
+			if err != nil {
+				return History{}, err
+			}
 			if row.PrincipalKobo > h.LargestCompletedAmountKobo {
 				h.LargestCompletedAmountKobo = row.PrincipalKobo
 			}
@@ -276,10 +396,7 @@ func (s *Store) historyFromViews(views []credit.View) History {
 			h.DisputeCount++
 			_ = d
 		}
-		if h.VerifiedSince == nil || row.ActivatedAt.Before(*h.VerifiedSince) {
-			t := row.ActivatedAt
-			h.VerifiedSince = &t
-		}
+
 	}
 	if h.CompletedObligations > 0 {
 		h.OnTimePercentage = float64(h.OnTimeCount) / float64(h.CompletedObligations) * 100
@@ -287,18 +404,21 @@ func (s *Store) historyFromViews(views []credit.View) History {
 			h.AverageDaysLate = float64(lateDays) / float64(h.LatePaymentCount)
 		}
 	}
-	return h
+	return h, nil
 }
 
-func (s *Store) ExportReceivablesCSV(orgID string) ([]byte, error) {
-	r := s.ReceivablesForSupplier(orgID)
+func (s *Store) ExportReceivablesCSV(ctx context.Context, orgID string) ([]byte, error) {
+	r, err := s.ReceivablesForSupplier(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
 	var b strings.Builder
 	w := csv.NewWriter(&b)
 	if err := w.Write([]string{"obligation_id", "buyer_name", "principal_kobo", "outstanding_kobo", "due_date", "ageing_bucket", "payment_status", "voluntary_paid_kobo", "collected_paid_kobo", "collection_fees_kobo"}); err != nil {
 		return nil, err
 	}
 	for _, row := range r.Rows {
-		if err := w.Write([]string{row.ObligationID, row.BuyerName, strconv.FormatInt(int64(row.PrincipalKobo), 10), strconv.FormatInt(int64(row.OutstandingKobo), 10), row.DueDate, row.AgeingBucket, row.PaymentStatus, strconv.FormatInt(int64(row.VoluntaryPaidKobo), 10), strconv.FormatInt(int64(row.CollectedPaidKobo), 10), strconv.FormatInt(int64(row.CollectionFeesKobo), 10)}); err != nil {
+		if err := w.Write([]string{row.ObligationID, csvText(row.BuyerName), strconv.FormatInt(int64(row.PrincipalKobo), 10), strconv.FormatInt(int64(row.OutstandingKobo), 10), row.DueDate, row.AgeingBucket, row.PaymentStatus, strconv.FormatInt(int64(row.VoluntaryPaidKobo), 10), strconv.FormatInt(int64(row.CollectedPaidKobo), 10), strconv.FormatInt(int64(row.CollectionFeesKobo), 10)}); err != nil {
 			return nil, err
 		}
 	}
@@ -385,7 +505,9 @@ func validAnalyticsName(name string) bool {
 			return false
 		}
 		for i, r := range part {
-			if !((r >= 'a' && r <= 'z') || (i > 0 && (r == '_' || (r >= '0' && r <= '9')))) {
+			isLetter := r >= 'a' && r <= 'z'
+			isSuffix := i > 0 && (r == '_' || (r >= '0' && r <= '9'))
+			if !isLetter && !isSuffix {
 				return false
 			}
 		}
@@ -419,7 +541,7 @@ func analyticsMetadata(metadata map[string]string) map[string]any {
 	return result
 }
 
-func (s *Store) rows(views []credit.View) []ObligationRow {
+func (s *Store) rows(views []credit.View) ([]ObligationRow, error) {
 	rows := []ObligationRow{}
 	now := s.source.Now()
 	for _, v := range views {
@@ -429,7 +551,9 @@ func (s *Store) rows(views []credit.View) []ObligationRow {
 		o := v.Obligation
 		row := ObligationRow{ObligationID: o.ID, CreditRequestID: o.CreditRequestID, BuyerBusinessID: o.BuyerBusinessID, BuyerName: v.Request.BuyerLegalName, PrincipalKobo: o.PrincipalKobo, OutstandingKobo: o.OutstandingKobo, BaseFeeKobo: o.BaseFeeKobo, DueDate: v.Request.DueDate, PaymentStatus: o.PaymentStatus, ActivatedAt: o.ActivatedAt}
 		var due time.Time
+		var scheduleItems []schedules.Item
 		if _, items, err := s.source.Schedule(o.ID); err == nil {
+			scheduleItems = items
 			for i := range items {
 				if items[i].State != schedules.ItemPaid && items[i].State != schedules.ItemCancelled {
 					d := items[i].DueAt
@@ -448,46 +572,39 @@ func (s *Store) rows(views []credit.View) []ObligationRow {
 		if !due.IsZero() {
 			row.NextDueAt = &due
 		}
-		if due.IsZero() || o.OutstandingKobo == 0 {
-			row.AgeingBucket = "paid"
-		} else {
-			grace := time.Duration(v.Request.GraceHours) * time.Hour
-			overdueAt := due.Add(grace)
-			row.Overdue = now.After(overdueAt)
-			if !row.Overdue {
-				row.AgeingBucket = "current"
-			} else {
-				days := int(now.Sub(overdueAt).Hours() / 24)
-				switch {
-				case days <= 7:
-					row.AgeingBucket = "1_7"
-				case days <= 30:
-					row.AgeingBucket = "8_30"
-				case days <= 60:
-					row.AgeingBucket = "31_60"
-				default:
-					row.AgeingBucket = "61_plus"
-				}
-			}
+		if err := row.summarizeInstalments(scheduleItems, due, v.Request.GraceHours, now); err != nil {
+			return nil, err
 		}
-		for _, p := range s.source.Payments(o.ID) {
+		allPayments, err := s.source.Payments(o.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range allPayments {
 			if p.State != payments.StateRecognized {
 				continue
 			}
 			if p.SourceType == payments.SourceCollected {
-				row.CollectedPaidKobo += p.AmountKobo
+				row.CollectedPaidKobo, err = ledger.CheckedAdd(row.CollectedPaidKobo, p.AmountKobo)
+				if err != nil {
+					return nil, err
+				}
 			} else {
-				row.VoluntaryPaidKobo += p.AmountKobo
-			}
-			row.CollectionFeesKobo += p.CollectionFeeKobo
-			if !due.IsZero() && p.PaidAt.After(due.Add(time.Duration(v.Request.GraceHours)*time.Hour)) {
-				row.LatePayment = true
-				days := int64(p.PaidAt.Sub(due.Add(time.Duration(v.Request.GraceHours)*time.Hour)).Hours() / 24)
-				if days > row.DaysLate {
-					row.DaysLate = days
+				row.VoluntaryPaidKobo, err = ledger.CheckedAdd(row.VoluntaryPaidKobo, p.AmountKobo)
+				if err != nil {
+					return nil, err
 				}
 			}
+			row.CollectionFeesKobo, err = ledger.CheckedAdd(row.CollectionFeesKobo, p.CollectionFeeKobo)
+			if err != nil {
+				return nil, err
+			}
+
 		}
+		fallbackDeadline := due
+		if !due.IsZero() {
+			fallbackDeadline = due.Add(time.Duration(v.Request.GraceHours) * time.Hour)
+		}
+		row.LatePayment, row.DaysLate = paymentTimeliness(allPayments, scheduleItems, fallbackDeadline)
 		for _, d := range s.source.Disputes(o.ID) {
 			if d.State == disputes.StateOpen || d.State == disputes.StateUnderReview || d.State == disputes.StatePartiallyResolved {
 				row.OpenDisputeCount++
@@ -498,31 +615,47 @@ func (s *Store) rows(views []credit.View) []ObligationRow {
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ActivatedAt.Before(rows[j].ActivatedAt) })
-	return rows
+	return rows, nil
 }
 
-func (s *Summary) addAt(row ObligationRow, now time.Time) {
+func (s *Summary) addAt(row ObligationRow, now time.Time) error {
+	var err error
 	s.ObligationCount++
-	s.PrincipalKobo += row.PrincipalKobo
-	s.OutstandingKobo += row.OutstandingKobo
-	s.VoluntaryPaidKobo += row.VoluntaryPaidKobo
-	s.CollectedPaidKobo += row.CollectedPaidKobo
-	s.BaseFeesKobo += row.BaseFeeKobo
-	s.CollectionFeesKobo += row.CollectionFeesKobo
-	if row.Overdue {
-		s.OverdueKobo += row.OutstandingKobo
+	s.PrincipalKobo, err = ledger.CheckedAdd(s.PrincipalKobo, row.PrincipalKobo)
+	if err != nil {
+		return err
 	}
-	if row.AgeingBucket == "current" {
-		if row.NextDueAt != nil {
-			d := row.NextDueAt.Truncate(24 * time.Hour)
-			today := now.UTC().Truncate(24 * time.Hour)
-			if d.Equal(today) {
-				s.DueTodayKobo += row.OutstandingKobo
-			}
-			if d.After(today) && d.Before(today.Add(8*24*time.Hour)) {
-				s.DueThisWeekKobo += row.OutstandingKobo
-			}
-		}
+	s.OutstandingKobo, err = ledger.CheckedAdd(s.OutstandingKobo, row.OutstandingKobo)
+	if err != nil {
+		return err
+	}
+	s.VoluntaryPaidKobo, err = ledger.CheckedAdd(s.VoluntaryPaidKobo, row.VoluntaryPaidKobo)
+	if err != nil {
+		return err
+	}
+	s.CollectedPaidKobo, err = ledger.CheckedAdd(s.CollectedPaidKobo, row.CollectedPaidKobo)
+	if err != nil {
+		return err
+	}
+	s.BaseFeesKobo, err = ledger.CheckedAdd(s.BaseFeesKobo, row.BaseFeeKobo)
+	if err != nil {
+		return err
+	}
+	s.CollectionFeesKobo, err = ledger.CheckedAdd(s.CollectionFeesKobo, row.CollectionFeesKobo)
+	if err != nil {
+		return err
+	}
+	s.OverdueKobo, err = ledger.CheckedAdd(s.OverdueKobo, row.overdueKobo)
+	if err != nil {
+		return err
+	}
+	s.DueTodayKobo, err = ledger.CheckedAdd(s.DueTodayKobo, row.dueTodayKobo)
+	if err != nil {
+		return err
+	}
+	s.DueThisWeekKobo, err = ledger.CheckedAdd(s.DueThisWeekKobo, row.dueWeekKobo)
+	if err != nil {
+		return err
 	}
 	if row.OpenDisputeCount > 0 {
 		s.OpenDisputeCount++
@@ -530,4 +663,140 @@ func (s *Summary) addAt(row ObligationRow, now time.Time) {
 	if row.MandateIssue {
 		s.MandateIssueCount++
 	}
+	return nil
+}
+
+// CSV quoting does not prevent spreadsheet applications interpreting formulas.
+func csvText(value string) string {
+	trimmed := strings.TrimLeft(value, " \t\r\n")
+	if trimmed != "" && strings.ContainsAny(trimmed[:1], "=+-@") {
+		return "'" + value
+	}
+	return value
+}
+
+// Replay oldest-first allocations in recognition order against each instalment's
+// collection date. A later instalment must not be judged against the first due date.
+func paymentTimeliness(records []payments.Payment, items []schedules.Item, fallback time.Time) (bool, int64) {
+	records = append([]payments.Payment(nil), records...)
+	items = append([]schedules.Item(nil), items...)
+	sort.SliceStable(records, func(i, j int) bool {
+		if records[i].RecognizedAt.Equal(records[j].RecognizedAt) {
+			return records[i].ID < records[j].ID
+		}
+		return records[i].RecognizedAt.Before(records[j].RecognizedAt)
+	})
+	sort.SliceStable(items, func(i, j int) bool { return items[i].Sequence < items[j].Sequence })
+	index := 0
+	var used ledger.Money
+	late := false
+	var days int64
+	check := func(paid, deadline time.Time) {
+		if !deadline.IsZero() && paid.After(deadline) {
+			late = true
+			if d := int64(paid.Sub(deadline).Hours() / 24); d > days {
+				days = d
+			}
+		}
+	}
+	for _, payment := range records {
+		if payment.State != payments.StateRecognized {
+			continue
+		}
+		remaining := payment.AmountKobo
+		if len(items) == 0 {
+			check(payment.PaidAt, fallback)
+			continue
+		}
+		for remaining > 0 && index < len(items) {
+			item := items[index]
+			if item.State == schedules.ItemCancelled || used >= item.PrincipalDueKobo {
+				index++
+				used = 0
+				continue
+			}
+			take := item.PrincipalDueKobo - used
+			if take > remaining {
+				take = remaining
+			}
+			check(payment.PaidAt, item.CollectionAt)
+			used += take
+			remaining -= take
+		}
+	}
+	return late, days
+}
+
+func (row *ObligationRow) summarizeInstalments(items []schedules.Item, fallback time.Time, graceHours int, now time.Time) error {
+	row.ageingAmounts = map[string]ledger.Money{}
+	row.AgeingBucket = "paid"
+	if row.OutstandingKobo == 0 {
+		return nil
+	}
+	if len(items) == 0 {
+		items = []schedules.Item{{PrincipalDueKobo: row.OutstandingKobo, DueAt: fallback, CollectionAt: fallback.Add(time.Duration(graceHours) * time.Hour)}}
+	}
+	loc, err := time.LoadLocation("Africa/Lagos")
+	if err != nil {
+		return err
+	}
+	today := now.In(loc)
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc)
+	remaining := row.OutstandingKobo
+	for _, item := range items {
+		if item.State == schedules.ItemPaid || item.State == schedules.ItemCancelled {
+			continue
+		}
+		amount := min(remaining, item.PrincipalDueKobo-item.AllocatedKobo)
+		if amount <= 0 {
+			continue
+		}
+		remaining -= amount
+		deadline := item.CollectionAt
+		if deadline.IsZero() {
+			deadline = item.DueAt.Add(time.Duration(graceHours) * time.Hour)
+		}
+		bucket := "current"
+		if !deadline.IsZero() && !now.Before(deadline) {
+			days := int(now.Sub(deadline) / (24 * time.Hour))
+			bucket = "61_plus"
+			if days <= 7 {
+				bucket = "1_7"
+			} else if days <= 30 {
+				bucket = "8_30"
+			} else if days <= 60 {
+				bucket = "31_60"
+			}
+			row.overdueKobo, err = ledger.CheckedAdd(row.overdueKobo, amount)
+			if err != nil {
+				return err
+			}
+			row.Overdue = true
+		}
+		if row.AgeingBucket == "paid" || (row.AgeingBucket == "current" && bucket != "current") {
+			row.AgeingBucket = bucket
+		}
+		row.ageingAmounts[bucket], err = ledger.CheckedAdd(row.ageingAmounts[bucket], amount)
+		if err != nil {
+			return err
+		}
+		due := item.DueAt.In(loc)
+		day := time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, loc)
+		if day.Equal(today) {
+			row.dueTodayKobo, err = ledger.CheckedAdd(row.dueTodayKobo, amount)
+			if err != nil {
+				return err
+			}
+		}
+		if day.After(today) && day.Before(today.AddDate(0, 0, 8)) {
+			row.dueWeekKobo, err = ledger.CheckedAdd(row.dueWeekKobo, amount)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if remaining > 0 {
+		return errors.New("unpaid schedule does not cover the outstanding balance")
+	}
+	return nil
 }

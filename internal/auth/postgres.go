@@ -34,7 +34,7 @@ type Service interface {
 	RevokeAllSessions(userID string) error
 	BeginTOTPEnrollment(userID string) (MFAMethod, error)
 	VerifyTOTP(userID, code string) error
-	ElevateSession(token string) error
+	StepUpSession(token, code string) (Session, string, error)
 	IsMFAEnrolled(userID string) bool
 }
 
@@ -98,7 +98,8 @@ var _ Service = (*Store)(nil)
 // their HMACs are used for lookup and uniqueness checks.
 type PostgresStore struct {
 	pool          *pgxpool.Pool
-	key           []byte
+	tokenKey      []byte
+	otpKey        []byte
 	encryptionKey []byte
 	now           func() time.Time
 }
@@ -106,9 +107,18 @@ type PostgresStore struct {
 var _ Service = (*PostgresStore)(nil)
 
 func (s *PostgresStore) UserByID(userID string) (User, error) {
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return User{}, errors.New("user not found")
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, userID); err != nil {
+		return User{}, errors.New("user not found")
+	}
 	var user User
 	var email, phone *string
-	err := s.pool.QueryRow(context.Background(), `SELECT id::text,normalized_email,normalized_phone,COALESCE(display_name,''),status,created_at,COALESCE(last_authenticated_at,'epoch'::timestamptz) FROM app.users WHERE id=$1::uuid`, userID).Scan(&user.ID, &email, &phone, &user.DisplayName, &user.Status, &user.CreatedAt, &user.LastAuthenticatedAt)
+	err = tx.QueryRow(ctx, `SELECT id::text,normalized_email,normalized_phone,COALESCE(display_name,''),status,created_at,COALESCE(last_authenticated_at,'epoch'::timestamptz) FROM app.users WHERE id=$1::uuid`, userID).Scan(&user.ID, &email, &phone, &user.DisplayName, &user.Status, &user.CreatedAt, &user.LastAuthenticatedAt)
 	if err != nil {
 		return User{}, errors.New("user not found")
 	}
@@ -118,16 +128,28 @@ func (s *PostgresStore) UserByID(userID string) (User, error) {
 	if phone != nil {
 		user.Phone = *phone
 	}
+	if err = tx.Commit(ctx); err != nil {
+		return User{}, errors.New("user not found")
+	}
 	return user, nil
 }
 
 func NewPostgresStore(pool *pgxpool.Pool, tokenHashKey string) *PostgresStore {
+	return NewPostgresStoreWithKeys(pool, tokenHashKey, tokenHashKey, tokenHashKey)
+}
+
+func NewPostgresStoreWithKeys(pool *pgxpool.Pool, tokenHashKey, otpHMACKey, fieldEncryptionKey string) *PostgresStore {
 	if tokenHashKey == "" {
 		tokenHashKey = "development-only-change-me"
 	}
-	key := []byte(tokenHashKey)
-	derived := sha256.Sum256(key)
-	return &PostgresStore{pool: pool, key: key, encryptionKey: derived[:], now: func() time.Time { return time.Now().UTC() }}
+	if otpHMACKey == "" {
+		otpHMACKey = "development-only-change-me"
+	}
+	if fieldEncryptionKey == "" {
+		fieldEncryptionKey = "development-only-change-me"
+	}
+	derived := sha256.Sum256([]byte(fieldEncryptionKey))
+	return &PostgresStore{pool: pool, tokenKey: []byte(tokenHashKey), otpKey: []byte(otpHMACKey), encryptionKey: derived[:], now: func() time.Time { return time.Now().UTC() }}
 }
 
 func (s *PostgresStore) RequestOTP(identifier, channel, purpose string) (OTPChallenge, string, error) {
@@ -164,9 +186,8 @@ func (s *PostgresStore) RequestOTP(identifier, channel, purpose string) (OTPChal
 	if err := tx.QueryRow(context.Background(), `
 		SELECT EXISTS (
 			SELECT 1 FROM app.otp_challenges
-			WHERE target_hash = $1 AND purpose = $2 AND consumed_at IS NULL
-			  AND expires_at > $3 AND last_sent_at > $4
-		)`, targetHash, purpose, now, now.Add(-30*time.Second)).Scan(&cooldown); err != nil {
+			WHERE target_hash = $1 AND expires_at > $2 AND last_sent_at > $3
+		)`, targetHash, now, now.Add(-30*time.Second)).Scan(&cooldown); err != nil {
 		return OTPChallenge{}, "", fmt.Errorf("check otp cooldown: %w", err)
 	}
 	if cooldown {
@@ -176,8 +197,8 @@ func (s *PostgresStore) RequestOTP(identifier, channel, purpose string) (OTPChal
 	if err := tx.QueryRow(context.Background(), `
 		INSERT INTO app.otp_challenges
 			(target_type, target_hash, target_ciphertext, purpose, code_hmac, expires_at, last_sent_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $6)
-		RETURNING id::text`, channel, targetHash, targetCiphertext, purpose, s.hashCodeBytes(code), now.Add(10*time.Minute)).Scan(&challengeID); err != nil {
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id::text`, channel, targetHash, targetCiphertext, purpose, s.hashCodeBytes(code), now.Add(10*time.Minute), now).Scan(&challengeID); err != nil {
 		return OTPChallenge{}, "", fmt.Errorf("create otp challenge: %w", err)
 	}
 	if err := tx.Commit(context.Background()); err != nil {
@@ -314,12 +335,22 @@ func (s *PostgresStore) SessionFromToken(token string) (Session, User, error) {
 	var email, phone, displayName, status string
 	var revokedAt *time.Time
 	if err := s.pool.QueryRow(context.Background(), `
-		SELECT session_id::text, user_id::text, authentication_level, COALESCE(device_label,''), session_created_at, session_expires_at, session_revoked_at,
+		SELECT session_id::text, user_id::text, authentication_level, COALESCE(device_label,''), session_created_at, session_expires_at, session_last_seen_at, session_revoked_at,
 		       COALESCE(email,''), COALESCE(phone,''), COALESCE(display_name,''), user_status, user_created_at, COALESCE(last_authenticated_at, 'epoch')
-		FROM app.session_by_token_hash($1)`, s.hashTokenBytes(token)).Scan(&session.ID, &session.UserID, &session.AuthenticationLevel, &session.DeviceLabel, &session.CreatedAt, &session.ExpiresAt, &revokedAt, &email, &phone, &displayName, &status, &user.CreatedAt, &user.LastAuthenticatedAt); err != nil {
+		FROM app.session_by_token_hash($1)`, s.hashTokenBytes(token)).Scan(&session.ID, &session.UserID, &session.AuthenticationLevel, &session.DeviceLabel, &session.CreatedAt, &session.ExpiresAt, &session.LastSeenAt, &revokedAt, &email, &phone, &displayName, &status, &user.CreatedAt, &user.LastAuthenticatedAt); err != nil {
 		return Session{}, User{}, errors.New("session is invalid or expired")
 	}
-	if revokedAt != nil || !s.now().Before(session.ExpiresAt) || status != "active" {
+	now := s.now()
+	if revokedAt != nil || !now.Before(session.ExpiresAt) || status != "active" {
+		return Session{}, User{}, errors.New("session is invalid or expired")
+	}
+	// Both deadlines apply: the absolute lifetime above and the idle deadline
+	// here, as README section 21.2 requires.
+	lastSeen := session.LastSeenAt
+	if lastSeen.IsZero() {
+		lastSeen = session.CreatedAt
+	}
+	if now.Sub(lastSeen) >= sessionIdleTimeout {
 		return Session{}, User{}, errors.New("session is invalid or expired")
 	}
 	user.ID, user.Email, user.Phone, user.DisplayName, user.Status = session.UserID, email, phone, displayName, status
@@ -328,6 +359,13 @@ func (s *PostgresStore) SessionFromToken(token string) (Session, User, error) {
 		var verifiedAt *time.Time
 		if queryErr := tx.QueryRow(context.Background(), `SELECT mfa_verified_at FROM app.sessions WHERE id = $1`, session.ID).Scan(&verifiedAt); queryErr == nil && verifiedAt != nil {
 			session.MFAVerifiedAt = verifiedAt.UTC()
+		}
+		// Refresh last-seen at most once per interval so the idle deadline does
+		// not add a write to every authenticated request.
+		if now.Sub(lastSeen) >= sessionIdleRefresh {
+			if _, execErr := tx.Exec(context.Background(), `SELECT app.touch_session($1, $2)`, session.ID, now); execErr == nil {
+				session.LastSeenAt = now
+			}
 		}
 		_ = tx.Commit(context.Background())
 	}
@@ -370,7 +408,7 @@ func (s *PostgresStore) RevokeAllSessions(userID string) error {
 
 func (s *PostgresStore) BeginTOTPEnrollment(userID string) (MFAMethod, error) {
 	if strings.TrimSpace(userID) == "" {
-		return MFAMethod{}, errors.New("user not found")
+		return MFAMethod{}, errors.New("verified MFA already exists or enrollment is unavailable")
 	}
 	secretBytes := make([]byte, 20)
 	if _, err := rand.Read(secretBytes); err != nil {
@@ -390,8 +428,11 @@ func (s *PostgresStore) BeginTOTPEnrollment(userID string) (MFAMethod, error) {
 	if err := tx.QueryRow(context.Background(), `
 		INSERT INTO app.mfa_methods (user_id, method_type, secret_ciphertext)
 		VALUES ($1, 'totp', $2)
+        ON CONFLICT (user_id,method_type) WHERE revoked_at IS NULL
+        DO UPDATE SET secret_ciphertext=EXCLUDED.secret_ciphertext,failed_attempts=0,locked_until=NULL
+        WHERE app.mfa_methods.verified_at IS NULL
 		RETURNING id::text, user_id::text, method_type`, userID, ciphertext).Scan(&method.ID, &method.UserID, &method.Type); err != nil {
-		return MFAMethod{}, errors.New("user not found")
+		return MFAMethod{}, errors.New("verified MFA already exists or enrollment is unavailable")
 	}
 	if err := tx.Commit(context.Background()); err != nil {
 		return MFAMethod{}, fmt.Errorf("commit mfa enrollment: %w", err)
@@ -400,28 +441,126 @@ func (s *PostgresStore) BeginTOTPEnrollment(userID string) (MFAMethod, error) {
 	return method, nil
 }
 
+// VerifyTOTP throttles per account. The row is locked for the whole check so
+// concurrent guesses cannot each read the same attempt count and slip past the
+// limit together.
 func (s *PostgresStore) VerifyTOTP(userID, code string) error {
+	var methodID string
 	var ciphertext []byte
-	var revokedAt *time.Time
+	var revokedAt, lockedUntil *time.Time
+	var failedAttempts int
+	var lastUsedCounter *int64
 	tx, err := s.beginUserTx(userID)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	if err := tx.QueryRow(context.Background(), `SELECT secret_ciphertext, revoked_at FROM app.mfa_methods WHERE user_id = $1 AND method_type = 'totp' ORDER BY created_at DESC LIMIT 1`, userID).Scan(&ciphertext, &revokedAt); err != nil || revokedAt != nil {
+	if err := tx.QueryRow(context.Background(), `SELECT id::text, secret_ciphertext, revoked_at, failed_attempts, locked_until, last_used_counter FROM app.mfa_methods WHERE user_id = $1 AND method_type = 'totp' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, userID).Scan(&methodID, &ciphertext, &revokedAt, &failedAttempts, &lockedUntil, &lastUsedCounter); err != nil || revokedAt != nil {
 		return errors.New("mfa method is not enrolled")
 	}
-	secret, err := s.decrypt(ciphertext)
-	if err != nil || !validTOTP(string(secret), strings.TrimSpace(code), s.now()) {
+	now := s.now()
+	if lockedUntil != nil && now.Before(*lockedUntil) {
+		return ErrMFALocked
+	}
+	secret, decryptErr := s.decrypt(ciphertext)
+	counter, matched := matchingTOTPCounter(string(secret), strings.TrimSpace(code), now)
+	if decryptErr != nil || !matched || (lastUsedCounter != nil && counter <= *lastUsedCounter) {
+		locked := failedAttempts+1 >= mfaMaxFailedAttempts
+		nextAttempts := failedAttempts + 1
+		var nextLock any
+		if locked {
+			nextAttempts = 0
+			nextLock = now.Add(mfaLockDuration)
+		}
+		if _, execErr := tx.Exec(context.Background(), `UPDATE app.mfa_methods SET failed_attempts = $2, locked_until = $3 WHERE id = $1::uuid`, methodID, nextAttempts, nextLock); execErr != nil {
+			return fmt.Errorf("record mfa attempt: %w", execErr)
+		}
+		if commitErr := tx.Commit(context.Background()); commitErr != nil {
+			return fmt.Errorf("commit mfa attempt: %w", commitErr)
+		}
+		if locked {
+			return ErrMFALocked
+		}
 		return errors.New("mfa code is invalid")
 	}
-	if _, err := tx.Exec(context.Background(), `UPDATE app.mfa_methods SET verified_at = $2 WHERE user_id = $1 AND method_type = 'totp' AND revoked_at IS NULL`, userID, s.now()); err != nil {
+	if _, err := tx.Exec(context.Background(), `UPDATE app.mfa_methods SET verified_at = $2, last_used_at = $2, last_used_counter = $3, failed_attempts = 0, locked_until = NULL WHERE user_id = $1 AND method_type = 'totp' AND revoked_at IS NULL`, userID, now, counter); err != nil {
 		return fmt.Errorf("verify mfa method: %w", err)
 	}
 	if err := tx.Commit(context.Background()); err != nil {
 		return fmt.Errorf("commit mfa verification: %w", err)
 	}
 	return nil
+}
+
+func (s *PostgresStore) StepUpSession(token, code string) (Session, string, error) {
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Session{}, "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var session Session
+	var userID string
+	if err = tx.QueryRow(ctx, `SELECT session_id::text,user_id::text,authentication_level,COALESCE(device_label,''),session_created_at,session_expires_at,session_last_seen_at FROM app.session_by_token_hash($1)`, s.hashTokenBytes(token)).Scan(&session.ID, &userID, &session.AuthenticationLevel, &session.DeviceLabel, &session.CreatedAt, &session.ExpiresAt, &session.LastSeenAt); err != nil {
+		return Session{}, "", errors.New("session not found")
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, userID); err != nil {
+		return Session{}, "", err
+	}
+	now := s.now()
+	var revokedAt *time.Time
+	if err = tx.QueryRow(ctx, `SELECT revoked_at FROM app.sessions WHERE id=$1::uuid AND token_hash=$2 FOR UPDATE`, session.ID, s.hashTokenBytes(token)).Scan(&revokedAt); err != nil || revokedAt != nil || !now.Before(session.ExpiresAt) || now.Sub(session.LastSeenAt) >= sessionIdleTimeout {
+		return Session{}, "", errors.New("session not found")
+	}
+	var methodID string
+	var ciphertext []byte
+	var methodRevokedAt, lockedUntil *time.Time
+	var lastUsedCounter *int64
+	var failedAttempts int
+	if err = tx.QueryRow(ctx, `SELECT id::text,secret_ciphertext,revoked_at,failed_attempts,locked_until,last_used_counter FROM app.mfa_methods WHERE user_id=$1::uuid AND method_type='totp' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, userID).Scan(&methodID, &ciphertext, &methodRevokedAt, &failedAttempts, &lockedUntil, &lastUsedCounter); err != nil || methodRevokedAt != nil {
+		return Session{}, "", errors.New("mfa method is not enrolled")
+	}
+	if lockedUntil != nil && now.Before(*lockedUntil) {
+		return Session{}, "", ErrMFALocked
+	}
+	secret, decryptErr := s.decrypt(ciphertext)
+	counter, matched := matchingTOTPCounter(string(secret), strings.TrimSpace(code), now)
+	if decryptErr != nil || !matched || (lastUsedCounter != nil && counter <= *lastUsedCounter) {
+		locked := failedAttempts+1 >= mfaMaxFailedAttempts
+		nextAttempts := failedAttempts + 1
+		var nextLock any
+		if locked {
+			nextAttempts, nextLock = 0, now.Add(mfaLockDuration)
+		}
+		if _, updateErr := tx.Exec(ctx, `UPDATE app.mfa_methods SET failed_attempts=$2,locked_until=$3 WHERE id=$1::uuid`, methodID, nextAttempts, nextLock); updateErr != nil {
+			return Session{}, "", updateErr
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return Session{}, "", err
+		}
+		if locked {
+			return Session{}, "", ErrMFALocked
+		}
+		return Session{}, "", errors.New("mfa code is invalid or was already used")
+	}
+	newToken, err := randomToken()
+	if err != nil {
+		return Session{}, "", err
+	}
+	newSession := Session{ID: newID(), UserID: userID, AuthenticationLevel: AAL2, MFAVerifiedAt: now, DeviceLabel: session.DeviceLabel, CreatedAt: now, ExpiresAt: session.ExpiresAt, LastSeenAt: now}
+	if _, err = tx.Exec(ctx, `UPDATE app.mfa_methods SET verified_at=$2,last_used_at=$2,last_used_counter=$3,failed_attempts=0,locked_until=NULL WHERE id=$1::uuid`, methodID, now, counter); err != nil {
+		return Session{}, "", err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE app.sessions SET revoked_at=$2 WHERE id=$1::uuid`, session.ID, now); err != nil {
+		return Session{}, "", err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO app.sessions(id,user_id,token_hash,device_label,authentication_level,mfa_verified_at,created_at,expires_at,last_seen_at) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$6,$7,$6)`, newSession.ID, userID, s.hashTokenBytes(newToken), newSession.DeviceLabel, AAL2, now, newSession.ExpiresAt); err != nil {
+		return Session{}, "", err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Session{}, "", err
+	}
+	return newSession, newToken, nil
 }
 
 func (s *PostgresStore) ElevateSession(token string) error {
@@ -472,11 +611,13 @@ func (s *PostgresStore) beginUserTx(userID string) (pgx.Tx, error) {
 	return tx, nil
 }
 
-func (s *PostgresStore) hashCodeBytes(code string) []byte { return hmacDigest(s.key, []byte(code)) }
+func (s *PostgresStore) hashCodeBytes(code string) []byte { return hmacDigest(s.otpKey, []byte(code)) }
 func (s *PostgresStore) hashTargetBytes(channel, identifier string) []byte {
-	return hmacDigest(s.key, []byte(targetKey(channel, identifier)))
+	return hmacDigest(s.otpKey, []byte(targetKey(channel, identifier)))
 }
-func (s *PostgresStore) hashTokenBytes(token string) []byte { return hmacDigest(s.key, []byte(token)) }
+func (s *PostgresStore) hashTokenBytes(token string) []byte {
+	return hmacDigest(s.tokenKey, []byte(token))
+}
 
 func hmacDigest(key, value []byte) []byte {
 	mac := hmac.New(sha256.New, key)

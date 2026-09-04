@@ -1,11 +1,15 @@
 <script lang="ts">
+ import {onMount} from 'svelte';
+ let rates:{base_bps:number;collection_bps:number}|null=$state(null),pricingError=$state('');
+ onMount(async()=>{try{const r=await fetch('/api/v1/pricing');if(!r.ok)throw new Error();const b=await r.json();if(!Number.isInteger(b.base_bps)||!Number.isInteger(b.collection_bps)||b.base_bps<0||b.base_bps>1000||b.collection_bps<0||b.collection_bps>1000)throw new Error();rates=b}catch{pricingError='Current rates could not be loaded. Please refresh before relying on a fee estimate.'}});
+ import { parseNaira } from '$lib/money';
 	import Money from '$lib/components/Money.svelte';
 	let principalNaira = $state(500000);
-	const kobo = $derived(Math.max(0, Math.round(principalNaira * 100)));
-	const voluntaryFee = $derived(Math.round(kobo * 5 / 1000));
-	const collectionFee = $derived(Math.round(kobo * 10 / 1000));
+	const kobo = $derived(Math.max(0, parseNaira(principalNaira)));
+	const voluntaryFee = $derived.by(()=>rates?Math.floor(kobo * rates.base_bps / 10000):null);
+	const collectionFee = $derived.by(()=>rates&&voluntaryFee!==null?voluntaryFee + Math.floor(kobo * rates.collection_bps / 10000):null);
 	const questions = [
-		['What if my customer does not pay?', 'We remind them first. We wait for the extra days to end. Then Kredit can try to debit the money.'],
+		['What if my customer does not pay?', 'Kredit sends reminders. After the agreed grace period, it can request a debit under valid bank authorization, subject to payment and dispute checks. Collection is not guaranteed.'],
 		['Does Kredit give loans?', 'No. You give the goods. You choose the customer. Kredit helps you keep the sale and payment.'],
 		['What does my customer need?', 'Only a private link. They do not need to install an app.']
 	];
@@ -14,11 +18,12 @@
 
 
 <main class="pricing-page">
-	<section class="pricing-hero shell"><div><p class="eyebrow">Price</p><h1>We earn only when<br />you get your money.</h1></div><div class="hero-side"><p>Add sales and see money owed for free. We charge only when your customer pays.</p><span>No monthly payment · No joining fee · No hidden money</span></div></section>
+	<section class="pricing-hero shell"><div><p class="eyebrow">Price</p><h1>Clear fees for<br />trade credit.</h1></div><div class="hero-side"><p>Add sales and see money owed for free. The recorded base fee starts when an accepted sale becomes active. Successful collection adds the recorded collection fee on the amount collected. Existing offers retain their rates.</p><span>No subscription · No joining fee</span></div></section>
 
-	<section class="rates shell" aria-label="Kredit fee rates"><article><span>01 / CUSTOMER PAYS</span><strong>0.5%</strong><p>If your customer pays ₦100,000, Kredit takes ₦500.</p></article><article><span>02 / KREDIT DEBITS</span><strong>1%</strong><p>If Kredit debits ₦100,000 after it is late, Kredit takes ₦1,000.</p></article></section>
+ {#if pricingError}<p role="alert" class="shell">{pricingError}</p>{:else if !rates}<p class="shell">Loading current rates…</p>{/if}
+ {#if rates}<section class="rates shell" aria-label="Kredit fee rates"><article><span>01 / BASE FEE ON ACTIVATION</span><strong>{rates.base_bps/100}%</strong><p>Payable by the seller when the sale becomes active.</p></article><article><span>02 / ADDITIONAL SUCCESSFUL COLLECTION FEE</span><strong>{rates.collection_bps/100}%</strong><p>Applies only to the amount successfully collected after the permitted collection time.</p></article></section>{/if}
 
-	<section class="calculator-section"><div class="shell calculator-layout"><div><p class="eyebrow inverse">See the money we take</p><h2>Choose the price of the goods.</h2><p>Move the line. You will see the fee before you agree.</p></div><div class="calculator"><div class="value"><span>Price of goods</span><strong>{describe(principalNaira)}</strong></div><input type="range" min="50000" max="10000000" step="50000" bind:value={principalNaira} aria-label="Price of goods in naira" /><div class="range-labels"><span>₦50k</span><span>₦10m</span></div><dl><div><dt>Customer pays <span>0.5%</span></dt><dd><Money amountKobo={voluntaryFee} /></dd></div><div><dt>Kredit debits <span>1%</span></dt><dd><Money amountKobo={collectionFee} /></dd></div><div><dt>Add the sale</dt><dd>₦0</dd></div></dl></div></div></section>
+	<section class="calculator-section"><div class="shell calculator-layout"><div><p class="eyebrow inverse">Estimate your fees</p><h2>Choose the price of the goods.</h2><p>Choose an amount to estimate the seller’s base fee and the total fee if the full balance is collected.</p></div><div class="calculator"><div class="value"><span>Price of goods</span><strong>{describe(principalNaira)}</strong></div><input type="range" min="50000" max="10000000" step="50000" bind:value={principalNaira} aria-label="Price of goods in naira" /><div class="range-labels"><span>₦50k</span><span>₦10m</span></div><dl><div><dt>Base fee <span>{rates?`${rates.base_bps/100}%`:"—"}</span></dt><dd><Money amountKobo={voluntaryFee} /></dd></div><div><dt>Total if fully collected <span>{rates?`${(rates.base_bps+rates.collection_bps)/100}%`:"—"}</span></dt><dd><Money amountKobo={collectionFee} /></dd></div><div><dt>Add the sale</dt><dd>₦0</dd></div></dl></div></div></section>
 
 	<section class="questions shell"><div class="section-head"><p class="eyebrow">Straight answers</p><h2>What you need to know.</h2></div><div class="question-list">{#each questions as [question, answer], index}<article><span>0{index + 1}</span><h3>{question}</h3><p>{answer}</p></article>{/each}</div></section>
 

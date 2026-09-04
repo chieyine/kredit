@@ -63,11 +63,25 @@ func (s *Store) adjust(actor, org, obligation string, amount ledger.Money, reaso
 	if strings.TrimSpace(approvedBy) != "" && strings.TrimSpace(approvedBy) == strings.TrimSpace(actor) {
 		return Action{}, errors.New("approval must be performed by a different user")
 	}
-	if amount >= highValueThreshold && strings.TrimSpace(approvedBy) == "" {
-		return Action{}, errors.New("high-value operation requires separate approval")
+	if amount >= highValueThreshold {
+		return Action{}, errors.New("high-value operation requires a verified approval workflow; currently unavailable")
+	}
+	if strings.TrimSpace(approvedBy) != "" {
+		return Action{}, errors.New("a caller-supplied approver is not evidence of approval")
 	}
 	if s.ledger == nil {
 		return Action{}, errors.New("ledger unavailable")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var adjusted ledger.Money
+	for _, previous := range s.actions {
+		if previous.ObligationID == obligation {
+			if previous.AmountKobo >= highValueThreshold-amount-adjusted {
+				return Action{}, errors.New("cumulative corrections require a verified approval workflow; currently unavailable")
+			}
+			adjusted += previous.AmountKobo
+		}
 	}
 	var tx ledger.Transaction
 	var err error
@@ -85,9 +99,7 @@ func (s *Store) adjust(actor, org, obligation string, amount ledger.Money, reaso
 		}
 	}
 	action := &Action{ID: s.newID(), ActorUserID: actor, OrganizationID: org, ActionType: kind, ObligationID: obligation, AmountKobo: amount, Reason: strings.TrimSpace(reason), ApprovedBy: approvedBy, LedgerTransactionID: tx.ID, CreatedAt: s.now()}
-	s.mu.Lock()
 	s.actions[action.ID] = action
-	s.mu.Unlock()
 	return cloneAction(*action), nil
 }
 func (s *Store) ListForOrganization(org string) []Action {

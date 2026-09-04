@@ -11,7 +11,7 @@
 		},
 		{
 			q: 'What happens if a customer does not pay?',
-			a: 'We remind them first. We wait for the extra days to end. Then Kredit can debit only the money still owed. If there is a problem, we stop and check.'
+			a: 'Kredit sends reminders first. After the agreed grace period, it can request a debit under valid bank authorization, subject to payment and dispute checks. A debit can fail; repayment is not guaranteed.'
 		},
 		{
 			q: 'What if a completed payment is reversed?',
@@ -27,11 +27,11 @@
 		},
 		{
 			q: 'How much does it cost?',
-			a: 'If your customer pays ₦100,000, Kredit takes ₦500. If Kredit has to debit ₦100,000 after it is late, Kredit takes ₦1,000. Adding a sale is free.'
+			a: 'Adding a draft sale is free. The seller owes the agreed base fee when the accepted sale becomes active. Successful collection adds the agreed collection fee on the amount collected. Check the pricing page for current rates; an existing offer keeps its recorded rates.'
 		},
 		{
 			q: 'Is my business data private?',
-			a: 'Yes. A shared receipt does not show names or bank details. Only you and the customer see the full sale.'
+			a: 'Access depends on your account and staff permissions. The buyer can see their sale, and authorized Kredit staff may access records to provide support or investigate a problem. Shared receipts omit names and bank details. The privacy notice explains how information is used.'
 		}
 	];
 
@@ -50,4 +50,4 @@
 	{@html `<script type="application/ld+json">${jsonLd(faqSchema)}<\/script>`}
 </svelte:head>
 
-<main class="shell prose-page"><p class="eyebrow">Common questions</p><h1>Simple answers before you start.</h1><dl class="faq">{#each faqs as item}<div><dt>{item.q}</dt><dd>{item.a}</dd></div>{/each}</dl></main>
+<main class="shell prose-page"><p class="eyebrow">Common questions</p><h1>Simple answers before you start.</h1><dl class="faq">{#each faqs as item}<div><dt>{item.q}</dt><dd>{item.a}</dd></div>{/each}</dl><p>See <a href="/pricing">current pricing</a> or read the <a href="/legal/privacy">privacy notice</a> for details.</p></main>

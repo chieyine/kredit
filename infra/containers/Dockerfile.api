@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM golang:1.26.5-alpine AS build
+FROM golang:1.26.8-alpine AS build
 WORKDIR /src
 # TARGETARCH is provided automatically by BuildKit so images build correctly
 # on amd64 and arm64 hosts alike.

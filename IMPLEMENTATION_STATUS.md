@@ -1,6 +1,73 @@
 # Implementation Status
 
-Last updated: 29 August 2026
+Last updated: 3 September 2026
+
+## Audit recommendations implemented (3 September 2026)
+
+Every recommendation from the repository code audit is implemented except the
+request-context refactor, which is deliberately staged (below). Migrations now
+run through **069**: canonical E.164 phone identifiers with a fail-closed
+backfill, session idle expiry and per-account MFA locking, and a rate-limit
+budget shared across API replicas for the authentication routes. The linters the
+repository had configured but never executed now run in CI and fail closed, and
+the fuzz gate — previously a no-op that matched no test — runs eight targets
+covering seven of the eight areas README section 40.3 names. The eighth, a CSV
+import parser, has no counterpart in v1: CSV is exported, never imported.
+[ADR 0005](docs/adr/0005-hand-written-http-and-sql.md) records that Go handlers
+and SQL are hand-written and removes the orphaned generated code and `sqlc`
+pipeline that nothing compiled.
+
+**Not implemented: request-scoped context propagation.** Repository methods take
+no `context.Context`, so threading the request context is a signature change
+across roughly fifty methods and every call site and test. Database-side
+`statement_timeout`, `lock_timeout` and `idle_in_transaction_session_timeout`
+already bound the work; what is missing is cancellation when a client
+disconnects. This is a mechanical refactor that should be done with a compiler
+in the loop, in its own change, and is recorded here rather than attempted
+blind.
+
+## Repository code audit (3 September 2026)
+
+Every owned file in the repository was reviewed against this README. Ten defects
+were corrected and locked in with regression tests: an obligation index that made
+activated obligations unreachable to payments, collections and disputes; a
+self-deadlocking auto-activation sweep; an MFA comparison that accepted an empty
+code against an undecodable secret; a biased OTP generator and a guessable CSRF
+fallback token; missing Origin/Sec-Fetch-Site verification (README section 21.6);
+a web proxy that forwarded client-supplied forwarded-address headers and so
+allowed rate-limit and OTP-throttle evasion; a "last day of month" instalment
+policy that silently behaved as "cap" (README section 26.2); release notes stored
+as waybill evidence; a nil reservation dereference on the successful-debit path;
+and a Linux-incompatible CI self-test that made `scripts/ci.sh` fail before it
+reached the test suite. No schema change was required. Open recommendations that
+were **not** applied, because each needs a product decision, are recorded in the
+audit summary: per-user MFA attempt throttling, session idle expiry, an error-
+returning payment list API, and stricter phone normalisation.
+
+## Admin workflow completion (3 September 2026)
+
+All seven recommended admin improvements are implemented: unified role-scoped review inbox; independently approved corrections; buyer-consented repayment-date amendments; exact naira/percentage settings and administrator names; policy impact previews; specialist permissions; attention views; searchable/exportable retained history. Migrations now run through **066**. Changes remain local and are not deployed. See [operating guide](docs/runbooks/admin-workflows.md) and [verification](docs/testing/admin-workflows-2026-09-03.md).
+
+## Direct code review (2 September 2026)
+
+Financial race conditions, payment-claim atomicity, report/disclosure accuracy, notification delivery routing and recurring work have received additional fixes. Migrations now run through 060. Financial reports use consistent snapshots; financial notices are transactional; real debits require verified prior-notice delivery; reconciliation cases and durable metrics are implemented. See [the completion record](docs/testing/code-completion-2026-09-02.md) for final changes and tests. Direct accepted-schedule replacement and unverified high-value adjustments remain blocked; the new independently approved amendment/correction workflows provide the supported path. See [review scope, file coverage and verification](docs/testing/code-review-2026-09-02.md). This is code-level evidence, not regulatory or provider certification.
+
+## Mono Sweep backend extension (2 September 2026)
+
+The provider-independent backend now has a Mono Variable Sweep sandbox adapter,
+separate buyer acceptance and bank authorization, reusable supplier/business
+mandates, durable debit reservations, partial repayment handling, bounded retries,
+async authenticated webhooks, and worker-driven reconciliation/notifications.
+Migration 052 protects shared mandate capacity and manual-payment races and adds
+immutable collection events. Customer registration retains only the provider
+reference and consent version; BVN and raw bank details are not retained.
+
+This extension is **not complete under the required provider acceptance gate**:
+Mono sandbox credentials/Sweep access are unavailable, and buyer authorization
+must be completed in the hosted provider flow. All 21 scenarios must still be
+proved against Mono. Production enablement is rejected by configuration.
+See [setup, limitations and official sources](docs/runbooks/mono-sweep.md) and
+[scenario evidence](docs/testing/mono-sweep-evidence.md).
 
 ## README audit correction (29 August 2026)
 
@@ -120,7 +187,7 @@ recurring trade line, scenarios A/B/D/E as durable credit aggregates, and the
 scenario-F duplicate-webhook proof. Draft amendment with optimistic
 concurrency, supplier cancellation, and buyer decline are implemented across
 the OpenAPI contract, generated clients, Go domain/API, Svelte flows, audit
-events, unit tests, and Playwright coverage. All 51 migrations and the seed
+events, unit tests, and Playwright coverage. The complete migration chain and seed
 were validated on clean PostgreSQL databases, including a repeated seed run.
 
 The August implementation pass added durable off-platform payment claims with bounded
@@ -340,7 +407,7 @@ they do not satisfy the remaining durable-repository or external approval gates.
 - Development may intentionally use deterministic process-local adapters; every
   database-backed runtime selects durable repositories and advertises
   `DomainAggregatesDurable` only for that configuration.
-- Migrations execute cleanly through version 051 on PostgreSQL.
+- Migrations execute cleanly through version 052 on PostgreSQL.
 - Non-development supports provider-neutral HTTPS connectors for identity,
   mandates, collections and notifications and rejects incomplete/mock setup.
 - Real provider integrations remain disabled by feature flags and unresolved product/legal questions.
@@ -362,9 +429,9 @@ independent evidence and a separate reviewer, enforces cooling-off and blocks
 sensitive actions, and revokes sessions/codes on completion. Seven durable
 privacy-rights request types support deadlines, legal holds, restrictions,
 dual-control completion, and expiring tenant-bound exports generated from
-authoritative stores. The catalog-generated field inventory covers 924 fields.
+authoritative stores. The catalog-generated field inventory covers 943 fields.
 
-Browser acceptance now contains 60 Chromium scenarios, including notification
+Browser acceptance now covers the complete Chromium product suite, including notification
 preferences, identity-bound privacy submission, enumeration-safe recovery,
 protected operations, accessibility and the product-quality gate.
 
@@ -374,3 +441,39 @@ No repository-owned README gap remains in the current audit. Complete the
 external pilot gates: manual assistive-technology/device evidence, legal and
 provider approvals, target-environment resilience/security proof, reviewed KPI
 targets, support readiness and launch-owner signatures.
+
+## Admin business settings — 2026-09-03
+
+Added `/admin/settings` with 18 business controls, independent approval, scheduled effective dates and immutable history. Values are enforced by workers and financial database boundaries. Fees are recorded on new offers and preserved for existing agreements; public pricing and offer displays use the corresponding rates. Requires migrations 061–063. See `docs/runbooks/business-settings.md` for protected deployment controls and forward-only repair once custom fee terms or policy history exist.
+
+## Product recommendations implemented — 2026-09-03
+
+Seven product and risk recommendations from the full-repository audit are
+implemented across code, configuration and recorded product decisions.
+
+**Deemed acceptance.** Pilot policy forbids converting buyer silence into an
+activated obligation. Worker scheduling has been removed and the database now
+rejects the legacy auto-activation issue reason, so the path remains unreachable
+even if stale application code attempts it. Any future enablement requires a new
+approved product decision and an authoritative durable implementation.
+
+**Admin surface.** `ADMIN_SURFACES` makes the operations namespace default-deny
+in production. This is a reachability control layered over the existing
+permission checks, not a replacement for them, and safety controls such as the
+dual-control admin change workflow must not be disabled to shrink the surface.
+
+**Provider abstraction.** `tests/contract/provider_contract_test.go` now runs
+its assertions over a registry of adapters, and asserts at compile time that the
+Mono client satisfies both provider interfaces. A second adapter should be a
+one-line registration; if it is not, the boundary leaked.
+
+**Not done.** Building the second collection adapter itself, the buyer-facing
+trade-history preview and access log recommended by the DPIA, and the
+aggregate-only history disclosure. Each needs product decisions recorded in
+`docs/product/open-questions.md` (EXT-010 to EXT-013) before it is worth
+writing.
+
+**Verification limits.** Repository-owned checks and the Go/frontend suites are
+run from the current working tree. PostgreSQL 18 integration and external
+provider, legal and deployment evidence remain release gates and must be
+recorded by the certification workflow before merging or enabling collections.

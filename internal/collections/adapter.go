@@ -83,8 +83,8 @@ func (a *ApprovedAdapter) Submit(ctx context.Context, request Request) (Response
 	return a.inner.Submit(ctx, request)
 }
 func (a *ApprovedAdapter) Get(ctx context.Context, providerID string) (Response, error) {
-	if !a.Enabled() {
-		return Response{}, errors.New("real collection provider is disabled")
+	if a.inner == nil {
+		return Response{}, errors.New("collection provider is unavailable")
 	}
 	return a.inner.Get(ctx, providerID)
 }
@@ -125,4 +125,17 @@ func (a *ApprovedAdapter) gate(amount int64) error {
 		return errors.New("collection amount exceeds approved pilot limit")
 	}
 	return nil
+}
+
+func (p *ApprovedAdapter) GetByReference(ctx context.Context, request Request) (Response, error) {
+	if p.inner == nil {
+		return Response{}, errors.New("collection provider is unavailable")
+	}
+	if provider, ok := p.inner.(ReferenceLookupProvider); ok {
+		return provider.GetByReference(ctx, request)
+	}
+	if request.CollectionReference != "" {
+		return p.inner.Get(ctx, request.CollectionReference)
+	}
+	return Response{}, errors.New("provider reference lookup is unavailable")
 }

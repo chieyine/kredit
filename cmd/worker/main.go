@@ -68,7 +68,7 @@ func main() {
 		panic(err)
 	}
 	logger := logging.New()
-	database, err := db.Open(context.Background(), cfg.RiverDatabaseURL)
+	database, err := db.OpenAsRole(context.Background(), cfg.RiverDatabaseURL, "kredit_worker")
 	if err != nil {
 		logger.Error("worker database startup failed", "error", err)
 		os.Exit(1)
@@ -89,16 +89,11 @@ func main() {
 		_ = runtime.Tracer.Shutdown(shutdownCtx)
 	}()
 	jobClient, err := jobs.NewClientWithHandlers(database.Raw(), logger, jobs.Handlers{
-		Tracer:  runtime.Tracer,
-		Metrics: runtime.Metrics,
+		ProviderWebhook: runtime.HandleProviderNotice,
+		Tracer:          runtime.Tracer,
+		Metrics:         runtime.Metrics,
 		Collection: func(ctx context.Context, operation, resourceID string) error {
-			switch operation {
-			case jobs.OpReconcileProvider:
-				_, err := runtime.Collections.Reconcile(ctx, resourceID)
-				return err
-			default:
-				return errors.New("unsupported collection operation")
-			}
+			return runtime.HandleCollectionJob(ctx, cfg, operation, resourceID)
 		},
 		Notification: func(ctx context.Context, operation, resourceID string) error {
 			if operation != jobs.OpDeliver {
@@ -152,6 +147,9 @@ func main() {
 	outboxTicker := time.NewTicker(2 * time.Second)
 	defer outboxTicker.Stop()
 	dispatcher := outbox.NewDispatcher(runtime.Outbox, outbox.PublishFunc(func(ctx context.Context, event outbox.Event) error {
+		if event.EventType == "notification.requested" {
+			return runtime.QueueOutboxNotification(ctx, event)
+		}
 		// Every committed financial event is handed to River before its outbox
 		// row is acknowledged. The reconciliation job is intentionally keyed by
 		// aggregate so bursts collapse without losing the safety check.
@@ -169,6 +167,9 @@ func main() {
 	if err := jobClient.EnqueueReconciliation(ctx, jobs.ReconciliationArgs{Operation: jobs.OpReconcileLedger}); err != nil {
 		logger.Error("initial financial reconciliation enqueue failed", "error", err)
 	}
+	if err := runtime.EnqueueCollectionWork(ctx, cfg); err != nil {
+		logger.Error("collection work discovery failed", "error", err)
+	}
 	enqueueDueNotifications(ctx, runtime, jobClient, logger)
 	enqueuePendingDocuments(ctx, runtime, jobClient, logger)
 	dispatchOutbox(ctx, dispatcher, logger)
@@ -176,6 +177,9 @@ func main() {
 		for {
 			select {
 			case <-maintenanceTicker.C:
+				if err := runtime.EnqueueCollectionWork(ctx, cfg); err != nil {
+					logger.Error("collection work discovery failed", "error", err)
+				}
 				if err := jobClient.EnqueueMaintenance(ctx, jobs.MaintenanceArgs{Operation: jobs.OpExpireReservations}); err != nil {
 					logger.Error("maintenance job enqueue failed", "error", err)
 				}

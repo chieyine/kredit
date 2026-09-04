@@ -93,7 +93,7 @@ AS $$
     ), revisions AS (
         INSERT INTO app.supplier_onboarding_revisions
             (id, organization_id, profile_version, change_type, actor_reference, snapshot)
-        SELECT public.uuidv7(), u.organization_id, u.version, 'requirements.reconciled', 'system:onboarding-reconciliation', to_jsonb(u)
+        SELECT pg_catalog.gen_random_uuid(), u.organization_id, u.version, 'requirements.reconciled', 'system:onboarding-reconciliation', to_jsonb(u)
         FROM updated u
         RETURNING supplier_onboarding_revisions.organization_id
     ), outboxed AS (

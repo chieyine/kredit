@@ -1,27 +1,29 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24.11.0-alpine AS build
+FROM node:24.20.0-alpine AS build
 WORKDIR /src
 RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/package.json
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 COPY web web
-RUN pnpm --dir web build
+RUN KREDIT_WEB_ADAPTER=node pnpm --dir web build
 
 # Production dependencies only; devDependencies (playwright, svelte-check,
 # typescript) never reach the runtime image.
-FROM node:24.11.0-alpine AS deps-prod
+FROM node:24.20.0-alpine AS deps-prod
 WORKDIR /src
 RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/package.json
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --prod --frozen-lockfile
 
-FROM node:24.11.0-alpine AS runtime
+FROM node:24.20.0-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 COPY --from=deps-prod /src/node_modules ./node_modules
-COPY --from=build /src/web/build ./build
+COPY --from=deps-prod /src/web/node_modules ./web/node_modules
+COPY --from=build /src/web/build ./web/build
+RUN node --input-type=module -e "import { createRequire } from 'node:module'; createRequire('/app/web/build/index.js').resolve('openapi-fetch');"
 USER node
 EXPOSE 3000
-CMD ["node", "build"]
+CMD ["node", "web/build"]

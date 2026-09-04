@@ -6,12 +6,14 @@ coverage.out
 
 # Node / SvelteKit
 node_modules/
+.svelte-kit/
 web/.svelte-kit/
 web/build/
 web/.vite/
 .vercel/
 web/.vercel/
 *.tsbuildinfo
+Claude outputs/
 
 # Local configuration and secrets
 .env
@@ -23,15 +25,12 @@ web/.vercel/
 # Local services and generated output
 .data/
 .tmp/
-api/generated/*
-!api/generated/.gitkeep
-db/generated/*
-!db/generated/.gitkeep
 web/src/lib/api/generated/*
 !web/src/lib/api/generated/.gitkeep
 
 # Test and OS output
 playwright-report/
 test-results/
+.pnpm-store/
 .DS_Store
 

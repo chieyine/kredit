@@ -121,17 +121,18 @@ func (s *Store) Open(input OpenInput) (Dispute, error) {
 	if input.DisputedAmountKobo > snapshot.OutstandingKobo {
 		return Dispute{}, errors.New("disputed amount exceeds outstanding")
 	}
-	effect := input.CollectionEffect
-	if effect == "" {
-		effect = EffectContestedOnly
-	}
-	if effect != EffectFullBlock && effect != EffectContestedOnly && effect != EffectNoAutomaticBlock {
-		return Dispute{}, errors.New("invalid collection effect")
-	}
-	dispute := &Dispute{ID: s.newID(), ObligationID: input.ObligationID, SupplierOrganizationID: snapshot.SupplierOrganizationID, BuyerUserID: snapshot.BuyerUserID, OpenedBy: input.OpenedBy, TotalDisputedKobo: input.DisputedAmountKobo, RemainingDisputedKobo: input.DisputedAmountKobo, Reason: strings.TrimSpace(input.Reason), Explanation: strings.TrimSpace(input.Explanation), State: StateOpen, CollectionEffect: effect, OpenedAt: s.now()}
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.disputes {
+		if existing.ObligationID == input.ObligationID && (existing.State == StateOpen || existing.State == StateUnderReview || existing.State == StatePartiallyResolved) {
+			return Dispute{}, errors.New("an active dispute already exists for this obligation")
+		}
+	}
+	// A party may identify the principal it contests, but it may not choose the
+	// collection policy. Until independent review, only that exact principal is
+	// blocked; a nominal dispute can never suspend the whole obligation.
+	dispute := &Dispute{ID: s.newID(), ObligationID: input.ObligationID, SupplierOrganizationID: snapshot.SupplierOrganizationID, BuyerUserID: snapshot.BuyerUserID, OpenedBy: input.OpenedBy, TotalDisputedKobo: input.DisputedAmountKobo, RemainingDisputedKobo: input.DisputedAmountKobo, Reason: strings.TrimSpace(input.Reason), Explanation: strings.TrimSpace(input.Explanation), State: StateOpen, CollectionEffect: EffectContestedOnly, OpenedAt: s.now()}
 	s.disputes[dispute.ID] = dispute
-	s.mu.Unlock()
 	return cloneDispute(*dispute), nil
 }
 func (s *Store) AddEvidence(disputeID, submittedBy, documentID, statement string) (Evidence, error) {
@@ -169,10 +170,19 @@ func (s *Store) Decide(input DecideInput) (Dispute, Decision, error) {
 	if input.RemainingDisputedKobo < 0 || input.RemainingDisputedKobo > dispute.RemainingDisputedKobo {
 		return Dispute{}, Decision{}, errors.New("invalid remaining disputed amount")
 	}
+	if input.AdjustmentKobo > dispute.RemainingDisputedKobo-input.RemainingDisputedKobo {
+		return Dispute{}, Decision{}, errors.New("adjusted principal must be removed from the remaining dispute")
+	}
 	if input.ValidPrincipalKobo < 0 {
 		return Dispute{}, Decision{}, errors.New("valid principal cannot be negative")
 	}
 	if input.AdjustmentKobo > 0 {
+		// This development store posts the journal entry and then applies the
+		// balance in two steps with no compensation between them. PostgresStore
+		// does both inside one transaction and is the implementation that runs
+		// anywhere money is real; the divergence is confined to local
+		// development and is called out here so it is not mistaken for the
+		// intended atomicity.
 		if s.ledger == nil || s.apply == nil {
 			return Dispute{}, Decision{}, errors.New("adjustment dependencies unavailable")
 		}

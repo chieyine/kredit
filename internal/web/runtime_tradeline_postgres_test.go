@@ -145,4 +145,16 @@ func TestPostgresTradeLineActivationCommitsAsOneFinancialTransaction(t *testing.
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM app.outbox_events WHERE idempotency_key IN($1,$2)`, "trade-line-drawdown:"+drawdown.ID+":TradeLineDrawdownActivated", "ledger:trade-line-drawdown:"+drawdown.ID+":activation").Scan(&activationEventCount); err != nil || activationEventCount != 2 {
 		t.Fatalf("atomic activation outbox events=%d err=%v", activationEventCount, err)
 	}
+	current, found := committingRuntime.TradeLines.Get(lineID)
+	if !found {
+		t.Fatal("trade line not found")
+	}
+	if _, err = committingRuntime.TradeLines.ReduceLimit(lineID, 400000, current.Version); err != nil {
+		t.Fatal(err)
+	}
+	current, found = committingRuntime.TradeLines.Get(lineID)
+	if !found || current.ApprovedLimitKobo != 400000 {
+		t.Fatalf("reduced limit did not persist: %+v found=%v", current, found)
+	}
+
 }

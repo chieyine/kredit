@@ -150,18 +150,18 @@ func (s *Server) operationsProviderEvents(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) previewOperationsCommand(w http.ResponseWriter, r *http.Request) {
-	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionProviderOperations)
-	if !ok {
-		return
-	}
 	var in platformops.CommandInput
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	if in.Type == "place_risk_hold" || in.Type == "lift_risk_hold" {
-		if _, _, _, ok = s.requirePlatformAccess(w, r, access.PermissionManageRiskHold); !ok {
-			return
-		}
+	permission, ok := permissionForOperationsCommand(in.Type)
+	if !ok {
+		writeProblem(w, http.StatusUnprocessableEntity, "command_preview_failed", "unsupported operations command")
+		return
+	}
+	_, user, _, allowed := s.requirePlatformAccess(w, r, permission)
+	if !allowed {
+		return
 	}
 	preview, err := s.runtime.PlatformOps.PreviewCommand(r.Context(), in)
 	if err != nil {
@@ -173,21 +173,27 @@ func (s *Server) previewOperationsCommand(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) executeOperationsCommand(w http.ResponseWriter, r *http.Request) {
-	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionProviderOperations)
-	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
-		return
-	}
 	var in platformops.CommandInput
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	if in.Type == "place_risk_hold" || in.Type == "lift_risk_hold" {
-		if _, _, _, ok = s.requirePlatformAccess(w, r, access.PermissionManageRiskHold); !ok {
-			return
-		}
+	permission, ok := permissionForOperationsCommand(in.Type)
+	if !ok {
+		writeProblem(w, http.StatusUnprocessableEntity, "operations_command_invalid", "unsupported operations command")
+		return
+	}
+	session, user, _, allowed := s.requirePlatformAccess(w, r, permission)
+	if !allowed || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
+		return
 	}
 	in.IdempotencyKey = strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	in.CorrelationID = requestIDFromContext(r.Context())
+	preflight, preflightErr := s.runtime.PlatformOps.PreflightCommand(r.Context(), in)
+	if preflightErr != nil {
+		writeProblem(w, 409, "operations_command_invalid", preflightErr.Error())
+		return
+	}
+	in.PreflightVersion = preflight.CurrentVersion
 	var external any
 	var err error
 	switch in.Type {
@@ -221,6 +227,24 @@ func (s *Server) executeOperationsCommand(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"command": command})
 }
 
+// permissionForOperationsCommand keeps destructive authority tied to the
+// exact command being requested. New command types fail closed until their
+// permission is deliberately selected here.
+func permissionForOperationsCommand(commandType string) (access.Permission, bool) {
+	switch commandType {
+	case "retry_job", "retry_webhook":
+		return access.PermissionOperateJobs, true
+	case "request_reconciliation", "resolve_unknown_submission", "retry_collection", "cancel_collection":
+		return access.PermissionOperateCollections, true
+	case "suspend_user", "restore_user", "suspend_organization", "restore_organization":
+		return access.PermissionSuspendAccounts, true
+	case "place_risk_hold", "lift_risk_hold":
+		return access.PermissionManageRiskHold, true
+	default:
+		return "", false
+	}
+}
+
 func (s *Server) operationsDiagnostics(w http.ResponseWriter, r *http.Request) {
 	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionProviderOperations)
 	if !ok {
@@ -244,13 +268,14 @@ func (s *Server) notifyOperationsTarget(r *http.Request, in platformops.CommandI
 	if affected, ok := command.Result["affected_target_id"].(string); ok && affected != "" {
 		in.TargetID = affected
 	}
-	if in.TargetType == "user" || in.TargetType == "buyer" {
+	switch in.TargetType {
+	case "user", "buyer":
 		var recipient struct{ ID, Email, Phone string }
 		recipient.ID = in.TargetID
 		if s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(normalized_email,''),COALESCE(normalized_phone,'') FROM app.users WHERE id=$1::uuid`, in.TargetID).Scan(&recipient.Email, &recipient.Phone) == nil {
 			recipients = append(recipients, recipient)
 		}
-	} else if in.TargetType == "organization" || in.TargetType == "supplier" {
+	case "organization", "supplier":
 		rows, err := s.runtime.Database.Raw().Query(r.Context(), `SELECT u.id::text,COALESCE(u.normalized_email,''),COALESCE(u.normalized_phone,'') FROM app.memberships m JOIN app.users u ON u.id=m.user_id WHERE m.organization_id=$1::uuid AND m.role IN('owner','administrator') AND m.status='active'`, in.TargetID)
 		if err == nil {
 			for rows.Next() {
@@ -264,7 +289,7 @@ func (s *Server) notifyOperationsTarget(r *http.Request, in platformops.CommandI
 			}
 			rows.Close()
 		}
-	} else if in.TargetType == "collection" {
+	case "collection":
 		rows, err := s.runtime.Database.Raw().Query(r.Context(), `SELECT u.id::text,COALESCE(u.normalized_email,''),COALESCE(u.normalized_phone,'') FROM app.collection_attempts ca JOIN app.obligations o ON o.id=ca.obligation_id JOIN app.credit_requests cr ON cr.id=o.credit_request_id JOIN app.users u ON u.id=cr.buyer_user_id WHERE ca.id=$1::uuid UNION SELECT u.id::text,COALESCE(u.normalized_email,''),COALESCE(u.normalized_phone,'') FROM app.collection_attempts ca JOIN app.obligations o ON o.id=ca.obligation_id JOIN app.memberships m ON m.organization_id=o.supplier_organization_id AND m.role IN('owner','administrator') AND m.status='active' JOIN app.users u ON u.id=m.user_id WHERE ca.id=$1::uuid`, in.TargetID)
 		if err == nil {
 			for rows.Next() {
@@ -280,7 +305,7 @@ func (s *Server) notifyOperationsTarget(r *http.Request, in platformops.CommandI
 		}
 	}
 	for _, recipient := range recipients {
-		_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "operations:" + command.ID + ":" + recipient.ID, Type: "OperationsControlApplied", RecipientID: recipient.ID, Email: recipient.Email, Phone: recipient.Phone, OrganizationID: in.OrganizationID, Priority: notifications.PriorityCritical, Reference: fmt.Sprintf("%s (%s)", in.Type, command.ID), NextAction: "Review this protected account or organization change and contact support if unexpected.", SecurePath: "/app/settings"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "operations:" + command.ID + ":" + recipient.ID, Type: "OperationsControlApplied", RecipientID: recipient.ID, Email: recipient.Email, Phone: recipient.Phone, OrganizationID: in.OrganizationID, Priority: notifications.PriorityCritical, Reference: fmt.Sprintf("%s (%s)", in.Type, command.ID), NextAction: "Review this protected account or organization change and contact support if unexpected.", SecurePath: "/app/settings"})
 	}
 }
 
@@ -328,7 +353,7 @@ func (s *Server) operationsOrganizations(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) operationsMoney(w http.ResponseWriter, r *http.Request) {
-	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionReviewCompliance)
+	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionReadFinancial)
 	if !ok {
 		return
 	}
@@ -342,11 +367,17 @@ func (s *Server) operationsMoney(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) operationsCases(w http.ResponseWriter, r *http.Request) {
-	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManageCases)
+	_, user, role, ok := s.requirePlatformAccess(w, r, access.PermissionManageCases)
 	if !ok {
 		return
 	}
-	items, err := s.runtime.PlatformOps.Cases(r.Context(), r.URL.Query().Get("state"), queryLimit(r))
+	var items []platformops.CaseSummary
+	var err error
+	if role == access.PlatformAdministrator {
+		items, err = s.runtime.PlatformOps.Cases(r.Context(), r.URL.Query().Get("state"), queryLimit(r))
+	} else {
+		items, err = s.runtime.PlatformOps.CasesForActor(r.Context(), r.URL.Query().Get("state"), queryLimit(r), user.ID)
+	}
 	if err != nil {
 		writeProblem(w, http.StatusServiceUnavailable, "cases_unavailable", "support cases could not be loaded")
 		return
@@ -370,13 +401,20 @@ func (s *Server) operationsDisputes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) transitionOperationsCase(w http.ResponseWriter, r *http.Request) {
-	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManageCases)
+	session, user, role, ok := s.requirePlatformAccess(w, r, access.PermissionManageCases)
 	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
 		return
 	}
 	if _, err := uuid.Parse(r.PathValue("caseID")); err != nil {
 		writeProblem(w, http.StatusBadRequest, "invalid_case", "case ID must be valid")
 		return
+	}
+	if role != access.PlatformAdministrator {
+		assigned, err := s.runtime.PlatformOps.CaseAssignedTo(r.Context(), r.PathValue("caseID"), user.ID)
+		if err != nil || !assigned {
+			writeProblem(w, http.StatusForbidden, "case_assignment_required", "this support case is not assigned to you")
+			return
+		}
 	}
 	var input struct {
 		State string `json:"state"`
@@ -423,7 +461,7 @@ func (s *Server) decideOperationsDispute(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) operationsTeam(w http.ResponseWriter, r *http.Request) {
-	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionBreakGlass)
+	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManageAccess)
 	if !ok {
 		return
 	}
@@ -437,7 +475,7 @@ func (s *Server) operationsTeam(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) grantOperationsRole(w http.ResponseWriter, r *http.Request) {
-	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionBreakGlass)
+	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManageAccess)
 	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
 		return
 	}
@@ -456,6 +494,15 @@ func (s *Server) grantOperationsRole(w http.ResponseWriter, r *http.Request) {
 	role := access.PlatformRole(strings.TrimSpace(input.Role))
 	if !role.Valid() {
 		writeProblem(w, http.StatusBadRequest, "invalid_platform_role", "choose a valid admin role")
+		return
+	}
+	if role == access.PlatformAdministrator || role == access.PlatformAccessAdministrator {
+		if _, _, _, ok = s.requirePlatformAccess(w, r, access.PermissionBreakGlass); !ok {
+			return
+		}
+	}
+	if r.PathValue("userID") == user.ID {
+		writeProblem(w, 409, "self_access_change", "Another access administrator must change your own roles")
 		return
 	}
 	var expires *time.Time
@@ -477,7 +524,7 @@ func (s *Server) grantOperationsRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) revokeOperationsRole(w http.ResponseWriter, r *http.Request) {
-	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionBreakGlass)
+	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManageAccess)
 	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
 		return
 	}
@@ -494,6 +541,16 @@ func (s *Server) revokeOperationsRole(w http.ResponseWriter, r *http.Request) {
 	if length := len(strings.TrimSpace(input.Reason)); length < 8 || length > 1000 {
 		writeProblem(w, http.StatusBadRequest, "role_reason_required", "reason must be between 8 and 1000 characters")
 		return
+	}
+	var targetRole string
+	if err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT role FROM app.platform_role_assignments WHERE id=$1::uuid`, r.PathValue("assignmentID")).Scan(&targetRole); err != nil {
+		writeProblem(w, 404, "role_not_found", "Role assignment not found")
+		return
+	}
+	if targetRole == "platform_admin" || targetRole == "access_administrator" {
+		if _, _, _, ok = s.requirePlatformAccess(w, r, access.PermissionBreakGlass); !ok {
+			return
+		}
 	}
 	if err := s.runtime.PlatformOps.RevokeRole(r.Context(), user.ID, r.PathValue("assignmentID")); err != nil {
 		writeProblem(w, http.StatusConflict, "role_revoke_failed", err.Error())
@@ -519,11 +576,18 @@ func (s *Server) operationsAudit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) operationsCase(w http.ResponseWriter, r *http.Request) {
-	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManageCases)
+	_, user, role, ok := s.requirePlatformAccess(w, r, access.PermissionManageCases)
 	if !ok {
 		return
 	}
 	id := r.PathValue("caseID")
+	if role != access.PlatformAdministrator {
+		assigned, err := s.runtime.PlatformOps.CaseAssignedTo(r.Context(), id, user.ID)
+		if err != nil || !assigned {
+			writeProblem(w, http.StatusForbidden, "case_assignment_required", "this support case is not assigned to you")
+			return
+		}
+	}
 	item, found := s.runtime.Support.Get(id)
 	if !found {
 		writeProblem(w, http.StatusNotFound, "case_not_found", "support case was not found")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"kredit/internal/schedules"
 	"os"
 	"testing"
 	"time"
@@ -47,6 +48,10 @@ func TestPostgresDisputeDecisionIsAtomicAndRestartSafe(t *testing.T) {
 	if _, err := pool.Exec(ctx, `INSERT INTO app.credit_aggregate_snapshots(credit_request_id,supplier_organization_id,buyer_user_id,aggregate,version) VALUES($1,$2,$3,$4,1)`, requestID, organizationID, openerID, payload); err != nil {
 		t.Fatal(err)
 	}
+	scheduleStore := schedules.NewPostgresStore(pool)
+	if _, _, err = scheduleStore.CreateDefault(obligationID, 10000, time.Now().AddDate(0, 0, 7).Format("2006-01-02"), time.Now().AddDate(0, 0, 7), 0); err != nil {
+		t.Fatal(err)
+	}
 	var disputeID string
 	defer func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM app.dispute_decisions WHERE dispute_id=$1::uuid`, disputeID)
@@ -83,6 +88,10 @@ func TestPostgresDisputeDecisionIsAtomicAndRestartSafe(t *testing.T) {
 	}
 	if err := pool.QueryRow(ctx, `SELECT (aggregate#>>'{obligation,outstanding_kobo}')::bigint FROM app.credit_aggregate_snapshots WHERE credit_request_id=$1`, requestID).Scan(&snapshot); err != nil {
 		t.Fatal(err)
+	}
+	_, items, scheduleErr := scheduleStore.GetForObligation(obligationID)
+	if scheduleErr != nil || len(items) != 1 || items[0].PrincipalDueKobo-items[0].AllocatedKobo != 7500 {
+		t.Fatalf("adjustment left collectible excess: %+v %v", items, scheduleErr)
 	}
 	if normalized != 7500 || snapshot != 7500 {
 		t.Fatalf("adjustment not atomic: normalized=%d snapshot=%d", normalized, snapshot)

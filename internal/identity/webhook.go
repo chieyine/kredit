@@ -58,6 +58,7 @@ func (p *WebhookProvider) create(ctx context.Context, kind string, input any) (V
 	if result.ProviderID == "" || result.State == "" {
 		return VerificationSession{}, errors.New("identity connector returned an incomplete session")
 	}
+	result.SafeResult = SafeVerificationResult(result.SafeResult)
 	result.Provider = p.name
 	return result, nil
 }
@@ -67,6 +68,10 @@ func (p *WebhookProvider) GetVerification(ctx context.Context, id string) (Provi
 	}
 	var result ProviderVerification
 	err := p.request(ctx, http.MethodGet, "/verifications/"+url.PathEscape(id), nil, &result)
+	if err == nil && (result.ProviderID != id || strings.TrimSpace(result.SubjectID) == "") {
+		err = errors.New("identity connector returned a mismatched verification")
+	}
+	result.SafeResult = SafeVerificationResult(result.SafeResult)
 	return result, err
 }
 func (p *WebhookProvider) VerifyWebhook(_ context.Context, headers http.Header, body []byte) (VerifiedIdentityEvent, error) {
@@ -84,6 +89,7 @@ func (p *WebhookProvider) VerifyWebhook(_ context.Context, headers http.Header, 
 	if event.ProviderID == "" || event.SubjectID == "" || event.State == "" {
 		return VerifiedIdentityEvent{}, errors.New("identity webhook event is incomplete")
 	}
+	event.SafeResult = SafeVerificationResult(event.SafeResult)
 	return event, nil
 }
 func (p *WebhookProvider) request(ctx context.Context, method, path string, input, output any) error {

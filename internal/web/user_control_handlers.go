@@ -60,7 +60,7 @@ func (s *Server) updateNotificationPreferences(w http.ResponseWriter, r *http.Re
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "notification.preferences_updated", ResourceType: "notification_preferences", ResourceID: user.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context())})
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "preferences:" + user.ID + ":" + strings.TrimSpace(r.Header.Get("Idempotency-Key")), Type: "NotificationPreferencesChanged", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, Priority: notifications.PriorityCritical, Reference: "preferences updated"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "preferences:" + user.ID + ":" + strings.TrimSpace(r.Header.Get("Idempotency-Key")), Type: "NotificationPreferencesChanged", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, Priority: notifications.PriorityCritical, Reference: "preferences updated"})
 	writeJSON(w, 200, map[string]any{"preferences": p})
 }
 
@@ -91,6 +91,9 @@ func (s *Server) requestAccountRecovery(w http.ResponseWriter, r *http.Request) 
 	id, _ := s.runtime.UserControl.RequestRecovery(r.Context(), in.Identifier, in.Channel, r.RemoteAddr)
 	if id != "" {
 		if req, err := s.runtime.UserControl.Recovery(r.Context(), id); err == nil {
+			if err := s.runtime.UserControl.SendRecoveryInstructions(r.Context(), req, ""); err != nil {
+				s.logger.Error("recovery instruction delivery failed")
+			}
 			s.notifyUser(r, req.TargetUserID, "AccountRecoveryRequested", "recovery-requested:"+id, id)
 		}
 	}
@@ -180,14 +183,10 @@ func (s *Server) completeAccountRecovery(w http.ResponseWriter, r *http.Request)
 		writeProblem(w, 409, "recovery_cooling_off", err.Error())
 		return
 	}
-	if err = s.runtime.Auth.RevokeAllSessions(userID); err != nil {
-		writeProblem(w, 503, "recovery_completion_failed", "sessions could not be revoked")
-		return
-	}
 	clearSessionCookies(w, s.config.Environment != "development")
 	s.runtime.Audit.Append(audit.Event{ActorUserID: userID, Action: "account.recovery_completed", ResourceType: "account_recovery", ResourceID: r.PathValue("requestID"), Severity: "warning"})
 	s.notifyUser(r, userID, "AccountRecoveryCompleted", "recovery-completed:"+r.PathValue("requestID"), r.PathValue("requestID"))
-	writeJSON(w, 200, map[string]any{"status": "COMPLETED", "message": "Account recovery completed. Existing sessions and old recovery codes were revoked."})
+	writeJSON(w, 200, map[string]any{"status": "COMPLETED", "message": "Account recovery completed. Existing sessions, old MFA methods and recovery codes were revoked. Sign in and enroll a new authenticator before protected actions."})
 }
 
 func (s *Server) listRecoveryReviews(w http.ResponseWriter, r *http.Request) {
@@ -259,7 +258,7 @@ func (s *Server) createPrivacyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "privacy.request_received", ResourceType: "privacy_request", ResourceID: item.ID})
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "privacy-received:" + item.ID, Type: "PrivacyRequestReceived", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, Priority: notifications.PriorityCritical, Reference: item.ID})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "privacy-received:" + item.ID, Type: "PrivacyRequestReceived", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, Priority: notifications.PriorityCritical, Reference: item.ID})
 	writeJSON(w, 201, map[string]any{"request": item})
 }
 func (s *Server) listMyPrivacyRequests(w http.ResponseWriter, r *http.Request) {
@@ -361,5 +360,5 @@ func (s *Server) notifyUser(r *http.Request, userID, eventType, eventID, referen
 	if err != nil {
 		return
 	}
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: eventID, Type: eventType, RecipientID: userID, Email: user.Email, Phone: user.Phone, Priority: notifications.PriorityCritical, Reference: reference})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: eventID, Type: eventType, RecipientID: userID, Email: user.Email, Phone: user.Phone, Priority: notifications.PriorityCritical, Reference: reference})
 }

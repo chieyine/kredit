@@ -35,6 +35,7 @@ const (
 )
 
 type Event struct {
+	DeferDelivery  bool
 	ID             string
 	Type           string
 	RecipientID    string
@@ -95,9 +96,35 @@ type Provider interface {
 // SendOTP delivers an authentication code through the requested channel. OTP
 // delivery deliberately bypasses user notification preferences and quiet hours:
 // it is an authentication response, not a marketing or routine notification.
+func (s *Store) SendRecoveryInstructions(ctx context.Context, recipient, channel, link string) error {
+	recipient = strings.TrimSpace(recipient)
+	channel = strings.ToLower(strings.TrimSpace(channel))
+	if channel == "phone" {
+		channel = ChannelSMS
+	}
+	if recipient == "" || !validChannel(channel) {
+		return errors.New("valid recovery destination and channel are required")
+	}
+	s.mu.Lock()
+	provider := s.providers[channel]
+	s.mu.Unlock()
+	if provider == nil {
+		return errors.New("recovery delivery provider is unavailable")
+	}
+	body := "Your Kredit account recovery request is under review. If you did not request this, contact support."
+	if link != "" {
+		body = "Your Kredit account recovery request was approved. Continue securely: " + link
+	}
+	_, err := provider.Send(ctx, Message{EventID: s.newID(), RecipientID: recipient, Destination: recipient, Channel: channel, Template: "AccountRecoveryContinuation", TemplateVersion: "v1", Body: body, SecureLink: link})
+	return err
+}
+
 func (s *Store) SendOTP(ctx context.Context, recipient, channel, code string) error {
 	recipient = strings.TrimSpace(recipient)
 	channel = strings.ToLower(strings.TrimSpace(channel))
+	if channel == "phone" {
+		channel = ChannelSMS
+	}
 	code = strings.TrimSpace(code)
 	if recipient == "" || code == "" {
 		return errors.New("OTP recipient and code are required")
@@ -175,18 +202,19 @@ func (p *MockProvider) Messages() []Message {
 }
 
 type Store struct {
-	mu          sync.Mutex
-	secret      []byte
-	providers   map[string]Provider
-	templates   map[string]string
-	preferences map[string]Preferences
-	deliveries  map[string]*Delivery
-	dedupe      map[string]string
-	now         func() time.Time
-	newID       func() string
-	baseURL     string
-	pool        *pgxpool.Pool
-	encryption  []byte
+	mu              sync.Mutex
+	secret          []byte
+	providers       map[string]Provider
+	templates       map[string]string
+	preferences     map[string]Preferences
+	deliveries      map[string]*Delivery
+	dedupe          map[string]string
+	now             func() time.Time
+	newID           func() string
+	baseURL         string
+	pool            *pgxpool.Pool
+	encryption      []byte
+	reminderConsent func(context.Context, string, string) (bool, error)
 }
 
 func NewStore(secret string) *Store {
@@ -288,28 +316,50 @@ func validChannel(channel string) bool {
 	return channel == ChannelEmail || channel == ChannelSMS || channel == ChannelWhatsApp
 }
 
+func (s *Store) SetReminderConsent(check func(context.Context, string, string) (bool, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reminderConsent = check
+}
+func (s *Store) reminderAllowed(ctx context.Context, event Event) (bool, error) {
+	if event.Priority == PriorityCritical || event.Type != "PaymentDueSoon" {
+		return true, nil
+	}
+	s.mu.Lock()
+	check := s.reminderConsent
+	s.mu.Unlock()
+	if check == nil {
+		return true, nil
+	}
+	if event.OrganizationID == "" {
+		return false, nil
+	}
+	return check(ctx, event.RecipientID, event.OrganizationID)
+}
+
 func (s *Store) Emit(ctx context.Context, event Event) ([]Delivery, error) {
 	if event.ID == "" || event.Type == "" || event.RecipientID == "" {
 		return nil, errors.New("event, type, and recipient are required")
 	}
-	s.mu.Lock()
-	prefs := s.preferences[event.RecipientID]
-	s.mu.Unlock()
-	if s.pool != nil {
-		var persisted Preferences
-		err := s.pool.QueryRow(ctx, `SELECT preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone,version FROM app.notification_preferences WHERE recipient_id=$1::uuid`, event.RecipientID).Scan(&persisted.PreferredChannel, &persisted.FallbackChannel, &persisted.OptedOut, &persisted.PaymentRemindersEnabled, &persisted.ProductUpdatesEnabled, &persisted.QuietStart, &persisted.QuietEnd, &persisted.Timezone, &persisted.Version)
-		if err == nil {
-			prefs = persisted
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return nil, err
-		}
+	allowed, err := s.reminderAllowed(ctx, event)
+	if err != nil {
+		return nil, err
 	}
-	if prefs.Timezone == "" {
-		prefs.Timezone = "Africa/Lagos"
+	if !allowed {
+		return []Delivery{}, nil
+	}
+	prefs, err := s.GetPreferences(ctx, event.RecipientID)
+	if err != nil {
+		return nil, err
 	}
 	channels := s.channelsFor(event, prefs)
 	deliveries := []Delivery{}
 	for _, channel := range channels {
+		if event.Email != "" || event.Phone != "" {
+			if channel == ChannelEmail && event.Email == "" || channel != ChannelEmail && event.Phone == "" {
+				continue
+			}
+		}
 		delivery, err := s.deliver(ctx, event, channel, prefs)
 		if err != nil {
 			return deliveries, err
@@ -354,9 +404,12 @@ func (s *Store) deliver(ctx context.Context, event Event, channel string, prefs 
 	body = render(body, event)
 	now := s.now()
 	delivery := &Delivery{ID: s.newID(), EventID: event.ID, RecipientID: event.RecipientID, Channel: channel, Template: event.Type, TemplateVersion: templateVersion, Body: body}
-	if event.Priority != PriorityCritical && inQuietHours(now, prefs) {
+	if event.DeferDelivery || (event.Priority != PriorityCritical && inQuietHours(now, prefs)) {
 		delivery.State = StateScheduled
-		delivery.ScheduledAt = nextQuietEnd(now, prefs)
+		delivery.ScheduledAt = now
+		if event.Priority != PriorityCritical && inQuietHours(now, prefs) {
+			delivery.ScheduledAt = nextQuietEnd(now, prefs)
+		}
 		s.deliveries[delivery.ID] = delivery
 		s.dedupe[key] = delivery.ID
 		s.mu.Unlock()
@@ -456,16 +509,44 @@ func render(template string, event Event) string {
 }
 func defaultTemplate(eventType string) string {
 	switch eventType {
+	case "MandateRevoked":
+		return "Your bank-debit authorization is no longer active. Check your repayment arrangements in Kredit."
+	case "CollectionRetryScheduled":
+		return "An unpaid bank-debit request may be retried after {{date}}. Review your current sale balance in Kredit."
+	case "ObligationAccepted":
+		return "Your acceptance of the trade-credit agreement was recorded. Review the agreed payment dates in Kredit."
+	case "GoodsReleased":
+		return "Your supplier has released goods for {{amount}}. Confirm receipt or report a problem in Kredit. If we do not hear from you by {{date}}, this sale may be treated as received."
+	case "ObligationRepaid":
+		return "No principal remains payable on this sale. Review the payment record in Kredit."
+	case "MandateExpiring":
+		return "Your bank-debit authorization expires on {{date}}. Review your repayment arrangements in Kredit."
+	case "CollectionUncertain":
+		return "The bank-debit result for {{amount}} is still being checked. Do not make a duplicate payment before checking your sale."
+	case "CollectionFailed":
+		return "The bank-debit request was unsuccessful. Check your sale for the remaining amount and next steps."
+	case "CollectionCancelled":
+		return "The bank-debit request was cancelled. Check your sale for any amount still owed."
 	case "PaymentRecorded":
 		return "{{amount}} received. Reference: {{reference}}."
+	case "PriorDebitNotice":
+		return "Your agreed bank debit of up to {{amount}} may be requested on or after {{date}} if it remains unpaid. Review your payment schedule or raise an issue in Kredit before collection."
 	case "PaymentDueSoon":
 		return "Your {{amount}} payment is due on {{date}}. Next action: {{next_action}}."
 	case "CollectionSubmitted":
 		return "{{amount}} remained unpaid after the agreed grace period. A collection request has been submitted. Reference: {{reference}}."
+	case "PaymentReversed":
+		return "A payment of {{amount}} has been reversed. Review your updated balance in Kredit. Reference: {{reference}}. {{next_action}}"
+	case "FinancialAdjustmentRecorded":
+		return "A financial adjustment of {{amount}} was recorded. Review the updated statement in Kredit. Reference: {{reference}}."
+	case "DisputeUpdated":
+		return "A dispute affecting {{amount}} has been updated. Review the decision and remaining balance in Kredit. Reference: {{reference}}. {{next_action}}"
 	case "DisputeOpened":
 		return "A dispute was opened for {{amount}}. Review securely for next steps: {{support_link}}"
 	case "SupplierSensitiveSettingChanged":
 		return "A sensitive supplier setting changed: {{reference}}. If this was not you, contact support now."
+	case "ScheduleAmendment":
+		return "A repayment-date change needs your attention. {{next_action}}. Reference: {{reference}}"
 	case "OperationsControlApplied":
 		return "A protected operations control was applied: {{reference}}. Next action: {{next_action}}"
 	case "SupplierVerificationOutcome":
@@ -502,7 +583,11 @@ func formatAmount(amount int64, currency string) string {
 	if currency == "" {
 		currency = "NGN"
 	}
-	return fmt.Sprintf("%s %d", currency, amount)
+	sign, whole, fraction := "", amount/100, amount%100
+	if amount < 0 {
+		sign, whole, fraction = "-", -whole, -fraction
+	}
+	return fmt.Sprintf("%s %s%d.%02d", currency, sign, whole, fraction)
 }
 func inQuietHours(now time.Time, prefs Preferences) bool {
 	if prefs.QuietStart == prefs.QuietEnd {
@@ -578,9 +663,12 @@ func (s *Store) deliverPostgres(ctx context.Context, event Event, channel string
 		return Delivery{}, err
 	}
 	shouldSend := true
-	if event.Priority != PriorityCritical && inQuietHours(now, prefs) {
+	if event.DeferDelivery || (event.Priority != PriorityCritical && inQuietHours(now, prefs)) {
 		delivery.State = StateScheduled
-		delivery.ScheduledAt = nextQuietEnd(now, prefs)
+		delivery.ScheduledAt = now
+		if event.Priority != PriorityCritical && inQuietHours(now, prefs) {
+			delivery.ScheduledAt = nextQuietEnd(now, prefs)
+		}
 		shouldSend = false
 	} else if provider == nil {
 		delivery.State = StateFailed
@@ -591,7 +679,7 @@ func (s *Store) deliverPostgres(ctx context.Context, event Event, channel string
 		delivery.State = StateSending
 	}
 	inserted := false
-	err = s.pool.QueryRow(ctx, `INSERT INTO app.notifications(id,recipient_id,channel,template,template_version,event_reference,state,body,scheduled_at,failed_at,failure_reason,secure_link,destination_ciphertext,lease_expires_at) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),$13,$14) ON CONFLICT(event_reference,channel) DO NOTHING RETURNING true`, delivery.ID, delivery.RecipientID, delivery.Channel, delivery.Template, delivery.TemplateVersion, delivery.EventID, delivery.State, delivery.Body, nullableTime(delivery.ScheduledAt), nullableTime(delivery.FailedAt), delivery.FailureReason, delivery.SecureLink, ciphertext, leaseTime(shouldSend, now)).Scan(&inserted)
+	err = s.pool.QueryRow(ctx, `INSERT INTO app.notifications(id,recipient_id,channel,template,template_version,event_reference,state,body,scheduled_at,failed_at,failure_reason,secure_link,destination_ciphertext,lease_expires_at,supplier_organization_id,priority) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),$13,$14,NULLIF($15,'')::uuid,$16) ON CONFLICT(event_reference,channel) DO NOTHING RETURNING true`, delivery.ID, delivery.RecipientID, delivery.Channel, delivery.Template, delivery.TemplateVersion, delivery.EventID, delivery.State, delivery.Body, nullableTime(delivery.ScheduledAt), nullableTime(delivery.FailedAt), delivery.FailureReason, delivery.SecureLink, ciphertext, leaseTime(shouldSend, now), event.OrganizationID, defaultPriority(event.Priority)).Scan(&inserted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		existing, loadErr := s.loadPersistentDelivery(ctx, event.ID, channel)
 		return existing, loadErr
@@ -665,6 +753,7 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 	}
 	var message Message
 	var ciphertext []byte
+	var organizationID, priority string
 	err := s.pool.QueryRow(ctx, `
 		UPDATE app.notifications
 		SET state='sending', lease_expires_at=now()+interval '10 minutes',
@@ -676,15 +765,27 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 			(state='sending' AND lease_expires_at<=now())
 		)
 		RETURNING event_reference,recipient_id::text,channel,template,
-			template_version,body,COALESCE(secure_link,''),destination_ciphertext`, id).
+			template_version,body,COALESCE(secure_link,''),destination_ciphertext,COALESCE(supplier_organization_id::text,''),priority`, id).
 		Scan(&message.EventID, &message.RecipientID, &message.Channel, &message.Template,
-			&message.TemplateVersion, &message.Body, &message.SecureLink, &ciphertext)
+			&message.TemplateVersion, &message.Body, &message.SecureLink, &ciphertext, &organizationID, &priority)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A sent row or a lease owned by another worker is already complete from
 		// this job's perspective.
 		return nil
 	}
 	if err != nil {
+		return err
+	}
+	prefs, err := s.GetPreferences(ctx, message.RecipientID)
+	if err != nil {
+		return s.failDelivery(ctx, id, err)
+	}
+	allowed, err := s.reminderAllowed(ctx, Event{RecipientID: message.RecipientID, OrganizationID: organizationID, Type: message.Template, Priority: priority})
+	if err != nil {
+		return s.failDelivery(ctx, id, err)
+	}
+	if !allowed || len(s.channelsFor(Event{Type: message.Template, Priority: priority}, prefs)) == 0 {
+		_, err = s.pool.Exec(ctx, "UPDATE app.notifications SET state='suppressed',lease_expires_at=NULL,next_attempt_at=NULL,updated_at=now() WHERE id=$1::uuid AND state='sending'", id)
 		return err
 	}
 	destination, err := s.decryptDestination(ciphertext)
@@ -788,4 +889,11 @@ func (s *Store) decryptDestination(value []byte) ([]byte, error) {
 	}
 	nonce, ciphertext := value[:gcm.NonceSize()], value[gcm.NonceSize():]
 	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+func defaultPriority(value string) string {
+	if value == PriorityRoutine {
+		return PriorityRoutine
+	}
+	return PriorityCritical
 }

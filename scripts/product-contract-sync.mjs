@@ -7,10 +7,16 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(import.meta.dirname, '..');
 const serverSource = readFileSync(resolve(root, 'internal/web/server.go'), 'utf8');
 const openapiSource = readFileSync(resolve(root, 'api/openapi.yaml'), 'utf8');
-const listing = spawnSync('rg', ['--files', 'web/src', '-g', '*.svelte', '-g', '*.ts', '-g', '!web/src/lib/api/generated/**'], {
+let listing = spawnSync('rg', ['--files', 'web/src', '-g', '*.svelte', '-g', '*.ts', '-g', '!web/src/lib/api/generated/**'], {
 	cwd: root,
 	encoding: 'utf8'
 });
+if (listing.status !== 0) {
+	listing = spawnSync('git', ['ls-files', 'web/src/**/*.svelte', 'web/src/**/*.ts', ':(exclude)web/src/lib/api/generated/**'], {
+		cwd: root,
+		encoding: 'utf8'
+	});
+}
 if (listing.status !== 0) throw new Error(listing.stderr || 'Could not list frontend source files.');
 
 const normalize = (path) => path

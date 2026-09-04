@@ -3,7 +3,9 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"kredit/internal/auth"
+	"kredit/internal/access"
 	"kredit/internal/config"
 	"kredit/internal/idempotency"
 	"kredit/internal/observability"
@@ -40,7 +42,36 @@ const (
 	// rateWindowTTL bounds how long an idle client entry stays in the rate
 	// table so the map cannot grow without limit.
 	rateWindowTTL = 5 * time.Minute
+
+	// The in-process limiter above is per replica, so with N API replicas the
+	// real budget is N times this one and it resets on deploy. That is fine for
+	// ordinary reads. It is not fine for the routes that issue and verify
+	// authentication codes, where the limit is what makes a six-digit code safe,
+	// so those routes are additionally counted in PostgreSQL and share one
+	// budget across every replica.
+	sensitiveRateLimitPerWindow = 20
+	sensitiveRateLimitWindow    = 10 * time.Minute
 )
+
+// sensitiveRateLimitRoute groups the authentication surfaces that share a
+// cross-replica budget. Grouping by prefix means an attacker cannot spread the
+// same attack across sibling routes to multiply their allowance.
+func sensitiveRateLimitRoute(path string) string {
+	switch {
+	case strings.HasPrefix(path, "/api/v1/auth/"):
+		return "auth"
+	case strings.HasPrefix(path, "/api/v1/mfa/"):
+		return "mfa"
+	case strings.HasPrefix(path, "/api/v1/account-recovery/"):
+		return "account-recovery"
+	case strings.Contains(path, "/onboarding/contacts/"):
+		return "onboarding-contact"
+	case strings.HasPrefix(path, "/api/v1/buyer-invitations/") && strings.HasSuffix(path, "/otp"):
+		return "buyer-invitation-otp"
+	default:
+		return ""
+	}
+}
 
 type rateWindow struct {
 	started time.Time
@@ -59,6 +90,7 @@ func NewServerWithRuntime(cfg config.Config, logger *slog.Logger, runtime *Runti
 
 func (s *Server) Handler() http.Handler {
 	handler := http.Handler(s.mux)
+	handler = s.withEnabledAdminSurfaces(handler)
 	handler = s.withBodyLimit(handler)
 	handler = s.withIdempotency(handler)
 	handler = s.withRateLimit(handler)
@@ -66,6 +98,60 @@ func (s *Server) Handler() http.Handler {
 	handler = s.withPanicRecovery(handler)
 	handler = s.withRequestContext(handler)
 	return handler
+}
+
+// adminSurface reduces an operations path to the surface it belongs to, which
+// is the first path segment after /api/v1/ops/. Sub-paths and identifiers are
+// deliberately collapsed so a surface is enabled or disabled as a whole.
+func adminSurface(path string) string {
+	rest := strings.TrimPrefix(path, "/api/v1/ops/")
+	if rest == path {
+		return ""
+	}
+	if index := strings.IndexByte(rest, '/'); index >= 0 {
+		rest = rest[:index]
+	}
+	return rest
+}
+
+// adminSurfaceEnabled reports whether this deployment operates the given
+// operations surface. An empty configuration means the surface set was never
+// enumerated, which internal/config refuses for production; outside production
+// it keeps development and the test suites working against the full surface.
+func (s *Server) adminSurfaceEnabled(surface string) bool {
+	if surface == "" {
+		return true
+	}
+	if len(s.config.AdminSurfaces) == 0 {
+		return true
+	}
+	for _, allowed := range s.config.AdminSurfaces {
+		if allowed == "all" || allowed == surface {
+			return true
+		}
+	}
+	return false
+}
+
+// withEnabledAdminSurfaces refuses operations surfaces this deployment has not
+// enabled. Every admin screen is a privileged path that has to be
+// access-reviewed and audited, and a pilot needs far fewer of them than the
+// product ships; enumerating the ones actually in use keeps the rest
+// unreachable rather than merely unused.
+//
+// A disabled surface answers 404 rather than 403: a caller without a reason to
+// know the surface exists is not told that it does.
+func (s *Server) withEnabledAdminSurfaces(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if surface := adminSurface(r.URL.Path); !s.adminSurfaceEnabled(surface) {
+			if s.logger != nil {
+				s.logger.Warn("operations surface is not enabled for this deployment", "surface", surface)
+			}
+			writeProblem(w, http.StatusNotFound, "not_found", "the requested resource was not found")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // withIdempotency makes retries safe for every financial mutation. The
@@ -85,20 +171,41 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 		if r.Body == nil {
 			r.Body = io.NopCloser(strings.NewReader(""))
 		}
-		body, err := io.ReadAll(io.LimitReader(r.Body, 2<<20+1))
+		body, err := io.ReadAll(io.LimitReader(r.Body, 3<<20+1))
 		if err != nil {
 			writeProblem(w, http.StatusBadRequest, "invalid_request", "request body could not be read")
 			return
 		}
-		if len(body) > 2<<20 {
-			writeProblem(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body exceeds the 2 MiB limit")
+		if len(body) > 3<<20 {
+			writeProblem(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body exceeds the 3 MiB limit")
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		scope := r.Method + " " + safeRequestPath(r.URL.Path)
 		if token := sessionTokenFromRequest(r); token != "" {
-			if _, user, err := s.runtime.Auth.SessionFromToken(token); err == nil {
-				scope += " user:" + user.ID
+			if session, user, err := s.runtime.Auth.SessionFromToken(token); err == nil {
+				scope += " user:" + user.ID + " session:" + session.ID + " aal:" + session.AuthenticationLevel
+				if strings.HasPrefix(r.URL.Path, "/api/v1/ops/") && s.runtime.Database != nil {
+					var roles string
+					if err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(string_agg(role,',' ORDER BY role),'') FROM app.platform_role_assignments WHERE user_id=$1::uuid AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now())`, user.ID).Scan(&roles); err != nil {
+						writeProblem(w, http.StatusServiceUnavailable, "authorization_unavailable", "current permissions could not be verified")
+						return
+					}
+					scope += " platform:" + roles
+				}
+				// Cached responses must not survive a membership or role change.
+				parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+				for i, part := range parts {
+					if part == "organizations" && i+1 < len(parts) {
+						membership, found := s.runtime.Organizations.Membership(parts[i+1], user.ID)
+						if !found {
+							writeProblem(w, http.StatusForbidden, "organization_forbidden", "organization access could not be verified")
+							return
+						}
+						scope += " membership:" + membership.ID + ":" + string(membership.Role) + ":" + membership.Status
+						break
+					}
+				}
 			}
 		}
 		record, existing, err := s.runtime.Idempotency.Reserve(r.Context(), scope, key, idempotency.HashRequest(r.Method, r.URL.Path, body))
@@ -111,6 +218,9 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 			return
 		}
 		if existing {
+			if sessionTokenFromRequest(r) != "" && !s.requireCSRF(w, r) {
+				return
+			}
 			if record.CompletedAt.IsZero() {
 				writeProblem(w, http.StatusConflict, "idempotency_in_progress", "an identical request is already in progress")
 				return
@@ -126,11 +236,40 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 		}
 
 		recorder := newIdempotencyRecorder(w)
+		// A panic below unwinds past Complete and leaves the reservation
+		// permanently "in progress", so every retry of a financial write would
+		// receive 409 until the record expires. Record the failure instead and
+		// re-panic so the recovery middleware still renders the error.
+		completed := false
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				if !completed {
+					if err := s.runtime.Idempotency.Complete(r.Context(), scope, key, http.StatusInternalServerError, []byte(`{"code":"internal_error","detail":"an unexpected server error occurred"}`)); err != nil {
+						s.logger.Error("idempotency failure persistence failed", "scope", scope, "error", err)
+					}
+				}
+				panic(recovered)
+			}
+		}()
 		next.ServeHTTP(recorder, r)
-		if err := s.runtime.Idempotency.Complete(r.Context(), scope, key, recorder.status, recorder.body.Bytes()); err != nil {
+		completed = true
+		status, response := recorder.status, recorder.body.Bytes()
+		if oneTimeCredentialResponse(r.URL.Path) && status < 400 {
+			// One-time credentials are delivered once and never copied into the
+			// durable response cache. A retry must not create a second credential.
+			status = http.StatusConflict
+			response = []byte(`{"code":"one_time_response_delivered","detail":"This request has already completed. One-time credentials cannot be replayed."}`)
+		}
+		if err := s.runtime.Idempotency.Complete(r.Context(), scope, key, status, response); err != nil {
 			s.logger.Error("idempotency response persistence failed", "scope", scope, "error", err)
 		}
 	})
+}
+
+func oneTimeCredentialResponse(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/auth/") || strings.HasPrefix(path, "/api/v1/mfa/") ||
+		strings.Contains(path, "/recovery-codes/") ||
+		(strings.HasPrefix(path, "/api/v1/account-recovery/") && strings.HasSuffix(path, "/complete"))
 }
 
 func requiresIdempotencyKey(r *http.Request) bool {
@@ -138,6 +277,9 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		return false
 	}
 	path := r.URL.Path
+	if path == "/api/v1/ops/business-policies/preview" || path == "/api/v1/ops/commands/preview" {
+		return false
+	}
 	if strings.HasSuffix(path, "/credit-requests") || strings.HasSuffix(path, "/buyer-invitations") {
 		return true
 	}
@@ -147,7 +289,7 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		// therefore must be safe to replay after a client timeout.
 		"/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
 		"/onboarding/", "/notification-preferences", "/recovery-codes", "/account-recovery/", "/privacy-requests", "/support-cases", "/product-feedback",
-		"/ops/commands", "/ops/cases/", "/ops/team/",
+		"/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
 	} {
 		if strings.Contains(path, suffix) {
 			return true
@@ -225,6 +367,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/onboarding/contacts/verify", s.verifyOnboardingContact)
 	s.mux.HandleFunc("PATCH /api/v1/organizations/{organizationID}/onboarding/representative", s.updateSupplierRepresentative)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/onboarding/kyb", s.submitSupplierKYB)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/onboarding/kyb/reconcile", s.reconcileSupplierKYB)
 	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/onboarding/settlement", s.updateSupplierSettlement)
 	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/onboarding/billing", s.updateSupplierBilling)
 	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/onboarding/credit-policy", s.updateSupplierCreditPolicy)
@@ -309,6 +452,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/collections/{attemptID}/retry", s.retryCollection)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/collections/{attemptID}/reconcile", s.reconcileCollection)
 	s.mux.HandleFunc("POST /api/v1/webhooks/collection/{provider}", s.collectionWebhook)
+	s.mux.HandleFunc("POST /api/v1/buyer/schedule-items/{itemID}/collection-notice/acknowledge", s.acknowledgeCollectionNotice)
+	s.mux.HandleFunc("POST /webhooks/mono", s.monoWebhook)
+	s.mux.HandleFunc("POST /api/v1/webhooks/mono", s.monoWebhook)
+	s.mux.HandleFunc("POST /api/v1/buyer/businesses/{businessID}/repayment-customer", s.createRepaymentCustomer)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/disputes", s.openDispute)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/disputes", s.listDisputes)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/disputes/{disputeID}", s.getDispute)
@@ -319,12 +466,32 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/fee-waiver", s.waiveObligationFee)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/operations", s.listOperationActions)
 	s.mux.HandleFunc("POST /api/v1/webhooks/messaging/whatsapp", s.whatsappWebhook)
+	s.mux.HandleFunc("POST /api/v1/webhooks/notifications/{channel}", s.notificationDeliveryReceipt)
 	s.mux.HandleFunc("GET /api/v1/me/notifications", s.myNotifications)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/reports/receivables", s.reportReceivables)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/provider-status", s.providerStatus)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/readiness", s.readinessStatus)
 	s.mux.HandleFunc("GET /api/v1/ops/metrics", s.metricsStatus)
 	s.mux.HandleFunc("GET /api/v1/ops/metrics/prometheus", s.metricsPrometheus)
+	s.mux.HandleFunc("GET /api/v1/pricing", s.publicPricing)
+	s.mux.HandleFunc("POST /api/v1/ops/business-policies/preview", s.previewBusinessPolicy)
+	s.mux.HandleFunc("GET /api/v1/ops/change-context", s.adminChangeContext)
+	s.mux.HandleFunc("GET /api/v1/ops/attention/details", s.adminAttentionDetails)
+	s.mux.HandleFunc("GET /api/v1/ops/attention", s.adminAttention)
+	s.mux.HandleFunc("GET /api/v1/ops/capabilities", s.adminCapabilities)
+	s.mux.HandleFunc("GET /api/v1/ops/approval-inbox", s.adminInbox)
+	s.mux.HandleFunc("POST /api/v1/ops/review-assignments", s.assignAdminReview)
+	s.mux.HandleFunc("GET /api/v1/ops/admin-changes", s.adminChanges)
+	s.mux.HandleFunc("POST /api/v1/ops/admin-changes", s.proposeAdminChange)
+	s.mux.HandleFunc("POST /api/v1/ops/admin-changes/{changeID}/decision", s.decideAdminChange)
+	s.mux.HandleFunc("GET /api/v1/ops/change-history", s.adminHistory)
+	s.mux.HandleFunc("GET /api/v1/buyer/amendments", s.buyerChanges)
+	s.mux.HandleFunc("POST /api/v1/buyer/amendments/{changeID}/decision", s.decideBuyerChange)
+	s.mux.HandleFunc("GET /api/v1/ops/business-policies", s.businessPolicies)
+	s.mux.HandleFunc("POST /api/v1/ops/business-policies", s.proposeBusinessPolicy)
+	s.mux.HandleFunc("POST /api/v1/ops/business-policies/{changeID}/decision", s.decideBusinessPolicy)
+	s.mux.HandleFunc("GET /api/v1/ops/financial-reconciliation", s.financialReviews)
+	s.mux.HandleFunc("POST /api/v1/ops/financial-reconciliation/{caseID}/decision", s.decideFinancialReview)
 	s.mux.HandleFunc("GET /api/v1/ops/overview", s.operationsOverview)
 	s.mux.HandleFunc("GET /api/v1/ops/analytics/scorecard", s.operationsAnalyticsScorecard)
 	s.mux.HandleFunc("GET /api/v1/ops/jobs", s.operationsJobs)
@@ -422,7 +589,7 @@ func (s *Server) withSecurityHeaders(next http.Handler) http.Handler {
 func (s *Server) withBodyLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.Body != nil {
-			r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
+			r.Body = http.MaxBytesReader(w, r.Body, 3<<20)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -462,8 +629,47 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 			writeProblem(w, http.StatusTooManyRequests, "rate_limited", "too many requests")
 			return
 		}
+		if !s.withinSharedAuthenticationBudget(w, r, key) {
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// withinSharedAuthenticationBudget enforces the cross-replica limit for
+// authentication routes. It fails closed: if the shared counter cannot be
+// reached, the request is refused rather than admitted without a limit, because
+// the limit is the control that makes these routes safe.
+func (s *Server) withinSharedAuthenticationBudget(w http.ResponseWriter, r *http.Request, client string) bool {
+	route := sensitiveRateLimitRoute(r.URL.Path)
+	if route == "" || r.Method == http.MethodGet || r.Method == http.MethodHead {
+		return true
+	}
+	if s.runtime == nil || s.runtime.Database == nil || s.runtime.Database.Raw() == nil {
+		// No shared store is configured, which is the development default. The
+		// per-process limiter above already applied.
+		return true
+	}
+	digest := hmac.New(sha256.New, []byte(runtimeDomainKey(s.config.OTPHMACKey, s.config.TokenHashKey, "shared-rate-limit")))
+	_, _ = digest.Write([]byte(route + "\x00" + client))
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	var attempts int
+	if err := s.runtime.Database.Raw().QueryRow(ctx,
+		`SELECT app.record_rate_limit_attempt($1, $2)`,
+		digest.Sum(nil), sensitiveRateLimitWindow).Scan(&attempts); err != nil {
+		s.logger.Error("shared authentication rate limit unavailable", "route", route, "error", err)
+		w.Header().Set("Retry-After", "60")
+		writeProblem(w, http.StatusServiceUnavailable, "rate_limit_unavailable", "verification is temporarily unavailable; please retry")
+		return false
+	}
+	if attempts > sensitiveRateLimitPerWindow {
+		s.recordSecurityEvent(r, "auth.rate_limited", "rate_limit", "denied", "warning")
+		w.Header().Set("Retry-After", fmt.Sprint(int(sensitiveRateLimitWindow.Seconds())))
+		writeProblem(w, http.StatusTooManyRequests, "rate_limited", "too many verification attempts; please wait before trying again")
+		return false
+	}
+	return true
 }
 
 func (s *Server) pruneRateWindows(now time.Time) {
@@ -485,11 +691,31 @@ func (s *Server) pruneRateWindows(now time.Time) {
 // so callers cannot rotate their identity with a spoofed header.
 func clientIP(r *http.Request) string {
 	remote := remoteHost(r)
-	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" && isPrivateOrLoopback(remote) {
-		for _, candidate := range strings.Split(forwarded, ",") {
-			candidate = strings.TrimSpace(candidate)
-			if parsed := net.ParseIP(candidate); parsed != nil {
-				return candidate
+	if isPrivateOrLoopback(remote) {
+		if realIP := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); realIP != "" {
+			if parsed := net.ParseIP(realIP); parsed != nil {
+				return realIP
+			}
+		}
+		if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+			if parsed := net.ParseIP(realIP); parsed != nil {
+				return realIP
+			}
+		}
+		if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+			parts := strings.Split(forwarded, ",")
+			// Check right-to-left to prefer the client address appended by the trusted ingress
+			for i := len(parts) - 1; i >= 0; i-- {
+				candidate := strings.TrimSpace(parts[i])
+				if parsed := net.ParseIP(candidate); parsed != nil && !isPrivateOrLoopback(candidate) {
+					return candidate
+				}
+			}
+			for _, candidate := range parts {
+				candidate = strings.TrimSpace(candidate)
+				if parsed := net.ParseIP(candidate); parsed != nil {
+					return candidate
+				}
 			}
 		}
 	}
@@ -537,23 +763,29 @@ func (s *Server) metricsPrometheus(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+	durable := ""
+	if s.runtime.Database != nil {
+		var err error
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		durable, err = observability.DurableFinancialMetrics(ctx, s.runtime.Database.Raw())
+		if err != nil {
+			writeProblem(w, 503, "metrics_unavailable", "Financial monitoring data could not be loaded")
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.WriteString(w, s.runtime.Metrics.Prometheus())
+	_, _ = io.WriteString(w, s.runtime.Metrics.Prometheus()+durable)
 }
 
 func (s *Server) requireMetricsAccess(w http.ResponseWriter, r *http.Request) bool {
-	session, _, ok := s.requireAuth(w, r)
-	if !ok {
-		return false
+	if s.config.MetricsScrapeToken != "" && hmac.Equal([]byte(r.Header.Get("Authorization")), []byte("Bearer "+s.config.MetricsScrapeToken)) {
+		return true
 	}
-	if session.AuthenticationLevel != auth.AAL2 {
-		s.recordSecurityEvent(r, "authorization.metrics_step_up_required", "metrics", "denied", "warning")
-		writeProblem(w, http.StatusForbidden, "step_up_required", "step-up authentication is required")
-		return false
-	}
-	return true
+	_, _, _, ok := s.requirePlatformAccess(w, r, access.PermissionProviderOperations)
+	return ok
 }
 
 func (s *Server) withRequestContext(next http.Handler) http.Handler {

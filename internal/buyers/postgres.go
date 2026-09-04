@@ -102,8 +102,8 @@ func (s *PostgresStore) CreateInvitation(actorUserID, organizationID string, inp
 		INSERT INTO app.buyer_invitations
 			(id, organization_id, target_type, target_hash, target_ciphertext,
 			 proposed_legal_name, proposed_trading_name, proposed_business_type,
-			 proposed_address, proposed_industry, status, created_by, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7,''), $8, $9, $10, 'pending', $11, $12, $13)
+			 proposed_address, proposed_industry, status, created_by, created_at, expires_at, token_hash)
+		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7,''), $8, $9, $10, 'pending', $11, $12, $13, $14)
 		RETURNING id::text, organization_id::text, target_type,
 			proposed_legal_name, COALESCE(proposed_trading_name,''),
 			proposed_business_type, proposed_address, proposed_industry,
@@ -111,7 +111,7 @@ func (s *PostgresStore) CreateInvitation(actorUserID, organizationID string, inp
 		s.hashTarget(input.TargetType, input.Target), ciphertext,
 		strings.TrimSpace(input.LegalName), strings.TrimSpace(input.TradingName),
 		strings.TrimSpace(input.BusinessType), strings.TrimSpace(input.BusinessAddress),
-		strings.TrimSpace(input.Industry), actorUserID, now, expires).Scan(
+		strings.TrimSpace(input.Industry), actorUserID, now, expires, s.hashToken(rawToken)).Scan(
 		&invitation.ID, &invitation.OrganizationID, &invitation.TargetType,
 		&invitation.ProposedLegalName, &invitation.ProposedTradingName,
 		&invitation.ProposedBusinessType, &invitation.ProposedAddress,
@@ -181,7 +181,31 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 	if legalName == "" || businessType == "" || address == "" || industry == "" {
 		return Portal{}, errors.New("complete buyer business details are required")
 	}
+	tx, err := s.beginTx(userID, row.OrganizationID)
+	if err != nil {
+		return Portal{}, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	// Serialize identity reuse for concurrent invitations for the same user.
+	var lockedUser string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM app.users WHERE id=$1::uuid FOR UPDATE`, userID).Scan(&lockedUser); err != nil {
+		return Portal{}, err
+	}
 	personID, businessID, representativeID := newUUID(), newUUID(), newUUID()
+	err = tx.QueryRow(ctx, `SELECT id::text FROM app.persons WHERE user_id=$1::uuid`, userID).Scan(&personID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return Portal{}, err
+	}
+	err = tx.QueryRow(ctx, `SELECT id::text FROM app.businesses WHERE owner_user_id=$1::uuid AND lower(legal_name)=lower($2) AND business_address=$3 AND business_type=$4 ORDER BY created_at,id LIMIT 1`, userID, legalName, address, businessType).Scan(&businessID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return Portal{}, err
+	}
+
+	err = tx.QueryRow(ctx, `SELECT id::text FROM app.business_representatives WHERE business_id=$1::uuid AND person_id=$2::uuid AND authority_verification_status IN ('pending','verified')`, businessID, personID).Scan(&representativeID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return Portal{}, err
+	}
+
 	personSession, err := s.identity.CreatePersonVerification(ctx, identity.PersonVerificationInput{SubjectID: personID, FullName: strings.TrimSpace(input.FullName)})
 	if err != nil {
 		return Portal{}, err
@@ -197,19 +221,14 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 	if !verificationComplete(personSession) || !verificationComplete(businessSession) || !verificationComplete(authoritySession) {
 		return Portal{}, errors.New("identity, business, and authority verification must complete before onboarding")
 	}
-	tx, err := s.beginTx(userID, row.OrganizationID)
-	if err != nil {
-		return Portal{}, err
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
 	now := time.Now().UTC()
-	if _, err := tx.Exec(ctx, `INSERT INTO app.persons (id, user_id, full_name, status, created_at) VALUES ($1, $2, $3, 'verified', $4)`, personID, userID, strings.TrimSpace(input.FullName), now); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO app.persons (id, user_id, full_name, status, created_at) VALUES ($1, $2, $3, 'verified', $4) ON CONFLICT (user_id) DO NOTHING`, personID, userID, strings.TrimSpace(input.FullName), now); err != nil {
 		return Portal{}, fmt.Errorf("create buyer person: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO app.businesses (id, owner_user_id, legal_name, trading_name, business_type, business_address, industry, status, created_at) VALUES ($1, $2, $3, NULLIF($4,''), $5, $6, $7, 'verified', $8)`, businessID, userID, legalName, tradingName, businessType, address, industry, now); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO app.businesses (id, owner_user_id, legal_name, trading_name, business_type, business_address, industry, status, created_at) VALUES ($1, $2, $3, NULLIF($4,''), $5, $6, $7, 'verified', $8) ON CONFLICT (id) DO NOTHING`, businessID, userID, legalName, tradingName, businessType, address, industry, now); err != nil {
 		return Portal{}, fmt.Errorf("create buyer business: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO app.business_representatives (id, business_id, person_id, role_title, authority_type, authority_verification_status, created_at) VALUES ($1, $2, $3, $4, $5, 'verified', $6)`, representativeID, businessID, personID, "authorised representative", "buyer_acceptance", now); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO app.business_representatives (id, business_id, person_id, role_title, authority_type, authority_verification_status, created_at) VALUES ($1, $2, $3, $4, $5, 'verified', $6) ON CONFLICT (id) DO NOTHING`, representativeID, businessID, personID, "authorised representative", "buyer_acceptance", now); err != nil {
 		return Portal{}, fmt.Errorf("create buyer representative: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO app.trade_relationships (supplier_organization_id,buyer_business_id,status) VALUES ($1::uuid,$2::uuid,'active') ON CONFLICT (supplier_organization_id,buyer_business_id) DO UPDATE SET status='active',updated_at=now()`, row.OrganizationID, businessID); err != nil {
@@ -454,12 +473,16 @@ func (s *PostgresStore) decrypt(value []byte) ([]byte, error) {
 
 func insertVerification(ctx context.Context, tx pgx.Tx, subjectID, subjectType string, session identity.VerificationSession, now time.Time) error {
 	reasons, _ := json.Marshal([]string{})
-	safe, err := json.Marshal(session.SafeResult)
+	safe, err := json.Marshal(identity.SafeVerificationResult(session.SafeResult))
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO app.verification_cases (id, subject_type, subject_id, provider, provider_reference, verification_level, state, reasons, safe_result, started_at, completed_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $10, $11)`, newUUID(), subjectType, subjectID, session.Provider, session.ProviderID, session.VerificationLevel, session.State, reasons, safe, now, session.ExpiresAt); err != nil {
+	result, err := tx.Exec(ctx, `INSERT INTO app.verification_cases (id, subject_type, subject_id, provider, provider_reference, verification_level, state, reasons, safe_result, started_at, completed_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $10, $11) ON CONFLICT(provider,provider_reference) DO UPDATE SET state=EXCLUDED.state,reasons=EXCLUDED.reasons,safe_result=EXCLUDED.safe_result,completed_at=EXCLUDED.completed_at,expires_at=EXCLUDED.expires_at WHERE app.verification_cases.subject_id=EXCLUDED.subject_id AND app.verification_cases.subject_type=EXCLUDED.subject_type`, newUUID(), subjectType, subjectID, session.Provider, session.ProviderID, session.VerificationLevel, session.State, reasons, safe, now, session.ExpiresAt)
+	if err != nil {
 		return fmt.Errorf("save verification case: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return errors.New("verification provider reference belongs to another identity")
 	}
 	return nil
 }
@@ -469,4 +492,33 @@ func newUUID() string {
 		return value.String()
 	}
 	return uuid.New().String()
+}
+
+func (s *PostgresStore) ReadCustomers(organizationID string) ([]Customer, error) {
+	if s == nil || s.pool == nil || strings.TrimSpace(organizationID) == "" {
+		return nil, errors.New("customer database or organization is unavailable")
+	}
+	ctx := context.Background()
+	tx, err := s.beginTx("", organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT buyer_user_id::text,buyer_business_id::text,legal_name,COALESCE(trading_name,''),industry,status FROM app.supplier_customers($1::uuid)`, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []Customer{}
+	for rows.Next() {
+		var customer Customer
+		if err := rows.Scan(&customer.BuyerUserID, &customer.BuyerBusinessID, &customer.LegalName, &customer.TradingName, &customer.Industry, &customer.Status); err != nil {
+			return nil, err
+		}
+		result = append(result, customer)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

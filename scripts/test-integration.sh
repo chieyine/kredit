@@ -9,6 +9,10 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
 	exit 1
 fi
 
+# Integration setup and cleanup deliberately use the migration/test owner.
+# Individual authorization tests enter the restricted runtime roles themselves.
+export DATABASE_URL="${TEST_DATABASE_URL:-${DATABASE_DIRECT_URL:-$DATABASE_URL}}"
+
 # Several cross-domain assertions intentionally use the deterministic
 # acceptance fixtures. Seeding here also verifies that a fresh migrated
 # database can be prepared twice without duplicate records.

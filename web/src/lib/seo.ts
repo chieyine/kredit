@@ -51,7 +51,7 @@ export const pageSEOByPath: Record<string, PageSEO> = {
 	},
 	'/pricing': {
 		title: 'Pricing — pay only when you get paid — Kredit',
-		description: 'Pay 0.5% when your customer pays or 1% when Kredit collects. No monthly fee, setup fee or hidden charge.'
+		description: 'See current supplier fees for activated trade credit and successful collections, with a clear fee calculation before you agree.'
 	},
 	'/security': {
 		title: 'How Kredit protects your money and records',

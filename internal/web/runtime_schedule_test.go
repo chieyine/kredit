@@ -79,6 +79,10 @@ func TestTradeLineReceiptCreatesItsOwnObligationScheduleAndBalancedLedger(t *tes
 	if err != nil || len(items) != 1 || items[0].PrincipalDueKobo != 125000 {
 		t.Fatalf("drawdown schedule mismatch: items=%+v err=%v", items, err)
 	}
+	if !items[0].CollectionAt.Equal(drawdown.CollectionAt) {
+		t.Fatalf("accepted debit date changed: %s != %s", items[0].CollectionAt, drawdown.CollectionAt)
+	}
+	verifyRevolvingRepayments(t, runtime, line.ID, activated.ObligationID, "supplier-1")
 	transactions, err := runtime.Ledger.GetByReference(activated.ObligationID)
 	if err != nil || len(transactions) != 1 {
 		t.Fatalf("activation ledger missing: transactions=%+v err=%v", transactions, err)

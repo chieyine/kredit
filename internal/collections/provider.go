@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -32,6 +33,14 @@ type Capabilities struct {
 	Settlement           bool `json:"settlement_reconciliation"`
 	Reversal             bool `json:"reversal"`
 	MultiAccount         bool `json:"multi_account_collection"`
+	PartialRecovery      bool `json:"partial_recovery"`
+	AutomaticRetries     bool `json:"automatic_retries"`
+}
+
+// ReferenceLookupProvider reconciles ambiguous submissions without requiring a
+// response ID. The original persisted request is the authoritative identity.
+type ReferenceLookupProvider interface {
+	GetByReference(context.Context, Request) (Response, error)
 }
 
 type CapabilityProvider interface{ Capabilities() Capabilities }
@@ -52,11 +61,13 @@ const (
 )
 
 type Request struct {
-	ExternalReference string
-	ObligationID      string
-	BuyerUserID       string
-	AmountKobo        ledger.Money
-	Currency          string
+	CollectionReference string
+	MandateReference    string
+	ExternalReference   string
+	ObligationID        string
+	BuyerUserID         string
+	AmountKobo          ledger.Money
+	Currency            string
 }
 type Response struct {
 	State                string
@@ -141,9 +152,10 @@ func (p *MockProvider) SetProviderResponse(providerID string, response Response)
 	p.responses[providerID] = response
 }
 func (p *MockProvider) Sign(event Webhook) string {
-	payload := fmt.Sprintf("%s|%s|%s|%d|%s|%s", event.EventID, event.ExternalReference, event.State, event.SucceededAmountKobo, event.SettlementState, event.SettlementReference)
+	event.Signature = ""
+	payload, _ := json.Marshal(event)
 	mac := hmac.New(sha256.New, p.secret)
-	_, _ = mac.Write([]byte(payload))
+	_, _ = mac.Write(payload)
 	return hex.EncodeToString(mac.Sum(nil))
 }
 func (p *MockProvider) VerifyWebhook(event Webhook) bool {

@@ -37,3 +37,26 @@ func TestBuyerInvitationIsSingleUseAndCreatesVerifiedPortal(t *testing.T) {
 		t.Fatal("accepted invitation must not be reusable")
 	}
 }
+
+func TestSecondSupplierInvitationReusesVerifiedIdentity(t *testing.T) {
+	s := NewStore("key", identity.NewMockProvider())
+	var first Portal
+	for _, supplier := range []string{"supplier-a", "supplier-b"} {
+		invite, err := s.CreateInvitation("owner", supplier, CreateInvitationInput{Target: "buyer@example.test", TargetType: "email", LegalName: "Buyer Ltd", BusinessType: "limited_company", BusinessAddress: "Lagos", Industry: "retail"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		portal, err := s.Accept(context.Background(), invite.RawToken, "buyer", AcceptInput{FullName: "Buyer Name"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if first.Person.ID == "" {
+			first = portal
+		} else if portal.Person.ID != first.Person.ID || portal.Business.ID != first.Business.ID || portal.Representative.ID != first.Representative.ID {
+			t.Fatal("second supplier created another identity")
+		}
+		if _, err = s.Accept(context.Background(), invite.RawToken, "buyer", AcceptInput{FullName: "Buyer Name"}); err == nil {
+			t.Fatal("invitation replay accepted")
+		}
+	}
+}

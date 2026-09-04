@@ -25,7 +25,7 @@ func main() {
 		panic(err)
 	}
 	logger := logging.New()
-	database, err := db.Open(context.Background(), cfg.DatabaseURL)
+	database, err := db.OpenAsRole(context.Background(), cfg.DatabaseURL, "kredit_app")
 	if err != nil {
 		logger.Error("database startup failed", "error", err)
 		os.Exit(1)

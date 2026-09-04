@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { parseNaira } from '$lib/money';
 	import { onMount } from 'svelte';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
 	import { productLabel } from '$lib/product-language';
@@ -8,7 +9,7 @@
 	const money=(value:number)=>new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format((value??0)/100);
 	async function load(){loading=true;error='';try{const response=await fetch(endpoint,{credentials:'include'});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail??'We could not open this problem.');dispute=data.dispute;evidence=data.evidence??[];decisions=data.decisions??[];remaining=String((dispute.remaining_disputed_kobo??0)/100)}catch(cause){error=cause instanceof Error?cause.message:'We could not open this problem.'}finally{loading=false}}
 	async function submitEvidence(event:SubmitEvent){event.preventDefault();busy=true;error='';notice='';const response=await fetch(`${endpoint}/evidence`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify({document_id:documentID,statement})});const data=await response.json().catch(()=>({}));busy=false;if(!response.ok){error=data.detail??'We could not add this information.';return}statement='';documentID='';notice='Information added.';await load()}
-	async function decide(event:SubmitEvent){event.preventDefault();busy=true;error='';notice='';const body={outcome,valid_principal_kobo:Math.round(Number(valid)*100),adjustment_kobo:Math.round(Number(adjustment)*100),remaining_disputed_kobo:Math.round(Number(remaining)*100),reason};const response=await fetch(`${endpoint}/decide`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify(body)});const data=await response.json().catch(()=>({}));busy=false;if(!response.ok){error=data.detail??'This problem changed before the decision was saved. Check it and try again.';return}notice='Decision saved. The amount owed has been updated.';await load()}
+	async function decide(event:SubmitEvent){event.preventDefault();busy=true;error='';notice='';const body={outcome,valid_principal_kobo:parseNaira(valid),adjustment_kobo:parseNaira(adjustment),remaining_disputed_kobo:parseNaira(remaining),reason};const response=await fetch(`${endpoint}/decide`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify(body)});const data=await response.json().catch(()=>({}));busy=false;if(!response.ok){error=data.detail??'This problem changed before the decision was saved. Check it and try again.';return}notice='Decision saved. The amount owed has been updated.';await load()}
 	onMount(load);
 </script>
 <a href={backHref}>← All reported problems</a>

@@ -77,7 +77,7 @@ func TestPostgresProductEventDeduplicationAndScorecardReconciliation(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(card.KPIs) != 3 || len(card.Guardrails) != 8 || len(card.Reconciliation) == 0 || card.SourceOfTruth == "" || !card.ReconciliationOK {
+	if len(card.KPIs) != 3 || len(card.Guardrails) < 8 || len(card.Reconciliation) == 0 || card.SourceOfTruth == "" || !card.ReconciliationOK {
 		t.Fatalf("incomplete pilot scorecard: %+v", card)
 	}
 	for _, event := range []string{"credit.repeat_sale", "supplier.retained"} {

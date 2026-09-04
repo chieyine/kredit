@@ -31,9 +31,9 @@ certificate.
   DNS/TLS, low-value production proof, monitoring, stop conditions, rollback
   and first-day sign-off.
 
-- Completed the launch-wide code audit across 552 owned files, 168 backend and
-  OpenAPI operations, 165 screen-relevant endpoints, 100 long-form guides and
-  every production database column. Product-contract, content, repository and
+- Completed a launch-wide audit across all repository-owned source and content,
+  all backend and OpenAPI operations, 100 long-form guides and every production
+  database column. Product-contract, content, repository and
   data-inventory checks are now mandatory CI and release gates.
 - Made caller-supplied environment values take priority over local `.env`
   defaults, preventing release checks and guarded database commands from
@@ -53,18 +53,19 @@ certificate.
   provider-neutral identity, mandate, collection and notification connectors.
 - Completed customer onboarding/directory, live reports/statements, signed
   secure links, same-origin production proxy and adapter-node containers.
-- Passed all 51 migrations, every database-backed package, the tagged
+- Passed the complete migration chain, every database-backed package, the tagged
   PostgreSQL suite, production API/worker/web builds, structural conformance,
-  and all 60 Chromium product, access-control, admin, SEO and accessibility
+  and the complete Chromium product, access-control, admin, SEO and accessibility
   scenarios in one uninterrupted run.
 - Added durable disputes, corrections, operations, notification delivery,
   analytics and messaging repositories; River notification/document workers;
   transactional outbox dispatch; malware-scanner integration; and a
   role/MFA-gated, privacy-safe operations console.
 - Fixed the database-backed first-login stored function discovered by the live
-  platform authorization proof. Migrations now pass through version 051,
-  including versioned supplier-onboarding readiness, reconciliation, product
-  analytics and rollback/reapply evidence.
+  platform authorization proof. The current migration chain includes versioned
+  supplier-onboarding readiness, reconciliation, product analytics and
+  rollback/reapply evidence; certification derives the exact version from the
+  repository rather than preserving a stale count here.
 - Completed recurring trade-line drawdowns with immutable terms, linked issue
   disputes, atomic obligation/schedule/ledger/outbox activation, safe expiry,
   printable agreements, and supplier/buyer browser flows.

@@ -161,6 +161,7 @@ type invitationRecord struct {
 }
 
 type Store struct {
+	acceptMu        sync.Mutex
 	mu              sync.RWMutex
 	tokenHashKey    []byte
 	identity        identity.IdentityProvider
@@ -313,6 +314,8 @@ func (s *Store) InvitationTarget(rawToken string) (string, string, error) {
 }
 
 func (s *Store) Accept(ctx context.Context, rawToken, userID string, input AcceptInput) (Portal, error) {
+	s.acceptMu.Lock()
+	defer s.acceptMu.Unlock()
 	if userID == "" || strings.TrimSpace(input.FullName) == "" {
 		return Portal{}, errors.New("authenticated user and full name are required")
 	}
@@ -353,7 +356,27 @@ func (s *Store) Accept(ctx context.Context, rawToken, userID string, input Accep
 	representativeID := s.newID()
 	person := &Person{ID: personID, UserID: userID, FullName: strings.TrimSpace(input.FullName), Status: "invited", CreatedAt: now}
 	business := &Business{ID: businessID, OwnerUserID: userID, LegalName: legalName, TradingName: tradingName, BusinessType: businessType, BusinessAddress: address, Industry: industry, Status: "pending_verification", CreatedAt: now}
-	representative := &Representative{ID: representativeID, BusinessID: businessID, PersonID: personID, RoleTitle: "authorised representative", AuthorityType: "buyer_acceptance", AuthorityStatus: "pending", CreatedAt: now}
+	newPerson, newBusiness, newRepresentative := true, true, true
+	if old := s.persons[s.personsByUser[userID]]; old != nil {
+		person = old
+		newPerson = false
+	}
+	for _, old := range s.businesses {
+		if old.OwnerUserID == userID && strings.EqualFold(old.LegalName, legalName) && old.BusinessAddress == address && old.BusinessType == businessType {
+			business = old
+			newBusiness = false
+			break
+		}
+	}
+	representative := &Representative{ID: representativeID, BusinessID: business.ID, PersonID: person.ID, RoleTitle: "authorised representative", AuthorityType: "buyer_acceptance", AuthorityStatus: "pending", CreatedAt: now}
+	for _, old := range s.representatives {
+		if old.BusinessID == business.ID && old.PersonID == person.ID {
+			representative = old
+			newRepresentative = false
+			break
+		}
+	}
+
 	s.persons[person.ID] = person
 	s.personsByUser[userID] = person.ID
 	s.businesses[business.ID] = business
@@ -365,10 +388,16 @@ func (s *Store) Accept(ctx context.Context, rawToken, userID string, input Accep
 			return
 		}
 		s.mu.Lock()
-		delete(s.persons, person.ID)
-		delete(s.personsByUser, userID)
-		delete(s.businesses, business.ID)
-		delete(s.representatives, representative.ID)
+		if newPerson {
+			delete(s.persons, person.ID)
+			delete(s.personsByUser, userID)
+		}
+		if newBusiness {
+			delete(s.businesses, business.ID)
+		}
+		if newRepresentative {
+			delete(s.representatives, representative.ID)
+		}
 		s.mu.Unlock()
 	}()
 
@@ -452,7 +481,7 @@ func (s *Store) lookupLocked(rawToken string) (*invitationRecord, error) {
 }
 
 func (s *Store) addVerificationLocked(subjectID, subjectType string, session identity.VerificationSession) {
-	verification := &VerificationCase{ID: s.newID(), SubjectType: subjectType, SubjectID: subjectID, Provider: session.Provider, ProviderReference: session.ProviderID, VerificationLevel: session.VerificationLevel, State: session.State, SafeResult: cloneMap(session.SafeResult), StartedAt: s.now(), CompletedAt: s.now(), ExpiresAt: session.ExpiresAt}
+	verification := &VerificationCase{ID: s.newID(), SubjectType: subjectType, SubjectID: subjectID, Provider: session.Provider, ProviderReference: session.ProviderID, VerificationLevel: session.VerificationLevel, State: session.State, SafeResult: identity.SafeVerificationResult(session.SafeResult), StartedAt: s.now(), CompletedAt: s.now(), ExpiresAt: session.ExpiresAt}
 	s.verifications[verification.ID] = verification
 }
 

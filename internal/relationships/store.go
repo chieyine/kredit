@@ -31,6 +31,7 @@ type Store struct {
 // development store and PostgreSQL implementation intentionally share the
 // same contract so production cannot accidentally depend on process memory.
 type Service interface {
+	AllowsReminders(context.Context, string, string) (bool, error)
 	Record(string, string, string, string, string, bool) (Consent, error)
 	List(string) []Consent
 }
@@ -160,4 +161,35 @@ func (s *PostgresStore) List(buyerUserID string) []Consent {
 		return []Consent{}
 	}
 	return result
+}
+
+func (s *Store) AllowsReminders(_ context.Context, buyer, org string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for i := len(s.consents) - 1; i >= 0; i-- {
+		c := s.consents[i]
+		if c.BuyerUserID == buyer && c.SupplierOrgID == org && c.ConsentType == "payment_reminders" {
+			return c.Granted, nil
+		}
+	}
+	return false, nil
+}
+func (s *PostgresStore) AllowsReminders(ctx context.Context, buyer, org string) (bool, error) {
+	if s.pool == nil {
+		return false, errors.New("relationship database unavailable")
+	}
+	if buyer == "" || org == "" {
+		return false, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, buyer, org); err != nil {
+		return false, err
+	}
+	var granted bool
+	err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT granted FROM app.relationship_consents WHERE buyer_user_id=$1::uuid AND supplier_organization_id=$2::uuid AND consent_type='payment_reminders' ORDER BY created_at DESC,id DESC LIMIT 1),false)`, buyer, org).Scan(&granted)
+	return granted, err
 }

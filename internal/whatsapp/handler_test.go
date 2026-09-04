@@ -32,6 +32,10 @@ func TestPaymentCommandNeverAcceptsCredentials(t *testing.T) {
 	if _, err := ParseCommand("send my BVN 123"); err == nil {
 		t.Fatal("sensitive command should not be supported")
 	}
+	confirmCmd, err := ParseCommand("YES")
+	if err != nil || confirmCmd.Kind != CommandConfirm {
+		t.Fatalf("expected confirm command, got %+v, err=%v", confirmCmd, err)
+	}
 }
 
 func TestParseAmountUsesExactIntegerKoboArithmetic(t *testing.T) {

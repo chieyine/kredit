@@ -37,6 +37,9 @@ type CustomItem struct {
 	DueDate    time.Time
 }
 type CreateInput struct {
+	// FirstCollectionAt preserves the accepted first debit instant. Later items
+	// keep the same calendar offset from their scheduled due dates.
+	FirstCollectionAt    time.Time
 	ObligationID         string
 	PrincipalKobo        ledger.Money
 	ScheduleType         string
@@ -117,6 +120,9 @@ func (s *Store) Create(input CreateInput) (Schedule, []Item, error) {
 	if input.GraceHours < 0 || input.GraceHours > 720 {
 		return Schedule{}, nil, errors.New("grace hours must be between 0 and 720")
 	}
+	if input.DueHour < 0 || input.DueHour > 23 || input.DueMinute < 0 || input.DueMinute > 59 {
+		return Schedule{}, nil, errors.New("invalid due time")
+	}
 	if input.StartDate.IsZero() {
 		return Schedule{}, nil, errors.New("start date is required")
 	}
@@ -145,6 +151,9 @@ func (s *Store) Create(input CreateInput) (Schedule, []Item, error) {
 			if input.InstalmentAmountKobo > input.PrincipalKobo || input.InstalmentAmountKobo != input.PrincipalKobo/ledger.Money(input.Count) || input.PrincipalKobo%ledger.Money(input.Count) != 0 {
 				return Schedule{}, nil, errors.New("instalment amount and count must equal principal")
 			}
+		}
+		if input.PrincipalKobo < ledger.Money(input.Count) {
+			return Schedule{}, nil, errors.New("each instalment must be at least one kobo")
 		}
 		base := input.PrincipalKobo / ledger.Money(input.Count)
 		remainder := input.PrincipalKobo - (base * ledger.Money(input.Count))
@@ -190,7 +199,17 @@ func (s *Store) Create(input CreateInput) (Schedule, []Item, error) {
 	items := make([]*Item, 0, len(amounts))
 	for i, amount := range amounts {
 		due := time.Date(dates[i].Year(), dates[i].Month(), dates[i].Day(), input.DueHour, input.DueMinute, 0, 0, loc)
-		items = append(items, &Item{ID: "schedule-item-" + s.newID(), ScheduleID: schedule.ID, Sequence: i + 1, PrincipalDueKobo: amount, DueAt: due, GraceHours: input.GraceHours, CollectionAt: due.Add(time.Duration(input.GraceHours) * time.Hour), State: ItemOpen})
+		collection := due.Add(time.Duration(input.GraceHours) * time.Hour)
+		if !input.FirstCollectionAt.IsZero() {
+			first := dates[0]
+			day := time.Date(dates[i].Year(), dates[i].Month(), dates[i].Day(), 0, 0, 0, 0, time.UTC)
+			origin := time.Date(first.Year(), first.Month(), first.Day(), 0, 0, 0, 0, time.UTC)
+			collection = input.FirstCollectionAt.In(loc).AddDate(0, 0, int(day.Sub(origin)/(24*time.Hour)))
+			if collection.Before(time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, loc)) {
+				return Schedule{}, nil, errors.New("collection cannot precede the payment day")
+			}
+		}
+		items = append(items, &Item{ID: "schedule-item-" + s.newID(), ScheduleID: schedule.ID, Sequence: i + 1, PrincipalDueKobo: amount, DueAt: due, GraceHours: input.GraceHours, CollectionAt: collection, State: ItemOpen})
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -208,7 +227,7 @@ func (s *Store) CreateDefault(obligationID string, principal ledger.Money, dueDa
 	if err != nil {
 		return Schedule{}, nil, err
 	}
-	return s.Create(CreateInput{ObligationID: obligationID, PrincipalKobo: principal, ScheduleType: TypeEqual, Count: 1, StartDate: date, DueHour: collectionAt.Hour(), DueMinute: collectionAt.Minute(), Timezone: collectionAt.Location().String(), GraceHours: graceHours, Cadence: CadenceCustom})
+	return s.Create(CreateInput{FirstCollectionAt: collectionAt, ObligationID: obligationID, PrincipalKobo: principal, ScheduleType: TypeEqual, Count: 1, StartDate: date, DueHour: collectionAt.Hour(), DueMinute: collectionAt.Minute(), Timezone: collectionAt.Location().String(), GraceHours: graceHours, Cadence: CadenceCustom})
 }
 
 func (s *Store) GetForObligation(obligationID string) (Schedule, []Item, error) {
@@ -290,6 +309,9 @@ func (s *Store) Allocate(obligationID string, amount ledger.Money) ([]Allocation
 	items := s.items[id]
 	capacity := ledger.Money(0)
 	for _, item := range items {
+		if item.State == ItemCancelled {
+			continue
+		}
 		remainingForItem := item.PrincipalDueKobo - item.AllocatedKobo
 		if remainingForItem > 0 {
 			capacity += remainingForItem
@@ -302,6 +324,9 @@ func (s *Store) Allocate(obligationID string, amount ledger.Money) ([]Allocation
 	targets := []AllocationTarget{}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].Sequence < items[j].Sequence })
 	for _, item := range items {
+		if item.State == ItemCancelled {
+			continue
+		}
 		open := item.PrincipalDueKobo - item.AllocatedKobo
 		if open <= 0 {
 			continue
@@ -333,23 +358,40 @@ func (s *Store) ReverseAllocations(targets []AllocationTarget) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	changes := map[*Item]ledger.Money{}
 	for _, target := range targets {
+		if target.AmountKobo <= 0 {
+			return errors.New("reversal amount must be positive")
+		}
+		var found *Item
 		for _, items := range s.items {
 			for _, item := range items {
 				if item.ID == target.ScheduleItemID {
-					if target.AmountKobo > item.AllocatedKobo {
-						return errors.New("schedule allocation reversal exceeds allocated amount")
-					}
-					item.AllocatedKobo -= target.AmountKobo
-					if item.AllocatedKobo == 0 {
-						item.State = ItemOpen
-					} else {
-						item.State = ItemPartiallyPaid
-					}
+					found = item
 				}
 			}
 		}
+		if found == nil {
+			return errors.New("schedule item not found")
+		}
+		allocated, ok := changes[found]
+		if !ok {
+			allocated = found.AllocatedKobo
+		}
+		if target.AmountKobo > allocated {
+			return errors.New("schedule allocation reversal exceeds allocated amount")
+		}
+		changes[found] = allocated - target.AmountKobo
 	}
+	for item, allocated := range changes {
+		item.AllocatedKobo = allocated
+		if allocated == 0 {
+			item.State = ItemOpen
+		} else {
+			item.State = ItemPartiallyPaid
+		}
+	}
+
 	return nil
 }
 func (s *Store) Evaluate(now time.Time) []Item {
@@ -420,6 +462,16 @@ func (s *Store) MarkCollected(obligationID string, amount ledger.Money) error {
 	if id == "" {
 		return errors.New("schedule not found")
 	}
+	if amount <= 0 {
+		return errors.New("amount must be positive")
+	}
+	var capacity ledger.Money
+	for _, item := range s.items[id] {
+		capacity += item.AllocatedKobo - item.CollectedKobo
+	}
+	if amount > capacity {
+		return errors.New("amount exceeds schedule capacity")
+	}
 	remaining := amount
 	for _, item := range s.items[id] {
 		available := item.AllocatedKobo - item.CollectedKobo
@@ -450,6 +502,16 @@ func (s *Store) ReverseCollected(obligationID string, amount ledger.Money) error
 	id := s.byObligation[obligationID]
 	if id == "" {
 		return errors.New("schedule not found")
+	}
+	if amount <= 0 {
+		return errors.New("amount must be positive")
+	}
+	var capacity ledger.Money
+	for _, item := range s.items[id] {
+		capacity += item.CollectedKobo
+	}
+	if amount > capacity {
+		return errors.New("amount exceeds schedule capacity")
 	}
 	remaining := amount
 	for i := len(s.items[id]) - 1; i >= 0; i-- {
@@ -486,13 +548,24 @@ func cadenceDate(start time.Time, index int, cadence, monthEnd string, loc *time
 		month := time.Month(monthIndex%12 + 1)
 		day := base.Day()
 		last := time.Date(year, month+1, 0, 0, 0, 0, 0, loc).Day()
-		if day > last {
-			if monthEnd == PolicyLastDay || monthEnd == PolicyCap {
-				return time.Date(year, month, last, 0, 0, 0, 0, loc), nil
+		switch monthEnd {
+		case PolicyLastDay:
+			// "Last day of month" means every instalment falls on the month end,
+			// not only the months that are too short for the start day. Treating
+			// it as PolicyCap silently shifted the agreed dates for any schedule
+			// that did not start on the 31st (README section 26.2).
+			return time.Date(year, month, last, 0, 0, 0, 0, loc), nil
+		case PolicyCap:
+			if day > last {
+				day = last
 			}
-			return time.Time{}, errors.New("monthly date exceeds month end without policy")
+			return time.Date(year, month, day, 0, 0, 0, 0, loc), nil
+		default:
+			if day > last {
+				return time.Time{}, errors.New("monthly date exceeds month end without policy")
+			}
+			return time.Date(year, month, day, 0, 0, 0, 0, loc), nil
 		}
-		return time.Date(year, month, day, 0, 0, 0, 0, loc), nil
 	case CadenceCustom:
 		return base, nil
 	default:
@@ -630,7 +703,7 @@ func (s *Store) allocatePostgres(obligationID string, amount ledger.Money) ([]Al
 	} else if err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, `SELECT id::text, principal_due_kobo, allocated_kobo, state FROM app.schedule_items WHERE schedule_id = $1::uuid ORDER BY sequence FOR UPDATE`, scheduleID)
+	rows, err := tx.Query(ctx, `SELECT id::text, principal_due_kobo, allocated_kobo, state FROM app.schedule_items WHERE schedule_id = $1::uuid AND state<>'CANCELLED' ORDER BY sequence FOR UPDATE`, scheduleID)
 	if err != nil {
 		return nil, err
 	}
@@ -749,56 +822,12 @@ func (s *Store) evaluatePostgres(now time.Time) []Item {
 }
 
 func (s *Store) collectionTargetPostgres(obligationID string, now time.Time) (ledger.Money, error) {
-	ctx := context.Background()
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	var scheduleID string
-	if err := tx.QueryRow(ctx, `SELECT id::text FROM app.repayment_schedules WHERE obligation_id = $1::uuid FOR UPDATE`, obligationID).Scan(&scheduleID); errors.Is(err, pgx.ErrNoRows) {
-		return 0, errors.New("schedule not found")
-	} else if err != nil {
-		return 0, err
-	}
-	rows, err := tx.Query(ctx, `SELECT id::text, principal_due_kobo, allocated_kobo, state, collection_at, due_at FROM app.schedule_items WHERE schedule_id = $1::uuid ORDER BY sequence FOR UPDATE`, scheduleID)
-	if err != nil {
-		return 0, err
-	}
 	var total ledger.Money
-	for rows.Next() {
-		var id string
-		var due, allocated int64
-		var state string
-		var collectionAt, dueAt time.Time
-		if err := rows.Scan(&id, &due, &allocated, &state, &collectionAt, &dueAt); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		if state == ItemPaid || state == ItemCancelled {
-			continue
-		}
-		if now.Before(dueAt) {
-			state = ItemOpen
-		} else if now.Before(collectionAt) {
-			state = ItemInGrace
-		} else if state != ItemPartiallyPaid {
-			state = ItemOverdue
-		}
-		if _, err := tx.Exec(ctx, `UPDATE app.schedule_items SET state = $2 WHERE id = $1::uuid`, id, state); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		if !now.Before(collectionAt) && due > allocated {
-			total += ledger.Money(due - allocated)
-		}
+	err := s.pool.QueryRow(context.Background(), `SELECT COALESCE(SUM(GREATEST(i.principal_due_kobo-i.allocated_kobo,0)) FILTER (WHERE i.state NOT IN ('PAID','CANCELLED') AND i.collection_at<=$2),0) FROM app.repayment_schedules s LEFT JOIN app.schedule_items i ON i.schedule_id=s.id WHERE s.obligation_id=$1::uuid GROUP BY s.id`, obligationID, now).Scan(&total)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, errors.New("schedule not found")
 	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return 0, err
-	}
-	rows.Close()
-	return total, tx.Commit(ctx)
+	return total, err
 }
 
 func (s *Store) markCollectedPostgres(obligationID string, amount ledger.Money, reverse bool) error {

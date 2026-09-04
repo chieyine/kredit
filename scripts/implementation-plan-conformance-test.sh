@@ -4,7 +4,7 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root_dir"
 
-temp_dir="$(mktemp -d /private/tmp/kredit-plan-conformance.XXXXXX)"
+temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kredit-plan-conformance.XXXXXX")"
 trap 'rm -rf "$temp_dir"' EXIT
 
 bash scripts/implementation-plan-conformance.sh

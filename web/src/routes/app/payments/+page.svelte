@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+ import { sumKobo } from '$lib/money';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
 	import Money from '$lib/components/Money.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
@@ -8,8 +9,8 @@
 	let organizationID = $state(''), error = $state(''), busy = $state(''), query = $state(''), status = $state('all');
 	let loading = $state(true);
 	const pendingClaims = $derived(claims.filter((claim) => claim.state === 'pending'));
-	const pendingTotal = $derived(pendingClaims.reduce((total, claim) => total + Number(claim.amount_kobo || 0), 0));
-	const receivedTotal = $derived(payments.filter((payment) => payment.state === 'recognized').reduce((total, payment) => total + Number(payment.amount_kobo || 0), 0));
+	const pendingTotal = $derived(sumKobo(pendingClaims.map((claim)=>claim.amount_kobo)));
+	const receivedTotal = $derived(sumKobo(payments.filter((payment)=>payment.state==='recognized').map((payment)=>payment.amount_kobo)));
 	const visiblePayments = $derived(payments.filter((payment) => {
 		const words = `${payment.buyer_legal_name ?? ''} ${payment.description ?? ''} ${payment.reference ?? ''}`.toLowerCase();
 		return (status === 'all' || payment.state === status) && words.includes(query.trim().toLowerCase());
@@ -30,14 +31,17 @@
 		} catch (cause) { error = cause instanceof Error ? cause.message : 'We could not open your payment records.'; }
 		finally { loading = false; }
 	}
-	async function decide(claim: any, decision: 'confirmed' | 'rejected') {
-		busy = claim.id; error = '';
-		const reason = decision === 'confirmed' ? 'Seller confirmed the money arrived' : 'Seller could not find this payment';
-		const response = await fetch(`/api/v1/organizations/${organizationID}/payment-claims/${claim.id}/decide`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey(), ...csrfHeaders() }, body: JSON.stringify({ decision, reason }) });
-		const result = await response.json().catch(() => ({})); busy = '';
-		if (!response.ok) { error = result.detail ?? 'We could not save your answer.'; return; }
-		await load();
-	}
+ async function decide(claim: any, decision: 'confirmed' | 'rejected') {
+  busy=claim.id;error='';
+  try {
+   const reason=decision==='confirmed'?'Seller confirmed the money arrived':'Seller could not find this payment';
+   const response=await fetch(`/api/v1/organizations/${organizationID}/payment-claims/${claim.id}/decide`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify({decision,reason})});
+   const result=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(result.detail??'We could not save your answer.');
+   await load();
+  }catch(cause){error=cause instanceof Error?cause.message:'We could not save your answer.'}finally{busy=''}
+ }
+
 	onMount(async () => {
 		try {
 			const response = await fetch('/api/v1/organizations', { credentials: 'include' });
@@ -53,7 +57,7 @@
 <main class="shell workspace payments-page">
 	<header class="page-heading"><div><p class="eyebrow">Payments</p><h1>Your money, clearly.</h1><p class="lede">See what has entered your account and check payments customers say they made.</p></div>{#if organizations.length > 1}<label>Business<select bind:value={organizationID} onchange={load}>{#each organizations as organization}<option value={organization.id}>{organization.trading_name || organization.legal_name}</option>{/each}</select></label>{/if}</header>
 	{#if error}<div class="error-box" role="alert"><div><strong>Payments could not open.</strong><p>{error}</p></div><button type="button" onclick={load}>Try again</button></div>{/if}
-	{#if loading}<div class="loading" role="status"><span class="sr-only">Opening your payments</span><Skeleton rows={5} tall /></div>{:else}
+	{#if loading}<div class="loading" role="status"><span class="sr-only">Opening your payments</span><Skeleton rows={5} tall /></div>{:else if !error}
 		<section class="money-summary" aria-label="Payment summary"><article class="total"><span>Money received</span><strong><Money amountKobo={receivedTotal} /></strong><small>All confirmed payments</small></article><article class:needs-action={pendingClaims.length > 0}><span>Waiting for your answer</span><strong><Money amountKobo={pendingTotal} /></strong><small>{pendingClaims.length} {pendingClaims.length === 1 ? 'payment' : 'payments'} to check</small></article><article><span>Payments recorded</span><strong>{payments.length}</strong><small>Complete payment history</small></article></section>
 		<section class="review-section" aria-labelledby="review-title"><header><div><p class="eyebrow">Needs your answer</p><h2 id="review-title">Check these payments.</h2></div><span>{pendingClaims.length}</span></header>
 		{#if pendingClaims.length}<div class="claim-list">{#each pendingClaims as claim}<article><div class="claim-amount"><span>Customer says they paid</span><strong><Money amountKobo={claim.amount_kobo} /></strong></div><dl><div><dt>Transfer number</dt><dd>{claim.transfer_reference}</dd></div><div><dt>Payment day</dt><dd>{date(claim.paid_at)}</dd></div><div><dt>Check before</dt><dd>{date(claim.hold_expires_at)}</dd></div></dl><p>Look at your bank account before answering.</p><div class="claim-actions"><button disabled={busy === claim.id} onclick={() => decide(claim, 'confirmed')}>{busy === claim.id ? 'Saving…' : 'Yes, I got the money'}</button><button class="secondary" disabled={busy === claim.id} onclick={() => decide(claim, 'rejected')}>I cannot find it</button></div></article>{/each}</div>{:else}<div class="all-clear"><span aria-hidden="true">✓</span><div><h3>Nothing to check.</h3><p>You have answered every payment report.</p></div></div>{/if}</section>

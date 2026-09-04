@@ -22,6 +22,7 @@ printf '%s\n' 'Preparing Go dependencies and schema...'
 go mod download
 pnpm install --frozen-lockfile
 go run ./cmd/migrate
+bash scripts/configure-development-database.sh
 go run ./cmd/seed
 
 printf '%s\n' 'Running available generators...'

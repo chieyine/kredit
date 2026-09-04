@@ -64,7 +64,7 @@ func (s *S3ObjectStore) SignedUploadURL(ctx context.Context, key string, ttl tim
 	if ttl <= 0 || ttl > 24*time.Hour {
 		return "", errors.New("signed URL TTL must be between 1 second and 24 hours")
 	}
-	request, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key), ContentType: aws.String(contentType), ServerSideEncryption: "AES256"}, func(options *s3.PresignOptions) { options.Expires = ttl })
+	request, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key), IfNoneMatch: aws.String("*"), ContentType: aws.String(contentType), ServerSideEncryption: "AES256"}, func(options *s3.PresignOptions) { options.Expires = ttl })
 	if err != nil {
 		return "", err
 	}

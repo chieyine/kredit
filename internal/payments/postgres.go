@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"kredit/internal/db"
+
 	"kredit/internal/ledger"
 	"kredit/internal/outbox"
 
@@ -32,6 +34,39 @@ func NewPostgresStore(pool *pgxpool.Pool, events *outbox.Store, invalidate func(
 }
 
 func (s *PostgresStore) Record(input RecordInput) (Payment, Allocation, error) {
+	return s.RecordContext(context.Background(), input)
+}
+
+func (s *PostgresStore) RecordContext(ctx context.Context, input RecordInput) (Payment, Allocation, error) {
+	if s == nil || s.pool == nil {
+		return Payment{}, Allocation{}, errors.New("payment database is not configured")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Payment{}, Allocation{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	payment, allocation, err := s.RecordTx(ctx, tx, input)
+	if err != nil {
+		return Payment{}, Allocation{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Payment{}, Allocation{}, err
+	}
+	s.AfterCommit(payment.ObligationID)
+	return payment, allocation, nil
+}
+
+// AfterCommit invalidates cached projections only after the owning transaction commits.
+func (s *PostgresStore) AfterCommit(obligationID string) {
+	if s.invalidate != nil {
+		s.invalidate(obligationID)
+	}
+}
+
+// RecordTx composes payment recognition with another domain mutation. The caller
+// owns rollback/commit and must call AfterCommit following a successful commit.
+func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInput) (Payment, Allocation, error) {
 	if s == nil || s.pool == nil {
 		return Payment{}, Allocation{}, errors.New("payment database is not configured")
 	}
@@ -41,15 +76,9 @@ func (s *PostgresStore) Record(input RecordInput) (Payment, Allocation, error) {
 	if !validSource(input.SourceType) {
 		return Payment{}, Allocation{}, errors.New("invalid payment source")
 	}
-	if input.SourceType == SourceCollected && strings.TrimSpace(input.Provider) == "" {
-		return Payment{}, Allocation{}, errors.New("collected payments require a provider")
+	if input.SourceType == SourceCollected && !validCollectedPayment(input) {
+		return Payment{}, Allocation{}, errors.New("collected payments require collection-worker provenance, provider identity, and an attempt idempotency key")
 	}
-	ctx := context.Background()
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return Payment{}, Allocation{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
 	if existing, allocation, found, err := loadByIdempotency(ctx, tx, input.IdempotencyKey); err != nil {
 		return Payment{}, Allocation{}, err
@@ -60,23 +89,45 @@ func (s *PostgresStore) Record(input RecordInput) (Payment, Allocation, error) {
 		return existing, allocation, nil
 	}
 
+	// Establish the persisted parties before reading tenant-scoped credit rows.
+	// A collection worker has no browser session; relying on session-local
+	// database context would make autonomous repayments disappear under RLS.
+	var buyerContext, supplierContext string
+	if err := tx.QueryRow(ctx, `SELECT s.buyer_user_id,s.supplier_organization_id FROM app.credit_aggregate_snapshots s JOIN app.obligations o ON o.credit_request_id::text=s.credit_request_id WHERE o.id=$1::uuid`, input.ObligationID).Scan(&buyerContext, &supplierContext); err != nil {
+		return Payment{}, Allocation{}, errors.New("obligation context not found")
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, buyerContext, supplierContext); err != nil {
+		return Payment{}, Allocation{}, err
+	}
 	var snapshot ObligationSnapshot
 	var creditRequestID string
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT o.id::text, c.buyer_user_id::text, o.supplier_organization_id::text,
-		       o.principal_kobo, o.outstanding_kobo, c.collection_at, o.currency, c.id::text
+		       o.principal_kobo, o.outstanding_kobo, c.collection_at, o.currency, c.id::text, c.fee_terms
 		FROM app.obligations o
 		JOIN app.credit_requests c ON c.id = o.credit_request_id
 		WHERE o.id = $1::uuid
 		FOR UPDATE OF o, c`, input.ObligationID).Scan(
 		&snapshot.ID, &snapshot.BuyerUserID, &snapshot.SupplierOrganizationID,
 		&snapshot.PrincipalKobo, &snapshot.OutstandingKobo, &snapshot.CollectionAt,
-		&snapshot.Currency, &creditRequestID)
+		&snapshot.Currency, &creditRequestID, &snapshot.FeeTerms)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Payment{}, Allocation{}, errors.New("obligation not found")
 	}
 	if err != nil {
 		return Payment{}, Allocation{}, fmt.Errorf("lock obligation: %w", err)
+	}
+	if existing, allocation, found, err := loadByIdempotency(ctx, tx, input.IdempotencyKey); err != nil {
+		return Payment{}, Allocation{}, err
+	} else if found {
+		if !samePaymentIntent(existing, input) {
+			return Payment{}, Allocation{}, errors.New("idempotency key was reused for a different payment")
+		}
+		return existing, allocation, nil
+	}
+
+	if defaultCurrency(input.Currency, snapshot.Currency) != snapshot.Currency {
+		return Payment{}, Allocation{}, errors.New("payment currency must match the obligation")
 	}
 	if input.AmountKobo > snapshot.OutstandingKobo {
 		return Payment{}, Allocation{}, errors.New("payment exceeds authoritative outstanding amount")
@@ -87,6 +138,9 @@ func (s *PostgresStore) Record(input RecordInput) (Payment, Allocation, error) {
 	if paidAt.IsZero() {
 		paidAt = now
 	}
+	if paidAt.After(now.Add(5 * time.Minute)) {
+		return Payment{}, Allocation{}, errors.New("payment date cannot be in the future")
+	}
 	payment := Payment{
 		ID: newIdentifier(), ObligationID: input.ObligationID,
 		BuyerUserID: snapshot.BuyerUserID, SupplierOrganizationID: snapshot.SupplierOrganizationID,
@@ -96,7 +150,7 @@ func (s *PostgresStore) Record(input RecordInput) (Payment, Allocation, error) {
 		PaidAt: paidAt, RecognizedAt: now, RecordedBy: input.RecordedBy,
 	}
 	if payment.SourceType == SourceCollected && !paidAt.Before(snapshot.CollectionAt) {
-		fee, feeErr := ledger.BaseFee(payment.AmountKobo)
+		fee, feeErr := snapshot.FeeTerms.Collection(payment.AmountKobo)
 		if feeErr != nil {
 			return Payment{}, Allocation{}, feeErr
 		}
@@ -146,7 +200,7 @@ func (s *PostgresStore) Record(input RecordInput) (Payment, Allocation, error) {
 		return Payment{}, Allocation{}, err
 	}
 	if payment.CollectionFeeKobo > 0 {
-		if _, err := tx.Exec(ctx, `INSERT INTO app.fees (supplier_organization_id,obligation_id,payment_id,fee_type,basis_amount_kobo,rate_basis_points,amount_kobo,currency,state,accrued_at) VALUES ($1::uuid,$2::uuid,$3::uuid,'collection',$4,50,$5,$6,'accrued',$7) ON CONFLICT (payment_id,fee_type) DO NOTHING`, payment.SupplierOrganizationID, payment.ObligationID, payment.ID, int64(payment.AmountKobo), int64(payment.CollectionFeeKobo), payment.Currency, paidAt); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO app.fees (supplier_organization_id,obligation_id,payment_id,fee_type,basis_amount_kobo,rate_basis_points,amount_kobo,currency,state,accrued_at) VALUES ($1::uuid,$2::uuid,$3::uuid,'collection',$4,$8,$5,$6,'accrued',$7) ON CONFLICT (payment_id,fee_type) DO NOTHING`, payment.SupplierOrganizationID, payment.ObligationID, payment.ID, int64(payment.AmountKobo), int64(payment.CollectionFeeKobo), payment.Currency, paidAt, collectionRate(snapshot.FeeTerms)); err != nil {
 			return Payment{}, Allocation{}, fmt.Errorf("insert collection fee: %w", err)
 		}
 		if err := postLedgerTx(ctx, tx, "collection_fee_accrued", payment.ID, "collection-fee:"+input.IdempotencyKey, paidAt,
@@ -157,11 +211,10 @@ func (s *PostgresStore) Record(input RecordInput) (Payment, Allocation, error) {
 	if err := s.appendEvent(ctx, tx, payment.ID, "payment.recognized", payment, "payment:"+input.IdempotencyKey); err != nil {
 		return Payment{}, Allocation{}, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return Payment{}, Allocation{}, err
-	}
-	if s.invalidate != nil {
-		s.invalidate(payment.ObligationID)
+	if newOutstanding == 0 {
+		if err := s.appendEvent(ctx, tx, payment.ID, "notification.requested", map[string]any{"event": "OBLIGATION_FULLY_REPAID", "obligation_id": payment.ObligationID}, "repaid:"+payment.ID); err != nil {
+			return Payment{}, Allocation{}, err
+		}
 	}
 	return payment, allocations[0], nil
 }
@@ -230,13 +283,16 @@ func allocateScheduleTx(ctx context.Context, tx pgx.Tx, payment Payment) ([]Allo
 }
 
 func (s *PostgresStore) Reverse(paymentID, actor, reason string) (Payment, error) {
+	return s.ReverseContext(context.Background(), paymentID, actor, reason)
+}
+
+func (s *PostgresStore) ReverseContext(ctx context.Context, paymentID, actor, reason string) (Payment, error) {
 	if s == nil || s.pool == nil {
 		return Payment{}, errors.New("payment database is not configured")
 	}
 	if paymentID == "" || actor == "" || strings.TrimSpace(reason) == "" {
 		return Payment{}, errors.New("payment, reversal actor, and reason are required")
 	}
-	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Payment{}, err
@@ -248,6 +304,9 @@ func (s *PostgresStore) Reverse(paymentID, actor, reason string) (Payment, error
 	}
 	if payment.State == StateReversed {
 		return payment, nil
+	}
+	if err := db.SetObligationContext(ctx, tx, payment.ObligationID); err != nil {
+		return Payment{}, err
 	}
 	var principal ledger.Money
 	var creditRequestID string
@@ -336,46 +395,39 @@ func (s *PostgresStore) Reverse(paymentID, actor, reason string) (Payment, error
 	return payment, nil
 }
 
-func (s *PostgresStore) List(obligationID string) []Payment {
-	if s == nil || s.pool == nil || obligationID == "" {
-		return []Payment{}
-	}
-	rows, err := s.pool.Query(context.Background(), paymentSelect+` WHERE p.obligation_id=$1::uuid ORDER BY p.recognized_at,p.id`, obligationID)
-	if err != nil {
-		return []Payment{}
-	}
-	defer rows.Close()
-	result := []Payment{}
-	for rows.Next() {
-		p, err := scanPayment(rows)
-		if err != nil {
-			return []Payment{}
-		}
-		result = append(result, p)
-	}
-	if rows.Err() != nil {
-		return []Payment{}
-	}
-	return result
+// List delegates to Read so a query failure surfaces as an error rather than an
+// empty payment history.
+func (s *PostgresStore) List(obligationID string) ([]Payment, error) {
+	return s.Read(obligationID)
 }
 
 func (s *PostgresStore) Get(paymentID string) (Payment, error) {
+	return s.GetContext(context.Background(), paymentID)
+}
+
+func (s *PostgresStore) GetContext(ctx context.Context, paymentID string) (Payment, error) {
 	if s == nil || s.pool == nil {
 		return Payment{}, errors.New("payment database is not configured")
 	}
-	return loadPayment(context.Background(), s.pool, paymentID, false)
+	return loadPayment(ctx, s.pool, paymentID, false)
 }
 
 func (s *PostgresStore) Rebuild(obligationID string) (ledger.Money, error) {
+	return s.RebuildContext(context.Background(), obligationID)
+}
+
+func (s *PostgresStore) RebuildContext(ctx context.Context, obligationID string) (ledger.Money, error) {
 	if s == nil || s.pool == nil {
 		return 0, errors.New("payment database is not configured")
 	}
-	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := db.SetObligationContext(ctx, tx, obligationID); err != nil {
+		return 0, err
+	}
 	var principal, current ledger.Money
 	var requestID string
 	if err := tx.QueryRow(ctx, `SELECT principal_kobo,outstanding_kobo,credit_request_id::text FROM app.obligations WHERE id=$1::uuid FOR UPDATE`, obligationID).Scan(&principal, &current, &requestID); err != nil {
@@ -385,11 +437,24 @@ func (s *PostgresStore) Rebuild(obligationID string) (ledger.Money, error) {
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(amount_kobo),0) FROM app.payments WHERE obligation_id=$1::uuid AND state='recognized'`, obligationID).Scan(&paid); err != nil {
 		return 0, err
 	}
-	expected := principal - paid
+	var forgiven ledger.Money
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(p.credit_kobo-p.debit_kobo),0) FROM ledger.postings p JOIN ledger.accounts a ON a.id=p.account_id JOIN ledger.transactions t ON t.id=p.transaction_id WHERE a.code=$2 AND ((t.event_type='write_off' AND t.reference_type='obligation' AND t.reference_id=$1) OR (t.event_type='dispute_adjustment' AND t.reference_type='dispute' AND EXISTS(SELECT 1 FROM app.disputes d WHERE d.id::text=t.reference_id AND d.obligation_id=$1::uuid)))`, obligationID, ledger.AccountTradeReceivable).Scan(&forgiven); err != nil {
+		return 0, err
+	}
+	if paid < 0 || paid > principal || forgiven < 0 || forgiven > principal-paid {
+		return 0, errors.New("recognized reductions exceed principal")
+	}
+	expected := principal - paid - forgiven
 	if expected < 0 {
 		return 0, errors.New("payments exceed principal")
 	}
 	if expected != current {
+		if err := db.GuardUnreservedReduction(ctx, tx, obligationID, int64(expected)); err != nil {
+			return 0, err
+		}
+		if err := s.appendEvent(ctx, tx, obligationID, "obligation.balance_rebuilt", map[string]any{"previous_kobo": current, "outstanding_kobo": expected}, "balance-rebuild:"+newIdentifier()); err != nil {
+			return 0, err
+		}
 		if err := updateOutstandingTx(ctx, tx, requestID, obligationID, expected, principal); err != nil {
 			return 0, err
 		}
@@ -495,3 +560,32 @@ func (s *PostgresStore) appendEvent(ctx context.Context, tx pgx.Tx, aggregateID,
 	_, err = s.outbox.AppendTx(ctx, tx, outbox.Event{AggregateType: "payment", AggregateID: aggregateID, EventType: eventType, Payload: payload, IdempotencyKey: key})
 	return err
 }
+
+func (s *PostgresStore) Read(obligationID string) ([]Payment, error) {
+	return s.ReadContext(context.Background(), obligationID)
+}
+
+func (s *PostgresStore) ReadContext(ctx context.Context, obligationID string) ([]Payment, error) {
+	if s == nil || s.pool == nil || obligationID == "" {
+		return nil, errors.New("payment database or obligation unavailable")
+	}
+	rows, err := s.pool.Query(ctx, paymentSelect+` WHERE p.obligation_id=$1::uuid ORDER BY p.recognized_at,p.id`, obligationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []Payment{}
+	for rows.Next() {
+		p, err := scanPayment(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func collectionRate(terms *ledger.FeeTerms) int64 { _, rate := terms.Rates(); return rate }

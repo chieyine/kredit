@@ -11,6 +11,14 @@ if [[ "${ALLOW_DB_RESET:-false}" != "true" ]]; then
   exit 1
 fi
 
-: "${DATABASE_URL:=postgres://kredit:kredit@localhost:5432/kredit?sslmode=disable}"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-go run ./cmd/migrate
+case "${APP_ENV:-}" in
+  development|test) ;;
+  *) printf '%s\n' 'Reset requires APP_ENV=development or APP_ENV=test.' >&2; exit 1 ;;
+esac
+
+database_admin_url="${DATABASE_DIRECT_URL:-${DATABASE_URL:-}}"
+: "${database_admin_url:?DATABASE_DIRECT_URL or DATABASE_URL is required for reset}"
+psql "$database_admin_url" -v ON_ERROR_STOP=1 -c 'BEGIN; DROP SCHEMA IF EXISTS app CASCADE; DROP SCHEMA IF EXISTS ledger CASCADE; DROP SCHEMA IF EXISTS jobs CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public; COMMIT;'
+DATABASE_DIRECT_URL="$database_admin_url" go run ./cmd/migrate
+
+psql "$database_admin_url" -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql

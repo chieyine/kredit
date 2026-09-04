@@ -44,3 +44,20 @@ operator access.
 Review this model before enabling a real provider, adding a restricted field,
 changing an export, changing tenant roles, or after a security incident. Record
 the reviewer and date in the release evidence.
+
+## Mono Sweep boundary (2 September 2026)
+
+- Forged callback: constant-time shared-secret header verification, bounded
+  payload, event allowlist and server-to-server result lookup before money.
+- Replay/out-of-order state: durable inbox identity, per-attempt financial
+  idempotency, sticky cancellation/expiry and controlled mismatch handling.
+- Concurrent/ambiguous debit: committed reservation before HTTP, obligation and
+  mandate locks, no resubmission after unknown outcomes, reconciled retry gates.
+- Sensitive payload leakage: transient BVN input, customer reference/consent
+  binding only, sanitized provider errors, no raw callback storage, supplier URL
+  redaction. Existing TLS/encrypted-storage controls remain deployment gates.
+- Sandbox/live contamination: test-key check, live-mode callback rejection,
+  default-off feature flags and explicit production refusal.
+
+Real Mono sandbox authorization, endpoint/partial-response confirmation, and
+production operational controls remain unverified external gates.

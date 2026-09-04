@@ -2,9 +2,13 @@ package web
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"kredit/internal/audit"
 	"kredit/internal/auth"
+	"kredit/internal/businesspolicy"
 	"kredit/internal/buyers"
 	"kredit/internal/collections"
 	"kredit/internal/config"
@@ -16,6 +20,7 @@ import (
 	"kredit/internal/feedback"
 	"kredit/internal/idempotency"
 	"kredit/internal/identity"
+	"kredit/internal/jobs"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
 	"kredit/internal/notifications"
@@ -27,6 +32,7 @@ import (
 	"kredit/internal/paymentclaims"
 	"kredit/internal/payments"
 	"kredit/internal/platformops"
+	"kredit/internal/providers/mono"
 	"kredit/internal/readiness"
 	"kredit/internal/relationships"
 	"kredit/internal/reports"
@@ -42,41 +48,45 @@ import (
 )
 
 type Runtime struct {
-	Database             *db.Pool
-	Persistence          PersistenceStatus
-	Idempotency          idempotency.Service
-	Auth                 auth.Service
-	Organizations        organizations.Service
-	Onboarding           onboarding.Service
-	Audit                audit.Service
-	Identity             identity.IdentityProvider
-	Buyers               buyers.Service
-	Mandates             mandates.Provider
-	Ledger               ledger.Service
-	Credit               credit.Service
-	Payments             payments.Service
-	PaymentClaims        paymentclaims.Service
-	PaymentClaimsEnabled bool
-	Schedules            *schedules.Store
-	TradeLines           tradelines.Service
-	Collections          collections.Service
-	Disputes             disputes.Service
-	Documents            *documents.Store
-	DocumentScanner      documents.Scanner
-	Relationships        relationships.Service
-	Support              *support.Store
-	Operations           operations.Service
-	Reports              *reports.Store
-	Corrections          corrections.Service
-	Readiness            readiness.Report
-	Metrics              *observability.Store
-	Tracer               *observability.Tracer
-	Notifications        *notifications.Store
-	WhatsApp             *whatsapp.Handler
-	Outbox               *outbox.Store
-	PlatformOps          *platformops.Store
-	UserControl          *usercontrol.Store
-	Feedback             *feedback.Store
+	BusinessPolicies          *businesspolicy.Store
+	policyInitializationError error
+	Mono                      *mono.Client
+	WebhookJobs               *jobs.Client
+	Database                  *db.Pool
+	Persistence               PersistenceStatus
+	Idempotency               idempotency.Service
+	Auth                      auth.Service
+	Organizations             organizations.Service
+	Onboarding                onboarding.Service
+	Audit                     audit.Service
+	Identity                  identity.IdentityProvider
+	Buyers                    buyers.Service
+	Mandates                  mandates.Provider
+	Ledger                    ledger.Service
+	Credit                    credit.Service
+	Payments                  payments.Service
+	PaymentClaims             paymentclaims.Service
+	PaymentClaimsEnabled      bool
+	Schedules                 *schedules.Store
+	TradeLines                tradelines.Service
+	Collections               collections.Service
+	Disputes                  disputes.Service
+	Documents                 *documents.Store
+	DocumentScanner           documents.Scanner
+	Relationships             relationships.Service
+	Support                   *support.Store
+	Operations                operations.Service
+	Reports                   *reports.Store
+	Corrections               corrections.Service
+	Readiness                 readiness.Report
+	Metrics                   *observability.Store
+	Tracer                    *observability.Tracer
+	Notifications             *notifications.Store
+	WhatsApp                  *whatsapp.Handler
+	Outbox                    *outbox.Store
+	PlatformOps               *platformops.Store
+	UserControl               *usercontrol.Store
+	Feedback                  *feedback.Store
 }
 
 // PersistenceStatus describes which runtime boundaries are actually backed
@@ -101,7 +111,7 @@ type PersistenceStatus struct {
 // implementations for every aggregate and the transactional outbox.
 func (r *Runtime) DurableDomainReady() bool {
 	return r != nil && r.Persistence.DatabaseConfigured &&
-		r.Persistence.AuthDurable && r.Persistence.LedgerDurable && r.Persistence.AuditDurable &&
+		r.policyInitializationError == nil && r.Persistence.AuthDurable && r.Persistence.LedgerDurable && r.Persistence.AuditDurable &&
 		r.Persistence.IdempotencyDurable && r.Persistence.DomainAggregatesDurable
 }
 
@@ -117,6 +127,18 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			identityProvider = provider
 		}
 	}
+	var monoClient *mono.Client
+	var webhookJobs *jobs.Client
+	if database != nil {
+		webhookJobs, _ = jobs.NewEnqueueClient(database.Raw())
+		if (cfg.MonoSweepEnabled || cfg.CollectionProvider == "mono-sweep") && cfg.Environment != "production" && strings.HasPrefix(cfg.MonoSecretKey, "test_sk_") {
+			monoClient, _ = mono.New(mono.DefaultBaseURL, cfg.MonoSecretKey, cfg.MonoWebhookSecret, cfg.MonoRedirectURL, cfg.PartialSweepEnabled, func(ctx context.Context, userID, businessID string) (string, error) {
+				var reference string
+				err := database.Raw().QueryRow(ctx, `SELECT provider_customer_reference FROM app.provider_customer_bindings WHERE provider='mono-sweep' AND buyer_user_id=$1::uuid AND buyer_business_id=$2::uuid`, userID, businessID).Scan(&reference)
+				return reference, err
+			})
+		}
+	}
 	mandateProvider := mandates.NewMockProvider()
 	var mandateRuntime mandates.Provider = mandateProvider
 	if database != nil {
@@ -127,13 +149,26 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			}
 		}
 	}
+	if cfg.CollectionProvider == "mono-sweep" {
+		mandateRuntime = mandates.NewUnavailableProvider("mono-sweep")
+	}
+	if monoClient != nil {
+		if !cfg.MonoSweepEnabled {
+			monoClient = monoClient.ReconciliationOnly()
+		}
+		mandateRuntime = mandates.NewPostgresProviderWithRemote(database.Raw(), monoClient)
+	}
 	var outboxStore *outbox.Store
 	var platformOpsStore *platformops.Store
+	var policies *businesspolicy.Store
+	var policyError error
 	feedbackStore := feedback.NewStore()
 	var ledgerStore ledger.Service = ledger.NewStore()
 	if database != nil {
 		outboxStore = outbox.NewStore(database.Raw())
 		platformOpsStore = platformops.NewStore(database.Raw())
+		policies = businesspolicy.NewStore(database.Raw(), cfg)
+		policyError = policies.ValidateStartup(context.Background())
 		feedbackStore = feedback.NewPostgresStore(database.Raw())
 		ledgerStore = ledger.NewPostgresStoreWithOutbox(database.Raw(), outboxStore)
 	}
@@ -189,10 +224,10 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			return
 		}
 		if request.ScheduleType == "one_time" || request.ScheduleType == "" {
-			_, _, _ = scheduleStore.Create(schedules.CreateInput{ObligationID: obligation.ID, PrincipalKobo: obligation.PrincipalKobo, ScheduleType: schedules.TypeEqual, Count: 1, StartDate: startDate, DueHour: request.CollectionAt.In(location).Hour(), DueMinute: request.CollectionAt.In(location).Minute(), Timezone: "Africa/Lagos", GraceHours: request.GraceHours, Cadence: schedules.CadenceCustom, AllocationPolicy: "due_date_order"})
+			_, _, _ = scheduleStore.Create(schedules.CreateInput{FirstCollectionAt: request.CollectionAt, ObligationID: obligation.ID, PrincipalKobo: obligation.PrincipalKobo, ScheduleType: schedules.TypeEqual, Count: 1, StartDate: startDate, DueHour: request.CollectionAt.In(location).Hour(), DueMinute: request.CollectionAt.In(location).Minute(), Timezone: "Africa/Lagos", GraceHours: request.GraceHours, Cadence: schedules.CadenceCustom, AllocationPolicy: "due_date_order"})
 			return
 		}
-		input := schedules.CreateInput{ObligationID: obligation.ID, PrincipalKobo: obligation.PrincipalKobo, ScheduleType: request.ScheduleType, Count: request.ScheduleCount, StartDate: startDate, DueHour: request.CollectionAt.In(location).Hour(), DueMinute: request.CollectionAt.In(location).Minute(), Timezone: "Africa/Lagos", GraceHours: request.GraceHours, Cadence: request.ScheduleCadence, MonthEndPolicy: request.MonthEndPolicy, AllocationPolicy: "due_date_order"}
+		input := schedules.CreateInput{FirstCollectionAt: request.CollectionAt, ObligationID: obligation.ID, PrincipalKobo: obligation.PrincipalKobo, ScheduleType: request.ScheduleType, Count: request.ScheduleCount, StartDate: startDate, DueHour: request.CollectionAt.In(location).Hour(), DueMinute: request.CollectionAt.In(location).Minute(), Timezone: "Africa/Lagos", GraceHours: request.GraceHours, Cadence: request.ScheduleCadence, MonthEndPolicy: request.MonthEndPolicy, AllocationPolicy: "due_date_order"}
 		for _, item := range request.CustomScheduleItems {
 			due, err := time.ParseInLocation("2006-01-02", item.DueDate, location)
 			if err != nil {
@@ -206,11 +241,14 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	var creditPostgres *credit.PostgresStore
 	if database != nil {
 		creditPostgres = credit.NewPostgresStore(database.Raw(), creditStore)
+		if cfg.DeemedAcceptanceMinHours > 0 {
+			creditPostgres.SetDeemedAcceptanceNotice(time.Duration(cfg.DeemedAcceptanceMinHours) * time.Hour)
+		}
 		creditRuntime = creditPostgres
 	}
 	tradeLineStore.SetActivationHandler(func(input tradelines.ActivationInput) (string, error) {
 		view, _, err := creditRuntime.ActivateTradeLineDrawdown(credit.TradeLineActivationInput{
-			DrawdownID: input.Drawdown.ID, TradeLineID: input.Line.ID,
+			FeeTerms: input.Drawdown.FeeTerms.Clone(), DrawdownID: input.Drawdown.ID, TradeLineID: input.Line.ID,
 			SupplierOrganizationID: input.Line.SupplierOrganizationID,
 			BuyerUserID:            input.Line.BuyerUserID, BuyerBusinessID: input.Line.BuyerBusinessID,
 			MandateID: input.Line.MandateID, PrincipalKobo: input.Drawdown.PrincipalKobo,
@@ -234,7 +272,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	if tradeLinePostgres != nil && creditPostgres != nil {
 		tradeLinePostgres.SetTransactionalActivationHandler(func(ctx context.Context, tx pgx.Tx, input tradelines.ActivationInput) (string, func(), error) {
 			view, _, finalize, err := creditPostgres.ActivateTradeLineDrawdownTx(ctx, tx, credit.TradeLineActivationInput{
-				DrawdownID: input.Drawdown.ID, TradeLineID: input.Line.ID,
+				FeeTerms: input.Drawdown.FeeTerms.Clone(), DrawdownID: input.Drawdown.ID, TradeLineID: input.Line.ID,
 				SupplierOrganizationID: input.Line.SupplierOrganizationID,
 				BuyerUserID:            input.Line.BuyerUserID, BuyerBusinessID: input.Line.BuyerBusinessID,
 				MandateID: input.Line.MandateID, PrincipalKobo: input.Drawdown.PrincipalKobo,
@@ -261,7 +299,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			if err != nil {
 				return "", nil, err
 			}
-			if _, _, err := scheduleStore.CreateTx(ctx, tx, schedules.CreateInput{ObligationID: view.Obligation.ID, PrincipalKobo: view.Obligation.PrincipalKobo, ScheduleType: schedules.TypeEqual, Count: 1, StartDate: startDate, DueHour: view.Request.CollectionAt.In(location).Hour(), DueMinute: view.Request.CollectionAt.In(location).Minute(), Timezone: "Africa/Lagos", GraceHours: view.Request.GraceHours, Cadence: schedules.CadenceCustom, AllocationPolicy: "due_date_order"}); err != nil {
+			if _, _, err := scheduleStore.CreateTx(ctx, tx, schedules.CreateInput{FirstCollectionAt: view.Request.CollectionAt, ObligationID: view.Obligation.ID, PrincipalKobo: view.Obligation.PrincipalKobo, ScheduleType: schedules.TypeEqual, Count: 1, StartDate: startDate, DueHour: view.Request.CollectionAt.In(location).Hour(), DueMinute: view.Request.CollectionAt.In(location).Minute(), Timezone: "Africa/Lagos", GraceHours: view.Request.GraceHours, Cadence: schedules.CadenceCustom, AllocationPolicy: "due_date_order"}); err != nil {
 				return "", nil, err
 			}
 			return view.Obligation.ID, finalize, nil
@@ -282,7 +320,14 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		}
 		return scheduleStore.ReverseAllocations(converted)
 	}
-	memoryPaymentStore := payments.NewStoreWithAllocator(ledgerStore, creditRuntime.PaymentSnapshot, creditRuntime.ApplyPayment, allocation, reallocate)
+	applyPayment := func(id string, delta ledger.Money) error {
+		apply := func() error { return creditRuntime.ApplyPayment(id, delta) }
+		if memory, ok := tradeLineStore.(*tradelines.Store); ok {
+			return memory.ApplyObligationDelta(id, delta, apply)
+		}
+		return apply()
+	}
+	memoryPaymentStore := payments.NewStoreWithAllocator(ledgerStore, creditRuntime.PaymentSnapshot, applyPayment, allocation, reallocate)
 	memoryPaymentStore.SetCollectedMarker(scheduleStore.MarkCollected)
 	memoryPaymentStore.SetCollectedReversalMarker(scheduleStore.ReverseCollected)
 	var paymentStore payments.Service = memoryPaymentStore
@@ -311,7 +356,23 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		}
 		return disputes.ObligationSnapshot{OutstandingKobo: state.OutstandingKobo, SupplierOrganizationID: state.SupplierOrganizationID, BuyerUserID: state.BuyerUserID}, nil
 	}
-	var disputeStore disputes.Service = disputes.NewStore(disputeSnapshot, ledgerStore, creditRuntime.ApplyAdjustment)
+	applyAdjustment := func(id string, amount ledger.Money, resolvingDispute bool) error {
+		if amount <= 0 {
+			return fmt.Errorf("adjustment must be positive")
+		}
+		apply := func() error {
+			snapshot, err := creditRuntime.PaymentSnapshot(id)
+			if err != nil {
+				return err
+			}
+			return scheduleStore.ReducePrincipal(id, snapshot.OutstandingKobo, amount, resolvingDispute, func() error { return creditRuntime.ApplyPayment(id, -amount) })
+		}
+		if memory, ok := tradeLineStore.(*tradelines.Store); ok {
+			return memory.ApplyObligationDelta(id, -amount, apply)
+		}
+		return fmt.Errorf("durable adjustments require a database transaction")
+	}
+	var disputeStore disputes.Service = disputes.NewStore(disputeSnapshot, ledgerStore, func(id string, amount ledger.Money) error { return applyAdjustment(id, amount, true) })
 	if database != nil {
 		var invalidate func(string)
 		if durableCredit, ok := creditRuntime.(*credit.PostgresStore); ok {
@@ -319,7 +380,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		}
 		disputeStore = disputes.NewPostgresStore(database.Raw(), invalidate)
 	}
-	var operationStore operations.Service = operations.NewStore(ledgerStore, creditRuntime.ApplyAdjustment)
+	var operationStore operations.Service = operations.NewStore(ledgerStore, func(id string, amount ledger.Money) error { return applyAdjustment(id, amount, false) })
 	if database != nil {
 		var invalidate func(string)
 		if durableCredit, ok := creditRuntime.(*credit.PostgresStore); ok {
@@ -327,25 +388,37 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		}
 		operationStore = operations.NewPostgresStore(database.Raw(), outboxStore, invalidate)
 	}
-	reportStore := reports.NewStore(reports.Source{SupplierViews: creditRuntime.ListForSupplier, BuyerViews: creditRuntime.ListForBuyer, Payments: paymentStore.List, Schedule: scheduleStore.GetForObligation, Disputes: disputeStore.ListForObligation})
+	feeWaivers := func(org string) map[string]ledger.Money {
+		result := map[string]ledger.Money{}
+		for _, action := range operationStore.ListForOrganization(org) {
+			if action.ActionType == "fee_waiver" {
+				result[action.ObligationID] += action.AmountKobo
+			}
+		}
+		return result
+	}
+	reportStore := reports.NewStore(reports.Source{FeeWaivers: feeWaivers, SupplierViews: creditRuntime.ListForSupplier, BuyerViews: creditRuntime.ListForBuyer, Payments: paymentStore.List, Schedule: scheduleStore.GetForObligation, Disputes: disputeStore.ListForObligation})
 	if database != nil {
 		reportStore = reports.NewPostgresStore(database.Raw(), reports.Source{SupplierViews: creditRuntime.ListForSupplier, BuyerViews: creditRuntime.ListForBuyer, Payments: paymentStore.List, Schedule: scheduleStore.GetForObligation, Disputes: disputeStore.ListForObligation})
 	}
 	var correctionStore corrections.Service = corrections.NewStore()
 	var auditStore audit.Service = audit.NewStore()
 	var idempotencyStore idempotency.Service = idempotency.NewMemoryStore()
-	var authStore auth.Service = auth.NewStore(cfg.TokenHashKey)
+	sessionKey := runtimeDomainKey(cfg.SessionSigningKey, cfg.TokenHashKey, "sessions")
+	otpKey := runtimeDomainKey(cfg.OTPHMACKey, cfg.TokenHashKey, "otp")
+	fieldKey := runtimeDomainKey(cfg.FieldEncryptionKey, cfg.TokenHashKey, "field-encryption:"+cfg.FieldEncryptionKeyID)
+	var authStore auth.Service = auth.NewStoreWithKeys(sessionKey, otpKey)
 	var organizationStore organizations.Service = organizations.NewStore()
 	var onboardingStore onboarding.Service = onboarding.NewStore()
-	var buyerStore buyers.Service = buyers.NewStore(cfg.TokenHashKey, identityProvider)
+	var buyerStore buyers.Service = buyers.NewStore(runtimeDomainKey(fieldKey, "", "buyers"), identityProvider)
 	allowedIndustries := csvSet(cfg.PilotAllowedIndustries)
 	if database != nil {
 		auditStore = audit.NewPostgresStore(database.Raw())
 		idempotencyStore = idempotency.NewPostgresStore(database.Raw())
-		authStore = auth.NewPostgresStore(database.Raw(), cfg.TokenHashKey)
-		organizationStore = organizations.NewPostgresStore(database.Raw(), cfg.TokenHashKey)
+		authStore = auth.NewPostgresStoreWithKeys(database.Raw(), sessionKey, otpKey, runtimeDomainKey(fieldKey, "", "auth"))
+		organizationStore = organizations.NewPostgresStore(database.Raw(), runtimeDomainKey(fieldKey, "", "organizations"))
 		onboardingStore = onboarding.NewPostgresStore(database.Raw())
-		buyerStore = buyers.NewPostgresStore(database.Raw(), cfg.TokenHashKey, identityProvider)
+		buyerStore = buyers.NewPostgresStore(database.Raw(), runtimeDomainKey(fieldKey, "", "buyers"), identityProvider)
 		correctionStore = corrections.NewPostgresStore(database.Raw())
 	}
 	// Apply pilot guards after selecting the runtime adapter so a durable
@@ -404,11 +477,11 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		documentStore = documents.NewPostgresStore(database.Raw(), objectStore)
 		supportStore = support.NewPostgresStore(database.Raw())
 	}
-	notificationStore := notifications.NewStore(cfg.TokenHashKey)
-	userControlStore := usercontrol.NewStore(cfg.TokenHashKey)
+	notificationStore := notifications.NewStore(runtimeDomainKey(cfg.TokenHashKey, sessionKey, "notifications"))
+	userControlStore := usercontrol.NewStore(runtimeDomainKey(cfg.TokenHashKey, sessionKey, "user-control"))
 	if database != nil {
-		notificationStore = notifications.NewPostgresStore(database.Raw(), cfg.TokenHashKey)
-		userControlStore = usercontrol.NewPostgresStore(database.Raw(), cfg.TokenHashKey)
+		notificationStore = notifications.NewPostgresStore(database.Raw(), runtimeDomainKey(cfg.TokenHashKey, sessionKey, "notifications"))
+		userControlStore = usercontrol.NewPostgresStore(database.Raw(), runtimeDomainKey(cfg.TokenHashKey, sessionKey, "user-control"))
 	}
 	notificationStore.SetBaseURL(cfg.PublicBaseURL)
 	if cfg.Environment == "development" {
@@ -429,11 +502,12 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			}
 		}
 	}
-	whatsAppHandler := whatsapp.NewHandler(cfg.TokenHashKey)
+	whatsAppKey := runtimeDomainKey(cfg.TokenHashKey, sessionKey, "whatsapp-webhook")
+	whatsAppHandler := whatsapp.NewHandler(whatsAppKey)
 	if database != nil {
-		whatsAppHandler = whatsapp.NewPostgresHandler(database.Raw(), cfg.TokenHashKey)
+		whatsAppHandler = whatsapp.NewPostgresHandler(database.Raw(), whatsAppKey)
 	}
-	var baseCollectionProvider collections.Provider = collections.NewMockProvider(cfg.TokenHashKey)
+	var baseCollectionProvider collections.Provider = collections.NewMockProvider(runtimeDomainKey(cfg.TokenHashKey, sessionKey, "mock-collections"))
 	collectionEnabled := cfg.Environment == "development" && !cfg.RealCollections
 	if cfg.Environment != "development" && cfg.RealCollections {
 		if connector, err := collections.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken, cfg.CollectionWebhookSecret); err == nil {
@@ -448,24 +522,50 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			}
 		}
 	}
+	if cfg.MonoSweepEnabled || cfg.CollectionProvider == "mono-sweep" {
+		collectionEnabled = false
+	}
+	if monoClient != nil {
+		baseCollectionProvider = monoClient
+		collectionEnabled = cfg.MonoSweepEnabled
+	}
 	collectionProvider := collections.NewResilientProvider(baseCollectionProvider, 3, time.Minute)
 	collectionSnapshot := func(obligationID string) (collections.ObligationSnapshot, error) {
 		state, err := creditRuntime.CollectionState(obligationID)
 		if err != nil {
 			return collections.ObligationSnapshot{}, err
 		}
-		blocked, _ := disputeStore.BlockedAmount(obligationID)
+		if state.MandateReference != "" {
+			mandate, lookupErr := mandateRuntime.GetMandate(context.Background(), state.MandateReference)
+			if lookupErr != nil {
+				return collections.ObligationSnapshot{}, lookupErr
+			}
+			state.MandateActive = mandate.Status == mandates.Active && (mandate.StartsAt.IsZero() || !time.Now().Before(mandate.StartsAt)) && (mandate.EndsAt.IsZero() || time.Now().Before(mandate.EndsAt))
+			if monoClient != nil && mandate.PartialRecovery && !cfg.PartialSweepEnabled {
+				state.CollectionEnabled = false
+			}
+		}
+		blocked, disputeErr := disputeStore.BlockedAmount(obligationID)
+		if disputeErr != nil {
+			return collections.ObligationSnapshot{}, disputeErr
+		}
 		claimHold := paymentClaimStore.ActiveHold(context.Background(), obligationID, time.Now().UTC())
 		_, supplierReadiness, readinessErr := onboardingStore.Get(state.SupplierOrganizationID)
 		if readinessErr != nil || !supplierReadiness.Ready {
 			state.CollectionEnabled = false
 		}
 		if platformOpsStore != nil {
-			buyerHeld, _ := platformOpsStore.ActiveHold(context.Background(), "buyer", state.BuyerUserID, "collection")
-			supplierHeld, _ := platformOpsStore.ActiveHold(context.Background(), "supplier", state.SupplierOrganizationID, "collection")
+			buyerHeld, holdErr := platformOpsStore.ActiveHold(context.Background(), "buyer", state.BuyerUserID, "collection")
+			if holdErr != nil {
+				return collections.ObligationSnapshot{}, holdErr
+			}
+			supplierHeld, holdErr := platformOpsStore.ActiveHold(context.Background(), "supplier", state.SupplierOrganizationID, "collection")
+			if holdErr != nil {
+				return collections.ObligationSnapshot{}, holdErr
+			}
 			state.ComplianceHold = state.ComplianceHold || buyerHeld || supplierHeld
 		}
-		return collections.ObligationSnapshot{ID: state.ID, BuyerUserID: state.BuyerUserID, Currency: state.Currency, Active: state.Active, OutstandingKobo: state.OutstandingKobo, MandateActive: state.MandateActive, MandateRemainingKobo: state.MandateRemainingKobo, CollectionEnabled: state.CollectionEnabled, ComplianceHold: state.ComplianceHold, BuyerPaymentHold: state.BuyerPaymentHold, BuyerPaymentHoldKobo: claimHold, ProviderSupported: state.ProviderSupported, DisputedBlockedKobo: blocked, Version: state.Version}, nil
+		return collections.ObligationSnapshot{ID: state.ID, BuyerUserID: state.BuyerUserID, Currency: state.Currency, Active: state.Active, CollectionPolicy: state.CollectionPolicy, OutstandingKobo: state.OutstandingKobo, MandateActive: state.MandateActive, MandateReference: state.MandateReference, MandateRemainingKobo: state.MandateRemainingKobo, CollectionEnabled: state.CollectionEnabled, ComplianceHold: state.ComplianceHold, BuyerPaymentHold: state.BuyerPaymentHold, BuyerPaymentHoldKobo: claimHold, ProviderSupported: state.ProviderSupported, DisputedBlockedKobo: blocked, Version: state.Version}, nil
 	}
 	collectionDue := func(obligationID string, now time.Time) (ledger.Money, error) {
 		return scheduleStore.CollectionTarget(obligationID, now)
@@ -480,13 +580,41 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	}
 	var collectionRuntime collections.Service = collectionEngine
 	if database != nil {
-		collectionRuntime = collections.NewPostgresEngine(database.Raw(), collectionEngine)
+		pgCollections := collections.NewPostgresEngine(database.Raw(), collectionEngine)
+		if cfg.RealCollections || cfg.MonoSweepEnabled {
+			delay := cfg.CollectionNoticeMinHours
+			if delay < 1 {
+				delay = 24
+			}
+			pgCollections.RequirePriorNotice(time.Duration(delay) * time.Hour)
+		}
+		collectionRuntime = pgCollections
 	}
 	relationshipStore := relationships.Service(relationships.NewStore())
 	if database != nil {
 		relationshipStore = relationships.NewPostgresStore(database.Raw())
 	}
+	notificationStore.SetReminderConsent(relationshipStore.AllowsReminders)
+	userControlStore.SetRecoveryDelivery(func(ctx context.Context, request usercontrol.RecoveryRequest, token string) error {
+		user, err := authStore.UserByID(request.TargetUserID)
+		if err != nil {
+			return err
+		}
+		destination := user.Email
+		if request.RequestedChannel == "phone" {
+			destination = user.Phone
+		}
+		link := ""
+		if token != "" {
+			link = strings.TrimRight(cfg.PublicBaseURL, "/") + "/recover?request=" + request.ID + "#token=" + token
+		}
+		return notificationStore.SendRecoveryInstructions(ctx, destination, request.RequestedChannel, link)
+	})
+	if memory, ok := authStore.(*auth.Store); ok {
+		userControlStore.SetRecoveryReset(memory.ResetAfterRecovery)
+	}
 	return &Runtime{
+		Mono: monoClient, WebhookJobs: webhookJobs,
 		Database: database,
 		Persistence: PersistenceStatus{
 			DatabaseConfigured:      database != nil,
@@ -531,8 +659,9 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		WhatsApp:             whatsAppHandler,
 		Outbox:               outboxStore,
 		PlatformOps:          platformOpsStore,
-		UserControl:          userControlStore,
-		Feedback:             feedbackStore,
+		BusinessPolicies:     policies, policyInitializationError: policyError,
+		UserControl: userControlStore,
+		Feedback:    feedbackStore,
 	}
 }
 
@@ -545,4 +674,17 @@ func csvSet(value string) map[string]bool {
 		}
 	}
 	return result
+}
+
+func runtimeDomainKey(primary, fallback, domain string) string {
+	key := strings.TrimSpace(primary)
+	if key == "" {
+		key = strings.TrimSpace(fallback)
+	}
+	if key == "" {
+		key = "development-only-change-me"
+	}
+	mac := hmac.New(sha256.New, []byte(key))
+	_, _ = mac.Write([]byte(domain))
+	return hex.EncodeToString(mac.Sum(nil))
 }

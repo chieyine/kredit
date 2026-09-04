@@ -14,17 +14,17 @@ import (
 )
 
 type Event struct {
-	ID             string
-	At             time.Time
-	ActorUserID    string
-	OrganizationID string
-	Action         string
-	ResourceType   string
-	ResourceID     string
-	Outcome        string
-	RequestID      string
-	Severity       string
-	Metadata       map[string]string
+	ID             string            `json:"id"`
+	At             time.Time         `json:"created_at"`
+	ActorUserID    string            `json:"actor_user_id"`
+	OrganizationID string            `json:"organization_id"`
+	Action         string            `json:"action"`
+	ResourceType   string            `json:"resource_type"`
+	ResourceID     string            `json:"resource_id"`
+	Outcome        string            `json:"outcome"`
+	RequestID      string            `json:"request_id"`
+	Severity       string            `json:"severity"`
+	Metadata       map[string]string `json:"metadata"`
 }
 
 type Store struct {
@@ -152,7 +152,7 @@ func (s *PostgresStore) ListForOrganization(organizationID string) []Event {
 		return nil
 	}
 	rows, err := s.pool.Query(context.Background(), `
-		SELECT id::text, occurred_at, COALESCE(actor_user_id::text,''), COALESCE(organization_id::text,''), action, COALESCE(resource_type,''), COALESCE(resource_id,''), outcome, request_id, severity, metadata
+		SELECT id::text, occurred_at, COALESCE(actor_user_id::text,''), COALESCE(organization_id::text,''), action, COALESCE(resource_type,''), COALESCE(resource_id,''), outcome, COALESCE(request_id,''), severity, metadata
 		FROM app.audit_events WHERE organization_id = $1::uuid ORDER BY occurred_at DESC`, organizationID)
 	if err != nil {
 		return nil

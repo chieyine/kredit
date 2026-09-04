@@ -1,0 +1,619 @@
+file	verification	review_scope
+.dockerignore	Inventory only; no individual behavioural assurance	No specific manual-review claim
+.env.example	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+.github/workflows/ci.yml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+.gitignore	Inventory only; no individual behavioural assurance	No specific manual-review claim
+.go-version	Inventory only; no individual behavioural assurance	No specific manual-review claim
+.golangci.yml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+.node-version	Inventory only; no individual behavioural assurance	No specific manual-review claim
+.pnpm-store/v11/index.db	Inventory only; no individual behavioural assurance	No specific manual-review claim
+.pnpm-version	Inventory only; no individual behavioural assurance	No specific manual-review claim
+CHANGELOG.md	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+IMPLEMENTATION_PLAN.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+IMPLEMENTATION_STATUS.md	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+README.local.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+README.md	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+SECURITY.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+Taskfile.yml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+api/generated/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+api/openapi.yaml	YAML syntax parsed; no deployed-environment assurance	Modified in current work; see review record for scope
+cmd/api/main.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/api/main_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/configcheck/main.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/configcheck/main_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/migrate/main.go	Go package tests / compilation and vet (integration build tags also exercised)	Guarded migration rollback
+cmd/migrate/main_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/provider-simulator/main.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/provider-simulator/main_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/reconcile/main.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/reconcile/main_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/seed/main.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/seed/main_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+cmd/worker/main.go	Go package tests / compilation and vet (integration build tags also exercised)	Notification dispatcher and recurring work
+cmd/worker/main_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+db/generated/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/migrations/001_initial.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/002_milestone1_auth_org.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/003_milestone2_buyers_identity.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/004_milestone3_credit_ledger.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/005_milestone4_payments.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/006_milestone5_schedules.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/007_milestone6_trade_lines.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/008_milestone7_collections.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/009_milestone8_disputes_operations.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/010_milestone9_notifications_whatsapp.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/011_milestone10_reporting_history.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/012_milestone11_provider_adapter.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/013_milestone12_release_readiness.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/014_river_jobs_schema.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/015_missing_domain_tables.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/016_financial_core_hardening.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/017_worker_operations.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/018_security_hardening.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/019_runtime_role_policies.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/020_auth_persistence_primitives.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/021_organization_persistence_primitives.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/022_network_and_mandates.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/023_buyer_persistence_primitives.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/024_credit_aggregate_snapshots.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/025_mandate_lookup_function.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/026_mandate_lookup_owner.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/027_credit_snapshot_tenant_functions.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/028_outbox_processing_lease.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/029_runtime_domain_repository_policies.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/030_schedule_repository_runtime_policy.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/031_atomic_payment_repository.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/032_supplier_customer_directory.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/033_fix_ledger_balance_trigger.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/034_trade_line_runtime_policy.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/035_collection_aggregate_repository.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/036_corrections_runtime_policy.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/037_dispute_operation_runtime_policy.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/038_notification_delivery_repository.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/039_analytics_runtime_policy.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/040_messaging_runtime_policy.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/041_notification_delivery_recovery.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/042_platform_operations_roles.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/043_fix_auth_user_upsert_ambiguity.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/044_payment_sources_and_claims.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/045_trade_line_mandate_integrity.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/046_trade_line_drawdown_lifecycle.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/047_supplier_onboarding_readiness.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/048_user_control_and_privacy.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/049_operations_controls.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/050_product_analytics.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/051_analytics_contract_completion.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/052_sweep_collection_safety.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/053_payment_reversal_integrity.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/054_collection_eligibility_lock.sql	Local migration chain through 054; 054 rollback/reapply checked	No specific manual-review claim
+db/migrations/055_durable_financial_notices.sql	Applied and rollback/reapply checked in disposable PostgreSQL	Added/updated during direct completion work; see code-completion-2026-09-02.md
+db/migrations/056_financial_reconciliation.sql	Applied and rollback/reapply checked in disposable PostgreSQL	Added/updated during direct completion work; see code-completion-2026-09-02.md
+db/migrations/057_collection_notice_delivery.sql	Applied and rollback/reapply checked in disposable PostgreSQL	Added/updated during direct completion work; see code-completion-2026-09-02.md
+db/migrations/058_operations_intent_integrity.sql	Applied and rollback/reapply checked in disposable PostgreSQL	Added/updated during direct completion work; see code-completion-2026-09-02.md
+db/migrations/059_adjustment_notification_evidence.sql	Applied and rollback/reapply checked in disposable PostgreSQL	Added/updated during direct completion work; see code-completion-2026-09-02.md
+db/migrations/060_provider_reversal_review.sql	Applied and rollback/reapply checked in disposable PostgreSQL	Added/updated during direct completion work; see code-completion-2026-09-02.md
+db/migrations/061_business_policies.sql	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+db/migrations/062_policy_enforcement_and_fee_terms.sql	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+db/migrations/063_preserve_existing_commitments.sql	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+db/queries/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/audit.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/auth.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/buyers.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/collections.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/credit.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/disputes.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/notifications.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/organizations.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/payments.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/provider_adapter.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/release_readiness.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/reports.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/schedules.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/queries/trade_lines.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+db/seeds/001_demo.sql	Executed twice by integration suite	No specific manual-review claim
+docker-compose.yml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+docs/adr/0001-modular-monolith.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/adr/0002-financial-source-of-truth.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/adr/0003-provider-neutral-identity.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/adr/0004-mono-sweep-collection-boundary.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/adr/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/api/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/api/openapi.yaml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+docs/compliance/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/compliance/data-inventory.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/compliance/data-inventory.tsv	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+docs/data-map.md	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+docs/operations/observability.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/operations/persistence-migration.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/operations/provider-adapter.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/operations/readme-conformance.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/operations/readme-gap-audit.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/analytics-event-catalog.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/interface-copy.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/open-questions.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/pilot-scorecard.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/readme-completion-plan.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/readme-completion-traceability.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/wave0-contracts.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/workstream-evidence.tsv	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/product/world-class-product-standard.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/release/certification-report.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/release/go-live-runbook.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/release/readiness-checklist.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/release/wave5-accessibility-evidence.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/release/wave6-analytics-evidence.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/README.md	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+docs/runbooks/backup-restore.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/break-glass-access.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/business-settings.md	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+docs/runbooks/dispute-adjustment.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/failed-jobs.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/failed-webhooks.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/financial-operations.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/mandate-cancellation.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/mono-sweep.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/operations-controls.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/payment-reversal.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/pilot-scorecard.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/production-pilot.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/provider-reconciliation.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/runbooks/worker-operations.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/security/production-security-checklist.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/testing/admin-settings-2026-09-03.md	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+docs/testing/code-completion-2026-09-02.md	Documentation/configuration reviewed for changes; no independent behavioural assurance	Added/updated during direct completion work; see code-completion-2026-09-02.md
+docs/testing/code-review-2026-09-02-files.tsv	Generated file inventory	Review artifact; distinguishes automated checks from focused review
+docs/testing/code-review-2026-09-02.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/testing/mono-sweep-evidence.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+docs/testing/test-matrix.md	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+docs/threat-model.md	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+go.mod	Inventory only; no individual behavioural assurance	No specific manual-review claim
+go.sum	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/containers/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/containers/Dockerfile.api	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/containers/Dockerfile.web	Inventory only; no individual behavioural assurance	Node build output matches runtime COPY
+infra/containers/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/environments/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/environments/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/environments/main.tf	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/environments/outputs.tf	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/environments/variables.tf	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/environments/versions.tf	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/monitoring/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/monitoring/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+infra/monitoring/otel-collector.yaml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+infra/monitoring/prometheus-rules.yaml	YAML syntax parsed; no deployed-environment assurance	Alert names, units, missing financial telemetry
+infra/postgres/roles.sql	Inventory only; no individual behavioural assurance	Runtime ledger, job and migration metadata grants
+internal/access/roles.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/access/roles_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/agreementdocs/document.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/agreementdocs/document_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/audit/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/audit/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/auth/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/auth/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/auth/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/auth/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/auth/target_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/businesspolicy/policy.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/businesspolicy/policy_test.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/businesspolicy/store.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/businesspolicy/store_test.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/buyers/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/buyers/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/buyers/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/buyers/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/collections/adapter.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/adapter_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/audit_regression_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/completion_postgres_test.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/collections/engine.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/engine_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/fee_policy_postgres_test.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/collections/financial_audit_postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/policy.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/provider.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/provider_contract_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/resilient.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/resilient_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/sweep_postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/collections/webhook_provider.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/config/config.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/config/config_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/corrections/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/corrections/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/corrections/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/corrections/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/credit/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/credit/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/credit/reads.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/credit/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/credit/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/db/financial_context.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/db/persistence_contract.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/db/persistence_contract_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/db/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/db/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/disputes/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/disputes/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/disputes/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/disputes/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/documents/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/documents/s3.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/documents/scanner.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/documents/scanner_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/documents/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/documents/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/feedback/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/feedback/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/idempotency/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/idempotency/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/identifier/id.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/identifier/id_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/identity/provider.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/identity/provider_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/identity/safe_result.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/identity/safe_result_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/identity/webhook.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/jobs/client.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/jobs/client_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/jobs/collection_requeue_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/jobs/dead_letter.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/jobs/telemetry_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/ledger/fee_terms.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/ledger/fee_terms_test.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/ledger/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/ledger/reconcile.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/ledger/reconcile_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/ledger/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/ledger/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/mandates/provider.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/mandates/provider_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/mandates/sweep_postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/mandates/unavailable.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/mandates/webhook.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/notifications/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/notifications/receipts.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/notifications/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/notifications/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/notifications/webhook.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/notifications/webhook_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/observability/financial.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/observability/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/observability/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/observability/tracer.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/observability/tracer_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/onboarding/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/onboarding/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/onboarding/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/onboarding/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/operations/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/operations/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/operations/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/operations/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/organizations/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/organizations/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/organizations/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/organizations/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/outbox/dispatcher.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/outbox/dispatcher_postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/outbox/dispatcher_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/outbox/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/paymentclaims/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/paymentclaims/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/paymentclaims/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/paymentclaims/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/payments/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/payments/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/payments/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/payments/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/platform/logging/logging.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/platform/logging/sanitize.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/platform/logging/sanitize_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/platformops/controls.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/platformops/controls_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/platformops/financial_review.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/platformops/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/providers/mono/customer.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/providers/mono/mono.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/providers/mono/mono_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/providers/mono/webhook.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/publictoken/token.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/publictoken/token_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/readiness/readiness.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/readiness/readiness_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/relationships/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/relationships/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/reports/analytics.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/reports/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/reports/snapshot.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/reports/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/reports/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/schedules/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/schedules/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/schedules/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/support/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/support/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/support/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/tradelines/postgres.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/tradelines/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/tradelines/store.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/tradelines/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Domain received focused review; package checks do not imply every line was manually reviewed
+internal/usercontrol/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/usercontrol/store.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/usercontrol/store_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/auth_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/business_policy_handlers.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/web/business_policy_handlers_test.go	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+internal/web/buyer_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/collection_jobs.go	Go package tests / compilation and vet (integration build tags also exercised)	Recurring discovery and complete pagination
+internal/web/completion_handlers_test.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/web/credit_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	Accepted schedules, exact collection/financial actions
+internal/web/dashboard_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/document_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/document_upload_slot_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/feedback_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/financial_reads.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/web/financial_review_handlers.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/web/http_helpers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/idempotency_middleware_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/web/mandate_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/web/milestone1_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/mono_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/mono_runtime_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/notification_receipt_handlers.go	Go package/integration coverage; targeted regression scope in completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+internal/web/notification_recipients.go	Go package tests / compilation and vet (integration build tags also exercised)	Actual user/contact destination resolution
+internal/web/onboarding_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/web/organization_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/web/outbox_notifications.go	Go package tests / compilation and vet (integration build tags also exercised)	Transactional outbox to delivery queue
+internal/web/outbox_notifications_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/payment_claim_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	Atomic claim confirmation caller
+internal/web/platform_operations_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/web/platform_operations_handlers_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/web/relationship_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/reports_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/web/runtime.go	Go package tests / compilation and vet (integration build tags also exercised)	Provider availability, persistence, transaction wiring
+internal/web/runtime_schedule_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/runtime_tradeline_postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/secure_link_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/secure_link_handlers_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/server.go	Go package tests / compilation and vet (integration build tags also exercised)	Current authorization and idempotent response handling
+internal/web/server_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/supplier_onboarding_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/support_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/web/user_control_handlers.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/web/user_control_handlers_test.go	Go package tests / compilation and vet (integration build tags also exercised)	Modified in current work; see review record for scope
+internal/whatsapp/fuzz_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/whatsapp/handler.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/whatsapp/handler_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+internal/whatsapp/postgres_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+package.json	JSON syntax parsed	No specific manual-review claim
+pnpm-lock.yaml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+pnpm-workspace.yaml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+scripts/api-lint.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/backup.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/bootstrap.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/check-tools.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/ci.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/content-audit.mjs	JavaScript syntax only; script not executed	No specific manual-review claim
+scripts/data-inventory-check.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/data-inventory-generate.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/database-safety-test.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/db-check.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/db-reset.sh	Shell syntax; guarded database script tests where applicable	Consistent local reset; explicit environment guard
+scripts/db-rollback.sh	Shell syntax; guarded database script tests where applicable	Real one-step migration rollback
+scripts/dev.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/frontend-api-coverage.mjs	JavaScript syntax only; script not executed	No specific manual-review claim
+scripts/generate.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/implementation-plan-conformance-test.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/implementation-plan-conformance.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/lint.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/load-env-test.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/load-env.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/load-smoke.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/openapi-generate.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/post-deploy-check.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/product-contract-sync.mjs	JavaScript syntax only; script not executed	No specific manual-review claim
+scripts/readme-conformance.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/release-certify.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/repository-audit.mjs	JavaScript syntax only; script not executed	No specific manual-review claim
+scripts/restore-drill.sh	Shell syntax; guarded database script tests where applicable	Checksum and empty-target guards
+scripts/security.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/sqlc-check.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/sqlc-generate.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/test-e2e.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/test-integration.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+scripts/web-test.sh	Shell syntax; guarded database script tests where applicable	No specific manual-review claim
+sqlc.yaml	YAML syntax parsed; no deployed-environment assurance	No specific manual-review claim
+tests/contract/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+tests/contract/provider_contract_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+tests/e2e/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+tests/e2e/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+tests/integration/persistence_test.go	Go package tests / compilation and vet (integration build tags also exercised)	No specific manual-review claim
+tests/load/smoke.js	Inventory only; no individual behavioural assurance	No specific manual-review claim
+tests/performance/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+tests/performance/acceptance.js	Inventory only; no individual behavioural assurance	No specific manual-review claim
+tests/performance/portfolio_queries.sql	Inventory only; no individual behavioural assurance	No specific manual-review claim
+tests/provider-simulators/README.md	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/package.json	JSON syntax parsed	No specific manual-review claim
+web/playwright.config.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/app.css	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/src/app.d.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/app.html	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/src/hooks.server.ts	Svelte/TypeScript and production build	Request body and timeout bounds
+web/src/lib/api/client.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/api/generated/.gitkeep	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/src/lib/blog/articles.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/AgreementSummary.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/AuditTimeline.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/AuthGate.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/BusinessVerificationCard.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/CollectionAttemptCard.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/CommandPalette.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/ConfirmFinancialAction.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/CustomerIdentityCard.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/DateTime.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/DisputeDetail.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/lib/components/DisputePanel.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/DocumentUploader.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/DocumentViewer.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/DueDate.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/EmptyState.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/FeeBreakdown.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/FeedbackPrompt.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/InlineError.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/MandateStatus.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/Money.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/MoneyInput.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/MotionObserver.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/NotificationHistory.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/OutstandingBalance.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/PaymentBreakdown.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/Percentage.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/PortalNav.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/ProtectedActionDialog.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/ReferenceCode.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/RiskFact.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/ScheduleTable.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/ShareActions.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/SiteFooter.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/SiteHeader.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/Skeleton.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/StatusPill.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/StepUpAuthDialog.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/SystemBanner.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/Timeline.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/TradeLineMeter.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/components/WorkspacePage.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/fee-terms.ts	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+web/src/lib/money.ts	Svelte/TypeScript and production build	Exact integer-kobo parsing
+web/src/lib/product-language.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/product-tools.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/seo.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/lib/server/legal-config.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/+error.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/analytics/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/audit/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/cases/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/cases/[id]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/controls/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/diagnostics/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/disputes/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/disputes/[id]/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/admin/jobs/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/money/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/organizations/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/privacy/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/provider-events/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/reconciliation/+page.svelte	Type check; representative browser regressions; see completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+web/src/routes/admin/recovery/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/search/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/settings/+page.svelte	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+web/src/routes/admin/team/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/admin/users/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/activity/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/collections/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/credit/[id]/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/app/credit/new/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/app/customers/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/customers/[id]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/customers/new/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/disputes/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/disputes/[id]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/help/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/notifications/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/onboarding/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/overdue/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/overview/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/payments/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/reports/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/app/settings/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/settings/billing/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/settings/credit-policy/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/app/settings/data/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/settings/notifications/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/settings/privacy/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/settings/security/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/settings/settlement/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/team/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/app/trade-lines/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/app/trade-lines/[id]/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/blog/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/blog/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/blog/[slug]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/blog/[slug]/+page.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/blog/rss.xml/+server.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/blog/topic/[topic]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/blog/topic/[topic]/+page.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer-invitations/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer-invitations/[token]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/credit-requests/[requestID]/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/buyer/disputes/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/disputes/[id]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/history/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/mandates/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/notifications/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/obligations/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/obligations/[id]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/payments/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/permissions/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/requests/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/settings/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/buyer/trade-lines/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/c/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/c/[token]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/c/[token]/+page.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/demo/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/faq/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/for-buyers/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/for-suppliers/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/glossary/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/how-it-works/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/legal/complaints/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/legal/privacy/+page.server.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/legal/privacy/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/legal/terms/+page.server.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/legal/terms/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/pay/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/pay/[token]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/pricing/+page.svelte	Svelte/TypeScript and production build	Modified in current work; see review record for scope
+web/src/routes/receipt/+layout.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/receipt/[public_token]/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/recover/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/robots.txt/+server.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/secure/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/security/+page.svelte	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/routes/sitemap.xml/+server.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/src/service-worker.ts	Svelte/TypeScript and production build	No specific manual-review claim
+web/static/apple-touch-icon.png	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/favicon.svg	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/icon-192.png	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/icon-512.png	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/icon-maskable.svg	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/icon.svg	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/manifest.webmanifest	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/og-source.svg	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/og.jpg	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/static/og.png	Inventory only; no individual behavioural assurance	No specific manual-review claim
+web/svelte.config.js	Inventory only; no individual behavioural assurance	Modified in current work; see review record for scope
+web/tests/access-control.spec.ts	Scenario not executed in this review	No specific manual-review claim
+web/tests/accessibility.spec.ts	Scenario not executed in this review	No specific manual-review claim
+web/tests/admin-section.spec.ts	Scenario not executed in this review	No specific manual-review claim
+web/tests/business-settings.spec.ts	Admin policy implementation; see 2026-09-03 verification record	Policy workflow, financial enforcement or supporting documentation
+web/tests/content-seo.spec.ts	Scenario not executed in this review	No specific manual-review claim
+web/tests/financial-completion.spec.ts	Type check; representative browser regressions; see completion record	Added/updated during direct completion work; see code-completion-2026-09-02.md
+web/tests/health.spec.ts	Scenario not executed in this review	No specific manual-review claim
+web/tests/money.spec.ts	Playwright exact-money test executed	No specific manual-review claim
+web/tests/product-flows.spec.ts	Scenario not executed in this review	No specific manual-review claim
+web/tests/product-quality.spec.ts	Scenario not executed in this review	No specific manual-review claim
+web/tsconfig.json	JSON syntax parsed	No specific manual-review claim
+web/vite.config.ts	Svelte/TypeScript and production build	No specific manual-review claim

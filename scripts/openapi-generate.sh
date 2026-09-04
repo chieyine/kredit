@@ -1,23 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-oapi_codegen="$(command -v oapi-codegen || true)"
-if [[ -z "$oapi_codegen" && -x "./.tmp/bin/oapi-codegen" ]]; then
-  oapi_codegen="./.tmp/bin/oapi-codegen"
-fi
-if [[ -z "$oapi_codegen" ]]; then
-  printf '%s\n' 'oapi-codegen is not installed; OpenAPI generation is configured but skipped.'
-  exit 0
-fi
-
-mkdir -p api/generated web/src/lib/api/generated
-# The HTTP implementation uses the standard library ServeMux. Generate the
-# contract types here; handlers remain explicit and are checked against the
-# same OpenAPI document instead of generating an incompatible Chi server.
-generated_file="$(mktemp)"
-trap 'rm -f "$generated_file"' EXIT
-"$oapi_codegen" -generate types -package generated api/openapi.yaml > "$generated_file"
-sed '/^WARNING: You are using an OpenAPI 3.1.x specification/d' "$generated_file" > api/generated/types.gen.go
+# Go server code and Go types are hand-written; see
+# docs/adr/0005-hand-written-http-and-sql.md. The OpenAPI document stays
+# canonical and is enforced against the implemented routes by
+# scripts/product-contract-sync.mjs. Only the TypeScript client types are
+# generated from it.
+mkdir -p web/src/lib/api/generated
 
 openapi_typescript="$(command -v openapi-typescript || true)"
 if [[ -x ./node_modules/.bin/openapi-typescript ]]; then

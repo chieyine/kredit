@@ -53,10 +53,45 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const headers = new Headers(event.request.headers);
 	headers.delete('host');
 	headers.delete('connection');
-	const method = event.request.method;
-	const body = method === 'GET' || method === 'HEAD' ? undefined : await event.request.arrayBuffer();
+	// The Go API trusts forwarded-client-address headers when the peer is the
+	// private proxy address, which this hop is. Anything the browser supplied
+	// must therefore be discarded and replaced with the address this server
+	// actually observed, or a caller could rotate its rate-limit and OTP-throttle
+	// identity at will by setting the header itself.
+	for (const spoofable of ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'true-client-ip', 'forwarded']) {
+		headers.delete(spoofable);
+	}
 	try {
-		return await fetch(target, { method, headers, body, redirect: 'manual' });
+		const clientAddress = event.getClientAddress();
+		if (clientAddress) headers.set('x-forwarded-for', clientAddress);
+	} catch {
+		// No observable client address (some adapters during prerender); leave the
+		// header absent so the API falls back to the connection address.
+	}
+	const method = event.request.method;
+	try {
+		let body: Uint8Array<ArrayBuffer> | undefined;
+		if (method !== 'GET' && method !== 'HEAD' && event.request.body) {
+			const reader = event.request.body.getReader();
+			const chunks: Uint8Array[] = [];
+			let size = 0;
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				size += value.byteLength;
+				if (size > (event.url.pathname.endsWith('/documents') ? 3 : 2) * 1024 * 1024) {
+					await reader.cancel();
+					return new Response(JSON.stringify({ title: 'Request too large', status: 413 }), {
+						status: 413, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' }
+					});
+				}
+				chunks.push(value);
+			}
+			body = new Uint8Array(size);
+			let offset = 0;
+			for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+		}
+		return await fetch(target, { method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(30_000) });
 	} catch {
 		return new Response(JSON.stringify({ type: 'about:blank', title: 'Service unavailable', status: 503, detail: 'The API is temporarily unavailable.' }), {
 			status: 503,

@@ -6,6 +6,6 @@
 <section class="card">
 	<h2>Confirm action</h2>
 	<p>{action} <strong><Money amountKobo={amountKobo} /></strong>?</p>
-	<p class="muted">Make sure the amount is correct. Nothing will be saved if your internet cuts off.</p>
+	<p class="muted">Make sure the amount is correct. If your connection drops, check the payment history before trying again.</p>
 	<button class="primary" type="button" {disabled} onclick={() => onconfirm?.()}>{action}</button>
 </section>

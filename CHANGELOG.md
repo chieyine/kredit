@@ -1,5 +1,110 @@
 # Changelog
 
+## Unreleased — decision register answered in draft
+
+- Drafted a position for every row of the external decision register, and split
+  the thirteen questions by who can actually answer them: five are questions for
+  Mono, five are the founder's own risk decisions, and three need a Nigerian
+  lawyer to review a draft rather than write one.
+- Recorded that cross-supplier trade history sharing may fall under the Credit
+  Reporting Act 2017, which reserves credit bureau operation to CBN-licensed
+  entities. Sharing is disabled for the pilot while that is answered; buyers are
+  shown only their own history, which loses nothing and defers the risk.
+- Set draft pilot limits, halt thresholds and the operations surface list for a
+  ten-supplier pilot at NGN500,000-2,000,000 per sale.
+- Added the thirteen questions to put to Mono in writing, with the use-case
+  question first: Sweep is written for lenders collecting loans, and Kredit is
+  not the lender.
+
+## Unreleased — product recommendations implemented
+
+- Constrained deemed acceptance, the only path where buyer silence creates a
+  collectable obligation. The window is now three days rather than one, it never
+  applies to a buyer's first trade credit, and it requires an authenticated
+  delivery receipt proving the goods-release notice reached the buyer and sat
+  with them for the full period. Enforced in `internal/credit` and independently
+  by a fail-closed database trigger (migration 070), documented as README
+  section 8.3.1 and business rule 21.
+- Sent the buyer a durable goods-release notice in the same transaction that
+  records the release, stating the deadline and what silence will be taken to
+  mean. No such notice was sent before, on any channel.
+- Added four pilot scorecard measures that answer questions the existing set did
+  not: mandate authorisation drop-off (the buyer proposition), voluntary payment
+  share (the collection-fee incentive conflict), activations from buyer silence
+  (residual wrongful-debit exposure), and manual touches per activated obligation
+  (cost to serve against a one-hundred-basis-point margin).
+- Pre-registered falsifiable pilot halt thresholds in
+  `docs/product/pilot-kill-thresholds.md`. Targets still wait for evidence;
+  stop conditions do not, because a threshold chosen after the data arrives is a
+  rationalisation.
+- Made the operations surface default-deny in production. `ADMIN_SURFACES`
+  enumerates the surfaces a deployment operates; anything unlisted answers 404
+  and is logged, and production refuses to start without the enumeration.
+- Generalised the provider contract suite over a registry of adapters so a
+  second collection adapter is a one-line registration, and added the
+  certification and contingency plan for the single-provider dependency.
+- Assessed cross-supplier trade history sharing in
+  `docs/compliance/dpia-trade-history-sharing.md`, which recommends
+  aggregate-only disclosure and records five outstanding decisions; the flow
+  stays disabled until they are signed.
+
+## Unreleased — audit recommendations implemented
+
+- Enforced the linters the repository already configured: `scripts/ci.sh` now runs `scripts/lint.sh`, which fails closed in CI when `golangci-lint` is absent, and the workflow installs it. `errcheck`, `staticcheck`, `unused` and `ineffassign` previously never ran.
+- Replaced the no-op fuzz gate (`go test ./... -run '^$'` matched nothing) with `scripts/fuzz.sh`, and added fuzz targets for reference parsing, provider webhook parsing past the signature layer, schedule generation, payment allocation, problem-details mapping and phone normalisation.
+- Canonicalised telephone identifiers to E.164 so one subscriber is one account, with a fail-closed backfill that refuses to merge duplicates automatically (migration 067).
+- Added a per-account MFA attempt lock and a session idle deadline alongside the absolute lifetime (migration 068).
+- Gave authentication routes a rate-limit budget shared across API replicas; the in-process limiter alone multiplied the real budget by the replica count and reset on deploy (migration 069).
+- Made the payment list report failure instead of returning an empty history during a database incident.
+- Stopped serving stale credit aggregates from the process-local projection, and bounded that projection so it no longer grows with every request the process has served.
+- Recorded [ADR 0005](docs/adr/0005-hand-written-http-and-sql.md): Go handlers and SQL are hand-written, the OpenAPI document stays the enforced contract, and the orphaned `api/generated`, `db/generated`, `db/queries` and `sqlc` pipeline are removed.
+- Documented the fee rounding direction as the contractual term it is, and fixed problem-detail truncation splitting a UTF-8 rune.
+
+## Unreleased — full-repository code audit fixes
+
+- Indexed activated obligations by their own identifier so payment snapshots, collection state, ownership checks and rehydrated views resolve; a request-keyed index previously hid the obligation from every financial reader.
+- Removed a self-deadlock in the durable auto-activation sweep and made it activate matured requests deterministically.
+- Refused malformed and empty MFA codes and compared them in constant time; an undecodable stored secret previously matched an empty submitted code.
+- Removed modulo bias from generated OTP codes and stopped issuing a clock-derived CSRF token when randomness is unavailable.
+- Added Origin/Sec-Fetch-Site verification and constant-time token comparison to CSRF checks, and stopped the web proxy forwarding client-supplied forwarded-address headers that allowed rate-limit and OTP-throttle evasion.
+- Implemented the documented "last day of month" instalment policy, which previously behaved as "cap" and silently shifted agreed dates.
+- Stopped recording free-text release notes as a waybill number in goods-release evidence.
+- Guarded a nil collection reservation on the successful-debit path, ordered ledger and payment reads deterministically, released a stuck idempotency reservation when a handler panics, and reported supplier onboarding OTP delivery failures.
+- Fixed the Linux CI break in the implementation-plan self-test and reformatted four files so `gofmt -l` is clean.
+
+## Unreleased — admin approvals and operating workflows
+
+- Added a role-scoped approval inbox with ownership and deadlines, independent financial corrections, and buyer-accepted repayment-date amendments.
+- Added specialist admin roles, policy impact previews, exact naira/percentage inputs, named actors, searchable change history and CSV exports.
+- Added operational attention counts/details and preserved original agreement dates alongside current repayment schedules.
+- Added migrations 064–066 and corrected write-offs to update unpaid instalment totals atomically. See docs/runbooks/admin-workflows.md and docs/testing/admin-workflows-2026-09-03.md.
+
+## Unreleased — completion of financial code fixes
+
+- Added consistent financial report snapshots, error-aware financial lists, checked totals and exact money displays.
+- Made financial lifecycle notices transactional and required authenticated prior-notice delivery plus waiting time before real debit submission.
+- Added durable financial metrics and owned reconciliation reviews, including provider reversal and missing-settlement evidence.
+- Bound operations retries to exact intent and validated commands before provider calls; preserved later settlement updates during lookup.
+- Added migrations 055–060, connector receipt/API contracts, an operator review page, and transaction/browser regression coverage. See docs/testing/code-completion-2026-09-02.md.
+
+## Unreleased — direct code review fixes
+
+- Closed stale collection eligibility and claim confirmation races; preserved valid payment reversals and forgiveness during balance rebuilds.
+- Corrected retry identities, late provider results, cancellation races, notification routing/amounts, recurring job deduplication and paginated discovery.
+- Rejected false second-approver assertions and unilateral replacement of accepted schedules; added exact naira parsing, waiver-aware fee reports and truthful repayment history.
+- Corrected new drawdown fee disclosures while preserving accepted legacy hashes, OTP cooldowns, one-time credential replay and the web container build target.
+- Added migrations 053–054 and focused regression tests. See docs/testing/code-review-2026-09-02.md for verification and remaining launch evidence.
+
+## Unreleased — Mono Sweep sandbox backend
+
+- Added a provider-isolated Variable Sweep adapter and transient customer registration with hosted buyer authorization, authoritative activation and supplier-scoped mandate reuse.
+- Separated invoice acceptance from bank authorization and included collection policy in accepted terms.
+- Commit debit reservations before network calls; reconcile unknown outcomes by saved reference; apply partial payments once per attempt and serialize manual payments/shared mandate capacity.
+- Added bounded delayed retries, async authenticated webhook jobs, due/reconciliation workers, internal notices, immutable collection events and migration 052.
+- Restricted persisted identity results to named verification facts; corrected worker lookup/ledger/job permissions and repayment tenant context.
+- Defaulted all Sweep/automatic flags off and reject production activation pending actual Mono sandbox certification. Added local contract, concurrency, crash-recovery and revocation tests.
+
+
 ## Unreleased — world-class product-quality closure
 
 - Added a durable product-quality standard spanning complete journeys,
@@ -238,3 +343,8 @@ All notable user-visible changes will be recorded here.
 - Added Milestone 10 reconciled receivables, ageing and fee reports, CSV exports, buyer factual repayment history without scoring, append-only correction requests and decisions, privacy-safe analytics events, API routes, UI views, and SQL schema.
 - Added Milestone 11 provider-neutral approved-adapter gates, provider capability/status reporting, settlement/reversal state tracking, signed webhook support through adapters, written-approval configuration checks, sandbox contract tests, provider SQL schema, and the operations enablement runbook. Real collection remains disabled by default.
 - Added Milestone 12 production-readiness evidence gates, configurable pilot limits, authenticated readiness and metrics endpoints, backup/restore and k6 load-smoke tooling, optional security/dependency/container scans, race checks, launch checklist, and pilot runbook. Production remains blocked until all gates and durable infrastructure requirements are complete.
+
+### Admin business policies (2026-09-03)
+- Added governed admin settings for collection automation, notices, limits, review flags, correction thresholds and fee rates.
+- Preserved recorded offer rates across future policy changes and used those rates in journals, fee accounting and disclosures.
+- Made ordinary credit receipt activation transactional through schedule creation, and added schema downgrade guards for policy history/custom fee terms.

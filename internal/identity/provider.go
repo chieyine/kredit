@@ -49,6 +49,7 @@ type VerificationSession struct {
 
 type ProviderVerification struct {
 	ProviderID        string
+	SubjectID         string
 	State             string
 	VerificationLevel int
 	Reasons           []string
@@ -171,7 +172,7 @@ func (p *MockProvider) VerifyWebhook(_ context.Context, _ http.Header, body []by
 func (p *MockProvider) create(subjectType, subjectID string, safeResult map[string]string) (VerificationSession, error) {
 	providerID := "mock-" + subjectType + "-" + subjectID
 	now := p.now()
-	verification := ProviderVerification{ProviderID: providerID, State: "verified", VerificationLevel: 2, CompletedAt: now, ExpiresAt: now.Add(365 * 24 * time.Hour), SafeResult: cloneMap(safeResult)}
+	verification := ProviderVerification{ProviderID: providerID, SubjectID: subjectID, State: "verified", VerificationLevel: 2, CompletedAt: now, ExpiresAt: now.Add(365 * 24 * time.Hour), SafeResult: cloneMap(safeResult)}
 	p.mu.Lock()
 	p.cases[providerID] = verification
 	p.mu.Unlock()

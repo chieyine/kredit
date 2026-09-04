@@ -9,10 +9,10 @@ func TestDatabaseURLFromEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("returns a trimmed URL", func(t *testing.T) {
+	t.Run("returns a trimmed worker URL", func(t *testing.T) {
 		const want = "postgres://kredit@localhost/kredit"
 		got, err := databaseURLFromEnv(func(key string) string {
-			if key != "DATABASE_URL" {
+			if key != "RIVER_DATABASE_URL" {
 				t.Fatalf("unexpected environment key %q", key)
 			}
 			return "  " + want + "  "

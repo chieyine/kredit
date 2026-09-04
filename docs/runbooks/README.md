@@ -22,3 +22,7 @@ Available:
 - [Financial and support operations](financial-operations.md)
 - [Protected operations controls](operations-controls.md)
 - [Weekly pilot scorecard review](pilot-scorecard.md)
+
+- [Mono Sweep sandbox setup and certification](mono-sweep.md)
+
+- [Admin approvals, buyer date changes and review ownership](admin-workflows.md)

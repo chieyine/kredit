@@ -43,8 +43,9 @@ tasks:
       - go test -race ./...
 
   test:fuzz:
+    desc: Run every stored fuzz corpus, then bounded randomised fuzzing per target
     cmds:
-      - go test ./... -run '^$'
+      - bash scripts/fuzz.sh
 
   lint:
     cmds:
@@ -102,6 +103,11 @@ tasks:
     cmds:
       - bash scripts/db-check.sh
 
+  db:restore-drill:
+    desc: Verify database backup integrity and point-in-time recovery
+    cmds:
+      - bash scripts/restore-drill.sh
+
   data:inventory:generate:
     cmds:
       - bash scripts/data-inventory-generate.sh
@@ -113,14 +119,6 @@ tasks:
   openapi:generate:
     cmds:
       - bash scripts/openapi-generate.sh
-
-  sqlc:generate:
-    cmds:
-      - bash scripts/sqlc-generate.sh
-
-  sqlc:check:
-    cmds:
-      - bash scripts/sqlc-check.sh
 
   web:check:
     cmds:

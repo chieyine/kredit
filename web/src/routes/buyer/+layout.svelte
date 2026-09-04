@@ -6,7 +6,7 @@
 	let { children } = $props();
 	const links: [string, string][] = [
 		['Home', '/buyer'], ['Sales to check', '/buyer/requests'], ['Money I owe', '/buyer/obligations'],
-		['My limits', '/buyer/trade-lines'], ['My history', '/buyer/history'], ['Transfers I reported', '/buyer/payments'], ['Bank debit', '/buyer/mandates'],
+		['My limits', '/buyer/trade-lines'], ['My history', '/buyer/history'], ['Date changes','/buyer/amendments'], ['Transfers I reported', '/buyer/payments'], ['Bank debit', '/buyer/mandates'],
 		['Message history', '/buyer/notifications'], ['Seller permissions', '/buyer/permissions'],
 		['My settings', '/buyer/settings'], ['Get help', '/legal/complaints']
 	];
@@ -17,7 +17,7 @@
 		['Limits', '/buyer/trade-lines', 'limits']
 	];
 	const mobileMore: [string, string, string][] = [
-		['My history', '/buyer/history', 'Sales and payments'],
+		['My history', '/buyer/history', 'Sales and payments'], ['Date changes','/buyer/amendments','Sales and payments'],
 		['Transfers I reported', '/buyer/payments', 'Sales and payments'],
 		['Bank debit', '/buyer/mandates', 'Sales and payments'],
 		['Message history', '/buyer/notifications', 'Messages and choices'],

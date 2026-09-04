@@ -48,7 +48,7 @@ func (s *MemoryStore) Reserve(_ context.Context, scope, key, requestHash string)
 	defer s.mu.Unlock()
 	index := scope + "\x00" + key
 	if existing, ok := s.records[index]; ok {
-		if !existing.ExpiresAt.IsZero() && !time.Now().UTC().Before(existing.ExpiresAt) {
+		if !existing.CompletedAt.IsZero() && !existing.ExpiresAt.IsZero() && !time.Now().UTC().Before(existing.ExpiresAt) {
 			delete(s.records, index)
 		} else {
 			if existing.RequestHash != requestHash {
@@ -95,7 +95,9 @@ func (s *PostgresStore) Reserve(ctx context.Context, scope, key, requestHash str
 	var record Record
 	var response []byte
 	var completed *time.Time
-	_, _ = s.pool.Exec(ctx, `DELETE FROM app.idempotency_records WHERE scope = $1 AND idempotency_key = $2 AND expires_at <= NOW()`, scope, key)
+	if _, err := s.pool.Exec(ctx, `SELECT app.delete_expired_idempotency_record($1, $2)`, scope, key); err != nil {
+		return Record{}, false, err
+	}
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO app.idempotency_records (scope, idempotency_key, request_hash)
 		VALUES ($1, $2, $3)

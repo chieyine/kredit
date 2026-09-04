@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"kredit/internal/db"
+
 	"kredit/internal/identifier"
 	"kredit/internal/ledger"
 
@@ -29,19 +31,15 @@ func (s *PostgresStore) Open(input OpenInput) (Dispute, error) {
 	if input.ObligationID == "" || input.OpenedBy == "" || input.DisputedAmountKobo <= 0 || strings.TrimSpace(input.Reason) == "" {
 		return Dispute{}, errors.New("obligation, opener, positive disputed amount, and reason are required")
 	}
-	effect := input.CollectionEffect
-	if effect == "" {
-		effect = EffectContestedOnly
-	}
-	if effect != EffectFullBlock && effect != EffectContestedOnly && effect != EffectNoAutomaticBlock {
-		return Dispute{}, errors.New("invalid collection effect")
-	}
 	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Dispute{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := db.SetObligationContext(ctx, tx, input.ObligationID); err != nil {
+		return Dispute{}, err
+	}
 	var supplierID, buyerID string
 	var outstanding ledger.Money
 	if err := tx.QueryRow(ctx, `SELECT o.supplier_organization_id::text,c.buyer_user_id::text,o.outstanding_kobo FROM app.obligations o JOIN app.credit_requests c ON c.id=o.credit_request_id WHERE o.id=$1::uuid FOR UPDATE OF o`, input.ObligationID).Scan(&supplierID, &buyerID, &outstanding); err != nil {
@@ -53,7 +51,14 @@ func (s *PostgresStore) Open(input OpenInput) (Dispute, error) {
 	if input.DisputedAmountKobo > outstanding {
 		return Dispute{}, errors.New("disputed amount exceeds outstanding")
 	}
-	dispute := Dispute{ID: identifier.New(), ObligationID: input.ObligationID, SupplierOrganizationID: supplierID, BuyerUserID: buyerID, OpenedBy: input.OpenedBy, TotalDisputedKobo: input.DisputedAmountKobo, RemainingDisputedKobo: input.DisputedAmountKobo, Reason: strings.TrimSpace(input.Reason), Explanation: strings.TrimSpace(input.Explanation), State: StateOpen, CollectionEffect: effect}
+	var active bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.disputes WHERE obligation_id=$1::uuid AND state IN('OPEN','UNDER_REVIEW','PARTIALLY_RESOLVED'))`, input.ObligationID).Scan(&active); err != nil {
+		return Dispute{}, err
+	}
+	if active {
+		return Dispute{}, errors.New("an active dispute already exists for this obligation")
+	}
+	dispute := Dispute{ID: identifier.New(), ObligationID: input.ObligationID, SupplierOrganizationID: supplierID, BuyerUserID: buyerID, OpenedBy: input.OpenedBy, TotalDisputedKobo: input.DisputedAmountKobo, RemainingDisputedKobo: input.DisputedAmountKobo, Reason: strings.TrimSpace(input.Reason), Explanation: strings.TrimSpace(input.Explanation), State: StateOpen, CollectionEffect: EffectContestedOnly}
 	if err := tx.QueryRow(ctx, `INSERT INTO app.disputes(id,obligation_id,supplier_organization_id,buyer_user_id,opened_by,total_disputed_kobo,remaining_disputed_kobo,reason,explanation,state,collection_effect) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$6,$7,NULLIF($8,''),'OPEN',$9) RETURNING opened_at`, dispute.ID, dispute.ObligationID, dispute.SupplierOrganizationID, dispute.BuyerUserID, dispute.OpenedBy, int64(dispute.TotalDisputedKobo), dispute.Reason, dispute.Explanation, dispute.CollectionEffect).Scan(&dispute.OpenedAt); err != nil {
 		return Dispute{}, err
 	}
@@ -102,6 +107,9 @@ func (s *PostgresStore) Decide(input DecideInput) (Dispute, Decision, error) {
 	if input.RemainingDisputedKobo < 0 || input.RemainingDisputedKobo > dispute.RemainingDisputedKobo {
 		return Dispute{}, Decision{}, errors.New("invalid remaining disputed amount")
 	}
+	if input.AdjustmentKobo > dispute.RemainingDisputedKobo-input.RemainingDisputedKobo {
+		return Dispute{}, Decision{}, errors.New("adjusted principal must be removed from the remaining dispute")
+	}
 	if input.ValidPrincipalKobo < 0 {
 		return Dispute{}, Decision{}, errors.New("valid principal cannot be negative")
 	}
@@ -137,6 +145,9 @@ func (s *PostgresStore) Decide(input DecideInput) (Dispute, Decision, error) {
 }
 
 func applyDisputeAdjustmentTx(ctx context.Context, tx pgx.Tx, dispute Dispute, amount ledger.Money) error {
+	if err := db.SetObligationContext(ctx, tx, dispute.ObligationID); err != nil {
+		return err
+	}
 	var requestID string
 	var outstanding, principal ledger.Money
 	if err := tx.QueryRow(ctx, `SELECT credit_request_id::text,outstanding_kobo,principal_kobo FROM app.obligations WHERE id=$1::uuid FOR UPDATE`, dispute.ObligationID).Scan(&requestID, &outstanding, &principal); err != nil {
@@ -145,8 +156,14 @@ func applyDisputeAdjustmentTx(ctx context.Context, tx pgx.Tx, dispute Dispute, a
 	if amount > outstanding {
 		return errors.New("adjustment exceeds outstanding")
 	}
+	if err := db.GuardUnreservedReduction(ctx, tx, dispute.ObligationID, int64(outstanding-amount)); err != nil {
+		return err
+	}
 	key := "dispute-adjustment:" + dispute.ID + ":" + fmt.Sprint(dispute.RemainingDisputedKobo)
 	if err := postDisputeLedgerTx(ctx, tx, dispute.ID, key, amount); err != nil {
+		return err
+	}
+	if err := db.ReduceSchedulePrincipalTx(ctx, tx, dispute.ObligationID, outstanding, amount, true); err != nil {
 		return err
 	}
 	newOutstanding := outstanding - amount
@@ -212,8 +229,14 @@ func (s *PostgresStore) Get(id string) (Dispute, []Evidence, []Decision, error) 
 	if err != nil {
 		return Dispute{}, nil, nil, err
 	}
-	e, _ := s.evidence(id)
-	ds, _ := s.decisions(id)
+	e, err := s.evidence(id)
+	if err != nil {
+		return Dispute{}, nil, nil, err
+	}
+	ds, err := s.decisions(id)
+	if err != nil {
+		return Dispute{}, nil, nil, err
+	}
 	return d, e, ds, nil
 }
 func (s *PostgresStore) ListForOrganization(id string) []Dispute {
@@ -287,4 +310,35 @@ func (s *PostgresStore) decisions(id string) ([]Decision, error) {
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+func (s *PostgresStore) readList(where, id string) ([]Dispute, error) {
+	rows, err := s.pool.Query(context.Background(), `SELECT id::text,obligation_id::text,supplier_organization_id::text,buyer_user_id::text,opened_by::text,total_disputed_kobo,remaining_disputed_kobo,reason,COALESCE(explanation,''),state,collection_effect,COALESCE(assigned_reviewer::text,''),opened_at,resolved_at FROM app.disputes WHERE `+where+` ORDER BY opened_at DESC`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Dispute{}
+	for rows.Next() {
+		d, e := scanDispute(rows)
+		if e != nil {
+			return nil, e
+		}
+		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+func (s *PostgresStore) ReadForOrganization(id string) ([]Dispute, error) {
+	return s.readList(`supplier_organization_id=$1::uuid`, id)
+}
+
+func (s *PostgresStore) ReadForObligation(id string) ([]Dispute, error) {
+	return s.readList(`obligation_id=$1::uuid`, id)
+}
+
+func (s *PostgresStore) ReadForBuyer(id string) ([]Dispute, error) {
+	return s.readList(`buyer_user_id=$1::uuid`, id)
 }

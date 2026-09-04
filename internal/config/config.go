@@ -16,6 +16,18 @@ const defaultTimezone = "Africa/Lagos"
 // Config contains deployment configuration shared by the API and worker.
 // Secrets are read from the environment and are never logged or serialized.
 type Config struct {
+	MetricsScrapeToken         string
+	MonoSweepEnabled           bool
+	PartialSweepEnabled        bool
+	CollectionNoticeMinHours   int64
+	DeemedAcceptanceMinHours   int64
+	AdminSurfaces              []string
+	AutomaticCollectionEnabled bool
+	AutomaticRetryEnabled      bool
+	MonoSecretKey              string
+	MonoWebhookSecret          string
+	MonoRedirectURL            string
+
 	Environment                    string
 	Version                        string
 	PublicBaseURL                  string
@@ -34,6 +46,7 @@ type Config struct {
 	DocumentScannerToken           string
 	SessionSigningKey              string
 	FieldEncryptionKeyID           string
+	FieldEncryptionKey             string
 	OTPHMACKey                     string
 	TokenHashKey                   string
 	OTelEndpoint                   string
@@ -93,15 +106,19 @@ type Config struct {
 
 func Load() (Config, error) {
 	c := Config{
+		MetricsScrapeToken:             envOr("METRICS_SCRAPE_TOKEN", ""),
+		MonoSecretKey:                  envOr("MONO_SECRET_KEY", ""),
+		MonoWebhookSecret:              envOr("MONO_WEBHOOK_SECRET", ""),
+		MonoRedirectURL:                envOr("MONO_REDIRECT_URL", ""),
 		Environment:                    strings.ToLower(strings.TrimSpace(envOr("APP_ENV", "development"))),
 		Version:                        envOr("APP_VERSION", "0.1.0-dev"),
 		PublicBaseURL:                  envOr("PUBLIC_BASE_URL", "http://localhost:5173"),
 		AppBaseURL:                     envOr("APP_BASE_URL", "http://localhost:5173"),
 		APIInternalURL:                 envOr("API_INTERNAL_URL", "http://localhost:8080"),
 		APIListenAddr:                  envOr("API_ADDR", ":8080"),
-		DatabaseURL:                    envOr("DATABASE_URL", "postgres://kredit:kredit@localhost:5432/kredit?sslmode=disable"),
-		DatabaseDirectURL:              envOr("DATABASE_DIRECT_URL", "postgres://kredit:kredit@localhost:5432/kredit?sslmode=disable"),
-		RiverDatabaseURL:               envOr("RIVER_DATABASE_URL", "postgres://kredit:kredit@localhost:5432/kredit?sslmode=disable"),
+		DatabaseURL:                    envOr("DATABASE_URL", "postgres://kredit_app_login:kredit-app-development-only@localhost:5432/kredit?sslmode=disable"),
+		DatabaseDirectURL:              envOr("DATABASE_DIRECT_URL", ""),
+		RiverDatabaseURL:               envOr("RIVER_DATABASE_URL", "postgres://kredit_worker_login:kredit-worker-development-only@localhost:5432/kredit?sslmode=disable"),
 		ObjectStorageEndpoint:          envOr("OBJECT_STORAGE_ENDPOINT", "http://localhost:9000"),
 		ObjectStorageBucket:            envOr("OBJECT_STORAGE_BUCKET", "kredit-local"),
 		ObjectStorageRegion:            envOr("OBJECT_STORAGE_REGION", "us-east-1"),
@@ -111,6 +128,7 @@ func Load() (Config, error) {
 		DocumentScannerToken:           envOr("DOCUMENT_SCANNER_TOKEN", ""),
 		SessionSigningKey:              envOr("SESSION_SIGNING_KEY", "development-only-change-me"),
 		FieldEncryptionKeyID:           envOr("FIELD_ENCRYPTION_KEY_ID", "development-only"),
+		FieldEncryptionKey:             envOr("FIELD_ENCRYPTION_KEY", "development-only-change-me"),
 		OTPHMACKey:                     envOr("OTP_HMAC_KEY", "development-only-change-me"),
 		TokenHashKey:                   envOr("TOKEN_HASH_KEY", "development-only-change-me"),
 		OTelEndpoint:                   envOr("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
@@ -153,6 +171,17 @@ func Load() (Config, error) {
 	}
 
 	var err error
+	c.CollectionNoticeMinHours, err = int64Env("COLLECTION_NOTICE_MIN_HOURS", 24)
+	if err != nil {
+		return Config{}, err
+	}
+	// Three days, not one: goods released on a Friday afternoon must not be
+	// deemed accepted before the buyer reopens on Monday.
+	c.DeemedAcceptanceMinHours, err = int64Env("DEEMED_ACCEPTANCE_MIN_HOURS", 72)
+	if err != nil {
+		return Config{}, err
+	}
+	c.AdminSurfaces = splitList(envOr("ADMIN_SURFACES", ""))
 	if c.RealCollections, err = boolEnv("FEATURE_REAL_COLLECTIONS", false); err != nil {
 		return Config{}, err
 	}
@@ -166,6 +195,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	for name, target := range map[string]*bool{
+		"MONO_SWEEP_ENABLED":                 &c.MonoSweepEnabled,
+		"PARTIAL_SWEEP_ENABLED":              &c.PartialSweepEnabled,
+		"AUTOMATIC_COLLECTION_ENABLED":       &c.AutomaticCollectionEnabled,
+		"AUTOMATIC_RETRY_ENABLED":            &c.AutomaticRetryEnabled,
 		"FEATURE_MULTI_ACCOUNT_COLLECTIONS":  &c.MultiAccountCollections,
 		"FEATURE_DIRECT_SUPPLIER_SETTLEMENT": &c.DirectSupplierSettlement,
 		"FEATURE_LIVE_SUPPLIER_BILLING":      &c.LiveSupplierBilling,
@@ -204,11 +237,38 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("APP_ENV must be development, staging, or production, got %q", c.Environment)
 	}
+	if c.MetricsScrapeToken != "" && len(c.MetricsScrapeToken) < 32 {
+		return errors.New("METRICS_SCRAPE_TOKEN must contain at least 32 characters")
+	}
 	if c.Currency != "NGN" || c.MoneyUnit != "kobo" {
 		return errors.New("money configuration must remain NGN/kobo")
 	}
+	if c.MonoSweepEnabled {
+		if c.Environment == "production" {
+			return errors.New("mono Sweep production enablement requires completed sandbox certification")
+		}
+		if c.CollectionProvider != "mono-sweep" || !strings.HasPrefix(c.MonoSecretKey, "test_sk_") || c.MonoWebhookSecret == "" || c.MonoRedirectURL == "" {
+			return errors.New("mono sandbox requires COLLECTION_PROVIDER=mono-sweep, test secret key, webhook secret, and redirect URL")
+		}
+	}
+	if c.PartialSweepEnabled && !c.MonoSweepEnabled {
+		return errors.New("PARTIAL_SWEEP_ENABLED requires MONO_SWEEP_ENABLED")
+	}
+	if c.AutomaticRetryEnabled && !c.AutomaticCollectionEnabled {
+		return errors.New("automatic retries require automatic collection")
+	}
 	if strings.TrimSpace(c.CollectionProvider) == "" {
 		return errors.New("COLLECTION_PROVIDER is required")
+	}
+	if (c.RealCollections || c.MonoSweepEnabled) && (c.CollectionNoticeMinHours < 1 || c.CollectionNoticeMinHours > 720) {
+		return errors.New("real collections require COLLECTION_NOTICE_MIN_HOURS between 1 and 720")
+	}
+	// Buyer silence may only become a collectable obligation where the notice
+	// has demonstrably been with the buyer long enough to answer it. Zero would
+	// disable that evidence requirement, so it is refused wherever real money
+	// can move.
+	if (c.RealCollections || c.MonoSweepEnabled) && (c.DeemedAcceptanceMinHours < 24 || c.DeemedAcceptanceMinHours > 720) {
+		return errors.New("real collections require DEEMED_ACCEPTANCE_MIN_HOURS between 24 and 720")
 	}
 	if c.RealCollections {
 		if strings.TrimSpace(c.ProviderApprovalReference) == "" || strings.TrimSpace(c.ProviderApprovedBy) == "" || strings.TrimSpace(c.ProviderApprovedAt) == "" {
@@ -251,6 +311,13 @@ func (c Config) Validate() error {
 		if !c.ProductionPilot {
 			return errors.New("FEATURE_PRODUCTION_PILOT must be enabled in production")
 		}
+		// Every admin surface is a privileged path that has to be
+		// access-reviewed and audited, and a pilot needs far fewer of them
+		// than the product ships. Production enumerates the surfaces it
+		// actually operates rather than inheriting the full set by default.
+		if len(c.AdminSurfaces) == 0 {
+			return errors.New("ADMIN_SURFACES must list the operations surfaces this deployment enables, or 'all'")
+		}
 		if !c.RealIdentity {
 			return errors.New("FEATURE_REAL_IDENTITY must be enabled in production; mock identity is not permitted")
 		}
@@ -281,6 +348,7 @@ func (c Config) Validate() error {
 			"DOCUMENT_SCANNER_ENDPOINT":   c.DocumentScannerEndpoint,
 			"DOCUMENT_SCANNER_TOKEN":      c.DocumentScannerToken,
 			"FIELD_ENCRYPTION_KEY_ID":     c.FieldEncryptionKeyID,
+			"FIELD_ENCRYPTION_KEY":        c.FieldEncryptionKey,
 			"OTEL_EXPORTER_OTLP_ENDPOINT": c.OTelEndpoint,
 			"NOTIFICATION_EMAIL_ENDPOINT": c.NotificationEmailEndpoint,
 			"NOTIFICATION_EMAIL_TOKEN":    c.NotificationEmailToken,
@@ -294,7 +362,7 @@ func (c Config) Validate() error {
 		if c.WhatsApp && (strings.TrimSpace(c.NotificationWhatsAppEndpoint) == "" || strings.TrimSpace(c.NotificationWhatsAppToken) == "") {
 			return errors.New("FEATURE_WHATSAPP requires NOTIFICATION_WHATSAPP_ENDPOINT and NOTIFICATION_WHATSAPP_TOKEN in production")
 		}
-		for name, value := range map[string]string{"SESSION_SIGNING_KEY": c.SessionSigningKey, "OTP_HMAC_KEY": c.OTPHMACKey, "TOKEN_HASH_KEY": c.TokenHashKey, "OBJECT_STORAGE_SECRET_KEY": c.ObjectStorageSecretKey, "DOCUMENT_SCANNER_TOKEN": c.DocumentScannerToken, "NOTIFICATION_EMAIL_TOKEN": c.NotificationEmailToken, "NOTIFICATION_SMS_TOKEN": c.NotificationSMSToken, "IDENTITY_PROVIDER_TOKEN": c.IdentityProviderToken, "IDENTITY_WEBHOOK_SECRET": c.IdentityWebhookSecret, "COLLECTION_PROVIDER_TOKEN": c.CollectionProviderToken, "COLLECTION_WEBHOOK_SECRET": c.CollectionWebhookSecret} {
+		for name, value := range map[string]string{"SESSION_SIGNING_KEY": c.SessionSigningKey, "OTP_HMAC_KEY": c.OTPHMACKey, "TOKEN_HASH_KEY": c.TokenHashKey, "FIELD_ENCRYPTION_KEY": c.FieldEncryptionKey, "OBJECT_STORAGE_SECRET_KEY": c.ObjectStorageSecretKey, "DOCUMENT_SCANNER_TOKEN": c.DocumentScannerToken, "NOTIFICATION_EMAIL_TOKEN": c.NotificationEmailToken, "NOTIFICATION_SMS_TOKEN": c.NotificationSMSToken, "IDENTITY_PROVIDER_TOKEN": c.IdentityProviderToken, "IDENTITY_WEBHOOK_SECRET": c.IdentityWebhookSecret, "COLLECTION_PROVIDER_TOKEN": c.CollectionProviderToken, "COLLECTION_WEBHOOK_SECRET": c.CollectionWebhookSecret} {
 			if err := validateSecret(name, value); err != nil {
 				return err
 			}
@@ -319,7 +387,7 @@ func (c Config) Validate() error {
 				return err
 			}
 		}
-		for name, value := range map[string]string{"DATABASE_URL": c.DatabaseURL, "DATABASE_DIRECT_URL": c.DatabaseDirectURL, "RIVER_DATABASE_URL": c.RiverDatabaseURL} {
+		for name, value := range map[string]string{"DATABASE_URL": c.DatabaseURL, "RIVER_DATABASE_URL": c.RiverDatabaseURL} {
 			if err := validateProductionDatabaseURL(name, value); err != nil {
 				return err
 			}
@@ -407,6 +475,23 @@ func validateProductionDatabaseURL(name, value string) error {
 	default:
 		return fmt.Errorf("%s must explicitly require TLS", name)
 	}
+}
+
+// splitList reads a comma-separated setting into trimmed, non-empty entries.
+// An unset or blank value yields nil rather than a single empty entry, so
+// callers can distinguish "not configured" from "configured as empty".
+func splitList(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func int64Env(name string, fallback int64) (int64, error) {

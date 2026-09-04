@@ -2,10 +2,12 @@ package ledger
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 	"time"
 )
@@ -189,6 +191,9 @@ func sameTransactionIntent(existing, requested Transaction) bool {
 	return true
 }
 
+// GetByReference returns the journal for one reference in chronological order.
+// Map iteration is unordered, so the result is sorted before it is returned:
+// VerifyChain and every statement rebuild depend on a stable sequence.
 func (s *Store) GetByReference(referenceID string) ([]Transaction, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -198,6 +203,15 @@ func (s *Store) GetByReference(referenceID string) ([]Transaction, error) {
 			result = append(result, cloneTransaction(transaction))
 		}
 	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if !result[i].EffectiveAt.Equal(result[j].EffectiveAt) {
+			return result[i].EffectiveAt.Before(result[j].EffectiveAt)
+		}
+		if !result[i].RecordedAt.Equal(result[j].RecordedAt) {
+			return result[i].RecordedAt.Before(result[j].RecordedAt)
+		}
+		return result[i].ID < result[j].ID
+	})
 	return result, nil
 }
 
@@ -205,7 +219,7 @@ func BaseFee(principal Money) (Money, error) {
 	if principal < 0 {
 		return 0, errors.New("principal cannot be negative")
 	}
-	// 0.5% = 5 basis points of one thousand (integer kobo arithmetic).
+	// 0.5% = 50 basis points (integer kobo arithmetic).
 	if principal > (Money(^uint64(0)>>1))/5 {
 		return 0, errors.New("principal is too large")
 	}
@@ -257,4 +271,24 @@ func newIdentifier() string {
 		return fmt.Sprintf("ledger-fallback-%d", time.Now().UnixNano())
 	}
 	return "ledger-" + hex.EncodeToString(value[:])
+}
+
+// VerifyChain computes a deterministic SHA-256 hash-chain digest across a slice
+// of chronological ledger transactions. If any transaction or posting is tampered
+// with, the resulting chain digest diverges.
+func VerifyChain(transactions []Transaction) string {
+	h := sha256.New()
+	for _, t := range transactions {
+		h.Write([]byte(t.ID))
+		h.Write([]byte(t.EventType))
+		h.Write([]byte(t.ReferenceType))
+		h.Write([]byte(t.ReferenceID))
+		h.Write([]byte(t.IdempotencyKey))
+		_, _ = fmt.Fprintf(h, "%d", t.EffectiveAt.UnixNano())
+		for _, p := range t.Postings {
+			h.Write([]byte(p.Account))
+			_, _ = fmt.Fprintf(h, "%d:%d", p.Debit, p.Credit)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }

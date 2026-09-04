@@ -59,6 +59,9 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 	if got, loaded, err := store.GetForObligation(obligationID); err != nil || got.ID != schedule.ID || len(loaded) != 2 {
 		t.Fatalf("load schedule: %v %+v %+v", err, got, loaded)
 	}
+	if target, err := store.CollectionTarget(obligationID, items[1].CollectionAt.Add(time.Minute)); err != nil || target != 3000 {
+		t.Fatalf("due target: %d %v", target, err)
+	}
 	targets, err := store.Allocate(obligationID, 1000)
 	if err != nil || len(targets) != 1 {
 		t.Fatalf("allocate: %v %+v", err, targets)

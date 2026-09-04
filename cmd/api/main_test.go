@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -20,15 +19,14 @@ func TestRunSelfHealthcheck(t *testing.T) {
 	defer ts.Close()
 
 	addr := strings.TrimPrefix(ts.URL, "http://")
-	os.Setenv("API_ADDR", addr)
-	defer os.Unsetenv("API_ADDR")
+	t.Setenv("API_ADDR", addr)
 
 	code := runSelfHealthcheck()
 	if code != 0 {
 		t.Fatalf("expected healthcheck code 0 for healthy server, got %d", code)
 	}
 
-	os.Setenv("API_ADDR", "127.0.0.1:1")
+	t.Setenv("API_ADDR", "127.0.0.1:1")
 	codeUnhealthy := runSelfHealthcheck()
 	if codeUnhealthy != 1 {
 		t.Fatalf("expected healthcheck code 1 for unreachable server, got %d", codeUnhealthy)

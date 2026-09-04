@@ -12,26 +12,30 @@ temporary="${output}.tmp"
   psql "$DATABASE_URL" -A -F $'\t' -t -c "
     SELECT c.table_schema,c.table_name,c.column_name,
       CASE
+        WHEN c.table_schema='jobs' AND c.column_name IN ('args','errors','metadata') THEN 'restricted_financial'
+        WHEN c.table_name LIKE 'admin_%' AND c.column_name IN ('proposed_by','approved_by','buyer_decided_by','buyer_id','owner_id','actor_id') THEN 'restricted_identity'
+        WHEN c.table_name LIKE 'admin_%' AND c.column_name IN ('before_values','after_values','proposed_values') THEN 'restricted_financial'
+        WHEN c.table_name LIKE 'business_policy_%' AND c.column_name IN ('proposed_by','decided_by','actor_id') THEN 'restricted_identity'
         WHEN c.table_name='analytics_events' THEN 'pseudonymous_product_analytics'
         WHEN c.column_name ~* '(token|secret|password|otp|session|mfa|hash|cipher)' THEN 'restricted_authentication'
-        WHEN c.column_name ~* '(amount|kobo|account|payment|mandate|settlement|principal|balance|fee|currency)' OR c.table_schema='ledger' THEN 'restricted_financial'
+        WHEN (c.table_name='financial_review_cases' AND c.column_name IN ('expected','actual')) OR c.column_name ~* '(amount|kobo|account|payment|mandate|settlement|principal|balance|fee|currency)' OR c.table_schema='ledger' THEN 'restricted_financial'
         WHEN c.column_name ~* '(email|phone|name|address|identity|user_id|person|representative|birth|bvn|nin)' THEN 'restricted_identity'
         ELSE 'confidential_commercial' END,
-      CASE WHEN c.table_schema='river' THEN 'platform_operator' WHEN c.column_name ~* '(user|person|email|phone)' THEN 'account_user' ELSE 'business_or_transaction' END,
+      CASE WHEN c.table_schema IN ('river','jobs') THEN 'platform_operator' WHEN c.column_name ~* '(user|person|email|phone)' THEN 'account_user' ELSE 'business_or_transaction' END,
       'application_or_authorized_provider',
       CASE WHEN c.table_schema='ledger' THEN 'financial_accounting' WHEN c.table_name='analytics_events' THEN 'pilot_measurement_and_product_reliability' WHEN c.table_name ~* '(recovery|session|otp|mfa)' THEN 'account_security' WHEN c.table_name ~* '(privacy|consent)' THEN 'privacy_rights' ELSE 'operate_trade_credit_service' END,
       'pending_legal_approval',
-      CASE WHEN c.table_name='analytics_events' THEN 'aal2_compliance_operations' WHEN c.table_name ~* '(recovery|privacy|verification|audit)' THEN 'authorized_user;case_bound_compliance' ELSE 'tenant_scoped_application;authorized_operations' END,
-      'validated_application_command;authorized_worker',
-      CASE WHEN c.column_name ~* '(hash|hmac)' THEN 'one_way_hmac_or_hash' WHEN c.column_name ~* '(cipher|token|secret)' THEN 'encrypted_or_opaque_reference' ELSE 'database_encryption;rls;access_audit' END,
+      CASE WHEN c.table_name='collection_notice_acknowledgements' THEN 'own_buyer;authorized_worker_read_only' WHEN c.table_name LIKE 'admin_%' THEN 'role_scoped_aal2_administrator;own_buyer_amendment;authorized_worker_read_only' WHEN c.table_name LIKE 'business_policy_%' THEN 'aal2_policy_manager_or_approver;authorized_worker_read_only' WHEN c.table_name IN ('financial_review_cases','financial_review_events','notification_delivery_receipts') THEN 'aal2_provider_operations;authorized_worker' WHEN c.table_name='analytics_events' THEN 'aal2_compliance_operations' WHEN c.table_name ~* '(recovery|privacy|verification|audit)' THEN 'authorized_user;case_bound_compliance' ELSE 'tenant_scoped_application;authorized_operations' END,
+      CASE WHEN c.table_name='collection_notice_acknowledgements' THEN 'authenticated_buyer_insert_only' WHEN c.table_name LIKE 'admin_%' OR c.table_name LIKE 'business_policy_%' THEN 'validated_application_command' ELSE 'validated_application_command;authorized_worker' END,
+      CASE WHEN c.table_schema='jobs' THEN 'database_encryption;runtime_role_grants' WHEN c.column_name ~* '(hash|hmac)' THEN 'one_way_hmac_or_hash' WHEN c.column_name ~* '(cipher|token|secret)' THEN 'encrypted_or_opaque_reference' ELSE 'database_encryption;rls;access_audit' END,
       'environment_retention_register_pending_legal_approval',
-      CASE WHEN c.table_schema='ledger' OR c.table_name ~* '(payment|obligation|agreement|audit|legal_hold)' THEN 'retain_under_financial_or_legal_hold;restrict_or_pseudonymize' ELSE 'delete_or_pseudonymize_after_approved_request_and_retention_expiry' END,
+      CASE WHEN c.table_schema='ledger' OR c.table_name ~* '(payment|obligation|agreement|audit|legal_hold|financial_review|business_policy|admin_change|admin_assignment|admin_review|notification_delivery_receipts|collection_notice_acknowledgements|operation_actions|operations_command)' THEN 'retain_under_financial_or_legal_hold;restrict_or_pseudonymize' ELSE 'delete_or_pseudonymize_after_approved_request_and_retention_expiry' END,
       CASE WHEN c.table_name ~* '(provider|mandate|settlement|notification)' THEN 'approved_provider_if_configured' ELSE 'kredit' END,
       'configured_region;transfer_assessment_required_for_external_processor',
       CASE WHEN c.table_schema='ledger' THEN 'Financial Systems Lead' WHEN c.table_name='analytics_events' THEN 'Data Platform Lead' WHEN c.table_name ~* '(privacy|legal_hold|restriction)' THEN 'Data Protection Lead' WHEN c.table_name ~* '(recovery|session|otp|mfa)' THEN 'Security Engineering Lead' ELSE 'Domain Engineering Lead' END
     FROM information_schema.columns c
     JOIN information_schema.tables t USING(table_schema,table_name)
-    WHERE t.table_type='BASE TABLE' AND c.table_schema IN ('app','ledger','river')
+    WHERE t.table_type='BASE TABLE' AND c.table_schema IN ('app','ledger','river','jobs')
     ORDER BY c.table_schema,c.table_name,c.ordinal_position;"
 } > "$temporary"
 mv "$temporary" "$output"

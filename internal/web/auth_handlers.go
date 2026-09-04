@@ -2,9 +2,12 @@ package web
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"net/http"
-	"time"
+	"net/url"
+	"strings"
 
 	"kredit/internal/audit"
 	"kredit/internal/auth"
@@ -72,7 +75,10 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	activated := s.runtime.Organizations.ActivateInvitations(user.ID)
 	s.runtime.UserControl.BindUser(user.ID, user.Email, user.Phone)
-	setSessionCookies(w, s.config.Environment != "development", token)
+	if !setSessionCookies(w, s.config.Environment != "development", token) {
+		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "a secure session could not be established")
+		return
+	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "auth.login.succeeded", ResourceType: "session", ResourceID: session.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"authentication_level": session.AuthenticationLevel}})
 	writeJSON(w, http.StatusOK, map[string]any{"user": user, "session": session, "activated_memberships": activated})
 }
@@ -139,15 +145,22 @@ func (s *Server) verifyTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wasEnrolled := s.runtime.Auth.IsMFAEnrolled(user.ID)
-	if err := s.runtime.Auth.VerifyTOTP(user.ID, input.Code); err != nil {
+	rotatedSession, rotatedToken, err := s.runtime.Auth.StepUpSession(sessionTokenFromRequest(r), input.Code)
+	if err != nil {
+		if errors.Is(err, auth.ErrMFALocked) {
+			s.recordSecurityEvent(r, "auth.mfa.locked", "mfa_method", "denied", "warning")
+			w.Header().Set("Retry-After", "900")
+			writeProblem(w, http.StatusTooManyRequests, "mfa_locked", "too many incorrect verification codes; try again shortly or use account recovery")
+			return
+		}
 		writeProblem(w, http.StatusUnauthorized, "mfa_invalid", err.Error())
 		return
 	}
-	if err := s.runtime.Auth.ElevateSession(sessionTokenFromRequest(r)); err != nil {
-		writeProblem(w, http.StatusConflict, "mfa_step_up_failed", err.Error())
+	if !setSessionCookies(w, s.config.Environment != "development", rotatedToken) {
+		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "a secure session could not be established")
 		return
 	}
-	session.AuthenticationLevel = auth.AAL2
+	session = rotatedSession
 	var recoveryCodes []string
 	if !wasEnrolled {
 		var err error
@@ -177,14 +190,65 @@ func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) (auth.Sessi
 	return session, user, true
 }
 
+// requireCSRF enforces the two controls README section 21.6 requires for
+// cookie-authenticated writes: a double-submit token compared in constant time,
+// and a same-origin check on Sec-Fetch-Site/Origin. Either control alone is
+// weaker than the pair.
 func (s *Server) requireCSRF(w http.ResponseWriter, r *http.Request) bool {
+	if !s.sameOriginRequest(r) {
+		s.recordSecurityEvent(r, "auth.csrf_cross_origin", "csrf", "denied", "warning")
+		writeProblem(w, http.StatusForbidden, "csrf_failed", "cross-origin state change is not permitted")
+		return false
+	}
 	cookie, err := r.Cookie(csrfCookieName)
-	if err != nil || cookie.Value == "" || cookie.Value != r.Header.Get("X-CSRF-Token") {
+	submitted := r.Header.Get("X-CSRF-Token")
+	if err != nil || cookie.Value == "" || submitted == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(submitted)) != 1 {
 		s.recordSecurityEvent(r, "auth.csrf_failed", "csrf", "denied", "warning")
 		writeProblem(w, http.StatusForbidden, "csrf_failed", "csrf token is required")
 		return false
 	}
 	return true
+}
+
+// sameOriginRequest rejects a browser write that a different site initiated.
+// Sec-Fetch-Site is authoritative where the browser sends it; otherwise the
+// Origin header is matched against the configured public origins. A request
+// with neither header did not come from a modern browser form or fetch, so it
+// still has to satisfy the double-submit token above.
+func (s *Server) sameOriginRequest(r *http.Request) bool {
+	switch strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))) {
+	case "same-origin", "none":
+		return true
+	case "same-site", "cross-site":
+		return false
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		// Neither header is present. Some proxies strip Sec-Fetch-* and Origin on
+		// the internal hop, so this is not evidence of a cross-site request; the
+		// double-submit token below remains the control.
+		return true
+	}
+	if origin == "null" {
+		return false
+	}
+	requested, err := url.Parse(origin)
+	if err != nil || requested.Host == "" {
+		return false
+	}
+	for _, allowed := range []string{s.config.PublicBaseURL, s.config.AppBaseURL} {
+		if allowed == "" {
+			continue
+		}
+		permitted, err := url.Parse(allowed)
+		if err != nil || permitted.Host == "" {
+			continue
+		}
+		if strings.EqualFold(permitted.Scheme, requested.Scheme) && strings.EqualFold(permitted.Host, requested.Host) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) recordSecurityEvent(r *http.Request, action, resourceType, outcome, severity string) {
@@ -202,11 +266,15 @@ func sessionTokenFromRequest(r *http.Request) string {
 	return cookie.Value
 }
 
-func setSessionCookies(w http.ResponseWriter, secure bool, token string) {
+func setSessionCookies(w http.ResponseWriter, secure bool, token string) bool {
 	csrf := opaqueToken()
+	if csrf == "" {
+		return false
+	}
 	maxAge := 30 * 24 * 60 * 60
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: token, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode})
 	http.SetCookie(w, &http.Cookie{Name: csrfCookieName, Value: csrf, Path: "/", MaxAge: maxAge, HttpOnly: false, Secure: secure, SameSite: http.SameSiteLaxMode})
+	return true
 }
 
 func clearSessionCookies(w http.ResponseWriter, secure bool) {
@@ -215,10 +283,13 @@ func clearSessionCookies(w http.ResponseWriter, secure bool) {
 	}
 }
 
+// opaqueToken returns 256 bits of cryptographic randomness. A clock-derived
+// fallback would be guessable, so a randomness failure returns an empty token
+// and the caller fails closed rather than issuing a predictable CSRF secret.
 func opaqueToken() string {
 	value := make([]byte, 32)
 	if _, err := rand.Read(value); err != nil {
-		return hex.EncodeToString([]byte(time.Now().String()))
+		return ""
 	}
 	return hex.EncodeToString(value)
 }

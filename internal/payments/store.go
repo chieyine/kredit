@@ -1,7 +1,9 @@
 package payments
 
 import (
+	"context"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,12 +18,15 @@ const (
 	SourceBuyerClaim       = "buyer_payment_claim"
 	SourceCashRecorded     = "cash_recorded"
 	SourceCollected        = "kredit_collection"
+	CollectionRecorder     = "collection-worker"
+	CollectionKeyPrefix    = "collection-attempt:"
 	SourceAdjustment       = "adjustment"
 	StateRecognized        = "recognized"
 	StateReversed          = "reversed"
 )
 
 type ObligationSnapshot struct {
+	FeeTerms               *ledger.FeeTerms `json:"fee_terms,omitempty"`
 	ID                     string
 	BuyerUserID            string
 	SupplierOrganizationID string
@@ -82,7 +87,10 @@ type AllocationTarget struct {
 type Service interface {
 	Record(RecordInput) (Payment, Allocation, error)
 	Reverse(paymentID, actor, reason string) (Payment, error)
-	List(obligationID string) []Payment
+	// List must report failure rather than return an empty history. Showing a
+	// supplier "no payments" during a database incident is the class of untrue
+	// statement README section 2.3 forbids.
+	List(obligationID string) ([]Payment, error)
 	Get(paymentID string) (Payment, error)
 	Rebuild(obligationID string) (ledger.Money, error)
 }
@@ -131,17 +139,21 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 	if !validSource(input.SourceType) {
 		return Payment{}, Allocation{}, errors.New("invalid payment source")
 	}
-	if input.SourceType == SourceCollected && strings.TrimSpace(input.Provider) == "" {
-		return Payment{}, Allocation{}, errors.New("collected payments require a provider")
+	if input.SourceType == SourceCollected && !validCollectedPayment(input) {
+		return Payment{}, Allocation{}, errors.New("collected payments require collection-worker provenance, provider identity, and an attempt idempotency key")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if existing := s.byKey[input.IdempotencyKey]; existing != "" {
-		payment := *s.payments[existing]
-		if !samePaymentIntent(payment, input) {
+		stored := s.payments[existing]
+		allocations := s.allocations[existing]
+		if stored == nil || len(allocations) == 0 {
+			return Payment{}, Allocation{}, errors.New("recorded payment could not be replayed; reconcile before retrying")
+		}
+		if !samePaymentIntent(*stored, input) {
 			return Payment{}, Allocation{}, errors.New("idempotency key was reused for a different payment")
 		}
-		return clonePayment(payment), s.allocations[existing][0].clone(), nil
+		return clonePayment(*stored), allocations[0].clone(), nil
 	}
 	if s.ledger == nil || s.lookup == nil || s.apply == nil {
 		return Payment{}, Allocation{}, errors.New("payment dependencies unavailable")
@@ -149,6 +161,9 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 	snapshot, err := s.lookup(input.ObligationID)
 	if err != nil {
 		return Payment{}, Allocation{}, err
+	}
+	if defaultCurrency(input.Currency, snapshot.Currency) != snapshot.Currency {
+		return Payment{}, Allocation{}, errors.New("payment currency must match the obligation")
 	}
 	if input.AmountKobo > snapshot.OutstandingKobo {
 		return Payment{}, Allocation{}, errors.New("payment exceeds authoritative outstanding amount")
@@ -158,12 +173,13 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 	if paidAt.IsZero() {
 		paidAt = now
 	}
+	if paidAt.After(now.Add(5 * time.Minute)) {
+		return Payment{}, Allocation{}, errors.New("payment date cannot be in the future")
+	}
 	payment := &Payment{ID: s.newID(), ObligationID: input.ObligationID, BuyerUserID: snapshot.BuyerUserID, SupplierOrganizationID: snapshot.SupplierOrganizationID, SourceType: input.SourceType, AmountKobo: input.AmountKobo, Currency: defaultCurrency(input.Currency, snapshot.Currency), Provider: strings.TrimSpace(input.Provider), ProviderReference: strings.TrimSpace(input.ProviderReference), State: StateRecognized, PaidAt: paidAt, RecognizedAt: now, RecordedBy: input.RecordedBy}
-	tx, err := s.ledger.PostPayment(payment.ID, payment.AmountKobo, payment.SourceType, paidAt, "payment:"+input.IdempotencyKey)
-	if err != nil {
+	if _, err := s.ledger.PostPayment(payment.ID, payment.AmountKobo, payment.SourceType, paidAt, "payment:"+input.IdempotencyKey); err != nil {
 		return Payment{}, Allocation{}, err
 	}
-	_ = tx
 	if err = s.apply(input.ObligationID, -payment.AmountKobo); err != nil {
 		_, _ = s.ledger.PostPaymentReversal(payment.ID, payment.AmountKobo, payment.SourceType, now, "rollback:"+input.IdempotencyKey)
 		return Payment{}, Allocation{}, err
@@ -178,7 +194,7 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 		}
 	}
 	if payment.SourceType == SourceCollected && !paidAt.Before(snapshot.CollectionAt) {
-		fee, _ := ledger.BaseFee(payment.AmountKobo)
+		fee, _ := snapshot.FeeTerms.Collection(payment.AmountKobo)
 		payment.CollectionFeeKobo = fee
 		if fee > 0 {
 			if _, err = s.ledger.PostCollectionFee(payment.ID, fee, paidAt, "collection-fee:"+input.IdempotencyKey); err != nil {
@@ -216,6 +232,49 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 	s.allocations[payment.ID] = allocations
 	s.byKey[input.IdempotencyKey] = payment.ID
 	return clonePayment(*payment), allocations[0].clone(), nil
+}
+
+func (s *Store) RecordContext(ctx context.Context, input RecordInput) (Payment, Allocation, error) {
+	if err := ctx.Err(); err != nil {
+		return Payment{}, Allocation{}, err
+	}
+	return s.Record(input)
+}
+
+func (s *Store) ReverseContext(ctx context.Context, paymentID, actor, reason string) (Payment, error) {
+	if err := ctx.Err(); err != nil {
+		return Payment{}, err
+	}
+	return s.Reverse(paymentID, actor, reason)
+}
+
+func (s *Store) GetContext(ctx context.Context, paymentID string) (Payment, error) {
+	if err := ctx.Err(); err != nil {
+		return Payment{}, err
+	}
+	return s.Get(paymentID)
+}
+
+func (s *Store) RebuildContext(ctx context.Context, obligationID string) (ledger.Money, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	return s.Rebuild(obligationID)
+}
+
+func (s *Store) ReadContext(ctx context.Context, obligationID string) ([]Payment, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s.List(obligationID)
+}
+
+func validCollectedPayment(input RecordInput) bool {
+	return input.RecordedBy == CollectionRecorder &&
+		strings.TrimSpace(input.Provider) != "" &&
+		strings.TrimSpace(input.ProviderReference) != "" &&
+		strings.HasPrefix(input.IdempotencyKey, CollectionKeyPrefix) &&
+		strings.TrimSpace(strings.TrimPrefix(input.IdempotencyKey, CollectionKeyPrefix)) != ""
 }
 
 func samePaymentIntent(existing Payment, requested RecordInput) bool {
@@ -315,7 +374,10 @@ func (s *Store) compensateReversalLedger(payment *Payment, fee bool) {
 	}
 }
 
-func (s *Store) List(obligationID string) []Payment {
+// List returns the obligation's payments oldest first. The PostgreSQL store
+// orders by (recognized_at, id); the in-memory store must match so statements
+// and receipts read the same in either configuration.
+func (s *Store) List(obligationID string) ([]Payment, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []Payment{}
@@ -324,7 +386,13 @@ func (s *Store) List(obligationID string) []Payment {
 			out = append(out, clonePayment(*p))
 		}
 	}
-	return out
+	sort.SliceStable(out, func(i, j int) bool {
+		if !out[i].RecognizedAt.Equal(out[j].RecognizedAt) {
+			return out[i].RecognizedAt.Before(out[j].RecognizedAt)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
 }
 
 func (s *Store) Get(paymentID string) (Payment, error) {
@@ -360,9 +428,9 @@ func (s *Store) Rebuild(obligationID string) (ledger.Money, error) {
 		return 0, errors.New("payments exceed principal")
 	}
 	if expected != snapshot.OutstandingKobo {
-		if err := s.apply(obligationID, expected-snapshot.OutstandingKobo); err != nil {
-			return 0, err
-		}
+		// This demo store has no authoritative dispute/write-off projection.
+		// Never resurrect forgiven principal from a payments-only reconstruction.
+		return 0, errors.New("balance differs from payment history; complete adjustment history is required for reconciliation")
 	}
 	return expected, nil
 }
@@ -371,7 +439,7 @@ func (a Allocation) clone() Allocation { return a }
 func clonePayment(p Payment) Payment   { return p }
 func defaultCurrency(value, fallback string) string {
 	if strings.TrimSpace(value) != "" {
-		return value
+		return strings.ToUpper(strings.TrimSpace(value))
 	}
 	return fallback
 }

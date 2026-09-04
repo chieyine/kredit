@@ -11,10 +11,16 @@ const excluded = [
 	'!web/.svelte-kit/**', '!web/test-results/**', '!web/playwright-report/**',
 	'!.pnpm-store/**', '!.tmp/**'
 ];
-const listing = spawnSync('rg', ['--files', '--hidden', ...excluded.flatMap((pattern) => ['-g', pattern])], {
+let listing = spawnSync('rg', ['--files', '--hidden', ...excluded.flatMap((pattern) => ['-g', pattern])], {
 	cwd: root,
 	encoding: 'utf8'
 });
+if (listing.status !== 0) {
+	listing = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+		cwd: root,
+		encoding: 'utf8'
+	});
+}
 if (listing.status !== 0) {
 	process.stderr.write(listing.stderr || 'Could not list repository files.\n');
 	process.exit(1);

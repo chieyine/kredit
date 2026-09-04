@@ -23,7 +23,7 @@ func TestRecordAllocationReversalAndCollectionFee(t *testing.T) {
 	if err != nil || duplicate.ID != voluntary.ID || book.OutstandingKobo != 85000 {
 		t.Fatal("duplicate payment was not idempotent")
 	}
-	collected, _, err := store.Record(RecordInput{ObligationID: "obl-1", SourceType: SourceCollected, AmountKobo: 50000, RecordedBy: "worker", IdempotencyKey: "col-1", Provider: "mock", ProviderReference: "provider-1", PaidAt: time.Now().UTC()})
+	collected, _, err := store.Record(RecordInput{ObligationID: "obl-1", SourceType: SourceCollected, AmountKobo: 50000, RecordedBy: CollectionRecorder, IdempotencyKey: CollectionKeyPrefix + "attempt-1", Provider: "mock", ProviderReference: "provider-1", PaidAt: time.Now().UTC()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +44,16 @@ func TestRecordAllocationReversalAndCollectionFee(t *testing.T) {
 	}
 	if expected, err := store.Rebuild("obl-1"); err != nil || expected != 50000 {
 		t.Fatalf("rebuild expected=%d err=%v", expected, err)
+	}
+}
+
+func TestCollectedPaymentRequiresWorkerAttemptProvenance(t *testing.T) {
+	store := NewStore(ledger.NewStore(), func(string) (ObligationSnapshot, error) {
+		return ObligationSnapshot{ID: "obl-1", BuyerUserID: "buyer", SupplierOrganizationID: "org", PrincipalKobo: 1000, OutstandingKobo: 1000, Currency: "NGN"}, nil
+	}, func(string, ledger.Money) error { return nil })
+	_, _, err := store.Record(RecordInput{ObligationID: "obl-1", SourceType: SourceCollected, AmountKobo: 100, RecordedBy: "supplier-user", IdempotencyKey: CollectionKeyPrefix + "attempt", Provider: "provider", ProviderReference: "ref"})
+	if err == nil {
+		t.Fatal("supplier-originated collected payment was accepted")
 	}
 }
 

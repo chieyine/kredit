@@ -323,11 +323,22 @@ func (s *Store) Money(ctx context.Context, limit int) (MoneySummary, []MoneyActi
 }
 
 func (s *Store) Cases(ctx context.Context, state string, limit int) ([]CaseSummary, error) {
+	return s.cases(ctx, state, limit, "")
+}
+
+func (s *Store) CasesForActor(ctx context.Context, state string, limit int, actorID string) ([]CaseSummary, error) {
+	if strings.TrimSpace(actorID) == "" {
+		return nil, errors.New("case assignment actor is required")
+	}
+	return s.cases(ctx, state, limit, actorID)
+}
+
+func (s *Store) cases(ctx context.Context, state string, limit int, actorID string) ([]CaseSummary, error) {
 	if s == nil || s.pool == nil {
 		return nil, errors.New("operations database is not configured")
 	}
 	state = strings.TrimSpace(state)
-	rows, err := s.pool.Query(ctx, `SELECT id::text,COALESCE(organization_id::text,''),subject_type,subject_id,state,break_glass,created_at,updated_at FROM app.support_cases WHERE ($1='' OR state=$1) ORDER BY updated_at DESC LIMIT $2`, state, normalizeLimit(limit))
+	rows, err := s.pool.Query(ctx, `SELECT c.id::text,COALESCE(c.organization_id::text,''),c.subject_type,c.subject_id,c.state,c.break_glass,c.created_at,c.updated_at FROM app.support_cases c WHERE ($1='' OR c.state=$1) AND ($3='' OR EXISTS(SELECT 1 FROM app.admin_review_assignments a WHERE a.kind='support' AND a.resource_id=c.id AND a.owner_id=$3::uuid)) ORDER BY c.updated_at DESC LIMIT $2`, state, normalizeLimit(limit), actorID)
 	if err != nil {
 		return nil, err
 	}
@@ -341,6 +352,15 @@ func (s *Store) Cases(ctx context.Context, state string, limit int) ([]CaseSumma
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) CaseAssignedTo(ctx context.Context, caseID, actorID string) (bool, error) {
+	if s == nil || s.pool == nil {
+		return false, errors.New("operations database is not configured")
+	}
+	var allowed bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.admin_review_assignments WHERE kind='support' AND resource_id=$1::uuid AND owner_id=$2::uuid)`, caseID, actorID).Scan(&allowed)
+	return allowed, err
 }
 
 func (s *Store) Disputes(ctx context.Context, state string, limit int) ([]DisputeSummary, error) {

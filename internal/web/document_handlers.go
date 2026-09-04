@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"net/http"
 	"time"
@@ -30,7 +29,7 @@ func (s *Server) uploadDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input documentUploadRequest
-	if err := decodeJSON(w, r, &input); err != nil {
+	if err := decodeJSONLimit(w, r, &input, 3<<20); err != nil {
 		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
@@ -39,7 +38,11 @@ func (s *Server) uploadDocument(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_document", "content_base64 must be valid base64")
 		return
 	}
-	doc, err := s.runtime.Documents.Add(context.Background(), organizationID, user.ID, input.Purpose, input.FileName, input.ContentType, input.RetentionClass, int64(len(content)), bytes.NewReader(content))
+	if len(content) > 2<<20 {
+		writeProblem(w, http.StatusRequestEntityTooLarge, "document_too_large", "inline documents must be 2 MiB or smaller")
+		return
+	}
+	doc, err := s.runtime.Documents.Add(r.Context(), organizationID, user.ID, input.Purpose, input.FileName, input.ContentType, input.RetentionClass, int64(len(content)), bytes.NewReader(content))
 	if err != nil {
 		writeProblem(w, http.StatusUnprocessableEntity, "document_invalid", err.Error())
 		return
@@ -59,7 +62,7 @@ func (s *Server) documentDownload(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_path", err.Error())
 		return
 	}
-	_, _, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadOrganization)
+	_, user, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadOrganization)
 	if !ok {
 		return
 	}
@@ -68,12 +71,12 @@ func (s *Server) documentDownload(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_path", err.Error())
 		return
 	}
-	doc, exists := s.runtime.Documents.Get(documentID)
+	doc, exists := s.runtime.Documents.GetForTenant(r.Context(), documentID, user.ID, organizationID)
 	if !exists || doc.OrganizationID != organizationID {
 		writeProblem(w, http.StatusNotFound, "document_not_found", "document was not found")
 		return
 	}
-	url, err := s.runtime.Documents.SignedDownload(context.Background(), documentID, 10*time.Minute)
+	url, err := s.runtime.Documents.SignedDownloadForTenant(r.Context(), documentID, user.ID, organizationID, 10*time.Minute)
 	if err != nil {
 		writeProblem(w, http.StatusConflict, "document_unavailable", err.Error())
 		return

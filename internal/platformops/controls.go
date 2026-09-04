@@ -2,10 +2,11 @@ package platformops
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -13,18 +14,19 @@ import (
 )
 
 type CommandInput struct {
-	Type            string         `json:"command_type"`
-	TargetType      string         `json:"target_type"`
-	TargetID        string         `json:"target_id"`
-	OrganizationID  string         `json:"organization_id,omitempty"`
-	Reason          string         `json:"reason"`
-	ExpectedVersion int64          `json:"expected_version"`
-	IdempotencyKey  string         `json:"-"`
-	CorrelationID   string         `json:"-"`
-	Scope           string         `json:"scope,omitempty"`
-	ExpiresAt       time.Time      `json:"expires_at,omitempty"`
-	Resolution      string         `json:"resolution,omitempty"`
-	ExternalResult  map[string]any `json:"-"`
+	PreflightVersion int64          `json:"-"`
+	Type             string         `json:"command_type"`
+	TargetType       string         `json:"target_type"`
+	TargetID         string         `json:"target_id"`
+	OrganizationID   string         `json:"organization_id,omitempty"`
+	Reason           string         `json:"reason"`
+	ExpectedVersion  int64          `json:"expected_version"`
+	IdempotencyKey   string         `json:"-"`
+	CorrelationID    string         `json:"-"`
+	Scope            string         `json:"scope,omitempty"`
+	ExpiresAt        time.Time      `json:"expires_at,omitempty"`
+	Resolution       string         `json:"resolution,omitempty"`
+	ExternalResult   map[string]any `json:"-"`
 }
 
 type Command struct {
@@ -47,14 +49,34 @@ var commandTypes = map[string]bool{
 	"request_reconciliation": true, "resolve_unknown_submission": true, "retry_collection": true, "cancel_collection": true,
 }
 
+type commandQueryer interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func (s *Store) PreflightCommand(ctx context.Context, in CommandInput) (Command, error) {
+	if err := validateCommand(in, true); err != nil {
+		return Command{}, err
+	}
+	preview, err := s.PreviewCommand(ctx, in)
+	if err != nil {
+		return Command{}, err
+	}
+	if preview.CurrentVersion != in.ExpectedVersion {
+		return Command{}, errors.New("version conflict before provider operation")
+	}
+	return preview, nil
+}
 func (s *Store) PreviewCommand(ctx context.Context, in CommandInput) (Command, error) {
+	return s.previewCommand(ctx, in, s.pool)
+}
+func (s *Store) previewCommand(ctx context.Context, in CommandInput, q commandQueryer) (Command, error) {
 	if s == nil || s.pool == nil {
 		return Command{}, errors.New("operations database is not configured")
 	}
 	if err := validateCommand(in, false); err != nil {
 		return Command{}, err
 	}
-	version, state, err := s.targetVersion(ctx, in, false)
+	version, state, err := s.targetVersion(ctx, q, in, false)
 	if err != nil {
 		return Command{}, err
 	}
@@ -118,7 +140,7 @@ func validateCommand(in CommandInput, execute bool) error {
 	return nil
 }
 
-func (s *Store) targetVersion(ctx context.Context, in CommandInput, lock bool) (int64, string, error) {
+func (s *Store) targetVersion(ctx context.Context, q commandQueryer, in CommandInput, lock bool) (int64, string, error) {
 	suffix := ""
 	if lock {
 		suffix = " FOR UPDATE"
@@ -128,27 +150,27 @@ func (s *Store) targetVersion(ctx context.Context, in CommandInput, lock bool) (
 	var row pgx.Row
 	switch in.Type {
 	case "retry_job":
-		row = s.pool.QueryRow(ctx, `SELECT attempt+1,state FROM jobs.river_job WHERE id=$1`+suffix, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT attempt+1,state FROM jobs.river_job WHERE id=$1`+suffix, in.TargetID)
 	case "retry_webhook":
-		row = s.pool.QueryRow(ctx, `SELECT attempts+1,state FROM app.provider_webhook_inbox WHERE provider=$1 AND event_id=$2`+suffix, in.TargetType, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT attempts+1,state FROM app.provider_webhook_inbox WHERE provider=$1 AND event_id=$2`+suffix, in.TargetType, in.TargetID)
 	case "suspend_user":
-		row = s.pool.QueryRow(ctx, `SELECT version,status FROM app.users WHERE id=$1::uuid`+suffix, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT version,status FROM app.users WHERE id=$1::uuid`+suffix, in.TargetID)
 	case "restore_user":
-		row = s.pool.QueryRow(ctx, `SELECT version,'suspended' FROM app.platform_suspensions WHERE id=$1::uuid AND target_type='user' AND lifted_at IS NULL`+suffix, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT version,'suspended' FROM app.platform_suspensions WHERE id=$1::uuid AND target_type='user' AND lifted_at IS NULL`+suffix, in.TargetID)
 	case "suspend_organization":
-		row = s.pool.QueryRow(ctx, `SELECT version,status FROM app.organizations WHERE id=$1::uuid`+suffix, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT version,status FROM app.organizations WHERE id=$1::uuid`+suffix, in.TargetID)
 	case "restore_organization":
-		row = s.pool.QueryRow(ctx, `SELECT version,'suspended' FROM app.platform_suspensions WHERE id=$1::uuid AND target_type='organization' AND lifted_at IS NULL`+suffix, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT version,'suspended' FROM app.platform_suspensions WHERE id=$1::uuid AND target_type='organization' AND lifted_at IS NULL`+suffix, in.TargetID)
 	case "place_risk_hold":
 		version, state = 1, "not_held"
 		return version, state, nil
 	case "lift_risk_hold":
-		row = s.pool.QueryRow(ctx, `SELECT version,'active' FROM app.risk_holds WHERE id=$1::uuid AND lifted_at IS NULL AND expires_at>now()`+suffix, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT version,'active' FROM app.risk_holds WHERE id=$1::uuid AND lifted_at IS NULL AND expires_at>now()`+suffix, in.TargetID)
 	case "request_reconciliation":
 		version, state = 1, "unrequested"
 		return version, state, nil
 	case "resolve_unknown_submission", "retry_collection", "cancel_collection":
-		row = s.pool.QueryRow(ctx, `SELECT attempt_number,state FROM app.collection_attempts WHERE id=$1::uuid`+suffix, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT attempt_number,state FROM app.collection_attempts WHERE id=$1::uuid`+suffix, in.TargetID)
 	}
 	if err := row.Scan(&version, &state); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -168,10 +190,25 @@ func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandIn
 		return Command{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	encodedIntent, err := json.Marshal(in)
+	if err != nil {
+		return Command{}, err
+	}
+	digest := sha256.Sum256(encodedIntent)
+	requestHash := hex.EncodeToString(digest[:])
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "operation:"+actorID+":"+in.IdempotencyKey); err != nil {
+		return Command{}, err
+	}
+	var storedHash string
 	var existing Command
-	err = tx.QueryRow(ctx, `SELECT c.id::text,c.command_type,c.target_type,c.target_id,c.expected_version,c.impact_preview,e.state,e.result,c.correlation_id,c.created_at FROM app.operations_commands c JOIN LATERAL (SELECT state,result FROM app.operations_command_events WHERE command_id=c.id ORDER BY occurred_at DESC LIMIT 1)e ON true WHERE c.requested_by=$1::uuid AND c.idempotency_key=$2`, actorID, in.IdempotencyKey).Scan(&existing.ID, &existing.Type, &existing.TargetType, &existing.TargetID, &existing.CurrentVersion, &existing.Impact, &existing.State, &existing.Result, &existing.CorrelationID, &existing.CreatedAt)
+	err = tx.QueryRow(ctx, `SELECT c.id::text,c.command_type,c.target_type,c.target_id,c.expected_version,c.impact_preview,e.state,e.result,c.correlation_id,c.created_at,COALESCE(c.request_hash,'') FROM app.operations_commands c JOIN LATERAL (SELECT state,result FROM app.operations_command_events WHERE command_id=c.id ORDER BY occurred_at DESC LIMIT 1)e ON true WHERE c.requested_by=$1::uuid AND c.idempotency_key=$2`, actorID, in.IdempotencyKey).Scan(&existing.ID, &existing.Type, &existing.TargetType, &existing.TargetID, &existing.CurrentVersion, &existing.Impact, &existing.State, &existing.Result, &existing.CorrelationID, &existing.CreatedAt, &storedHash)
 	if err == nil {
-		_ = tx.Commit(ctx)
+		if storedHash != requestHash {
+			return Command{}, errors.New("idempotency key belongs to a different or unverifiable command")
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return Command{}, err
+		}
 		return existing, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -179,9 +216,12 @@ func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandIn
 	}
 	// Lock through the transaction directly (targetVersion uses the pool), then
 	// enforce optimistic concurrency in each mutation below as the final guard.
-	preview, err := s.PreviewCommand(ctx, in)
+	preview, err := s.previewCommand(ctx, in, tx)
 	if err != nil {
 		return Command{}, err
+	}
+	if in.PreflightVersion == in.ExpectedVersion && len(in.ExternalResult) > 0 {
+		preview.CurrentVersion = in.ExpectedVersion
 	}
 	if preview.CurrentVersion != in.ExpectedVersion {
 		return Command{}, fmt.Errorf("version conflict: current version is %d", preview.CurrentVersion)
@@ -189,7 +229,7 @@ func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandIn
 	impactJSON, _ := json.Marshal(preview.Impact)
 	result := map[string]any{}
 	var commandID string
-	err = tx.QueryRow(ctx, `INSERT INTO app.operations_commands(command_type,target_type,target_id,organization_id,requested_by,reason,expected_version,idempotency_key,impact_preview,correlation_id) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5::uuid,$6,$7,$8,$9,$10) RETURNING id::text,created_at`, in.Type, in.TargetType, in.TargetID, in.OrganizationID, actorID, strings.TrimSpace(in.Reason), in.ExpectedVersion, in.IdempotencyKey, impactJSON, in.CorrelationID).Scan(&commandID, &preview.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO app.operations_commands(command_type,target_type,target_id,organization_id,requested_by,reason,expected_version,idempotency_key,impact_preview,correlation_id,request_hash) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5::uuid,$6,$7,$8,$9,$10,$11) RETURNING id::text,created_at`, in.Type, in.TargetType, in.TargetID, in.OrganizationID, actorID, strings.TrimSpace(in.Reason), in.ExpectedVersion, in.IdempotencyKey, impactJSON, in.CorrelationID, requestHash).Scan(&commandID, &preview.CreatedAt)
 	if err != nil {
 		return Command{}, err
 	}
@@ -347,7 +387,7 @@ func (s *Store) Diagnostics(ctx context.Context, windowMinutes int, correlationI
 	}
 	rows.Close()
 	keys := []string{"dead_letters", "unknown_submissions", "reconciliation_overdue", "ledger_drift", "report_drift", "notification_backlog", "scanner_backlog", "mandate_mismatch", "settlement_mismatch"}
-	query := `SELECT (SELECT count(*) FROM app.job_dead_letters),(SELECT count(*) FROM app.collection_attempts WHERE state='UNKNOWN'),(SELECT count(*) FROM app.reconciliation_cases WHERE state IN('REQUESTED','IN_PROGRESS') AND created_at<now()-interval '30 minutes'),(SELECT count(*) FROM (SELECT transaction_id FROM ledger.postings GROUP BY transaction_id HAVING sum(debit_kobo)<>sum(credit_kobo)) drift),(SELECT count(*) FROM app.obligations o WHERE o.outstanding_kobo<>greatest(0,o.principal_kobo-COALESCE((SELECT sum(p.amount_kobo) FROM app.payments p WHERE p.obligation_id=o.id AND p.state='recognized'),0))),(SELECT count(*) FROM app.notifications WHERE state IN('scheduled','failed')),(SELECT count(*) FROM app.documents WHERE scan_state IN('PENDING','QUARANTINED')),(SELECT count(*) FROM app.trade_lines WHERE state='ACTIVE' AND (mandate_id IS NULL OR mandate_active=false)),(SELECT count(*) FROM app.settlement_events WHERE expected_at<now() AND actual_at IS NULL)`
+	query := `SELECT (SELECT count(*) FROM app.job_dead_letters),(SELECT count(*) FROM app.collection_attempts WHERE state='UNKNOWN'),(SELECT count(*) FROM app.reconciliation_cases WHERE state IN('REQUESTED','IN_PROGRESS') AND created_at<now()-interval '30 minutes'),(SELECT count(*) FROM (SELECT transaction_id FROM ledger.postings GROUP BY transaction_id HAVING sum(debit_kobo)<>sum(credit_kobo)) drift),(SELECT count(*) FROM app.financial_discrepancies WHERE kind='balance'),(SELECT count(*) FROM app.notifications WHERE state IN('scheduled','failed')),(SELECT count(*) FROM app.documents WHERE scan_state IN('PENDING','QUARANTINED')),(SELECT count(*) FROM app.trade_lines WHERE state='ACTIVE' AND (mandate_id IS NULL OR mandate_active=false)),(SELECT count(*) FROM app.financial_discrepancies WHERE kind IN ('settlement','settlement_missing','provider_reversal','settlement_without_payment'))`
 	values := make([]int64, len(keys))
 	args := make([]any, len(keys))
 	for i := range values {
@@ -378,5 +418,3 @@ func (s *Store) ActiveHold(ctx context.Context, targetType, targetID, scope stri
 	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.risk_holds WHERE target_type=$1 AND target_id=$2::uuid AND lifted_at IS NULL AND expires_at>now() AND scope IN ($3,'all_sensitive'))`, targetType, targetID, scope).Scan(&blocked)
 	return blocked, err
 }
-
-func parseInt64(value string) (int64, error) { return strconv.ParseInt(value, 10, 64) }

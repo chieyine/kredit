@@ -221,36 +221,74 @@ func (s *PostgresStore) GetByReference(referenceID string) ([]Transaction, error
 		return []Transaction{}, errors.New("ledger database is not configured")
 	}
 	ctx := context.Background()
-	rows, err := s.pool.Query(ctx, `SELECT id::text FROM ledger.transactions WHERE reference_id = $1 ORDER BY effective_at, recorded_at`, referenceID)
+	txRows, err := s.pool.Query(ctx, `
+		SELECT id::text, event_type, reference_type, reference_id, idempotency_key, effective_at, recorded_at
+		FROM ledger.transactions
+		WHERE reference_id = $1
+		ORDER BY effective_at, recorded_at`, referenceID)
 	if err != nil {
 		return nil, err
 	}
+	defer txRows.Close()
+
+	transactions := make([]Transaction, 0)
+	txMap := make(map[string]*Transaction)
 	ids := make([]string, 0)
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
+
+	for txRows.Next() {
+		var t Transaction
+		if err := txRows.Scan(&t.ID, &t.EventType, &t.ReferenceType, &t.ReferenceID, &t.IdempotencyKey, &t.EffectiveAt, &t.RecordedAt); err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
+		t.Postings = make([]Posting, 0)
+		transactions = append(transactions, t)
+		ids = append(ids, t.ID)
 	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
+	if err := txRows.Err(); err != nil {
 		return nil, err
 	}
-	rows.Close()
-	result := make([]Transaction, 0, len(ids))
-	for _, id := range ids {
-		tx, err := s.pool.Begin(ctx)
-		if err != nil {
-			return nil, err
-		}
-		transaction, err := loadTransaction(ctx, tx, id)
-		_ = tx.Rollback(ctx)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, transaction)
+	txRows.Close()
+
+	if len(ids) == 0 {
+		return transactions, nil
 	}
-	return result, nil
+
+	for i := range transactions {
+		txMap[transactions[i].ID] = &transactions[i]
+	}
+
+	pRows, err := s.pool.Query(ctx, `
+		SELECT postings.transaction_id::text, accounts.code, postings.debit_kobo, postings.credit_kobo
+		FROM ledger.postings postings
+		JOIN ledger.accounts accounts ON accounts.id = postings.account_id
+		WHERE postings.transaction_id = ANY($1::uuid[])
+		ORDER BY postings.id`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer pRows.Close()
+
+	for pRows.Next() {
+		var txID string
+		var p Posting
+		if err := pRows.Scan(&txID, &p.Account, &p.Debit, &p.Credit); err != nil {
+			return nil, err
+		}
+		if t, ok := txMap[txID]; ok {
+			t.Postings = append(t.Postings, p)
+		}
+	}
+	if err := pRows.Err(); err != nil {
+		return nil, err
+	}
+
+	return transactions, nil
+}
+
+func (s *PostgresStore) PostActivationWithFeeTx(ctx context.Context, tx pgx.Tx, id string, principal, fee Money, at time.Time, key string) (Transaction, error) {
+	t, err := activationTransaction(id, principal, fee, at, key)
+	if err != nil {
+		return t, err
+	}
+	return s.postTx(ctx, tx, t)
 }

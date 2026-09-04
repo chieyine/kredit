@@ -92,3 +92,43 @@ func TestProviderStatesVersionConflictsAndRestrictedSettlementInput(t *testing.T
 		t.Fatalf("resubmission did not reset review state: %#v", p)
 	}
 }
+
+func TestKYBDecisionIsBoundToProviderReferenceAndVersion(t *testing.T) {
+	s := NewStore()
+	p, _ := s.Ensure("org", "owner", true, true)
+	p, _, _ = s.SubmitKYB("org", "owner", "provider-ref-1", p.Version)
+	staleVersion := p.Version
+	p, _, _ = s.SubmitKYB("org", "owner", "provider-ref-2", p.Version)
+	if _, _, err := s.RecordKYBDecisionForReference("org", "provider", "provider-ref-1", staleVersion, "approved", "", time.Now().UTC().Add(time.Hour)); err == nil {
+		t.Fatal("stale provider result approved a replacement verification")
+	}
+	if _, _, err := s.RecordKYBDecisionForReference("org", "provider", "provider-ref-1", p.Version, "approved", "", time.Now().UTC().Add(time.Hour)); err == nil {
+		t.Fatal("mismatched provider reference was accepted")
+	}
+	if _, _, err := s.RecordKYBDecisionForReference("org", "provider", "provider-ref-2", p.Version, "approved", "", time.Now().UTC().Add(time.Hour)); err != nil {
+		t.Fatalf("current provider result rejected: %v", err)
+	}
+}
+
+func TestFinanceMFAChangesPreserveOwnerVerification(t *testing.T) {
+	s := NewStore()
+	p, err := s.Ensure("org", "owner", true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _, err = s.SyncSecurity("org", "owner", true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := p.OwnerMFAVerifiedAt
+	for _, finance := range []bool{true, false, true} {
+		p, _, err = s.SyncSecurity("org", "owner", true, finance)
+		if err != nil || p.OwnerMFAVerifiedAt.IsZero() || !p.OwnerMFAVerifiedAt.Equal(original) {
+			t.Fatalf("owner MFA lost: %+v %v", p, err)
+		}
+	}
+	p, _, err = s.SyncSecurity("org", "owner", false, true)
+	if err != nil || !p.OwnerMFAVerifiedAt.IsZero() {
+		t.Fatal("owner revocation was ignored")
+	}
+}

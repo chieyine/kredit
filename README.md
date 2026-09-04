@@ -19,6 +19,8 @@
 
 ---
 
+Mono Sweep sandbox backend: see the [setup and certification runbook](docs/runbooks/mono-sweep.md). Migration 052 and local tests are implemented; real Mono sandbox authorization and provider proof remain pending. Production Sweep remains disabled.
+
 ## Table of contents
 
 - [0. How to use this document](#0-how-to-use-this-document)
@@ -517,6 +519,7 @@ Do not use “borrower” or “lender” in the ordinary supplier-funded workfl
 18. Exact supplier-to-supplier exposure information must not be exposed without a lawful basis and buyer consent.
 19. The product must distinguish “verified identity” from “approved creditworthiness.”
 20. The product must never imply that KYC or a mandate guarantees repayment.
+21. Buyer silence may activate an obligation only where a delivered notice proves the buyer was told, and never on a buyer's first trade credit.
 
 ---
 
@@ -565,6 +568,12 @@ Total fee: **₦125,000**
 
 - All calculations use integer kobo.
 - Floating-point money is prohibited.
+- **Rounding is always down, to the whole kobo, in the payer's favour.** A fee is
+  computed as `amount x basis points / 10000` with the remainder discarded, so
+  the supplier is never charged a fraction of a kobo it did not incur. The
+  maximum effect is one kobo per fee. This is a contractual term, not an
+  implementation detail: it is stated in the supplier agreement and enforced by
+  `TestFeeRoundingAlwaysFavoursTheSupplier`.
 - The base fee accrues only when principal becomes active.
 - A request cancelled before goods are released does not attract the base fee.
 - A trade-line limit itself is not billable; actual activated drawdowns are billable.
@@ -648,6 +657,31 @@ Must support:
 - automatic collection;
 - disputes;
 - statement and closure.
+
+#### 8.3.1 Receipt confirmation and deemed acceptance
+
+Activation normally follows an explicit buyer answer: confirm receipt, or raise
+an issue. Where a buyer neither confirms nor objects, a sale may be activated by
+silence only under all of the following conditions, which are enforced together
+by `internal/credit` and by the database trigger in
+`db/migrations/070_deemed_acceptance_evidence.sql`:
+
+- goods release is recorded;
+- the buyer business has previously answered a goods-release notice itself, on
+  another sale, so a buyer's first trade credit is never activated by silence;
+- a goods-release notice was delivered to the buyer, evidenced by an
+  authenticated delivery receipt, and has been with them for the full waiting
+  period;
+- the waiting period is `DEEMED_ACCEPTANCE_MIN_HOURS`, at least 24 hours and by
+  default 72, so goods released before a weekend closure cannot be deemed
+  accepted before the buyer reopens.
+
+Elapsed time alone is never sufficient. Where the evidence cannot be read, the
+sale stays in `RECEIPT_CONFIRMATION_PENDING` and waits for an explicit answer:
+delaying a supplier is recoverable, debiting a buyer who was never told is not.
+
+The goods-release notice states the deadline and what silence will be taken to
+mean, and links the buyer to the screen where they can object.
 
 ### 8.4 Instalment credit
 
@@ -795,11 +829,11 @@ Must include:
 | Styling | Tailwind CSS 4 |
 | Component foundation | shadcn-svelte and Bits UI, customised into Kredit's own design system |
 | Backend language | Go 1.26, latest patched point release |
-| HTTP stack | Standard `net/http` ServeMux with generated OpenAPI handlers and explicit middleware |
-| API contract | REST, OpenAPI 3.1, problem-details errors |
+| HTTP stack | Standard `net/http` ServeMux with hand-written handlers and explicit middleware ([ADR 0005](docs/adr/0005-hand-written-http-and-sql.md)) |
+| API contract | REST, OpenAPI 3.1, problem-details errors; `api/openapi.yaml` is enforced against the routes by `scripts/product-contract-sync.mjs` |
 | Database | PostgreSQL 18, latest patched point release |
 | Database driver | `pgx/v5`, patched release at or above the version fixing known 2026 advisories |
-| Query generation | `sqlc` 1.31 or newer compatible stable release |
+| Query generation | None. Financial SQL is written explicitly against `pgx` ([ADR 0005](docs/adr/0005-hand-written-http-and-sql.md)) |
 | Migrations | Goose, SQL-first migrations |
 | Durable jobs | River using PostgreSQL and `pgx/v5` |
 | Cache | None by default; Redis only when a measured need exists |
@@ -986,16 +1020,13 @@ kredit/
 │   ├── risk/                 # Factual flags and manual review
 │   ├── settlements/          # Supplier settlement observations
 │   ├── tradelines/           # Limits and drawdowns
-│   └── web/                  # HTTP middleware and generated handler adapters
+│   └── web/                  # HTTP middleware and hand-written handlers
 ├── api/
 │   ├── openapi.yaml          # Canonical OpenAPI 3.1 specification
 │   ├── components/           # Optional split OpenAPI components
-│   ├── generated/            # Generated Go API code; never hand-edit
 │   └── examples/             # Request and response fixtures
 ├── db/
 │   ├── migrations/           # Goose SQL migrations
-│   ├── queries/              # sqlc query files grouped by module
-│   ├── generated/            # sqlc generated Go; never hand-edit
 │   ├── fixtures/             # Integration-test data
 │   └── seeds/                # Local/staging demo seeds
 ├── web/
@@ -1043,7 +1074,6 @@ kredit/
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
-├── sqlc.yaml
 ├── Taskfile.yml
 ├── README.md
 └── IMPLEMENTATION_STATUS.md
@@ -1051,14 +1081,21 @@ kredit/
 
 ### 11.1 Generated code policy
 
+Go server code and Go database access are hand-written; see
+[ADR 0005](docs/adr/0005-hand-written-http-and-sql.md).
+
 The following are generated and must never be edited manually:
 
-- `api/generated/*`;
-- `db/generated/*`;
-- `web/src/lib/api/schema.d.ts`;
+- `web/src/lib/api/generated/schema.d.ts`;
 - any generated OpenAPI client file.
 
-CI must fail when generation produces an uncommitted diff.
+`api/openapi.yaml` remains the canonical transport contract. Because no Go
+server code is generated from it, drift is caught by comparing the document to
+the implemented routes instead: `scripts/product-contract-sync.mjs` fails when
+the OpenAPI operations and the backend routes disagree, and
+`scripts/frontend-api-coverage.mjs` fails when a route has no frontend surface
+and no recorded exemption. CI must fail when generation produces an uncommitted
+diff.
 
 ### 11.2 Module structure
 
@@ -1181,6 +1218,20 @@ the check as complete.
 All configuration must be typed and validated on startup. The application must fail fast when a required production variable is absent or malformed.
 
 Use environment variables for deployment-specific configuration and secrets. Do not commit secrets.
+
+Database credentials are separated by workload. `DATABASE_URL` authenticates
+with an unprivileged API login and the API enters the `kredit_app` role at
+connection startup. `RIVER_DATABASE_URL` uses a distinct worker login and the
+worker enters `kredit_worker`. `DATABASE_DIRECT_URL` is reserved for migrations,
+development seed fixtures, controlled backups, resets, and rollbacks; it must
+never be supplied to an API or worker deployment. Apply
+`infra/postgres/roles.sql` after migrations. Local and Compose environments can
+provision the development-only login wrappers with
+`scripts/configure-development-database.sh`; production credentials come from
+the deployment secret manager.
+`BACKUP_DATABASE_URL` uses a separate read-only login that enters
+`kredit_backup`; that role may bypass RLS solely so `pg_dump` can read every
+tenant and forced-RLS audit row, but it has no write or administration grants.
 
 Categories:
 
@@ -1491,7 +1542,7 @@ Tailwind 4's browser baseline must be checked against actual target devices befo
 
 ### 14.1 HTTP layer
 
-Use Go's standard `net/http` stack and current `ServeMux` method/wildcard routing, integrated with generated OpenAPI handler interfaces.
+Use Go's standard `net/http` stack and current `ServeMux` method/wildcard routing. Handlers are hand-written and checked against `api/openapi.yaml` by the contract-sync gate rather than generated from it ([ADR 0005](docs/adr/0005-hand-written-http-and-sql.md)).
 
 The HTTP layer is responsible for:
 
@@ -1639,10 +1690,10 @@ Changes must follow this order:
 
 1. update OpenAPI;
 2. lint it;
-3. regenerate Go and TypeScript types;
+3. regenerate the TypeScript client types;
 4. implement the domain/handler;
 5. add contract and end-to-end tests;
-6. commit generated code.
+6. commit the generated TypeScript and run `pnpm run audit` so the contract-sync gate confirms the document and the routes still agree.
 
 ### 15.2 API versioning
 

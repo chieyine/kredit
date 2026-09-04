@@ -75,6 +75,7 @@ type CreateLineInput struct {
 	TermsVersion           string
 }
 type CreateDrawdownInput struct {
+	FeeTerms            *ledger.FeeTerms `json:"-"`
 	LineID              string
 	PrincipalKobo       ledger.Money
 	GoodsDescription    string
@@ -86,33 +87,35 @@ type CreateDrawdownInput struct {
 	ExpiresAt           time.Time
 }
 type Drawdown struct {
-	ID                       string       `json:"id"`
-	TradeLineID              string       `json:"trade_line_id"`
-	PrincipalKobo            ledger.Money `json:"principal_kobo"`
-	GoodsDescription         string       `json:"goods_description"`
-	InvoiceReference         string       `json:"invoice_reference,omitempty"`
-	InvoiceDocumentHash      string       `json:"invoice_document_hash,omitempty"`
-	DueDate                  string       `json:"due_date"`
-	CollectionAt             time.Time    `json:"collection_at"`
-	GraceHours               int          `json:"grace_hours"`
-	TermsVersion             string       `json:"terms_version"`
-	AgreementHash            string       `json:"agreement_hash"`
-	State                    string       `json:"state"`
-	ReservationID            string       `json:"reservation_id"`
-	ObligationID             string       `json:"obligation_id,omitempty"`
-	BuyerConfirmedAt         time.Time    `json:"buyer_confirmed_at,omitempty"`
-	ReleaseActorID           string       `json:"release_actor_id,omitempty"`
-	DeliveryMethod           string       `json:"delivery_method,omitempty"`
-	ReleaseNotes             string       `json:"release_notes,omitempty"`
-	ReleaseEvidenceReference string       `json:"release_evidence_reference,omitempty"`
-	ReleasedAt               time.Time    `json:"released_at,omitempty"`
-	ReceiptState             string       `json:"receipt_state,omitempty"`
-	ReceiptActorID           string       `json:"receipt_actor_id,omitempty"`
-	ReceiptIssueReason       string       `json:"receipt_issue_reason,omitempty"`
-	ReceiptDisputeID         string       `json:"receipt_dispute_id,omitempty"`
-	ReceiptAt                time.Time    `json:"receipt_at,omitempty"`
-	ActivatedAt              time.Time    `json:"activated_at,omitempty"`
-	CreatedAt                time.Time    `json:"created_at"`
+	OutstandingKobo          *ledger.Money    `json:"outstanding_kobo,omitempty"`
+	FeeTerms                 *ledger.FeeTerms `json:"fee_terms,omitempty"`
+	ID                       string           `json:"id"`
+	TradeLineID              string           `json:"trade_line_id"`
+	PrincipalKobo            ledger.Money     `json:"principal_kobo"`
+	GoodsDescription         string           `json:"goods_description"`
+	InvoiceReference         string           `json:"invoice_reference,omitempty"`
+	InvoiceDocumentHash      string           `json:"invoice_document_hash,omitempty"`
+	DueDate                  string           `json:"due_date"`
+	CollectionAt             time.Time        `json:"collection_at"`
+	GraceHours               int              `json:"grace_hours"`
+	TermsVersion             string           `json:"terms_version"`
+	AgreementHash            string           `json:"agreement_hash"`
+	State                    string           `json:"state"`
+	ReservationID            string           `json:"reservation_id"`
+	ObligationID             string           `json:"obligation_id,omitempty"`
+	BuyerConfirmedAt         time.Time        `json:"buyer_confirmed_at,omitempty"`
+	ReleaseActorID           string           `json:"release_actor_id,omitempty"`
+	DeliveryMethod           string           `json:"delivery_method,omitempty"`
+	ReleaseNotes             string           `json:"release_notes,omitempty"`
+	ReleaseEvidenceReference string           `json:"release_evidence_reference,omitempty"`
+	ReleasedAt               time.Time        `json:"released_at,omitempty"`
+	ReceiptState             string           `json:"receipt_state,omitempty"`
+	ReceiptActorID           string           `json:"receipt_actor_id,omitempty"`
+	ReceiptIssueReason       string           `json:"receipt_issue_reason,omitempty"`
+	ReceiptDisputeID         string           `json:"receipt_dispute_id,omitempty"`
+	ReceiptAt                time.Time        `json:"receipt_at,omitempty"`
+	ActivatedAt              time.Time        `json:"activated_at,omitempty"`
+	CreatedAt                time.Time        `json:"created_at"`
 }
 type Reservation struct {
 	ID             string       `json:"id"`
@@ -164,7 +167,7 @@ type Service interface {
 	ConfirmDrawdown(string, string, string) (Drawdown, TradeLine, error)
 	ReleaseDrawdown(ReleaseInput) (Drawdown, TradeLine, error)
 	RecordDrawdownReceipt(ReceiptInput) (Drawdown, TradeLine, error)
-	CancelDrawdown(string, string) (Drawdown, TradeLine, error)
+	CancelDrawdown(string, string, string) (Drawdown, TradeLine, error)
 	UpdateOutstanding(string, ledger.Money) (TradeLine, error)
 	Suspend(string, string) (TradeLine, error)
 	Resume(string) (TradeLine, error)
@@ -369,7 +372,7 @@ func (s *Store) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Reservatio
 	if input.CollectionAt.Before(due) {
 		return Drawdown{}, Reservation{}, TradeLine{}, errors.New("collection time cannot be before due date")
 	}
-	drawdown := &Drawdown{ID: s.newID(), TradeLineID: line.ID, PrincipalKobo: input.PrincipalKobo, GoodsDescription: strings.TrimSpace(input.GoodsDescription), InvoiceReference: strings.TrimSpace(input.InvoiceReference), InvoiceDocumentHash: strings.TrimSpace(input.InvoiceDocumentHash), DueDate: input.DueDate, CollectionAt: input.CollectionAt, GraceHours: line.DefaultGraceHours, TermsVersion: line.TermsVersion, State: DrawdownPending, CreatedAt: s.now()}
+	drawdown := &Drawdown{FeeTerms: input.FeeTerms.Clone(), ID: s.newID(), TradeLineID: line.ID, PrincipalKobo: input.PrincipalKobo, GoodsDescription: strings.TrimSpace(input.GoodsDescription), InvoiceReference: strings.TrimSpace(input.InvoiceReference), InvoiceDocumentHash: strings.TrimSpace(input.InvoiceDocumentHash), DueDate: input.DueDate, CollectionAt: input.CollectionAt, GraceHours: line.DefaultGraceHours, TermsVersion: line.TermsVersion, State: DrawdownPending, CreatedAt: s.now()}
 	drawdown.AgreementHash = drawdownHash(*drawdown, *line)
 	reservation := &Reservation{ID: s.newID(), TradeLineID: line.ID, DrawdownID: drawdown.ID, AmountKobo: input.PrincipalKobo, State: ReservationPending, ExpiresAt: expires, IdempotencyKey: input.IdempotencyKey, CreatedAt: s.now()}
 	drawdown.ReservationID = reservation.ID
@@ -404,7 +407,7 @@ func (s *Store) ConfirmDrawdown(drawdownID, buyerUserID, agreementHash string) (
 	if line == nil || line.BuyerUserID != buyerUserID {
 		return Drawdown{}, TradeLine{}, errors.New("buyer mismatch")
 	}
-	if d.State != DrawdownPending && !d.BuyerConfirmedAt.IsZero() && agreementHash == d.AgreementHash && drawdownHash(*d, *line) == d.AgreementHash {
+	if d.State != DrawdownPending && !d.BuyerConfirmedAt.IsZero() && agreementHash == d.AgreementHash && VerifyAgreementHash(*d, *line) {
 		return cloneDrawdown(*d), cloneLine(*line), nil
 	}
 	if d.State != DrawdownPending {
@@ -413,7 +416,7 @@ func (s *Store) ConfirmDrawdown(drawdownID, buyerUserID, agreementHash string) (
 	if err := s.eligibleLocked(line); err != nil {
 		return Drawdown{}, TradeLine{}, err
 	}
-	if strings.TrimSpace(agreementHash) == "" || agreementHash != d.AgreementHash || drawdownHash(*d, *line) != d.AgreementHash {
+	if strings.TrimSpace(agreementHash) == "" || agreementHash != d.AgreementHash || !VerifyAgreementHash(*d, *line) {
 		return Drawdown{}, TradeLine{}, errors.New("drawdown agreement hash mismatch")
 	}
 	r := s.reservations[d.ReservationID]
@@ -551,6 +554,8 @@ func (s *Store) RecordDrawdownReceipt(input ReceiptInput) (Drawdown, TradeLine, 
 	r.State = ReservationConverted
 	d.State = DrawdownActivated
 	d.ObligationID = obligationID
+	principal := d.PrincipalKobo
+	d.OutstandingKobo = &principal
 	d.ActivatedAt = s.now()
 	s.recalculateLocked(line)
 	line.UpdatedAt = s.now()
@@ -558,7 +563,7 @@ func (s *Store) RecordDrawdownReceipt(input ReceiptInput) (Drawdown, TradeLine, 
 	return cloneDrawdown(*d), cloneLine(*line), nil
 }
 
-func (s *Store) CancelDrawdown(drawdownID, actorID string) (Drawdown, TradeLine, error) {
+func (s *Store) CancelDrawdown(authorizedLineID, drawdownID, actorID string) (Drawdown, TradeLine, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	d := s.drawdowns[drawdownID]
@@ -566,7 +571,7 @@ func (s *Store) CancelDrawdown(drawdownID, actorID string) (Drawdown, TradeLine,
 		return Drawdown{}, TradeLine{}, errors.New("drawdown not found")
 	}
 	line := s.lines[d.TradeLineID]
-	if line == nil || strings.TrimSpace(actorID) == "" {
+	if line == nil || authorizedLineID == "" || d.TradeLineID != authorizedLineID || strings.TrimSpace(actorID) == "" {
 		return Drawdown{}, TradeLine{}, errors.New("drawdown cancellation actor is invalid")
 	}
 	if d.State == DrawdownCancelled {
@@ -602,8 +607,12 @@ func (s *Store) UpdateOutstanding(drawdownID string, outstanding ledger.Money) (
 	if d.State != DrawdownActivated || outstanding < 0 || outstanding > d.PrincipalKobo {
 		return TradeLine{}, errors.New("invalid activated outstanding")
 	}
-	line.CurrentExposureKobo -= d.PrincipalKobo
-	line.CurrentExposureKobo += outstanding
+	previous := d.PrincipalKobo
+	if d.OutstandingKobo != nil {
+		previous = *d.OutstandingKobo
+	}
+	line.CurrentExposureKobo += outstanding - previous
+	d.OutstandingKobo = &outstanding
 	s.recalculateLocked(line)
 	line.UpdatedAt = s.now()
 	line.Version++
@@ -747,7 +756,17 @@ func (s *Store) expireReservationsLocked() {
 	}
 }
 
+const currentFeeDisclosure = "0.5% supplier base service fee on activated principal; an additional 0.5% only on amounts Kredit successfully collects at or after the permitted collection time (up to 1% total on collected principal)"
+const legacyFeeDisclosure = "0.5% supplier base service fee on activated principal; 1% collection fee only on amounts Kredit successfully collects"
+
 func drawdownHash(drawdown Drawdown, line TradeLine) string {
+	if drawdown.FeeTerms != nil {
+		return drawdownHashWithFee(drawdown, line, drawdown.FeeTerms.Disclosure())
+	}
+	return drawdownHashWithFee(drawdown, line, currentFeeDisclosure)
+}
+
+func drawdownHashWithFee(drawdown Drawdown, line TradeLine, fee string) string {
 	canonical := struct {
 		DrawdownID             string       `json:"drawdown_id"`
 		TradeLineID            string       `json:"trade_line_id"`
@@ -766,7 +785,7 @@ func drawdownHash(drawdown Drawdown, line TradeLine) string {
 		MandateID              string       `json:"mandate_id"`
 		TermsVersion           string       `json:"terms_version"`
 		FeeDisclosure          string       `json:"fee_disclosure"`
-	}{drawdown.ID, drawdown.TradeLineID, line.SupplierOrganizationID, line.BuyerUserID, line.BuyerBusinessID, drawdown.PrincipalKobo, "NGN", drawdown.GoodsDescription, drawdown.InvoiceReference, drawdown.InvoiceDocumentHash, drawdown.DueDate, drawdown.CollectionAt.UTC(), drawdown.GraceHours, line.Cadence, line.MandateID, drawdown.TermsVersion, "0.5% supplier base service fee on activated principal; 1% collection fee only on amounts Kredit successfully collects"}
+	}{drawdown.ID, drawdown.TradeLineID, line.SupplierOrganizationID, line.BuyerUserID, line.BuyerBusinessID, drawdown.PrincipalKobo, "NGN", drawdown.GoodsDescription, drawdown.InvoiceReference, drawdown.InvoiceDocumentHash, drawdown.DueDate, drawdown.CollectionAt.UTC(), drawdown.GraceHours, line.Cadence, line.MandateID, drawdown.TermsVersion, fee}
 	payload, _ := json.Marshal(canonical)
 	hash := sha256.Sum256(payload)
 	return hex.EncodeToString(hash[:])
@@ -775,7 +794,7 @@ func drawdownHash(drawdown Drawdown, line TradeLine) string {
 // VerifyAgreementHash proves that the stored digest still represents the
 // complete immutable drawdown terms and trade-line parties.
 func VerifyAgreementHash(drawdown Drawdown, line TradeLine) bool {
-	return drawdown.AgreementHash != "" && drawdownHash(drawdown, line) == drawdown.AgreementHash
+	return DrawdownFeeDisclosure(drawdown, line) != ""
 }
 
 func (s *Store) recalculateLocked(line *TradeLine) {
@@ -784,8 +803,15 @@ func (s *Store) recalculateLocked(line *TradeLine) {
 		line.AvailableLimitKobo = 0
 	}
 }
-func cloneLine(v TradeLine) TradeLine            { return v }
-func cloneDrawdown(v Drawdown) Drawdown          { return v }
+func cloneLine(v TradeLine) TradeLine { return v }
+func cloneDrawdown(v Drawdown) Drawdown {
+	v.FeeTerms = v.FeeTerms.Clone()
+	if v.OutstandingKobo != nil {
+		n := *v.OutstandingKobo
+		v.OutstandingKobo = &n
+	}
+	return v
+}
 func cloneReservation(v Reservation) Reservation { return v }
 func defaultTerms(v string) string {
 	if strings.TrimSpace(v) == "" {
@@ -794,3 +820,59 @@ func defaultTerms(v string) string {
 	return v
 }
 func newIdentifier() string { return identifier.New() }
+
+// Preserve the exact fee wording bound by older accepted hashes. New agreements
+// use the corrected disclosure; rendering never silently rewrites accepted terms.
+func DrawdownFeeDisclosure(drawdown Drawdown, line TradeLine) string {
+	if drawdown.AgreementHash == "" {
+		return ""
+	}
+	if drawdown.FeeTerms != nil {
+		fee := drawdown.FeeTerms.Disclosure()
+		if drawdownHashWithFee(drawdown, line, fee) == drawdown.AgreementHash {
+			return fee
+		}
+		return ""
+	}
+	for _, fee := range []string{currentFeeDisclosure, legacyFeeDisclosure} {
+		if drawdownHashWithFee(drawdown, line, fee) == drawdown.AgreementHash {
+			return fee
+		}
+	}
+	return ""
+}
+
+// ApplyObligationDelta keeps the development store's balance and capacity in
+// one critical section, using the same line-before-credit lock order as activation.
+func (s *Store) ApplyObligationDelta(obligationID string, delta ledger.Money, apply func() error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, d := range s.drawdowns {
+		if d.ObligationID != obligationID || d.State != DrawdownActivated {
+			continue
+		}
+		previous := d.PrincipalKobo
+		if d.OutstandingKobo != nil {
+			previous = *d.OutstandingKobo
+		}
+		next, err := ledger.CheckedAdd(previous, delta)
+		if err != nil || next < 0 || next > d.PrincipalKobo {
+			return errors.New("invalid drawdown balance")
+		}
+		line := s.lines[d.TradeLineID]
+		exposure, err := ledger.CheckedAdd(line.CurrentExposureKobo, delta)
+		if err != nil || exposure < 0 {
+			return errors.New("invalid line exposure")
+		}
+		if err := apply(); err != nil {
+			return err
+		}
+		d.OutstandingKobo = &next
+		line.CurrentExposureKobo = exposure
+		s.recalculateLocked(line)
+		line.Version++
+		line.UpdatedAt = s.now()
+		return nil
+	}
+	return apply()
+}

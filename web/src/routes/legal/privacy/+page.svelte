@@ -1,8 +1,8 @@
 <script lang="ts">
 	let { data } = $props();
-	const effectiveDate = data.legal.effectiveDate
+	let effectiveDate = $derived(data.legal.effectiveDate
 		? new Date(`${data.legal.effectiveDate}T12:00:00Z`).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-		: '';
+		: '');
 </script>
 
 <svelte:head><title>Privacy notice — Kredit</title></svelte:head>

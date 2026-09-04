@@ -62,9 +62,10 @@ func (p *WebhookProvider) Cancel(ctx context.Context, id string) (Response, erro
 	return result, err
 }
 func (p *WebhookProvider) Sign(event Webhook) string {
-	payload := fmt.Sprintf("%s|%s|%s|%d|%s|%s", event.EventID, event.ExternalReference, event.State, event.SucceededAmountKobo, event.SettlementState, event.SettlementReference)
+	event.Signature = ""
+	payload, _ := json.Marshal(event)
 	mac := hmac.New(sha256.New, []byte(p.secret))
-	_, _ = mac.Write([]byte(payload))
+	_, _ = mac.Write(payload)
 	return hex.EncodeToString(mac.Sum(nil))
 }
 func (p *WebhookProvider) VerifyWebhook(event Webhook) bool {

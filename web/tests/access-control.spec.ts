@@ -7,7 +7,7 @@ test('logged-out visitors are redirected before protected account pages render',
 	await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
 	await expect(page.locator('footer.site-footer')).toBeVisible();
 	await expect(page.locator('footer.site-footer').getByText('How it works')).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Seller account' })).toHaveCount(0);
+	await expect(page.getByRole('navigation', { name: 'Seller account', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Your money, clearly.' })).toHaveCount(0);
 });
 
@@ -37,7 +37,7 @@ test('an invalid saved session shows only the account check before sign-in', asy
 	await page.goto('/app/payments');
 	await expect(page.getByRole('heading', { name: 'Checking your account…' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Your money, clearly.' })).toHaveCount(0);
-	await expect(page.getByRole('navigation', { name: 'Seller account' })).toHaveCount(0);
+	await expect(page.getByRole('navigation', { name: 'Seller account', exact: true })).toHaveCount(0);
 	await expect(page).toHaveURL(/\/app\?next=%2Fapp%2Fpayments$/);
 });
 
@@ -54,8 +54,8 @@ test('an expired session cannot flash the next page during an account navigation
 		await route.fulfill({ status: 401, contentType: 'application/problem+json', body: JSON.stringify({ detail: 'Session expired.' }) });
 	});
 	await page.goto('/app/settings');
-	await expect(page.getByRole('navigation', { name: 'Seller account' })).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Seller account' }).getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Seller account', exact: true })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Seller account', exact: true }).getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
 	await page.getByRole('link', { name: 'Payments', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Your money, clearly.' })).toHaveCount(0);
 	await expect(page).toHaveURL(/\/app\?next=%2Fapp%2Fpayments$/);
@@ -68,7 +68,7 @@ test('the secure payment link is public but never shows the seller account', asy
 	await page.goto('/pay/example');
 	await expect(page.getByRole('heading', { name: 'Check the amount before you pay.' })).toBeVisible();
 	await expect(page.getByText('₦250,000.00')).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Seller account' })).toHaveCount(0);
+	await expect(page.getByRole('navigation', { name: 'Seller account', exact: true })).toHaveCount(0);
 });
 
 test('the signed-in payments page prioritizes money and items needing an answer', async ({ page, context, baseURL }) => {
@@ -80,8 +80,8 @@ test('the signed-in payments page prioritizes money and items needing an answer'
 	await page.route('**/api/v1/organizations/org-1/payment-claims', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payment_claims: [{ id: 'claim-1', amount_kobo: 10000000, transfer_reference: 'TRF-100', state: 'pending', paid_at: '2026-08-30T09:00:00Z', hold_expires_at: '2026-08-31T09:00:00Z' }] }) }));
 	await page.goto('/app/payments');
 	await expect(page.getByRole('heading', { name: 'Your money, clearly.' })).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Seller account' })).toBeVisible();
-	const headerMenu = page.getByRole('navigation', { name: 'Seller account' }).getByRole('button', { name: 'Menu', exact: true });
+	await expect(page.getByRole('navigation', { name: 'Seller account', exact: true })).toBeVisible();
+	const headerMenu = page.getByRole('navigation', { name: 'Seller account', exact: true }).getByRole('button', { name: 'Menu', exact: true });
 	await expect(headerMenu).toBeVisible();
 	const bottomNavigation = page.getByLabel('Seller account main pages');
 	await expect(bottomNavigation.getByRole('link')).toHaveCount(4);

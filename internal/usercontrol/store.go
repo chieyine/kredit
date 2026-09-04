@@ -60,18 +60,20 @@ type PrivacyRequest struct {
 }
 
 type Store struct {
-	mu           sync.Mutex
-	pool         *pgxpool.Pool
-	secret       []byte
-	now          func() time.Time
-	users        map[string]string
-	recoveries   map[string]*RecoveryRequest
-	evidence     map[string]map[string]bool
-	codes        map[string]map[string]bool
-	capabilities map[string]string
-	privacy      map[string]*PrivacyRequest
-	restrictions map[string]bool
-	rate         map[string][]time.Time
+	recoveryDelivery func(context.Context, RecoveryRequest, string) error
+	recoveryReset    func(string) error
+	mu               sync.Mutex
+	pool             *pgxpool.Pool
+	secret           []byte
+	now              func() time.Time
+	users            map[string]string
+	recoveries       map[string]*RecoveryRequest
+	evidence         map[string]map[string]bool
+	codes            map[string]map[string]bool
+	capabilities     map[string]string
+	privacy          map[string]*PrivacyRequest
+	restrictions     map[string]bool
+	rate             map[string][]time.Time
 }
 
 func NewStore(secret string) *Store {
@@ -284,7 +286,7 @@ func (s *Store) ReviewRecovery(ctx context.Context, requestID, reviewerID, decis
 		return RecoveryRequest{}, "", errors.New("recovery decision is invalid")
 	}
 	if s.pool == nil {
-		return s.reviewRecoveryMemory(requestID, reviewerID, decision, reason, expectedVersion)
+		return s.reviewRecoveryMemory(ctx, requestID, reviewerID, decision, reason, expectedVersion)
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -303,6 +305,9 @@ func (s *Store) ReviewRecovery(ctx context.Context, requestID, reviewerID, decis
 		t := s.now().Add(24 * time.Hour)
 		until = &t
 		token = randomToken()
+		if err := s.SendRecoveryInstructions(ctx, r, token); err != nil {
+			return RecoveryRequest{}, "", err
+		}
 	}
 	_, err = tx.Exec(ctx, `UPDATE app.account_recovery_requests SET state=$2,reviewer_user_id=$3::uuid,review_reason=$4,reviewed_at=now(),cooling_off_until=$5,completion_token_hash=$6,version=version+1,updated_at=now() WHERE id=$1::uuid`, requestID, state, reviewerID, reason, until, nullableDigest(s, token))
 	if err != nil {
@@ -324,21 +329,26 @@ func (s *Store) ReviewRecovery(ctx context.Context, requestID, reviewerID, decis
 	return r, token, nil
 }
 
-func (s *Store) reviewRecoveryMemory(id, reviewer, decision, reason string, version int64) (RecoveryRequest, string, error) {
+func (s *Store) reviewRecoveryMemory(ctx context.Context, id, reviewer, decision, reason string, version int64) (RecoveryRequest, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.recoveries[id]
 	if r == nil || r.State != RecoveryPendingReview || r.Version != version || r.TargetUserID == reviewer {
 		return RecoveryRequest{}, "", errors.New("recovery conflict")
 	}
+	token := ""
+	if decision == "approve" {
+		token = randomToken()
+		if err := s.SendRecoveryInstructions(ctx, *r, token); err != nil {
+			return RecoveryRequest{}, "", err
+		}
+	}
 	r.ReviewerUserID = reviewer
 	r.ReviewReason = reason
 	r.Version++
-	token := ""
 	if decision == "approve" {
 		r.State = RecoveryCoolingOff
 		r.CoolingOffUntil = s.now().Add(24 * time.Hour)
-		token = randomToken()
 		s.capabilities[id] = hex.EncodeToString(s.digest(token))
 	} else {
 		r.State = "REJECTED"
@@ -358,6 +368,17 @@ func (s *Store) CompleteRecovery(ctx context.Context, requestID, token string) (
 		if err != nil {
 			return "", errors.New("recovery request is invalid or cooling off")
 		}
+		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, userID); err != nil {
+			return "", err
+		}
+		// Revoke sessions and the lost MFA method in the same transaction as
+		// consuming the completion token. The next login must enroll a new factor.
+		if _, err = tx.Exec(ctx, `UPDATE app.mfa_methods SET revoked_at=now() WHERE user_id=$1::uuid AND revoked_at IS NULL`, userID); err != nil {
+			return "", err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE app.sessions SET revoked_at=now() WHERE user_id=$1::uuid AND revoked_at IS NULL`, userID); err != nil {
+			return "", err
+		}
 		if _, err = tx.Exec(ctx, `UPDATE app.account_recovery_codes SET state='REVOKED' WHERE user_id=$1::uuid AND state='ACTIVE'`, userID); err != nil {
 			return "", err
 		}
@@ -372,8 +393,13 @@ func (s *Store) CompleteRecovery(ctx context.Context, requestID, token string) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.recoveries[requestID]
-	if r == nil || r.State != RecoveryCoolingOff || s.now().Before(r.CoolingOffUntil) || s.capabilities[requestID] != hex.EncodeToString(s.digest(token)) {
+	if r == nil || r.State != RecoveryCoolingOff || s.now().Before(r.CoolingOffUntil) || !s.now().Before(r.ExpiresAt) || s.capabilities[requestID] != hex.EncodeToString(s.digest(token)) {
 		return "", errors.New("recovery request is invalid or cooling off")
+	}
+	if s.recoveryReset != nil {
+		if err := s.recoveryReset(r.TargetUserID); err != nil {
+			return "", err
+		}
 	}
 	r.State = RecoveryCompleted
 	r.Version++
@@ -572,7 +598,9 @@ func (s *Store) DecidePrivacy(ctx context.Context, id, reviewer, decision, reaso
 	}
 	if state == "APPROVED" || state == "PARTIALLY_APPROVED" {
 		if r.RequestType == "RESTRICTION" || r.RequestType == "DELETION" {
-			_, err = tx.Exec(ctx, `INSERT INTO app.processing_restrictions(user_id,privacy_request_id,scope,reason) VALUES($1::uuid,$2::uuid,'non-essential-processing',$3)`, r.RequesterUserID, id, reason)
+			if _, err = tx.Exec(ctx, `INSERT INTO app.processing_restrictions(user_id,privacy_request_id,scope,reason) VALUES($1::uuid,$2::uuid,'non-essential-processing',$3)`, r.RequesterUserID, id, reason); err != nil {
+				return PrivacyRequest{}, err
+			}
 		}
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO app.privacy_request_events(request_id,event_type,actor_user_id,actor_reference,metadata) VALUES($1::uuid,'privacy.request_decided',$2::uuid,'platform:reviewer',jsonb_build_object('decision',$3::text,'reason',$4::text))`, id, reviewer, state, reason); err != nil {
@@ -732,4 +760,20 @@ func loadRecovery(ctx context.Context, q rowQuerier, id string, lock bool) (Reco
 		r.CoolingOffUntil = *cool
 	}
 	return r, err
+}
+
+// SetRecoveryDelivery is configured once during runtime construction. Delivery
+// must succeed before an approval commits; the raw token is never persisted.
+func (s *Store) SetRecoveryDelivery(deliver func(context.Context, RecoveryRequest, string) error) {
+	s.recoveryDelivery = deliver
+}
+func (s *Store) SetRecoveryReset(reset func(string) error) { s.recoveryReset = reset }
+func (s *Store) SendRecoveryInstructions(ctx context.Context, r RecoveryRequest, token string) error {
+	if s.recoveryDelivery == nil {
+		if s.pool != nil {
+			return errors.New("recovery delivery is not configured")
+		}
+		return nil
+	}
+	return s.recoveryDelivery(ctx, r, token)
 }

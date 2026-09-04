@@ -42,26 +42,42 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+      - name: Install required Go linter
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.2
+          install-only: true
       - name: Install required Go analysis tools
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
+          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.4.0
       - uses: aquasecurity/setup-trivy@v0.2.3
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm --dir web exec playwright install --with-deps chromium
-      - name: Apply fresh database migrations
+      - name: Apply fresh database migrations and runtime roles
         env:
           DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
-        run: go run ./cmd/migrate
+        run: |
+          go run ./cmd/migrate
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false \
+            -f infra/postgres/development-logins.sql
       - name: Run repository checks
         env:
           GOCACHE: ${{ runner.temp }}/go-cache
           SECURITY_STRICT: "1"
           DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+          DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+          APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
+          RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
         run: bash scripts/ci.sh
       - name: Build platform-neutral containers
         run: |

@@ -75,6 +75,9 @@ func TestDrawdownConfirmationActivationAndSuspension(t *testing.T) {
 	if _, err = store.UpdateOutstanding(drawdown.ID, 700); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = store.UpdateOutstanding(drawdown.ID, 700); err != nil {
+		t.Fatal(err)
+	}
 	updated, _ = store.Get(line.ID)
 	if updated.CurrentExposureKobo != 700 || updated.AvailableLimitKobo != 4300 {
 		t.Fatal("exposure update incorrect")
@@ -130,7 +133,15 @@ func TestReceiptIssueDoesNotActivateAndCancellationReleasesLimit(t *testing.T) {
 		t.Fatalf("issue replay was not safe: drawdown=%+v err=%v", replay, replayErr)
 	}
 	cancelled, _, _, _ := store.ReserveDrawdown(CreateDrawdownInput{LineID: line.ID, PrincipalKobo: 200, GoodsDescription: "other", IdempotencyKey: "cancel"})
-	if _, updated, err = store.CancelDrawdown(cancelled.ID, "supplier"); err != nil || updated.AvailableLimitKobo != 700 {
+	for _, wrongLine := range []string{"", "another-line"} {
+		if _, _, err = store.CancelDrawdown(wrongLine, cancelled.ID, "supplier"); err == nil {
+			t.Fatal("cross-line cancellation accepted")
+		}
+	}
+	if _, _, err = store.CancelDrawdown(cancelled.TradeLineID, cancelled.ID, ""); err == nil {
+		t.Fatal("anonymous cancellation accepted")
+	}
+	if _, updated, err = store.CancelDrawdown(cancelled.TradeLineID, cancelled.ID, "supplier"); err != nil || updated.AvailableLimitKobo != 700 {
 		t.Fatalf("cancel did not release only its reservation: line=%+v err=%v", updated, err)
 	}
 }
@@ -188,5 +199,22 @@ func TestTradeLineRejectsClientAssertedMandateState(t *testing.T) {
 	_, err := store.CreateLine(CreateLineInput{SupplierOrganizationID: "org", BuyerUserID: "buyer", BuyerBusinessID: "biz", ApprovedLimitKobo: 1000, StartAt: time.Now().UTC(), EndAt: time.Now().UTC().Add(time.Hour), MandateID: "unverified", MandateActive: true})
 	if err == nil {
 		t.Fatal("expected unverified active mandate to be rejected")
+	}
+}
+
+func TestFeeDisclosurePreservesAcceptedLegacyHash(t *testing.T) {
+	d := Drawdown{ID: "drawdown", PrincipalKobo: 10000}
+	l := TradeLine{ID: "line"}
+	d.AgreementHash = drawdownHashWithFee(d, l, legacyFeeDisclosure)
+	if !VerifyAgreementHash(d, l) || DrawdownFeeDisclosure(d, l) != legacyFeeDisclosure {
+		t.Fatal("legacy evidence was rewritten")
+	}
+	d.AgreementHash = drawdownHash(d, l)
+	if !VerifyAgreementHash(d, l) || DrawdownFeeDisclosure(d, l) != currentFeeDisclosure {
+		t.Fatal("new agreement uses incorrect fee")
+	}
+	d.PrincipalKobo++
+	if VerifyAgreementHash(d, l) {
+		t.Fatal("changed terms verified")
 	}
 }

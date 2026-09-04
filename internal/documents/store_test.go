@@ -3,7 +3,9 @@ package documents
 import (
 	"bytes"
 	"context"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestDocumentRequiresCleanScanBeforeDownload(t *testing.T) {
@@ -21,6 +23,28 @@ func TestDocumentRequiresCleanScanBeforeDownload(t *testing.T) {
 	}
 	if _, err := store.SignedDownload(context.Background(), doc.ID, 60); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestConcurrentUploadSlotsRespectPerUserQuota(t *testing.T) {
+	store := NewStore(NewMemoryObjectStore())
+	var wait sync.WaitGroup
+	var mu sync.Mutex
+	succeeded := 0
+	for i := 0; i < 40; i++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			if _, _, err := store.CreateUpload(context.Background(), "org-1", "user-1", "evidence", "proof.png", "image/png", "dispute", 1024, time.Hour); err == nil {
+				mu.Lock()
+				succeeded++
+				mu.Unlock()
+			}
+		}()
+	}
+	wait.Wait()
+	if succeeded != 20 {
+		t.Fatalf("concurrent quota admitted %d slots, want 20", succeeded)
 	}
 }
 

@@ -55,7 +55,7 @@ type MaintenanceArgs struct {
 
 func (MaintenanceArgs) Kind() string { return KindMaintenance }
 func (MaintenanceArgs) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: QueueMaintenance, MaxAttempts: 5, UniqueOpts: river.UniqueOpts{ByArgs: true}}
+	return river.InsertOpts{Queue: QueueMaintenance, MaxAttempts: 5, UniqueOpts: river.UniqueOpts{ByArgs: true, ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled}}}
 }
 
 type FinancialArgs struct {
@@ -75,7 +75,7 @@ type ReconciliationArgs struct {
 
 func (ReconciliationArgs) Kind() string { return KindReconciliation }
 func (ReconciliationArgs) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: QueueReconciliation, MaxAttempts: 12, UniqueOpts: river.UniqueOpts{ByArgs: true}}
+	return river.InsertOpts{Queue: QueueReconciliation, MaxAttempts: 12, UniqueOpts: river.UniqueOpts{ByArgs: true, ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled}}}
 }
 
 type ProviderWebhookArgs struct {
@@ -98,7 +98,8 @@ type CollectionArgs struct {
 
 func (CollectionArgs) Kind() string { return KindCollection }
 func (CollectionArgs) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: QueueCollections, MaxAttempts: 10, UniqueOpts: river.UniqueOpts{ByArgs: true}}
+	// A completed lookup must not suppress the next periodic reconciliation.
+	return river.InsertOpts{Queue: QueueCollections, MaxAttempts: 10, UniqueOpts: river.UniqueOpts{ByArgs: true, ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled}}}
 }
 
 type NotificationArgs struct {
@@ -185,6 +186,11 @@ type MaintenanceWorker struct {
 	Logger *slog.Logger
 }
 
+// sharedRateLimitWindow must match internal/web.sensitiveRateLimitWindow. The
+// prune keeps four windows of history so a bucket is never dropped while it is
+// still counting.
+const sharedRateLimitWindow = 10 * time.Minute
+
 func (w *MaintenanceWorker) Work(ctx context.Context, job *river.Job[MaintenanceArgs]) error {
 	if w.Pool == nil {
 		return errors.New("maintenance worker database is not configured")
@@ -193,6 +199,12 @@ func (w *MaintenanceWorker) Work(ctx context.Context, job *river.Job[Maintenance
 	case OpExpireReservations:
 		if err := ExpireDrawdownReservations(ctx, w.Pool); err != nil {
 			return err
+		}
+		// The shared authentication rate-limit buckets are keyed by client and
+		// route, so the table would otherwise grow with every distinct caller.
+		// Pruning here keeps it bounded without a separate scheduled job.
+		if _, err := w.Pool.Exec(ctx, `SELECT app.prune_rate_limits($1)`, sharedRateLimitWindow); err != nil {
+			return fmt.Errorf("prune shared rate limits: %w", err)
 		}
 	case OpEvaluateSchedules:
 		_, err := w.Pool.Exec(ctx, `
@@ -525,3 +537,12 @@ func (c *Client) insert(ctx context.Context, args river.JobArgs, opts *river.Ins
 }
 
 func ScheduleMaintenance(now time.Time) time.Time { return now.Add(time.Minute) }
+
+// NewEnqueueClient never runs workers in the API process.
+func NewEnqueueClient(pool *pgxpool.Pool) (*Client, error) {
+	inner, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Schema: "jobs"})
+	if err != nil {
+		return nil, err
+	}
+	return &Client{inner: inner}, nil
+}

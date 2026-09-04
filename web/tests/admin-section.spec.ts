@@ -7,6 +7,7 @@ const json = (body: unknown) => ({
 });
 
 test.beforeEach(async ({ page, context, baseURL }) => {
+ await page.route('**/api/v1/ops/attention',r=>r.fulfill(json({items:[]})));
 	await context.addCookies([
 		{
 			name: 'kredit_session',
@@ -86,7 +87,7 @@ test('the admin section exposes the main platform work without dead screens', as
 
 	await page.goto('/admin');
 	await expect(page.getByRole('heading', { name: 'Run the whole platform from one place.' })).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Admin account' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Admin account', exact: true })).toBeVisible();
 
 	await page.goto('/admin/users');
 	await expect(page.getByRole('heading', { name: 'Every Kredit user.' })).toBeVisible();
@@ -114,11 +115,12 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 	await expect(mobileNavigation).toBeVisible();
 	await expect(mobileNavigation.getByRole('link')).toHaveCount(4);
 	await expect(mobileNavigation.getByRole('button')).toHaveCount(0);
-	await page.getByRole('navigation', { name: 'Admin account' }).getByRole('button', { name: 'Menu', exact: true }).click();
+	await page.getByRole('navigation', { name: 'Admin account', exact: true }).getByRole('button', { name: 'Menu', exact: true }).click();
 
 	const more = page.getByRole('dialog', { name: 'Admin account menu' });
 	await expect(more).toBeVisible();
-	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(12);
+	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(18);
+ await expect(more.getByRole('link', { name: 'Business settings' })).toBeVisible();
 	await expect(more.getByText('Customer support', { exact: true })).toBeVisible();
 	await expect(more.getByText('Access and control', { exact: true })).toBeVisible();
 	await more.getByRole('link', { name: 'Support cases' }).click();

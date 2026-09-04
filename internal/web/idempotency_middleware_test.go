@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"kredit/internal/config"
@@ -74,5 +75,52 @@ func TestFinancialMutationRouteMatrixRequiresIdempotencyKey(t *testing.T) {
 				t.Fatalf("route %s is not protected", path)
 			}
 		})
+	}
+}
+
+func TestOneTimeCredentialsAreNotStoredForReplay(t *testing.T) {
+	cfg := config.Config{Environment: "development", CollectionProvider: "mock"}
+	s := NewServer(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s.mux.HandleFunc("POST /api/v1/mfa/test-one-time", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]string{"secret": "private-test-value"})
+	})
+	request := func() *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/api/v1/mfa/test-one-time", bytes.NewBufferString(`{}`))
+		r.Header.Set("Idempotency-Key", "one-time")
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		return w
+	}
+	if first := request(); first.Code != 200 {
+		t.Fatal(first.Code)
+	}
+	if replay := request(); replay.Code != 409 || bytes.Contains(replay.Body.Bytes(), []byte("private-test-value")) {
+		t.Fatalf("one-time response leaked: %d", replay.Code)
+	}
+}
+
+func TestAdminCommandPreviewDoesNotRequireMutationKey(t *testing.T) {
+	if requiresIdempotencyKey(httptest.NewRequest("POST", "/api/v1/ops/commands/preview", nil)) {
+		t.Fatal("read-only preview requires a key")
+	}
+	if !requiresIdempotencyKey(httptest.NewRequest("POST", "/api/v1/ops/commands", nil)) {
+		t.Fatal("command execution lost its key requirement")
+	}
+}
+
+func TestDocumentJSONCanCarryAFullTwoMiBFile(t *testing.T) {
+	cfg := config.Config{Environment: "development", Version: "test", APIListenAddr: ":0", Currency: "NGN", MoneyUnit: "kobo", CollectionProvider: "mock"}
+	server := NewServer(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server.mux.HandleFunc("POST /api/v1/organizations/org/documents", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusCreated, map[string]bool{"ok": true})
+	})
+	// Base64 expands two MiB to roughly 2.67 MiB before the small JSON envelope.
+	payload := `{"content_base64":"` + strings.Repeat("A", (2<<20)*4/3) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/organizations/org/documents", bytes.NewBufferString(payload))
+	req.Header.Set("Idempotency-Key", "large-document")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("full-size document JSON rejected: %d %s", response.Code, response.Body.String())
 	}
 }

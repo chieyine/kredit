@@ -96,3 +96,26 @@ func TestInvitationActivatesAfterUserAuthentication(t *testing.T) {
 		t.Fatalf("invitation did not activate: %+v", activated)
 	}
 }
+
+func TestAdminCannotDemoteOwner(t *testing.T) {
+	s := NewStore()
+	org, _, err := s.Create("owner", CreateInput{LegalName: "Supplier", BusinessType: "limited_company", BusinessAddress: "Lagos", Industry: "retail"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ChangeRole(org.ID, "admin", "owner", access.RoleSales); err == nil {
+		t.Fatal("owner was demoted")
+	}
+	member, ok := s.Membership(org.ID, "owner")
+	if !ok || member.Role != access.RoleOwner {
+		t.Fatal("owner protection changed membership")
+	}
+	_, invited, err := s.Invite("owner", org.ID, "staff@example.test", "email", "staff", access.RoleSales)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.ActivateInvitations(invited.UserID)
+	if _, err = s.ChangeRole(org.ID, "owner", "staff", access.RoleFinance); err != nil {
+		t.Fatal(err)
+	}
+}

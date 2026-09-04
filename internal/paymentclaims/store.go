@@ -10,6 +10,7 @@ import (
 
 	"kredit/internal/identifier"
 	"kredit/internal/ledger"
+	"kredit/internal/payments"
 )
 
 const (
@@ -59,6 +60,7 @@ type CreateInput struct {
 }
 
 type Service interface {
+	Confirm(context.Context, string, string, string, payments.Service) (Claim, error)
 	Create(context.Context, CreateInput) (Claim, error)
 	Get(context.Context, string) (Claim, error)
 	ListForObligation(context.Context, string) []Claim
@@ -93,7 +95,11 @@ func (s *Store) Create(_ context.Context, input CreateInput) (Claim, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if id := s.byKey[input.IdempotencyKey]; id != "" {
-		return *s.items[id], nil
+		existing := *s.items[id]
+		if !sameClaimIntent(existing, input) {
+			return Claim{}, errors.New("idempotency key belongs to a different payment claim")
+		}
+		return existing, nil
 	}
 	snapshot, err := s.lookup(input.ObligationID)
 	if err != nil {
@@ -195,4 +201,42 @@ func (s *Store) ActiveHold(_ context.Context, obligationID string, at time.Time)
 		total += claim.AmountKobo
 	}
 	return total
+}
+
+// PostgreSQL persists timestamps to microsecond precision.
+func sameClaimIntent(claim Claim, input CreateInput) bool {
+	return claim.ObligationID == input.ObligationID && claim.BuyerUserID == input.BuyerUserID && claim.AmountKobo == input.AmountKobo && claim.TransferReference == strings.TrimSpace(input.TransferReference) && claim.SourceAccountMasked == strings.TrimSpace(input.SourceAccountMasked) && claim.EvidenceDocumentID == strings.TrimSpace(input.EvidenceDocumentID) && (input.PaidAt.IsZero() || claim.PaidAt.Truncate(time.Microsecond).Equal(input.PaidAt.Truncate(time.Microsecond)))
+}
+
+func claimPaymentInput(claim Claim, actor string) payments.RecordInput {
+	return payments.RecordInput{ObligationID: claim.ObligationID, SourceType: payments.SourceBuyerClaim, AmountKobo: claim.AmountKobo, Currency: claim.Currency, ProviderReference: claim.TransferReference, PaidAt: claim.PaidAt, RecordedBy: actor, IdempotencyKey: "payment-claim:" + claim.ID}
+}
+
+func (s *Store) Confirm(ctx context.Context, id, actor, reason string, recorder payments.Service) (Claim, error) {
+	if strings.TrimSpace(actor) == "" || strings.TrimSpace(reason) == "" || recorder == nil {
+		return Claim{}, errors.New("reviewer, reason, and payment service are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	claim := s.items[id]
+	if claim == nil {
+		return Claim{}, errors.New("payment claim not found")
+	}
+	if claim.State == Confirmed {
+		return *claim, nil
+	}
+	if claim.State != Pending {
+		return Claim{}, errors.New("payment claim is not pending")
+	}
+	payment, _, err := recorder.Record(claimPaymentInput(*claim, actor))
+	if err != nil {
+		return Claim{}, err
+	}
+	now := s.now()
+	claim.State = Confirmed
+	claim.ReviewedBy = actor
+	claim.ReviewReason = strings.TrimSpace(reason)
+	claim.PaymentID = payment.ID
+	claim.ReviewedAt = &now
+	return *claim, nil
 }

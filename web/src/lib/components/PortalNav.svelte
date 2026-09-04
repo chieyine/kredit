@@ -32,8 +32,8 @@
 	let moreOpen = $state(false);
 	let moreTrigger: HTMLButtonElement | null = null;
 	let closeButton = $state<HTMLButtonElement | null>(null);
-	const menuID = `portal-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-	const moreID = `${menuID}-more`;
+	let menuID = $derived(`portal-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+	let moreID = $derived(`${menuID}-more`);
 	const hasMobileBar = $derived(mobilePrimary.length > 0);
 
 	function current(href: string) {

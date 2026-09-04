@@ -19,15 +19,19 @@ const (
 type PlatformRole string
 
 const (
-	PlatformSupportAgent       PlatformRole = "support_agent"
-	PlatformComplianceReviewer PlatformRole = "compliance_reviewer"
-	PlatformDisputeReviewer    PlatformRole = "dispute_reviewer"
-	PlatformAdministrator      PlatformRole = "platform_admin"
+	PlatformSupportAgent        PlatformRole = "support_agent"
+	PlatformComplianceReviewer  PlatformRole = "compliance_reviewer"
+	PlatformDisputeReviewer     PlatformRole = "dispute_reviewer"
+	PlatformAdministrator       PlatformRole = "platform_admin"
+	PlatformFinanceOperator     PlatformRole = "finance_operator"
+	PlatformPolicyManager       PlatformRole = "policy_manager"
+	PlatformApprover            PlatformRole = "approver"
+	PlatformAccessAdministrator PlatformRole = "access_administrator"
 )
 
 func (r PlatformRole) Valid() bool {
 	switch r {
-	case PlatformSupportAgent, PlatformComplianceReviewer, PlatformDisputeReviewer, PlatformAdministrator:
+	case PlatformSupportAgent, PlatformComplianceReviewer, PlatformDisputeReviewer, PlatformAdministrator, PlatformFinanceOperator, PlatformPolicyManager, PlatformApprover, PlatformAccessAdministrator:
 		return true
 	default:
 		return false
@@ -37,6 +41,10 @@ func (r PlatformRole) Valid() bool {
 type Permission string
 
 const (
+	PermissionApproveChanges     Permission = "changes:approve"
+	PermissionAdminFinancial     Permission = "platform_financial:manage"
+	PermissionManageAccess       Permission = "platform_access:manage"
+	PermissionManagePolicies     Permission = "business_policy:manage"
 	PermissionReadOrganization   Permission = "organization:read"
 	PermissionManageOrganization Permission = "organization:manage"
 	PermissionInviteMembers      Permission = "members:invite"
@@ -47,11 +55,15 @@ const (
 	PermissionReadAudit          Permission = "audit:read"
 	PermissionReadFinancial      Permission = "financial:read"
 	PermissionManageFinancial    Permission = "financial:manage"
+	PermissionManageDisputes     Permission = "disputes:manage"
 	PermissionSupportSearch      Permission = "support:search"
 	PermissionManageCases        Permission = "support:cases:manage"
 	PermissionReviewCompliance   Permission = "compliance:review"
 	PermissionReviewDisputes     Permission = "disputes:review"
 	PermissionProviderOperations Permission = "providers:operate"
+	PermissionOperateJobs        Permission = "operations:jobs"
+	PermissionOperateCollections Permission = "operations:collections"
+	PermissionSuspendAccounts    Permission = "operations:accounts"
 	PermissionBreakGlass         Permission = "platform:break_glass"
 	PermissionRecoverAccounts    Permission = "accounts:recover"
 	PermissionReviewPrivacy      Permission = "privacy:review"
@@ -71,7 +83,9 @@ func CanPlatform(role PlatformRole, permission Permission) bool {
 		return false
 	}
 	switch permission {
-	case PermissionSupportSearch, PermissionManageCases:
+	case PermissionSupportSearch:
+		return role == PlatformAdministrator || role == PlatformAccessAdministrator
+	case PermissionManageCases:
 		return role == PlatformSupportAgent || role == PlatformAdministrator
 	case PermissionReviewCompliance, PermissionRecoverAccounts, PermissionReviewPrivacy, PermissionManageRiskHold:
 		return role == PlatformComplianceReviewer || role == PlatformAdministrator
@@ -79,6 +93,22 @@ func CanPlatform(role PlatformRole, permission Permission) bool {
 		return role == PlatformDisputeReviewer || role == PlatformAdministrator
 	case PermissionProviderOperations:
 		return role == PlatformAdministrator || role == PlatformComplianceReviewer
+	case PermissionOperateJobs:
+		return role == PlatformAdministrator
+	case PermissionOperateCollections:
+		return role == PlatformAdministrator || role == PlatformFinanceOperator
+	case PermissionSuspendAccounts:
+		return role == PlatformAdministrator
+	case PermissionManagePolicies:
+		return role == PlatformAdministrator || role == PlatformPolicyManager || role == PlatformApprover
+	case PermissionApproveChanges:
+		return role == PlatformAdministrator || role == PlatformApprover
+	case PermissionReadFinancial:
+		return role == PlatformAdministrator || role == PlatformFinanceOperator || role == PlatformApprover || role == PlatformComplianceReviewer
+	case PermissionAdminFinancial:
+		return role == PlatformAdministrator || role == PlatformFinanceOperator || role == PlatformApprover
+	case PermissionManageAccess:
+		return role == PlatformAdministrator || role == PlatformAccessAdministrator
 	case PermissionBreakGlass:
 		return role == PlatformAdministrator
 	default:
@@ -114,7 +144,7 @@ func Can(role Role, permission Permission) bool {
 		return role == RoleAdministrator || role == RoleFinance || role == RoleViewer
 	case PermissionReadFinancial:
 		return role == RoleFinance || role == RoleCollections || role == RoleViewer
-	case PermissionManageFinancial:
+	case PermissionManageFinancial, PermissionManageDisputes:
 		return role == RoleFinance || role == RoleCollections
 	default:
 		return false
@@ -123,7 +153,7 @@ func Can(role Role, permission Permission) bool {
 
 func RequiresStepUp(permission Permission) bool {
 	switch permission {
-	case PermissionManageOrganization, PermissionInviteMembers, PermissionManageMembers, PermissionInviteBuyers, PermissionCreateCredit, PermissionReleaseGoods, PermissionManageFinancial:
+	case PermissionManageOrganization, PermissionInviteMembers, PermissionManageMembers, PermissionInviteBuyers, PermissionCreateCredit, PermissionReleaseGoods, PermissionManageFinancial, PermissionManageDisputes:
 		return true
 	default:
 		return false

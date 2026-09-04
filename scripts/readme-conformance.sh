@@ -20,7 +20,10 @@ for asset in web/static/og.png web/static/icon-192.png web/static/icon-512.png w
 require_file web/src/routes/robots.txt/+server.ts
 require_file web/src/routes/sitemap.xml/+server.ts
 
-for command in dev build test test:unit test:integration test:e2e test:race test:fuzz lint audit security generate api:lint readme:check plan:check db:migrate db:rollback db:reset db:seed db:check data:inventory:generate data:inventory:check openapi:generate sqlc:generate web:check web:test ci; do require_text Taskfile.yml "  ${command}:"; done
+# sqlc:generate is intentionally absent; Go persistence is hand-written per
+# docs/adr/0005-hand-written-http-and-sql.md.
+for command in dev build test test:unit test:integration test:e2e test:race test:fuzz lint audit security generate api:lint readme:check plan:check db:migrate db:rollback db:reset db:seed db:check data:inventory:generate data:inventory:check openapi:generate web:check web:test ci; do require_text Taskfile.yml "  ${command}:"; done
+require_file docs/adr/0005-hand-written-http-and-sql.md
 
 for command in api worker migrate seed reconcile provider-simulator; do require_file "cmd/${command}/main.go"; done
 
@@ -66,6 +69,10 @@ require_file db/migrations/051_analytics_contract_completion.sql
 require_file internal/reports/analytics.go
 require_file docs/product/analytics-event-catalog.md
 require_file docs/product/pilot-scorecard.md
+require_file docs/product/pilot-kill-thresholds.md
+require_file docs/operations/provider-certification-plan.md
+require_file docs/compliance/dpia-trade-history-sharing.md
+require_file docs/operations/admin-surface-enablement.md
 require_file docs/runbooks/pilot-scorecard.md
 require_text api/openapi.yaml '/ops/analytics/scorecard:'
 for route in '/ops/users:' '/ops/organizations:' '/ops/money:' '/ops/cases:' '/ops/disputes:' '/ops/team:'; do require_text api/openapi.yaml "  ${route}"; done

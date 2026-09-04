@@ -19,7 +19,8 @@
 	const routeArticle = $derived((page.data as any)?.article);
 	const routeSEO = $derived((page.data as any)?.seo);
 	const seo = $derived(routeArticle ? { title: routeArticle.title, description: routeArticle.description, type: 'article' as const, published: routeArticle.published, modified: routeArticle.modified, wordCount: routeArticle.wordCount, category: routeArticle.category } : routeSEO ?? seoForPath(normalizedPath));
-	const indexable = $derived(!privateShell && !nonIndexablePaths.has(normalizedPath) && page.status < 400);
+	const legalApproved = $derived((page.data as any)?.legal?.active === true);
+	const indexable = $derived(!privateShell && (!nonIndexablePaths.has(normalizedPath) || legalApproved) && page.status < 400);
 	const organizationSchema = {
 		'@context': 'https://schema.org',
 		'@type': 'Organization',

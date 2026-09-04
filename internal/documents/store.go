@@ -26,19 +26,23 @@ const (
 )
 
 type Document struct {
-	ID             string    `json:"id"`
-	OrganizationID string    `json:"organization_id"`
-	UploadedBy     string    `json:"uploaded_by"`
-	Purpose        string    `json:"purpose"`
-	ObjectKey      string    `json:"object_key"`
-	FileName       string    `json:"file_name"`
-	ContentType    string    `json:"content_type"`
-	SizeBytes      int64     `json:"size_bytes"`
-	SHA256         string    `json:"sha256"`
-	ScanState      ScanState `json:"scan_state"`
-	RetentionClass string    `json:"retention_class"`
-	CreatedAt      time.Time `json:"created_at"`
-	ScannedAt      time.Time `json:"scanned_at,omitempty"`
+	ID                string    `json:"id"`
+	OrganizationID    string    `json:"organization_id"`
+	UploadedBy        string    `json:"uploaded_by"`
+	Purpose           string    `json:"purpose"`
+	ObjectKey         string    `json:"object_key"`
+	FileName          string    `json:"file_name"`
+	ContentType       string    `json:"content_type"`
+	SizeBytes         int64     `json:"size_bytes"`
+	SHA256            string    `json:"sha256"`
+	ScanState         ScanState `json:"scan_state"`
+	RetentionClass    string    `json:"retention_class"`
+	CreatedAt         time.Time `json:"created_at"`
+	ScannedAt         time.Time `json:"scanned_at,omitempty"`
+	UploadCompletedAt time.Time `json:"upload_completed_at,omitempty"`
+	UploadExpiresAt   time.Time `json:"upload_expires_at,omitempty"`
+	ScanAttempts      int       `json:"scan_attempts"`
+	ScanLeaseUntil    time.Time `json:"scan_lease_until,omitempty"`
 }
 
 type ObjectStore interface {
@@ -111,7 +115,7 @@ func (s *Store) Add(ctx context.Context, organizationID, actorID, purpose, fileN
 		return Document{}, fmt.Errorf("read document: %w", err)
 	}
 	now := s.now()
-	doc := Document{ID: newID(), OrganizationID: organizationID, UploadedBy: actorID, Purpose: purpose, ObjectKey: key, FileName: strings.TrimSpace(fileName), ContentType: contentType, SizeBytes: size, SHA256: hex.EncodeToString(digest.Sum(nil)), ScanState: ScanPending, RetentionClass: retentionClass, CreatedAt: now}
+	doc := Document{ID: newID(), OrganizationID: organizationID, UploadedBy: actorID, Purpose: purpose, ObjectKey: key, FileName: strings.TrimSpace(fileName), ContentType: contentType, SizeBytes: size, SHA256: hex.EncodeToString(digest.Sum(nil)), ScanState: ScanPending, RetentionClass: retentionClass, CreatedAt: now, UploadCompletedAt: now}
 	if s.pool != nil {
 		if err := s.insert(ctx, doc); err != nil {
 			return Document{}, err
@@ -146,17 +150,29 @@ func (s *Store) CreateUpload(ctx context.Context, organizationID, actorID, purpo
 	if err != nil {
 		return Document{}, "", err
 	}
-	doc := Document{ID: newID(), OrganizationID: organizationID, UploadedBy: actorID, Purpose: purpose, ObjectKey: key, FileName: strings.TrimSpace(fileName), ContentType: contentType, SizeBytes: size, ScanState: ScanPending, RetentionClass: retentionClass, CreatedAt: s.now()}
+	now := s.now()
+	doc := Document{ID: newID(), OrganizationID: organizationID, UploadedBy: actorID, Purpose: purpose, ObjectKey: key, FileName: strings.TrimSpace(fileName), ContentType: contentType, SizeBytes: size, ScanState: ScanPending, RetentionClass: retentionClass, CreatedAt: now, UploadExpiresAt: now.Add(ttl)}
 	if s.pool != nil {
-		if err := s.insert(ctx, doc); err != nil {
+		if err := s.insertUploadWithQuota(ctx, doc); err != nil {
 			return Document{}, "", err
 		}
-	}
-	s.mu.Lock()
-	if s.pool == nil {
+	} else {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		userCount, organizationCount := 0, 0
+		for _, existing := range s.items {
+			if existing.OrganizationID == organizationID && existing.UploadCompletedAt.IsZero() && now.Before(existing.UploadExpiresAt) {
+				organizationCount++
+				if existing.UploadedBy == actorID {
+					userCount++
+				}
+			}
+		}
+		if userCount >= 20 || organizationCount >= 100 {
+			return Document{}, "", errors.New("too many incomplete upload slots; complete or wait for existing slots to expire")
+		}
 		s.items[doc.ID] = doc
 	}
-	s.mu.Unlock()
 	return doc, url, nil
 }
 
@@ -166,7 +182,7 @@ func (s *Store) CompleteScan(id string, state ScanState) (Document, error) {
 	}
 	if s.pool != nil {
 		var doc Document
-		err := s.pool.QueryRow(context.Background(), `UPDATE app.documents SET scan_state = $2, scanned_at = now() WHERE id = $1::uuid RETURNING id::text, COALESCE(organization_id::text,''), uploaded_by::text, purpose, object_key, file_name, content_type, size_bytes, sha256, scan_state, retention_class, created_at, COALESCE(scanned_at, now())`, id, string(state)).Scan(&doc.ID, &doc.OrganizationID, &doc.UploadedBy, &doc.Purpose, &doc.ObjectKey, &doc.FileName, &doc.ContentType, &doc.SizeBytes, &doc.SHA256, &doc.ScanState, &doc.RetentionClass, &doc.CreatedAt, &doc.ScannedAt)
+		err := s.pool.QueryRow(context.Background(), `UPDATE app.documents SET scan_state = $2, scanned_at = now(), scan_lease_until=NULL WHERE id = $1::uuid AND upload_completed_at IS NOT NULL RETURNING id::text, COALESCE(organization_id::text,''), uploaded_by::text, purpose, object_key, file_name, content_type, size_bytes, sha256, scan_state, retention_class, created_at, COALESCE(scanned_at, now())`, id, string(state)).Scan(&doc.ID, &doc.OrganizationID, &doc.UploadedBy, &doc.Purpose, &doc.ObjectKey, &doc.FileName, &doc.ContentType, &doc.SizeBytes, &doc.SHA256, &doc.ScanState, &doc.RetentionClass, &doc.CreatedAt, &doc.ScannedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Document{}, errors.New("document not found")
 		}
@@ -181,8 +197,12 @@ func (s *Store) CompleteScan(id string, state ScanState) (Document, error) {
 	if !ok {
 		return Document{}, errors.New("document not found")
 	}
+	if doc.UploadCompletedAt.IsZero() {
+		return Document{}, errors.New("document upload is not complete")
+	}
 	doc.ScanState = state
 	doc.ScannedAt = s.now()
+	doc.ScanLeaseUntil = time.Time{}
 	s.items[id] = doc
 	return doc, nil
 }
@@ -191,9 +211,25 @@ func (s *Store) CompleteScan(id string, state ScanState) (Document, error) {
 // matches the declared size before it can enter the scanner queue. It never
 // marks a document clean; only a scanner result may do that.
 func (s *Store) CompleteUpload(ctx context.Context, id string) (Document, error) {
-	doc, ok := s.Get(id)
+	return s.completeUpload(ctx, id, "", "")
+}
+
+// CompleteUploadForTenant performs the same transition while establishing the
+// request-local identity consumed by document RLS policies.
+func (s *Store) CompleteUploadForTenant(ctx context.Context, id, actorID, organizationID string) (Document, error) {
+	return s.completeUpload(ctx, id, actorID, organizationID)
+}
+
+func (s *Store) completeUpload(ctx context.Context, id, actorID, organizationID string) (Document, error) {
+	doc, ok := s.getContext(ctx, id, actorID, organizationID)
 	if !ok {
 		return Document{}, errors.New("document not found")
+	}
+	if !doc.UploadCompletedAt.IsZero() {
+		return doc, nil
+	}
+	if !doc.UploadExpiresAt.IsZero() && !s.now().Before(doc.UploadExpiresAt) {
+		return Document{}, errors.New("upload slot has expired")
 	}
 	reader, ok := s.objects.(ObjectMetadataReader)
 	if !ok {
@@ -206,14 +242,55 @@ func (s *Store) CompleteUpload(ctx context.Context, id string) (Document, error)
 	if size != doc.SizeBytes || !allowedType(contentType) || !strings.EqualFold(strings.TrimSpace(contentType), strings.TrimSpace(doc.ContentType)) {
 		return Document{}, errors.New("uploaded document metadata does not match the declared upload")
 	}
+	doc.UploadCompletedAt = s.now()
+	if s.pool != nil {
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return Document{}, err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if actorID != "" || organizationID != "" {
+			if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, actorID, organizationID); err != nil {
+				return Document{}, err
+			}
+		}
+		if err = tx.QueryRow(ctx, `UPDATE app.documents SET upload_completed_at=now() WHERE id=$1::uuid AND upload_completed_at IS NULL AND upload_expires_at>now() RETURNING upload_completed_at`, id).Scan(&doc.UploadCompletedAt); err != nil {
+			return Document{}, errors.New("upload slot is expired or already unavailable")
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return Document{}, err
+		}
+		return doc, nil
+	}
+	s.mu.Lock()
+	s.items[id] = doc
+	s.mu.Unlock()
 	return doc, nil
 }
 
 func (s *Store) Get(id string) (Document, bool) {
+	return s.getContext(context.Background(), id, "", "")
+}
+
+func (s *Store) GetForTenant(ctx context.Context, id, actorID, organizationID string) (Document, bool) {
+	return s.getContext(ctx, id, actorID, organizationID)
+}
+
+func (s *Store) getContext(ctx context.Context, id, actorID, organizationID string) (Document, bool) {
 	if s.pool != nil {
 		var doc Document
-		err := s.pool.QueryRow(context.Background(), `SELECT id::text, COALESCE(organization_id::text,''), uploaded_by::text, purpose, object_key, file_name, content_type, size_bytes, sha256, scan_state, retention_class, created_at, COALESCE(scanned_at, 'epoch'::timestamptz) FROM app.documents WHERE id = $1::uuid`, id).
-			Scan(&doc.ID, &doc.OrganizationID, &doc.UploadedBy, &doc.Purpose, &doc.ObjectKey, &doc.FileName, &doc.ContentType, &doc.SizeBytes, &doc.SHA256, &doc.ScanState, &doc.RetentionClass, &doc.CreatedAt, &doc.ScannedAt)
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return Document{}, false
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if actorID != "" || organizationID != "" {
+			if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, actorID, organizationID); err != nil {
+				return Document{}, false
+			}
+		}
+		err = tx.QueryRow(ctx, `SELECT id::text, COALESCE(organization_id::text,''), uploaded_by::text, purpose, object_key, file_name, content_type, size_bytes, sha256, scan_state, retention_class, created_at, COALESCE(scanned_at, 'epoch'::timestamptz), COALESCE(upload_completed_at,'epoch'::timestamptz), COALESCE(upload_expires_at,'epoch'::timestamptz),scan_attempts,COALESCE(scan_lease_until,'epoch'::timestamptz) FROM app.documents WHERE id = $1::uuid`, id).
+			Scan(&doc.ID, &doc.OrganizationID, &doc.UploadedBy, &doc.Purpose, &doc.ObjectKey, &doc.FileName, &doc.ContentType, &doc.SizeBytes, &doc.SHA256, &doc.ScanState, &doc.RetentionClass, &doc.CreatedAt, &doc.ScannedAt, &doc.UploadCompletedAt, &doc.UploadExpiresAt, &doc.ScanAttempts, &doc.ScanLeaseUntil)
 		return doc, err == nil
 	}
 	s.mu.RLock()
@@ -223,7 +300,15 @@ func (s *Store) Get(id string) (Document, bool) {
 }
 
 func (s *Store) SignedDownload(ctx context.Context, id string, ttl time.Duration) (string, error) {
-	doc, ok := s.Get(id)
+	return s.signedDownload(ctx, id, "", "", ttl)
+}
+
+func (s *Store) SignedDownloadForTenant(ctx context.Context, id, actorID, organizationID string, ttl time.Duration) (string, error) {
+	return s.signedDownload(ctx, id, actorID, organizationID, ttl)
+}
+
+func (s *Store) signedDownload(ctx context.Context, id, actorID, organizationID string, ttl time.Duration) (string, error) {
+	doc, ok := s.getContext(ctx, id, actorID, organizationID)
 	if !ok {
 		return "", errors.New("document not found")
 	}
@@ -237,8 +322,50 @@ func (s *Store) insert(ctx context.Context, doc Document) error {
 	if s.pool == nil {
 		return errors.New("document database is not configured")
 	}
-	_, err := s.pool.Exec(ctx, `INSERT INTO app.documents (id, organization_id, uploaded_by, purpose, object_key, file_name, content_type, size_bytes, sha256, scan_state, retention_class, created_at) VALUES ($1::uuid, NULLIF($2,'')::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, doc.ID, doc.OrganizationID, doc.UploadedBy, doc.Purpose, doc.ObjectKey, doc.FileName, doc.ContentType, doc.SizeBytes, doc.SHA256, string(doc.ScanState), doc.RetentionClass, doc.CreatedAt)
-	return err
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, doc.UploadedBy, doc.OrganizationID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO app.documents (id, organization_id, uploaded_by, purpose, object_key, file_name, content_type, size_bytes, sha256, scan_state, retention_class, created_at,upload_completed_at,upload_expires_at) VALUES ($1::uuid, NULLIF($2,'')::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11, $12,$13,$14)`, doc.ID, doc.OrganizationID, doc.UploadedBy, doc.Purpose, doc.ObjectKey, doc.FileName, doc.ContentType, doc.SizeBytes, doc.SHA256, string(doc.ScanState), doc.RetentionClass, doc.CreatedAt, nullableDocumentTime(doc.UploadCompletedAt), nullableDocumentTime(doc.UploadExpiresAt)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *Store) insertUploadWithQuota(ctx context.Context, doc Document) error {
+	if s.pool == nil {
+		return errors.New("document database is not configured")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true),pg_advisory_xact_lock(hashtextextended('document-upload-org:'||$2,0))`, doc.UploadedBy, doc.OrganizationID); err != nil {
+		return err
+	}
+	var userCount, organizationCount int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FILTER(WHERE uploaded_by=$2::uuid),count(*) FROM app.documents WHERE organization_id=$1::uuid AND upload_completed_at IS NULL AND upload_expires_at>now()`, doc.OrganizationID, doc.UploadedBy).Scan(&userCount, &organizationCount); err != nil {
+		return err
+	}
+	if userCount >= 20 || organizationCount >= 100 {
+		return errors.New("too many incomplete upload slots; complete or wait for existing slots to expire")
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO app.documents (id, organization_id, uploaded_by, purpose, object_key, file_name, content_type, size_bytes, sha256, scan_state, retention_class, created_at,upload_completed_at,upload_expires_at) VALUES ($1::uuid, NULLIF($2,'')::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11, $12,$13,$14)`, doc.ID, doc.OrganizationID, doc.UploadedBy, doc.Purpose, doc.ObjectKey, doc.FileName, doc.ContentType, doc.SizeBytes, doc.SHA256, string(doc.ScanState), doc.RetentionClass, doc.CreatedAt, nullableDocumentTime(doc.UploadCompletedAt), nullableDocumentTime(doc.UploadExpiresAt)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func nullableDocumentTime(value time.Time) any {
+	if value.IsZero() {
+		return nil
+	}
+	return value
 }
 
 func allowedType(contentType string) bool {

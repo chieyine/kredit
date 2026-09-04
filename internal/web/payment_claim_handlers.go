@@ -10,7 +10,6 @@ import (
 	"kredit/internal/ledger"
 	"kredit/internal/notifications"
 	"kredit/internal/paymentclaims"
-	"kredit/internal/payments"
 	"kredit/internal/publictoken"
 )
 
@@ -28,7 +27,16 @@ type paymentClaimDecisionInput struct {
 }
 
 func (s *Server) createBuyerPaymentClaim(w http.ResponseWriter, r *http.Request) {
-	if !s.runtime.PaymentClaimsEnabled {
+	enabled := s.runtime.PaymentClaimsEnabled
+	if s.runtime.BusinessPolicies != nil {
+		policy, err := s.runtime.BusinessPolicies.Read(r.Context())
+		if err != nil {
+			writeProblem(w, 503, "policy_unavailable", "Business policies could not be checked")
+			return
+		}
+		enabled = policy.Values.PaymentClaims
+	}
+	if !enabled {
 		writeProblem(w, http.StatusConflict, "feature_disabled", "Off-platform payment claims are disabled")
 		return
 	}
@@ -56,7 +64,7 @@ func (s *Server) createBuyerPaymentClaim(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: claim.SupplierOrganizationID, Action: "payment_claim.opened", ResourceType: "payment_claim", ResourceID: claim.ID, Outcome: "success"})
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "payment-claim:" + claim.ID, Type: "BuyerPaymentClaimed", RecipientID: claim.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the payment evidence", SecurePath: "/app/payments"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-claim:" + claim.ID, Type: "BuyerPaymentClaimed", OrganizationID: claim.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the payment evidence", SecurePath: "/app/payments"})
 	writeJSON(w, 201, map[string]any{"payment_claim": claim})
 }
 
@@ -65,7 +73,11 @@ func (s *Server) listBuyerPaymentClaims(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payment_claims": s.runtime.PaymentClaims.ListForBuyer(r.Context(), user.ID)})
+	financialRows1, readErr1 := s.runtime.readPaymentClaimsForBuyer(r.Context(), user.ID)
+	if financialReadError(w, readErr1) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"payment_claims": financialRows1})
 }
 
 func (s *Server) listPaymentClaims(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +91,11 @@ func (s *Server) listPaymentClaims(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "Obligation was not found")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payment_claims": s.runtime.PaymentClaims.ListForObligation(r.Context(), view.Obligation.ID)})
+	financialRows2, readErr2 := s.runtime.readPaymentClaimsForObligation(r.Context(), view.Obligation.ID)
+	if financialReadError(w, readErr2) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"payment_claims": financialRows2})
 }
 
 func (s *Server) listOrganizationPaymentClaims(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +103,11 @@ func (s *Server) listOrganizationPaymentClaims(w http.ResponseWriter, r *http.Re
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payment_claims": s.runtime.PaymentClaims.ListForSupplier(r.Context(), orgID)})
+	financialRows3, readErr3 := s.runtime.readPaymentClaimsForSupplier(r.Context(), orgID)
+	if financialReadError(w, readErr3) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"payment_claims": financialRows3})
 }
 
 func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {
@@ -111,22 +131,18 @@ func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	decision := strings.ToLower(strings.TrimSpace(input.Decision))
-	paymentID := ""
 	if decision == paymentclaims.Confirmed {
-		payment, _, recordErr := s.runtime.Payments.Record(payments.RecordInput{ObligationID: claim.ObligationID, SourceType: payments.SourceBuyerClaim, AmountKobo: claim.AmountKobo, Currency: claim.Currency, ProviderReference: claim.TransferReference, PaidAt: claim.PaidAt, RecordedBy: user.ID, IdempotencyKey: "payment-claim:" + claim.ID})
-		if recordErr != nil {
-			writeProblem(w, 409, "payment_claim_confirmation_failed", recordErr.Error())
-			return
-		}
-		paymentID = payment.ID
+		claim, err = s.runtime.PaymentClaims.Confirm(r.Context(), claim.ID, user.ID, input.Reason, s.runtime.Payments)
+	} else {
+		claim, err = s.runtime.PaymentClaims.Decide(r.Context(), claim.ID, user.ID, decision, input.Reason, "")
 	}
-	claim, err = s.runtime.PaymentClaims.Decide(r.Context(), claim.ID, user.ID, decision, input.Reason, paymentID)
 	if err != nil {
 		writeProblem(w, 409, "payment_claim_decision_failed", err.Error())
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "payment_claim." + decision, ResourceType: "payment_claim", ResourceID: claim.ID, Outcome: "success"})
-	_, _ = s.runtime.Notifications.Emit(r.Context(), notifications.Event{ID: "payment-claim-decision:" + claim.ID, Type: "PaymentClaimDecision", RecipientID: claim.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the supplier decision", SecurePath: "/buyer/history"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-claim-decision:" + claim.ID, Type: "PaymentClaimDecision", RecipientID: claim.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the supplier decision", SecurePath: "/buyer/history"})
+	paymentID := claim.PaymentID
 	response := map[string]any{"payment_claim": claim}
 	if paymentID != "" {
 		if token, issueErr := s.issuePublicToken("receipt", paymentID, 365*24*time.Hour); issueErr == nil {
@@ -138,12 +154,12 @@ func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) publicReceipt(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	paymentID, err := publictoken.Parse(s.config.TokenHashKey, token, "receipt", time.Now().UTC())
+	paymentID, err := publictoken.Parse(runtimeDomainKey(s.config.TokenHashKey, s.config.SessionSigningKey, "public-receipts"), token, "receipt", time.Now().UTC())
 	if err != nil {
 		writeProblem(w, http.StatusGone, "receipt_unavailable", "Receipt link is invalid or expired")
 		return
 	}
-	payment, err := s.runtime.Payments.Get(paymentID)
+	payment, err := s.runtime.getPayment(r.Context(), paymentID)
 	if err != nil {
 		writeProblem(w, 404, "receipt_not_found", "Receipt was not found")
 		return
@@ -175,7 +191,7 @@ func (s *Server) createPaymentLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) publicPaymentIntent(w http.ResponseWriter, r *http.Request) {
-	requestID, err := publictoken.Parse(s.config.TokenHashKey, r.PathValue("token"), "payment", time.Now().UTC())
+	requestID, err := publictoken.Parse(runtimeDomainKey(s.config.TokenHashKey, s.config.SessionSigningKey, "public-payments"), r.PathValue("token"), "payment", time.Now().UTC())
 	if err != nil {
 		writeProblem(w, 410, "payment_link_unavailable", "Payment link is invalid or expired")
 		return
@@ -189,5 +205,5 @@ func (s *Server) publicPaymentIntent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) issuePublicToken(purpose, id string, duration time.Duration) (string, error) {
-	return publictoken.Issue(s.config.TokenHashKey, purpose, id, time.Now().UTC().Add(duration))
+	return publictoken.Issue(runtimeDomainKey(s.config.TokenHashKey, s.config.SessionSigningKey, "public-"+purpose+"s"), purpose, id, time.Now().UTC().Add(duration))
 }

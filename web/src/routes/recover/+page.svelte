@@ -2,13 +2,13 @@
 	import { page } from '$app/state';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
 	let identifier=$state(''),channel=$state('email'),requestID=$state(''),recoveryCode=$state(''),secondIdentifier=$state(''),secondChannel=$state('phone'),challengeID=$state(''),contactCode=$state(''),completionToken=$state(''),message=$state(''),error=$state(''),busy=$state('');
-	$effect(()=>{requestID=page.url.searchParams.get('request')??requestID;completionToken=page.url.searchParams.get('token')??completionToken});
+	$effect(()=>{requestID=page.url.searchParams.get('request')??requestID;completionToken=new URLSearchParams(page.url.hash.slice(1)).get('token')??page.url.searchParams.get('token')??completionToken});
 	async function post(path:string,body:any){busy=path;error='';const response=await fetch(path,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify(body)});const data=await response.json().catch(()=>({}));busy='';if(!response.ok){error=data.detail??'We could not complete this step.';return null}message=data.message??'Saved.';return data}
 	async function start(){const data=await post('/api/v1/account-recovery/requests',{identifier,channel});if(data?.development_request_id)requestID=data.development_request_id}
 	async function addRecoveryCode(){const data=await post(`/api/v1/account-recovery/requests/${requestID}/evidence`,{factor_type:'recovery_code',proof:recoveryCode});if(data)recoveryCode=''}
 	async function requestContactCode(){const data=await post('/api/v1/auth/otp/challenges',{identifier:secondIdentifier,channel:secondChannel,purpose:'recovery'});if(data){challengeID=data.challenge_id;contactCode=data.development_code??''}}
 	async function addContact(){const data=await post(`/api/v1/account-recovery/requests/${requestID}/evidence`,{factor_type:secondChannel==='email'?'verified_email':'verified_phone',proof:'',challenge_id:challengeID,code:contactCode,channel:secondChannel,identifier:secondIdentifier});if(data){challengeID='';contactCode='';secondIdentifier=''}}
-	async function complete(){const data=await post(`/api/v1/account-recovery/requests/${requestID}/complete`,{token:completionToken});if(data){completionToken='';message='Your account recovery is complete. Sign in again on every device.'}}
+	async function complete(){const data=await post(`/api/v1/account-recovery/requests/${requestID}/complete`,{token:completionToken});if(data){completionToken='';message='Your account recovery is complete. Sign in again, then set up a new authenticator in Security settings before making protected changes.'}}
 	async function cancel(){busy='cancel';error='';const response=await fetch(`/api/v1/me/account-recovery/${requestID}/cancel`,{method:'POST',credentials:'include',headers:{'Idempotency-Key':idempotencyKey(),...csrfHeaders()}});busy='';if(!response.ok){const data=await response.json().catch(()=>({}));error=data.detail??'We could not cancel this recovery request.';return}message='This recovery request was cancelled.'}
 </script>
 <svelte:head><title>Get back into your account — Kredit</title></svelte:head>

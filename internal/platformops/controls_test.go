@@ -37,7 +37,12 @@ func TestControlledSuspendRestoreHoldAndIdempotency(t *testing.T) {
 		t.Skip("integration database required")
 	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	poolConfig, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	poolConfig.MaxConns = 1
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +74,11 @@ func TestControlledSuspendRestoreHoldAndIdempotency(t *testing.T) {
 	replayed, err := store.ExecuteCommand(ctx, actor, base)
 	if err != nil || replayed.ID != applied.ID {
 		t.Fatalf("idempotency failed: %+v %v", replayed, err)
+	}
+	changed := base
+	changed.TargetID = actor
+	if _, err = store.ExecuteCommand(ctx, actor, changed); err == nil {
+		t.Fatal("same key authorized a different target")
 	}
 	var status string
 	if err = pool.QueryRow(ctx, `SELECT status FROM app.users WHERE id=$1::uuid`, target).Scan(&status); err != nil || status != "suspended" {

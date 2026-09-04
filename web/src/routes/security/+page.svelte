@@ -1,21 +1,21 @@
 <script lang="ts">
 	const safeguards = [
 		['Safe sign-in', 'We send a private sign-in link. We ask you to check again before important actions.'],
-		['Correct money', 'We count every kobo. We do not count one payment twice. We do not debit more than is owed.'],
-		['Private details', 'We lock important details. Your papers stay private. Shared links stop working after some time.'],
-		['Copies of your records', 'We keep safe copies. If something breaks, we can bring the records back.'],
-		['Fair payments', 'You see the amount and date before you say yes. If there is a problem, debit stops.'],
-		['We test first', 'We test sign-in, payments and every new change before people use it.']
+		['Correct money', 'Balances are recorded in kobo. Payment references help prevent duplicate entries, and collection checks account for money already paid or reserved.'],
+		['Private details', 'Account permissions restrict access to records. Document downloads use private, expiring links.'],
+		['Copies of your records', 'Backup and restore procedures are tested before launch. Production recovery must be rehearsed and monitored.'],
+		['Fair payments', 'You review the terms before accepting. Recorded disputes and reported payments affect the amount eligible for collection.'],
+		['We test first', 'Checks cover sign-in, payment calculations, account permissions and recovery. Independent review remains part of launch preparation.']
 	];
 </script>
 
 
 <main class="trust-page">
-	<section class="trust-hero shell"><div><p class="eyebrow">Is it safe?</p><h1>We keep your money and details safe.</h1></div><div class="hero-side"><p>We control who can enter your account. We keep payment records. We stop if something looks wrong.</p><dl><div><dt>Your staff</dt><dd>See only what they need</dd></div><div><dt>Your sale</dt><dd>Cannot change after “yes”</dd></div><div><dt>A problem</dt><dd>We stop and check</dd></div></dl></div></section>
+	<section class="trust-hero shell"><div><p class="eyebrow">Is it safe?</p><h1>How Kredit protects your records.</h1></div><div class="hero-side"><p>We control who can enter your account. We keep payment records. We stop if something looks wrong.</p><dl><div><dt>Your staff</dt><dd>See only what they need</dd></div><div><dt>Your sale</dt><dd>Changes need an audit trail</dd></div><div><dt>A problem</dt><dd>We stop and check</dd></div></dl></div></section>
 
 	<section class="safeguards shell"><div class="section-head"><p class="eyebrow">How we keep it safe</p><h2>We check every important step.</h2></div><div class="safeguard-list">{#each safeguards as [title, body], index}<article><span>0{index + 1}</span><h3>{title}</h3><p>{body}</p></article>{/each}</div></section>
 
-	<section class="boundaries-section"><div class="shell boundaries"><article><span>01 / SHARED LINKS</span><h2>We hide private details.</h2><p>Shared links do not show full names, bank details, private notes or another seller’s sales.</p></article><article><span>02 / SLOW PAYMENT</span><h2>We check before we debit again.</h2><p>If a payment is slow, we do not take the money again. We first ask the bank what happened.</p></article></div></section>
+	<section class="boundaries-section"><div class="shell boundaries"><article><span>01 / SHARED LINKS</span><h2>We hide private details.</h2><p>Public receipt links omit full names, bank details and private notes. Private invitation and document links serve a different purpose; share them only with the intended recipient.</p></article><article><span>02 / SLOW PAYMENT</span><h2>We check before we debit again.</h2><p>If a payment is slow, we do not take the money again. We first ask the bank what happened.</p></article></div></section>
 
 	<section class="reporting shell"><div><p class="eyebrow">Tell us about a problem</p><h2>Found a safety or privacy issue?</h2></div><div><p>Tell us what happened, but never send your password, one-time code, recovery code or full bank details.</p><a href="/legal/complaints">Report a problem <span>↗</span></a></div></section>
 

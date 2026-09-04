@@ -7,12 +7,17 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	platformlogging "kredit/internal/platform/logging"
 )
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	return decodeJSONLimit(w, r, destination, 1<<20)
+}
+
+func decodeJSONLimit(w http.ResponseWriter, r *http.Request, destination any, limit int64) error {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
@@ -59,7 +64,14 @@ func safeProblemDetail(status int, code, detail string) string {
 		}
 	}
 	if len(detail) > 512 {
-		return detail[:512]
+		// Truncate on a rune boundary. Cutting mid-sequence emits invalid UTF-8
+		// into a problem+json body, which the encoder then rewrites with
+		// replacement characters.
+		cut := 512
+		for cut > 0 && !utf8.RuneStart(detail[cut]) {
+			cut--
+		}
+		return detail[:cut]
 	}
 	return detail
 }

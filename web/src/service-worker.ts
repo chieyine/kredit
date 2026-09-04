@@ -22,9 +22,11 @@ self.addEventListener('fetch', (event) => {
 	const request = event.request;
 	const url = new URL(request.url);
 	if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-	// Financial, identity, invitation, document, and admin responses must never
-	// be cached or replayed while offline.
-	if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/buyer-invitations/') || url.pathname.startsWith('/admin/') || url.pathname.startsWith('/app/')) return;
+	// Financial, identity, obligation, payment, invitation, document, and admin responses
+	// must NEVER be cached or replayed while offline to prevent stale state,
+	// unauthorized offline actions, or shared-device data leakage.
+	const privatePrefixes = ['/api/', '/app/', '/buyer/', '/pay/', '/c/', '/receipt/', '/admin/', '/buyer-invitations/', '/secure/', '/recover/'];
+	if (privatePrefixes.some((prefix) => url.pathname.startsWith(prefix))) return;
 	if (request.destination === 'document') return;
 	if (!staticAssets.has(url.pathname)) return;
 	event.respondWith(

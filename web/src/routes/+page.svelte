@@ -100,7 +100,7 @@
 	:global(body) { background: #f4f0e7; }
 	:global(.site-header) { background: rgb(245 242 234 / .94); border-color: #cec9bf; }
 	.home { overflow: hidden; color: #17181b; background: #f5f2ea; }
-	.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(28rem, .85fr); gap: clamp(3rem, 7vw, 7rem); align-items: center; min-height: calc(100vh - 5rem); padding-top: clamp(4rem, 9vw, 8rem); padding-bottom: clamp(5rem, 9vw, 8rem); }
+	.hero { box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) minmax(28rem, .85fr); gap: clamp(3rem, 7vw, 7rem); align-items: center; min-height: min(58rem, calc(100svh - 5rem)); padding-top: clamp(4rem, 9vw, 8rem); padding-bottom: clamp(5rem, 9vw, 8rem); }
 	.kicker { display: flex; align-items: center; gap: .65rem; margin: 0 0 1.6rem; color: #5a625d; font-size: .76rem; font-weight: 780; letter-spacing: .12em; text-transform: uppercase; }.kicker span { width: 1.8rem; height: 2px; background: #e85f3d; }
 	h1 { max-width: 12ch; margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(3.8rem, 7.5vw, 7.2rem); font-weight: 500; line-height: .88; letter-spacing: -.065em; } h1 em, h2 em { color: #e85f3d; font-weight: 500; }
 	.hero-lede { max-width: 37rem; margin: 2rem 0 0; color: #5f6863; font-size: clamp(1.05rem, 1.7vw, 1.3rem); line-height: 1.62; }.hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 1.5rem; margin-top: 2.2rem; }

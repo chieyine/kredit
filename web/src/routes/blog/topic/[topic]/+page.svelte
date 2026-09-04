@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { jsonLd, SITE_URL } from '$lib/seo';
 	let { data } = $props();
-	const hubURL = `${SITE_URL}/blog/topic/${data.details.slug}`;
-	const listSchema = {
+	let hubURL = $derived(`${SITE_URL}/blog/topic/${data.details.slug}`);
+	let listSchema = $derived({
 		'@context': 'https://schema.org',
 		'@type': 'CollectionPage',
 		name: data.details.title,
@@ -14,12 +14,12 @@
 			numberOfItems: data.articles.length,
 			itemListElement: data.articles.map((article: any, index: number) => ({ '@type': 'ListItem', position: index + 1, name: article.title, url: `${SITE_URL}/blog/${article.slug}` }))
 		}
-	};
-	const breadcrumbSchema = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+	});
+	let breadcrumbSchema = $derived({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
 		{ '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
 		{ '@type': 'ListItem', position: 2, name: 'Helpful guides', item: `${SITE_URL}/blog` },
 		{ '@type': 'ListItem', position: 3, name: data.category, item: hubURL }
-	]};
+	]});
 </script>
 
 <svelte:head>

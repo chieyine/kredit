@@ -20,6 +20,7 @@ import (
 const (
 	CommandCreateCredit  = "create_credit"
 	CommandRecordPayment = "record_payment"
+	CommandConfirm       = "confirm"
 	CommandQuery         = "query"
 	CommandUnknown       = "unknown"
 )
@@ -133,6 +134,9 @@ func ParseCommand(text string) (Command, error) {
 	}
 	if strings.HasPrefix(lower, "how much") || strings.HasPrefix(lower, "who is overdue") || strings.HasPrefix(lower, "what is due") || strings.HasPrefix(lower, "check ") || strings.HasPrefix(lower, "show ") {
 		return Command{Kind: CommandQuery, Query: normalized}, nil
+	}
+	if lower == "yes" || lower == "confirm" || lower == "ok" || strings.HasPrefix(lower, "confirm ") {
+		return Command{Kind: CommandConfirm, Query: normalized}, nil
 	}
 	return Command{Kind: CommandUnknown}, errors.New("unsupported command")
 }

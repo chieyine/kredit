@@ -117,7 +117,7 @@ func (s *Store) Prometheus() string {
 	for _, key := range keys {
 		name := "kredit_" + strings.ReplaceAll(key, ".", "_")
 		builder.WriteString("# TYPE " + name + " counter\n")
-		builder.WriteString(fmt.Sprintf("%s %d\n", name, snapshot.Counters[key]))
+		fmt.Fprintf(&builder, "%s %d\n", name, snapshot.Counters[key])
 	}
 	durationKeys := make([]string, 0, len(snapshot.Durations))
 	for key := range snapshot.Durations {
@@ -128,9 +128,9 @@ func (s *Store) Prometheus() string {
 		name := "kredit_" + strings.ReplaceAll(key, ".", "_")
 		value := snapshot.Durations[key]
 		builder.WriteString("# TYPE " + name + "_milliseconds summary\n")
-		builder.WriteString(fmt.Sprintf("%s_milliseconds_count %d\n", name, value.Count))
-		builder.WriteString(fmt.Sprintf("%s_milliseconds_sum %g\n", name, value.SumMilliseconds))
-		builder.WriteString(fmt.Sprintf("%s_milliseconds{quantile=\"0.95\"} %g\n", name, value.P95Milliseconds))
+		fmt.Fprintf(&builder, "%s_milliseconds_count %d\n", name, value.Count)
+		fmt.Fprintf(&builder, "%s_milliseconds_sum %g\n", name, value.SumMilliseconds)
+		fmt.Fprintf(&builder, "%s_milliseconds{quantile=\"0.95\"} %g\n", name, value.P95Milliseconds)
 	}
 	return builder.String()
 }

@@ -189,3 +189,62 @@ func TestValidateSecretRejectsRepeatedUnicodeCharacter(t *testing.T) {
 		t.Fatal("expected repeated Unicode secret to be rejected")
 	}
 }
+
+func TestMonoSandboxFlagsFailClosed(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("MONO_SWEEP_ENABLED", "true")
+	t.Setenv("COLLECTION_PROVIDER", "mono-sweep")
+	t.Setenv("MONO_WEBHOOK_SECRET", "sandbox-webhook-secret")
+	t.Setenv("MONO_REDIRECT_URL", "https://example.test/return")
+	t.Setenv("MONO_SECRET_KEY", "live_sk_forbidden")
+	if _, err := Load(); err == nil {
+		t.Fatal("live credentials accepted for sandbox")
+	}
+	t.Setenv("MONO_SECRET_KEY", "test_sk_fixture")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AutomaticCollectionEnabled || cfg.AutomaticRetryEnabled || cfg.PartialSweepEnabled {
+		t.Fatal("financial flags enabled by default")
+	}
+	t.Setenv("APP_ENV", "production")
+	if _, err = Load(); err == nil {
+		t.Fatal("uncertified Mono production enabled")
+	}
+}
+
+func TestProductionRequiresAnEnumeratedAdminSurface(t *testing.T) {
+	cfg := Config{Environment: "production", Version: "1", APIListenAddr: ":8080", Currency: "NGN", MoneyUnit: "kobo", CollectionProvider: "provider", ApprovedRetentionPolicy: true, RetentionApprovalReference: "retention-approval", ProductionPilot: true, PilotApprovalReference: "pilot-approval"}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "ADMIN_SURFACES") {
+		t.Fatalf("expected the admin surface enumeration gate, got %v", err)
+	}
+	cfg.AdminSurfaces = []string{"cases", "disputes"}
+	if err := cfg.Validate(); err != nil && strings.Contains(err.Error(), "ADMIN_SURFACES") {
+		t.Fatalf("an enumerated surface list must satisfy the gate, got %v", err)
+	}
+}
+
+func TestAdminSurfacesIgnoreBlankEntries(t *testing.T) {
+	if surfaces := splitList("  cases , ,disputes ,"); len(surfaces) != 2 || surfaces[0] != "cases" || surfaces[1] != "disputes" {
+		t.Fatalf("unexpected surface list %#v", surfaces)
+	}
+	if surfaces := splitList("   "); surfaces != nil {
+		t.Fatalf("a blank setting must read as not configured, got %#v", surfaces)
+	}
+}
+
+func TestDeemedAcceptanceWindowIsBoundedWhereMoneyCanMove(t *testing.T) {
+	cfg := Config{Environment: "development", Version: "1", APIListenAddr: ":8080", Currency: "NGN", MoneyUnit: "kobo", CollectionProvider: "provider", RealCollections: true, CollectionNoticeMinHours: 24, DeemedAcceptanceMinHours: 0, ProviderApprovalReference: "ref", ProviderApprovedBy: "approver", ProviderApprovedAt: "2026-01-01T00:00:00Z"}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "DEEMED_ACCEPTANCE_MIN_HOURS") {
+		t.Fatalf("a disabled waiting period must be refused where real money can move, got %v", err)
+	}
+	cfg.DeemedAcceptanceMinHours = 12
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "DEEMED_ACCEPTANCE_MIN_HOURS") {
+		t.Fatalf("a window shorter than a day must be refused, got %v", err)
+	}
+	cfg.DeemedAcceptanceMinHours = 72
+	if err := cfg.Validate(); err != nil && strings.Contains(err.Error(), "DEEMED_ACCEPTANCE_MIN_HOURS") {
+		t.Fatalf("the default window must be accepted, got %v", err)
+	}
+}

@@ -4,7 +4,7 @@
 	let p:any={preferred_channel:'whatsapp',fallback_channel:'email',payment_reminders_enabled:true,product_updates_enabled:false,quiet_start_hour:22,quiet_end_hour:7,timezone:'Africa/Lagos',version:1};
 	let message='',busy=false,loading=true;
 	async function load(){const r=await fetch('/api/v1/me/notification-preferences',{credentials:'include'});if(r.ok)p=(await r.json()).preferences;loading=false}
-	async function save(){busy=true;message='';const r=await fetch('/api/v1/me/notification-preferences',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify({...p,expected_version:p.version})});const d=await r.json().catch(()=>({}));busy=false;if(r.ok){p=d.preferences;message='Your message choices were saved.'}else message=d.detail??'We could not save your message choices.'}
+	async function save(){busy=true;message='';const r=await fetch('/api/v1/me/notification-preferences',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify({preferred_channel:p.preferred_channel,fallback_channel:p.fallback_channel,payment_reminders_enabled:p.payment_reminders_enabled,product_updates_enabled:p.product_updates_enabled,quiet_start_hour:p.quiet_start_hour,quiet_end_hour:p.quiet_end_hour,timezone:p.timezone,expected_version:p.version})});const d=await r.json().catch(()=>({}));busy=false;if(r.ok){p=d.preferences;message='Your message choices were saved.'}else message=d.detail??'We could not save your message choices.'}
 	onMount(load);
 </script>
 <svelte:head><title>Notification preferences — Kredit</title></svelte:head>

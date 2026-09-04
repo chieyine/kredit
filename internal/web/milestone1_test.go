@@ -84,6 +84,11 @@ func TestSupplierOnboardingAndTenantBoundaries(t *testing.T) {
 	decodeResponse(t, enrollmentResponse, &enrollment)
 	verifyMFAResponse := doJSON(t, client, "/api/v1/mfa/totp/verify", http.MethodPost, map[string]string{"code": auth.TOTPCode(enrollment.Secret, time.Now().UTC())}, map[string]string{"X-CSRF-Token": csrfValue}, http.StatusOK)
 	_ = verifyMFAResponse.Body.Close()
+	for _, cookie := range client.cookies {
+		if cookie.Name == csrfCookieName {
+			csrfValue = cookie.Value
+		}
+	}
 	inviteSuccessResponse := doJSON(t, client, "/api/v1/organizations/"+organizationPayload.Organization.ID+"/members", http.MethodPost, map[string]string{"target": "sales@example.test", "channel": "email", "role": "sales"}, map[string]string{"X-CSRF-Token": csrfValue, "Idempotency-Key": "invite-success"}, http.StatusAccepted)
 	_ = inviteSuccessResponse.Body.Close()
 	auditResponse := doJSON(t, client, "/api/v1/organizations/"+organizationPayload.Organization.ID+"/audit-events", http.MethodGet, nil, nil, http.StatusOK)

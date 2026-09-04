@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"kredit/internal/outbox"
+	"kredit/internal/schedules"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -45,6 +46,10 @@ func TestPostgresWriteOffIsAtomicIdempotentAndRestartSafe(t *testing.T) {
 	}
 	payload, _ := json.Marshal(map[string]any{"request": map[string]any{"id": request, "version": 1}, "obligation": map[string]any{"id": obligation, "outstanding_kobo": 10000, "payment_status": "UNPAID"}})
 	if _, err := pool.Exec(ctx, `INSERT INTO app.credit_aggregate_snapshots(credit_request_id,supplier_organization_id,buyer_user_id,aggregate,version) VALUES($1,$2,$3,$4,1)`, request, org, actor, payload); err != nil {
+		t.Fatal(err)
+	}
+	// Production activation always creates a repayment schedule atomically.
+	if _, _, err := schedules.NewPostgresStore(pool).CreateDefault(obligation, 10000, time.Now().Add(7*24*time.Hour).Format("2006-01-02"), time.Now().UTC().Add(7*24*time.Hour), 0); err != nil {
 		t.Fatal(err)
 	}
 	key := "operation-key-" + request

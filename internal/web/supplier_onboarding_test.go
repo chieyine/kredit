@@ -51,6 +51,11 @@ func TestNewSupplierOwnerReachesPilotReadyAndCanInviteSales(t *testing.T) {
 	decodeResponse(t, enroll, &mfa)
 	elevate := doJSON(t, client, "/api/v1/mfa/totp/verify", http.MethodPost, map[string]string{"code": auth.TOTPCode(mfa.Secret, time.Now().UTC())}, map[string]string{"X-CSRF-Token": csrf}, http.StatusOK)
 	_ = elevate.Body.Close()
+	for _, cookie := range client.cookies {
+		if cookie.Name == csrfCookieName {
+			csrf = cookie.Value
+		}
+	}
 	getVersion := func() int64 {
 		r := doJSON(t, client, "/api/v1/organizations/"+org+"/onboarding", http.MethodGet, nil, nil, http.StatusOK)
 		var v struct {

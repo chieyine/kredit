@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {feeDisclosure} from "$lib/fee-terms";
 	import { onMount } from 'svelte';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
 	let statements: any[] = $state([]), error = $state(''), notice = $state(''), busy = $state('');
@@ -33,7 +34,7 @@
 		<header><div><span>You can still use</span><strong>{money(statement.line.available_limit_kobo)}</strong></div><div><span>You already owe</span><strong>{money(statement.line.current_exposure_kobo)}</strong></div><div><span>Waiting for goods</span><strong>{money(statement.line.reserved_pending_kobo)}</strong></div></header>
 		{#if statement.drawdowns.length}<div class="drawdowns">{#each statement.drawdowns as drawdown}<article>
 			<div class="title"><strong>{money(drawdown.principal_kobo)}</strong><span class="status">{stateLabel(drawdown.state)}</span></div><h2>{drawdown.goods_description}</h2>
-			<dl><dt>Pay before</dt><dd>{drawdown.due_date}</dd><dt>Bank debit after</dt><dd>{new Date(drawdown.collection_at).toLocaleString('en-NG')}</dd><dt>Extra time</dt><dd>{drawdown.grace_hours} hours</dd><dt>Invoice</dt><dd>{drawdown.invoice_reference || 'No number'}</dd><dt>Kredit fee</dt><dd>0.5% when you pay. 1% only when Kredit has to collect late money.</dd></dl>
+			<dl><dt>Pay before</dt><dd>{drawdown.due_date}</dd><dt>Bank debit after</dt><dd>{new Date(drawdown.collection_at).toLocaleString('en-NG')}</dd><dt>Extra time</dt><dd>{drawdown.grace_hours} hours</dd><dt>Invoice</dt><dd>{drawdown.invoice_reference || 'No number'}</dd><dt>Kredit fee</dt><dd>{feeDisclosure(drawdown.fee_terms)}</dd></dl>
 			<details class="hash"><summary>Technical record</summary><code>{drawdown.agreement_hash}</code></details><a href={`/api/v1/buyer/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/agreement-document`} target="_blank" rel="noreferrer">Print or save this sale →</a>
 			{#if drawdown.state === 'PENDING_BUYER_CONFIRMATION'}<p>Check the goods, money and dates. Payment does not start yet.</p><button class="primary" disabled={busy === drawdown.id} onclick={() => command(`/api/v1/buyer/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/confirm`, { agreement_hash: drawdown.agreement_hash }, drawdown.id)}>Yes to this {money(drawdown.principal_kobo)} sale</button>{/if}
 			{#if ['PENDING_BUYER_CONFIRMATION', 'BUYER_CONFIRMED'].includes(drawdown.state)}<button class="danger" disabled={busy === drawdown.id} onclick={() => command(`/api/v1/buyer/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/cancel`, {}, drawdown.id)}>Cancel this sale</button>{/if}

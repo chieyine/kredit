@@ -123,6 +123,46 @@ func TestScheduledNotificationIsRecoveredAndDeliveredOnce(t *testing.T) {
 	}
 }
 
+func TestScheduledSupplierReminderRechecksWithdrawnConsent(t *testing.T) {
+	if os.Getenv("KREDIT_INTEGRATION") != "1" {
+		t.Skip("integration database required")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	var user, org string
+	if err = pool.QueryRow(ctx, `INSERT INTO app.users(normalized_email) VALUES($1) RETURNING id::text`, fmt.Sprintf("consent-reminder-%d@example.test", time.Now().UnixNano())).Scan(&user); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `INSERT INTO app.organizations(legal_name,business_type,business_address,industry) VALUES('Consent reminder','limited_company','Lagos','retail') RETURNING id::text`).Scan(&org); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM app.notifications WHERE recipient_id=$1::uuid;DELETE FROM app.notification_preferences WHERE recipient_id=$1::uuid;DELETE FROM app.organizations WHERE id=$2::uuid;DELETE FROM app.users WHERE id=$1::uuid`, user, org)
+	}()
+	allowed := true
+	store := NewPostgresStore(pool, "consent-secret")
+	store.SetReminderConsent(func(context.Context, string, string) (bool, error) { return allowed, nil })
+	store.SetPreferences(user, Preferences{PreferredChannel: ChannelEmail, FallbackChannel: ChannelEmail, PaymentRemindersEnabled: true, QuietStart: 0, QuietEnd: 0, Timezone: "Africa/Lagos"})
+	d, err := store.Emit(ctx, Event{ID: "consent-due-" + user, Type: "PaymentDueSoon", RecipientID: user, OrganizationID: org, Email: "buyer@example.test", Priority: PriorityRoutine, DeferDelivery: true})
+	if err != nil || len(d) != 1 {
+		t.Fatalf("queue: %+v %v", d, err)
+	}
+	allowed = false
+	provider := NewMockProvider(ChannelEmail)
+	store.RegisterProvider(provider)
+	if err = store.DeliverScheduled(ctx, d[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err = pool.QueryRow(ctx, `SELECT state FROM app.notifications WHERE id=$1::uuid`, d[0].ID).Scan(&state); err != nil || state != StateSuppressed || len(provider.Messages()) != 0 {
+		t.Fatalf("withdrawn reminder state=%s sent=%d err=%v", state, len(provider.Messages()), err)
+	}
+}
+
 func TestPostgresPreferenceVersionAndFutureSuppression(t *testing.T) {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" || os.Getenv("KREDIT_INTEGRATION") != "1" {
@@ -156,7 +196,7 @@ func TestPostgresPreferenceVersionAndFutureSuppression(t *testing.T) {
 		t.Fatalf("optional=%+v err=%v", optional, err)
 	}
 	required, err := store.Emit(ctx, Event{ID: "required-" + userID, Type: "AccountRecoveryRequested", RecipientID: userID, Email: email, Priority: PriorityCritical})
-	if err != nil || len(required) < 2 {
+	if err != nil || len(required) != 1 || required[0].Channel != ChannelEmail || len(smsProvider.Messages()) != 0 {
 		t.Fatalf("required=%+v err=%v", required, err)
 	}
 	restarted := NewPostgresStore(pool, "preferences-secret")

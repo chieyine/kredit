@@ -67,3 +67,15 @@ func TestPostgresClaimIsRestartSafeAndExpiresHold(t *testing.T) {
 		t.Fatalf("expired hold=%d", hold)
 	}
 }
+
+func TestUnavailablePaymentClaimCheckBlocksCollection(t *testing.T) {
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, "postgres://test@localhost/test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool.Close()
+	if hold := NewPostgresStore(pool).ActiveHold(ctx, "unavailable", time.Now()); hold != ledger.Money(1<<63-1) {
+		t.Fatalf("failed hold lookup allowed collection: %d", hold)
+	}
+}

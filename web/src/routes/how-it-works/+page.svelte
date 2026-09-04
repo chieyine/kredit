@@ -1,7 +1,7 @@
 <script lang="ts">
 	const steps = [
 		{ number: '01', title: 'Add the sale.', body: 'Write the goods, amount and day the customer will pay.', facts: [['Money to pay', '₦1,200,000'], ['Pay in', '30 days'], ['Extra days', '3 days']] },
-		{ number: '02', title: 'Your customer says yes.', body: 'Send a private link. Your customer checks the sale and accepts it.', facts: [['Customer', 'Confirmed'], ['Sale', 'Accepted'], ['Debit', 'Allowed']] },
+		{ number: '02', title: 'Your customer says yes.', body: 'Send a private link. Your customer checks the sale and accepts it.', facts: [['Customer', 'Confirmed'], ['Sale', 'Accepted'], ['Debit', 'Separate permission']] },
 		{ number: '03', title: 'Confirm the goods.', body: 'You mark the goods as sent. Your customer says they received them.', facts: [['You sent it', 'Saved'], ['They got it', 'Confirmed'], ['Proof', 'Saved']] },
 		{ number: '04', title: 'See the money.', body: 'See reminders, transfers, problems and payments in one place.', facts: [['Reminders', 'WhatsApp'], ['Problems', 'Can be reported'], ['Debit', 'Only if late']] }
 	];
@@ -17,8 +17,8 @@
 
 <main class="how-page">
 	<section class="intro shell">
-		<div><p class="eyebrow">How it works</p><h1>Four easy steps.</h1></div>
-		<div class="intro-note"><span>It is simple</span><p>Add the sale. Your customer says yes. Confirm the goods. See the payments.</p></div>
+		<div><p class="eyebrow">How it works</p><h1>From order to payment.</h1></div>
+		<div class="intro-note"><span>The sale journey</span><p>Add the sale. Your customer says yes. Confirm the goods. See the payments.</p></div>
 	</section>
 
 	<section class="journey shell" aria-label="The Kredit agreement journey">
@@ -47,7 +47,7 @@
 		<div class="exception-list">
 			<article><span>01</span><div><h3>The goods have a problem</h3><p>Your customer shows the problem. Kredit will not debit that amount until both of you settle it.</p></div></article>
 			<article><span>02</span><div><h3>Your customer pays you directly</h3><p>They tell Kredit. You confirm the payment. The money left to pay goes down.</p></div></article>
-			<article><span>03</span><div><h3>Your customer pays late</h3><p>Kredit sends reminders. After the extra days end, Kredit can debit only the money still owed.</p></div></article>
+			<article><span>03</span><div><h3>Your customer pays late</h3><p>Kredit sends reminders. After the agreed grace period, it can request a debit under valid bank authorization, subject to payment and dispute checks. Collection is not guaranteed.</p></div></article>
 		</div>
 		<div class="next"><p>Want to know the cost?</p><a href="/pricing">See simple pricing <span>↗</span></a></div>
 	</section>
