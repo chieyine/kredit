@@ -6,7 +6,6 @@ import (
 	"kredit/internal/businesspolicy"
 	"kredit/internal/config"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,14 +24,15 @@ func main() {
 		databaseURL = os.Getenv("DATABASE_URL")
 	}
 	if databaseURL == "" {
-		databaseURL = "postgres://kredit:kredit@localhost:5432/kredit?sslmode=disable"
+		panic("DATABASE_DIRECT_URL or DATABASE_URL is required for demo seeding")
 	}
 	root, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
 	seed := filepath.Join(root, "db", "seeds", "001_demo.sql")
-	if _, err := os.Stat(seed); err != nil {
+	seedSQL, err := os.ReadFile(seed)
+	if err != nil {
 		panic(err)
 	}
 	ctx := context.Background()
@@ -45,10 +45,7 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("loading %s\n", seed)
-	command := exec.Command("psql", databaseURL, "-v", "ON_ERROR_STOP=1", "-f", seed)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
-	if err := command.Run(); err != nil {
-		panic(err)
+	if _, err := pool.Exec(ctx, string(seedSQL)); err != nil {
+		panic(fmt.Errorf("apply demo seed: %w", err))
 	}
 }
