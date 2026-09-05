@@ -1,34 +1,44 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
 func TestRunSelfHealthcheck(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/healthz" || r.URL.Path == "/healthz" {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"ok"}`))
-			return
+	healthyClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != selfHealthcheckURL {
+			t.Fatalf("healthcheck destination changed: got %q want %q", request.URL.String(), selfHealthcheckURL)
 		}
-		http.NotFound(w, r)
-	}))
-	defer ts.Close()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"status":"ok"}`)),
+			Request:    request,
+		}, nil
+	})}
 
-	addr := strings.TrimPrefix(ts.URL, "http://")
-	t.Setenv("API_ADDR", addr)
-
-	code := runSelfHealthcheck()
-	if code != 0 {
+	if code := runSelfHealthcheckWithClient(healthyClient); code != 0 {
 		t.Fatalf("expected healthcheck code 0 for healthy server, got %d", code)
 	}
 
-	t.Setenv("API_ADDR", "127.0.0.1:1")
-	codeUnhealthy := runSelfHealthcheck()
-	if codeUnhealthy != 1 {
-		t.Fatalf("expected healthcheck code 1 for unreachable server, got %d", codeUnhealthy)
+	unhealthyClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	})}
+	if code := runSelfHealthcheckWithClient(unhealthyClient); code != 1 {
+		t.Fatalf("expected healthcheck code 1 for unreachable server, got %d", code)
+	}
+
+	if code := runSelfHealthcheckWithClient(nil); code != 1 {
+		t.Fatalf("expected healthcheck code 1 for nil client, got %d", code)
 	}
 }
