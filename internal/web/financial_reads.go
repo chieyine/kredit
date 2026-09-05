@@ -9,6 +9,7 @@ import (
 	"kredit/internal/payments"
 	"kredit/internal/tradelines"
 	"net/http"
+	"time"
 )
 
 func (r *Runtime) readCreditForSupplier(ctx context.Context, id string) ([]credit.View, error) {
@@ -112,6 +113,22 @@ func (r *Runtime) readPaymentClaimsForObligation(ctx context.Context, id string)
 		return source.ReadForObligation(ctx, id)
 	}
 	return r.PaymentClaims.ListForObligation(ctx, id), nil
+}
+func (r *Runtime) collectionEligibilityContext(ctx context.Context, id string, now time.Time) (collections.Eligibility, error) {
+	if source, ok := r.Collections.(interface {
+		EligibilityContext(context.Context, string, time.Time) (collections.Eligibility, error)
+	}); ok {
+		return source.EligibilityContext(ctx, id, now)
+	}
+	return r.Collections.Eligibility(id, now)
+}
+func (r *Runtime) getCollectionAttemptContext(ctx context.Context, id string) (collections.Attempt, bool) {
+	if source, ok := r.Collections.(interface {
+		GetAttemptContext(context.Context, string) (collections.Attempt, bool)
+	}); ok {
+		return source.GetAttemptContext(ctx, id)
+	}
+	return r.Collections.GetAttempt(id)
 }
 func (r *Runtime) readCollectionsAttempts(id string) ([]collections.Attempt, error) {
 	return r.readCollectionsAttemptsContext(context.Background(), id)

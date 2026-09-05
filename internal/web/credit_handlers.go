@@ -1221,7 +1221,8 @@ func (s *Server) collectionEligibility(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	eligibility, err := s.runtime.Collections.Eligibility(v.Obligation.ID, time.Now().UTC())
+	ctx := db.WithTenantContext(r.Context(), "", orgID)
+	eligibility, err := s.runtime.collectionEligibilityContext(ctx, v.Obligation.ID, time.Now().UTC())
 	if err != nil {
 		writeProblem(w, 409, "eligibility_failed", err.Error())
 		return
@@ -1236,6 +1237,7 @@ func (s *Server) startCollection(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireSupplierReady(w, orgID, user.ID, "starting a live collection") {
 		return
 	}
@@ -1293,10 +1295,11 @@ func (s *Server) retryCollection(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireCSRF(w, r) {
 		return
 	}
-	attempt, exists := s.runtime.Collections.GetAttempt(attemptID)
+	attempt, exists := s.runtime.getCollectionAttemptContext(r.Context(), attemptID)
 	if !exists || !s.runtime.Credit.ObligationBelongsToOrganization(attempt.ObligationID, orgID) {
 		writeProblem(w, 404, "collection_not_found", "collection attempt was not found")
 		return
@@ -1317,10 +1320,11 @@ func (s *Server) reconcileCollection(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireCSRF(w, r) {
 		return
 	}
-	attempt, exists := s.runtime.Collections.GetAttempt(attemptID)
+	attempt, exists := s.runtime.getCollectionAttemptContext(r.Context(), attemptID)
 	if !exists || !s.runtime.Credit.ObligationBelongsToOrganization(attempt.ObligationID, orgID) {
 		writeProblem(w, 404, "collection_not_found", "collection attempt was not found")
 		return
