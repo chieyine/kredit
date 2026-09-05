@@ -21,6 +21,25 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          def replace_once(text, old, new, label):
+              if text.count(old) != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {text.count(old)}')
+              return text.replace(old, new, 1)
+
+          def patch_function(text, name, old, new):
+              start_marker = f'func (s *Server) {name}('
+              start = text.find(start_marker)
+              if start < 0:
+                  raise SystemExit(f'handler {name} not found')
+              next_start = text.find('\nfunc (s *Server) ', start + len(start_marker))
+              if next_start < 0:
+                  next_start = len(text)
+              body = text[start:next_start]
+              if body.count(old) != 1:
+                  raise SystemExit(f'{name}: expected one scoped anchor, found {body.count(old)}')
+              body = body.replace(old, new, 1)
+              return text[:start] + body + text[next_start:]
+
           p = Path('internal/payments/postgres.go')
           text = p.read_text()
           old = '''\tif existing, allocation, found, err := loadByIdempotency(ctx, tx, input.IdempotencyKey); err != nil {
@@ -58,9 +77,7 @@ jobs:
           \t}
 
           '''
-          if text.count(old) != 1:
-              raise SystemExit('RecordTx context block changed unexpectedly')
-          text = text.replace(old, new)
+          text = replace_once(text, old, new, 'RecordTx tenant context')
 
           old = '''\tpayment, err := loadPayment(ctx, tx, paymentID, true)
           \tif err != nil {
@@ -84,13 +101,11 @@ jobs:
           \t\treturn payment, nil
           \t}
           '''
-          if text.count(old) != 1:
-              raise SystemExit('ReverseContext block changed unexpectedly')
-          text = text.replace(old, new)
+          text = replace_once(text, old, new, 'ReverseContext tenant context')
 
-          old = '''\treturn loadPayment(ctx, s.pool, paymentID, false)
-          '''
-          new = '''\ttx, err := s.pool.Begin(ctx)
+          text = replace_once(text,
+              '\treturn loadPayment(ctx, s.pool, paymentID, false)\n',
+              '''\ttx, err := s.pool.Begin(ctx)
           \tif err != nil {
           \t\treturn Payment{}, err
           \t}
@@ -99,17 +114,15 @@ jobs:
           \t\treturn Payment{}, err
           \t}
           \treturn loadPayment(ctx, tx, paymentID, false)
-          '''
-          if text.count(old) != 1:
-              raise SystemExit('GetContext block changed unexpectedly')
-          text = text.replace(old, new)
+          ''', 'GetContext tenant context')
 
-          old = '''\trows, err := s.pool.Query(ctx, paymentSelect+` WHERE p.obligation_id=$1::uuid ORDER BY p.recognized_at,p.id`, obligationID)
+          text = replace_once(text,
+              '''\trows, err := s.pool.Query(ctx, paymentSelect+` WHERE p.obligation_id=$1::uuid ORDER BY p.recognized_at,p.id`, obligationID)
           \tif err != nil {
           \t\treturn nil, err
           \t}
-          '''
-          new = '''\ttx, err := s.pool.Begin(ctx)
+          ''',
+              '''\ttx, err := s.pool.Begin(ctx)
           \tif err != nil {
           \t\treturn nil, err
           \t}
@@ -121,34 +134,40 @@ jobs:
           \tif err != nil {
           \t\treturn nil, err
           \t}
-          '''
-          if text.count(old) != 1:
-              raise SystemExit('ReadContext block changed unexpectedly')
-          text = text.replace(old, new)
+          ''', 'ReadContext tenant context')
           p.write_text(text)
 
           p = Path('internal/web/credit_handlers.go')
           text = p.read_text()
-          needle = '\t"kredit/internal/credit"\n'
-          if text.count(needle) != 1:
-              raise SystemExit('credit import anchor changed unexpectedly')
-          text = text.replace(needle, needle + '\t"kredit/internal/db"\n')
+          import_anchor = '\t"kredit/internal/credit"\n'
+          if '\t"kredit/internal/db"\n' not in text:
+              text = replace_once(text, import_anchor, import_anchor + '\t"kredit/internal/db"\n', 'db import')
 
-          replacements = [
-              ('''\t_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)\n\tif !ok {\n\t\treturn\n\t}\n\tif !s.requireCSRF(w, r) {''',
-               '''\t_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)\n\tif !ok {\n\t\treturn\n\t}\n\tr = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))\n\tif !s.requireCSRF(w, r) {''', 2),
-              ('''\tif _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {\n\t\treturn\n\t}\n\tv, err := s.runtime.Credit.GetForSupplier(requestID, orgID)''',
-               '''\tif _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {\n\t\treturn\n\t}\n\tr = r.WithContext(db.WithTenantContext(r.Context(), "", orgID))\n\tv, err := s.runtime.Credit.GetForSupplier(requestID, orgID)''', 2),
-              ('''\t_, user, ok := s.requireAuth(w, r)\n\tif !ok {\n\t\treturn\n\t}\n\trequestID, _ := pathID(r, "requestID")\n\tv, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)''',
-               '''\t_, user, ok := s.requireAuth(w, r)\n\tif !ok {\n\t\treturn\n\t}\n\tr = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))\n\trequestID, _ := pathID(r, "requestID")\n\tv, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)''', 1),
-              ('''\t_, user, ok := s.requireAuth(w, r)\n\tif !ok {\n\t\treturn\n\t}\n\tobligationID, _ := pathID(r, "obligationID")''',
-               '''\t_, user, ok := s.requireAuth(w, r)\n\tif !ok {\n\t\treturn\n\t}\n\tr = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))\n\tobligationID, _ := pathID(r, "obligationID")''', 1),
-          ]
-          for old, new, expected in replacements:
-              actual = text.count(old)
-              if actual != expected:
-                  raise SystemExit(f'handler anchor expected {expected}, found {actual}: {old[:70]!r}')
-              text = text.replace(old, new)
+          manage = '''\t_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)
+          \tif !ok {
+          \t\treturn
+          \t}
+          '''
+          manage_ctx = manage + '\tr = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))\n'
+          for name in ('recordPayment', 'reversePayment'):
+              text = patch_function(text, name, manage, manage_ctx)
+
+          read = '''\tif _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
+          \t\treturn
+          \t}
+          '''
+          read_ctx = read + '\tr = r.WithContext(db.WithTenantContext(r.Context(), "", orgID))\n'
+          for name in ('listPayments', 'reconcilePayments'):
+              text = patch_function(text, name, read, read_ctx)
+
+          auth = '''\t_, user, ok := s.requireAuth(w, r)
+          \tif !ok {
+          \t\treturn
+          \t}
+          '''
+          auth_ctx = auth + '\tr = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))\n'
+          for name in ('listBuyerPayments', 'getBuyerObligation'):
+              text = patch_function(text, name, auth, auth_ctx)
           p.write_text(text)
           PY
           gofmt -w internal/db/tenant_context.go internal/db/financial_context.go internal/payments/postgres.go internal/web/credit_handlers.go
