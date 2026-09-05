@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const realStack = process.env.KREDIT_REAL_STACK_E2E === '1';
+const realStack = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.KREDIT_REAL_STACK_E2E === '1';
 test.describe('real-stack financial journeys', () => {
 	test.skip(!realStack, 'requires the real Go API and PostgreSQL acceptance database');
 
