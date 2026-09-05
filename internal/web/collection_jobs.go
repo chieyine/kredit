@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"kredit/internal/businesspolicy"
+	"kredit/internal/collections"
 	"kredit/internal/config"
+	"kredit/internal/db"
 	"kredit/internal/jobs"
 )
 
@@ -32,20 +34,16 @@ func (r *Runtime) EnqueueCollectionWork(ctx context.Context, cfg config.Config) 
 		}
 	}
 	if cfg.RealCollections || cfg.MonoSweepEnabled {
-		if _, err := r.Database.Raw().Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key)
- SELECT 'obligation',s.obligation_id::text,'notification.requested',jsonb_build_object('event','PRE_DEBIT_NOTICE','schedule_item_id',i.id,'amount_kobo',i.principal_due_kobo),app.collection_notice_key(i)
- FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id JOIN app.obligations o ON o.id=s.obligation_id
- WHERE o.lifecycle_status='ACTIVE' AND o.outstanding_kobo>0 AND i.state NOT IN ('PAID','CANCELLED') AND i.principal_due_kobo>i.allocated_kobo AND i.collection_at<=now()+interval '31 days'
- ON CONFLICT(idempotency_key) DO NOTHING`); err != nil {
+		if _, err := r.Database.Raw().Exec(ctx, `SELECT app.enqueue_pre_debit_notices()`); err != nil {
 			return err
 		}
 	}
 
-	err := r.enqueueCollectionPages(ctx, `SELECT id::text,id::text FROM app.collection_attempts WHERE state IN ('PENDING','SUBMITTED','UNKNOWN') AND id::text>$1 ORDER BY id::text LIMIT 100`, jobs.OpReconcileProvider)
+	err := r.enqueueTenantCollectionPages(ctx, `SELECT resource_id,organization_id::text FROM app.collection_attempt_work_page($1,100)`, jobs.OpReconcileProvider)
 	if err != nil {
 		return err
 	}
-	if _, err = r.Database.Raw().Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) SELECT 'obligation',s.obligation_id::text,'notification.requested',jsonb_build_object('event',CASE WHEN i.due_at<=now() THEN 'PAYMENT_DUE' ELSE 'UPCOMING_DUE' END,'schedule_item_id',i.id,'amount_kobo',i.principal_due_kobo-i.allocated_kobo),CASE WHEN i.due_at<=now() THEN 'due:' ELSE 'upcoming:' END||i.id::text||':'||i.due_at::text FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id JOIN app.obligations o ON o.id=s.obligation_id WHERE o.lifecycle_status='ACTIVE' AND o.outstanding_kobo>0 AND i.state NOT IN ('PAID','CANCELLED') AND i.principal_due_kobo>i.allocated_kobo AND i.due_at<=now()+make_interval(days=>$1) ON CONFLICT(idempotency_key) DO NOTHING`, int(policy.UpcomingNoticeDays)); err != nil {
+	if _, err = r.Database.Raw().Exec(ctx, `SELECT app.enqueue_due_payment_notices($1)`, int(policy.UpcomingNoticeDays)); err != nil {
 		return err
 	}
 	if r.Mono != nil {
@@ -59,7 +57,7 @@ func (r *Runtime) EnqueueCollectionWork(ctx context.Context, cfg config.Config) 
 	if !policy.CollectionsEnabled || !policy.AutomaticCollection {
 		return nil
 	}
-	return r.enqueueCollectionPages(ctx, `SELECT DISTINCT o.id::text,o.id::text FROM app.obligations o JOIN app.repayment_schedules s ON s.obligation_id=o.id JOIN app.schedule_items i ON i.schedule_id=s.id WHERE o.lifecycle_status='ACTIVE' AND o.outstanding_kobo>0 AND i.state NOT IN ('PAID','CANCELLED') AND i.collection_at<=now() AND i.principal_due_kobo>i.allocated_kobo AND o.id::text>$1 AND NOT EXISTS(SELECT 1 FROM app.collection_reservations r WHERE r.obligation_id=o.id AND r.state IN ('PROCESSING','COMPLETED')) ORDER BY o.id::text LIMIT 100`, "collect_due")
+	return r.enqueueTenantCollectionPages(ctx, `SELECT resource_id,organization_id::text FROM app.collection_due_work_page($1,100)`, "collect_due")
 }
 
 // Page through the entire eligible set so unresolved early rows cannot starve
@@ -98,7 +96,45 @@ func (r *Runtime) enqueueCollectionPages(ctx context.Context, query, operation s
 	}
 }
 
-func (r *Runtime) HandleCollectionJob(ctx context.Context, cfg config.Config, operation, id string) error {
+func (r *Runtime) enqueueTenantCollectionPages(ctx context.Context, query, operation string) error {
+	cursor := ""
+	for {
+		rows, err := r.Database.Raw().Query(ctx, query, cursor)
+		if err != nil {
+			return err
+		}
+		type item struct{ id, organizationID string }
+		batch := []item{}
+		for rows.Next() {
+			var v item
+			if err = rows.Scan(&v.id, &v.organizationID); err != nil {
+				rows.Close()
+				return err
+			}
+			batch = append(batch, v)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		for _, v := range batch {
+			if err = r.WebhookJobs.EnqueueCollection(ctx, jobs.CollectionArgs{Operation: operation, ResourceID: v.id, OrganizationID: v.organizationID}); err != nil {
+				return err
+			}
+			cursor = v.id
+		}
+		if len(batch) < 100 {
+			return nil
+		}
+	}
+}
+
+func (r *Runtime) HandleCollectionJob(ctx context.Context, cfg config.Config, args jobs.CollectionArgs) error {
+	operation, id := args.Operation, args.ResourceID
+	if args.OrganizationID != "" {
+		ctx = db.WithTenantContext(ctx, "", args.OrganizationID)
+	}
 	if operation == "reconcile_mandate" {
 		notice := mono.Notice{EventID: "mandate-reconciliation:" + id, Type: "reconcile", MandateID: id}
 		payload, _ := json.Marshal(notice)
@@ -122,14 +158,22 @@ func (r *Runtime) HandleCollectionJob(ctx context.Context, cfg config.Config, op
 	if !policy.CollectionsEnabled || !policy.AutomaticCollection {
 		return nil
 	}
-	eligibility, err := r.Collections.Eligibility(id, time.Now().UTC())
+	var eligibility collections.Eligibility
+	var err error
+	if scoped, ok := r.Collections.(interface {
+		EligibilityContext(context.Context, string, time.Time) (collections.Eligibility, error)
+	}); ok {
+		eligibility, err = scoped.EligibilityContext(ctx, id, time.Now().UTC())
+	} else {
+		eligibility, err = r.Collections.Eligibility(id, time.Now().UTC())
+	}
 	if err != nil {
 		return err
 	}
 	if !eligibility.Eligible {
 		return nil
 	}
-	attempts, err := r.readCollectionsAttempts(id)
+	attempts, err := r.readCollectionsAttemptsContext(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -155,7 +199,15 @@ func (r *Runtime) HandleCollectionJob(ctx context.Context, cfg config.Config, op
 		return err
 	}
 	var itemID string
-	if err = r.Database.Raw().QueryRow(ctx, `SELECT i.id::text FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id WHERE s.obligation_id=$1::uuid AND i.state NOT IN ('PAID','CANCELLED') AND i.collection_at<=now() AND i.principal_due_kobo>i.allocated_kobo ORDER BY i.sequence LIMIT 1`, id).Scan(&itemID); err != nil {
+	tx, err := r.Database.Raw().Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err = db.SetObligationContext(ctx, tx, id); err != nil {
+		return err
+	}
+	if err = tx.QueryRow(ctx, `SELECT i.id::text FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id WHERE s.obligation_id=$1::uuid AND i.state NOT IN ('PAID','CANCELLED') AND i.collection_at<=now() AND i.principal_due_kobo>i.allocated_kobo ORDER BY i.sequence LIMIT 1`, id).Scan(&itemID); err != nil {
 		return err
 	}
 	_, err = r.Collections.Start(ctx, id, "due-schedule:"+itemID, time.Now().UTC())

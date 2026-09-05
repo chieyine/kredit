@@ -137,3 +137,13 @@ REVOKE INSERT, UPDATE, DELETE ON app.receipt_confirmations FROM kredit_worker;
 REVOKE INSERT, UPDATE, DELETE ON app.payment_claims FROM kredit_worker;
 REVOKE INSERT, UPDATE, DELETE ON app.collection_notice_acknowledgements FROM kredit_worker;
 REVOKE UPDATE, DELETE ON app.collection_notice_acknowledgements FROM kredit_app;
+
+-- Phase 2 narrow global collection discovery. These functions expose only
+-- resource and tenant identifiers; financial reads/writes still use RLS.
+GRANT EXECUTE ON FUNCTION app.collection_due_work_page(TEXT,INTEGER) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.collection_attempt_work_page(TEXT,INTEGER) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.collection_identity_by_attempt(UUID) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.collection_identity_by_external(TEXT) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.collection_attempt_identity_by_external(TEXT) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.enqueue_pre_debit_notices() TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.enqueue_due_payment_notices(INTEGER) TO kredit_worker;

@@ -114,6 +114,14 @@ func (r *Runtime) readPaymentClaimsForObligation(ctx context.Context, id string)
 	return r.PaymentClaims.ListForObligation(ctx, id), nil
 }
 func (r *Runtime) readCollectionsAttempts(id string) ([]collections.Attempt, error) {
+	return r.readCollectionsAttemptsContext(context.Background(), id)
+}
+func (r *Runtime) readCollectionsAttemptsContext(ctx context.Context, id string) ([]collections.Attempt, error) {
+	if source, ok := r.Collections.(interface {
+		ReadAttemptsContext(context.Context, string) ([]collections.Attempt, error)
+	}); ok {
+		return source.ReadAttemptsContext(ctx, id)
+	}
 	if source, ok := r.Collections.(interface {
 		ReadAttempts(id string) ([]collections.Attempt, error)
 	}); ok {
