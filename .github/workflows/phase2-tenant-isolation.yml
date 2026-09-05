@@ -1,5 +1,6 @@
 name: Phase 2 Tenant Isolation
 
+# Permanent gate for Phase 2 tenant-isolation regressions, including supplier collection endpoints.
 on:
   push:
     branches: [phase2-tenant-isolation]
