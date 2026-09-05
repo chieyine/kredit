@@ -35,10 +35,10 @@ func (s *tenantPaymentStore) List(obligationID string) ([]payments.Payment, erro
 	return s.ReadContext(s.ctx, obligationID)
 }
 func (s *tenantPaymentStore) Get(paymentID string) (payments.Payment, error) {
-	return s.PostgresStore.GetContext(s.ctx, paymentID)
+	return s.GetContext(s.ctx, paymentID)
 }
 func (s *tenantPaymentStore) Rebuild(obligationID string) (ledger.Money, error) {
-	return s.PostgresStore.RebuildContext(s.ctx, obligationID)
+	return s.RebuildContext(s.ctx, obligationID)
 }
 func (s *tenantPaymentStore) RecordTx(ctx context.Context, tx pgx.Tx, input payments.RecordInput) (payments.Payment, payments.Allocation, error) {
 	identity, _ := db.TenantFromContext(s.ctx)
