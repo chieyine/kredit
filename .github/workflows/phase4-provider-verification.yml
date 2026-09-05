@@ -1,0 +1,48 @@
+name: Phase 4 Provider Verification
+
+on:
+  push:
+    branches: [phase4-provider-verification]
+  pull_request:
+    paths:
+      - 'internal/providers/**'
+      - 'internal/collections/**'
+      - 'internal/mandates/**'
+      - 'internal/identity/**'
+      - 'internal/notifications/**'
+      - 'internal/web/**'
+      - 'internal/config/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.go-version'
+      - '.github/workflows/phase4-provider-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-provider-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provider-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Synthetic provider contracts and boundary regressions
+        run: >-
+          go test -count=1 -race -timeout 180s
+          ./internal/providers/mono ./internal/collections ./internal/mandates
+          ./internal/identity ./internal/notifications ./internal/web ./internal/config
+      - name: Record certification boundary
+        if: always()
+        run: |
+          echo '### Phase 4 provider verification' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This job uses synthetic fixtures and local HTTPS servers, not Mono sandbox credentials.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'A passing job is adapter regression evidence only. Real provider certification and production enablement remain blocked.' >> "$GITHUB_STEP_SUMMARY"

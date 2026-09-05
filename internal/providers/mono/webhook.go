@@ -61,7 +61,9 @@ func (c *Client) ParseWebhook(secret string, raw []byte) (Notice, error) {
 	if mandate == "" || len(mandate) > 256 || len(event.Data.Reference) > 256 {
 		return Notice{}, errors.New("invalid Mono event reference")
 	}
-	if strings.Contains(event.Type, ".debit.") && event.Data.Reference == "" {
+	// Individual partial-sweep notices need correlation too, even though only
+	// reconciliation of the aggregate debit is allowed to create a payment.
+	if (strings.Contains(event.Type, ".debit.") || strings.Contains(event.Type, ".debit_attempt.")) && event.Data.Reference == "" {
 		return Notice{}, errors.New("debit reference is required")
 	}
 	block := map[string]mandates.Status{"events.mandate.action.cancel": mandates.Cancelled, "events.mandate.action.pause": mandates.Paused, "events.mandates.expired": mandates.Expired, "events.mandates.rejected": mandates.Failed}[event.Type]

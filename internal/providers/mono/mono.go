@@ -29,12 +29,12 @@ const DefaultBaseURL = "https://api.withmono.com"
 type CustomerResolver func(context.Context, string, string) (string, error)
 
 type Client struct {
-	initiationDisabled                          bool
+	initiationDisabled                         bool
 	baseURL, secret, webhookSecret, redirectURL string
-	partial                                     bool
-	resolve                                     CustomerResolver
-	http                                        *http.Client
-	now                                         func() time.Time
+	partial                                    bool
+	resolve                                    CustomerResolver
+	http                                       *http.Client
+	now                                        func() time.Time
 }
 
 func New(baseURL, secret, webhookSecret, redirectURL string, partial bool, resolver CustomerResolver) (*Client, error) {
@@ -205,7 +205,9 @@ func (c *Client) GetByReference(ctx context.Context, in collections.Request) (co
 	return debitResponse(out.Data, in.MandateReference, in.ExternalReference, in.AmountKobo), nil
 }
 func debitResponse(d debitData, mandate, reference string, requested ledger.Money) collections.Response {
-	if d.LiveMode || (d.Currency != "" && d.Currency != "NGN") {
+	// Malformed monetary evidence is an unknown outcome, not a failed debit.
+	// Keep reconciliation/reservation semantics rather than guessing a payment.
+	if requested <= 0 || d.Amount < 0 || d.Collected < 0 || d.Pending < 0 || d.LiveMode || (d.Currency != "" && d.Currency != "NGN") {
 		return collections.Response{State: collections.ProviderPending}
 	}
 	state := collections.ProviderPending
@@ -220,6 +222,10 @@ func debitResponse(d debitData, mandate, reference string, requested ledger.Mone
 		state = collections.ProviderPartial
 	case "failed":
 		state = collections.ProviderFailed
+	}
+	// A final full-success result cannot also report an outstanding sweep.
+	if state == collections.ProviderSucceeded && d.Pending > 0 {
+		state = collections.ProviderPending
 	}
 	if state == collections.ProviderPartial {
 		amount = ledger.Money(d.Collected)
