@@ -1,0 +1,51 @@
+name: Phase 1 hygiene repair
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase1-hygiene-repair
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.event.head_commit.message != 'chore: normalize phase 1 audit hygiene'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Normalize research CSV and durable audit references
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          csv_path = Path('docs/content/article-research-2026-09-04.csv')
+          csv_bytes = csv_path.read_bytes().replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+          csv_path.write_bytes(csv_bytes)
+
+          audit_path = Path('docs/testing/solo-audit-2026-09-04.md')
+          audit = audit_path.read_text(encoding='utf-8')
+          old = '[Desktop homepage preview](../../.tmp/solo-audit/home-desktop-final.png) · [Mobile homepage preview](../../.tmp/solo-audit/home-mobile-final.png) · [Mobile pricing preview](../../.tmp/solo-audit/pricing-mobile-final.png)'
+          new = 'The final browser screenshots were ephemeral local audit evidence and are intentionally not referenced as repository files.'
+          if old not in audit:
+              raise SystemExit('expected temporary screenshot reference line was not found')
+          audit_path.write_text(audit.replace(old, new), encoding='utf-8')
+          PY
+      - name: Commit source hygiene repair
+        shell: bash
+        run: |
+          if git diff --quiet -- docs/content/article-research-2026-09-04.csv docs/testing/solo-audit-2026-09-04.md; then
+            echo 'No hygiene changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/content/article-research-2026-09-04.csv docs/testing/solo-audit-2026-09-04.md
+          git commit -m 'chore: normalize phase 1 audit hygiene'
+          git push origin HEAD:main
