@@ -1,0 +1,163 @@
+name: Phase 2 Runtime Patch
+
+on:
+  push:
+    branches: [phase2-tenant-isolation]
+    paths: ['.github/workflows/phase2-runtime-patch.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+      - name: Wire authoritative tenant context into payment runtime
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('internal/payments/postgres.go')
+          text = p.read_text()
+          old = '''\tif existing, allocation, found, err := loadByIdempotency(ctx, tx, input.IdempotencyKey); err != nil {
+          \t\treturn Payment{}, Allocation{}, err
+          \t} else if found {
+          \t\tif !samePaymentIntent(existing, input) {
+          \t\t\treturn Payment{}, Allocation{}, errors.New("idempotency key was reused for a different payment")
+          \t\t}
+          \t\treturn existing, allocation, nil
+          \t}
+
+          \t// Establish the persisted parties before reading tenant-scoped credit rows.
+          \t// A collection worker has no browser session; relying on session-local
+          \t// database context would make autonomous repayments disappear under RLS.
+          \tvar buyerContext, supplierContext string
+          \tif err := tx.QueryRow(ctx, `SELECT s.buyer_user_id,s.supplier_organization_id FROM app.credit_aggregate_snapshots s JOIN app.obligations o ON o.credit_request_id::text=s.credit_request_id WHERE o.id=$1::uuid`, input.ObligationID).Scan(&buyerContext, &supplierContext); err != nil {
+          \t\treturn Payment{}, Allocation{}, errors.New("obligation context not found")
+          \t}
+          \tif _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, buyerContext, supplierContext); err != nil {
+          \t\treturn Payment{}, Allocation{}, err
+          \t}
+          '''
+          new = '''\t// Tenant identity must come from an authenticated HTTP boundary or a
+          \t// tenant-scoped worker job, never from the obligation being requested.
+          \tif err := db.SetObligationContext(ctx, tx, input.ObligationID); err != nil {
+          \t\treturn Payment{}, Allocation{}, err
+          \t}
+          \tif existing, allocation, found, err := loadByIdempotency(ctx, tx, input.IdempotencyKey); err != nil {
+          \t\treturn Payment{}, Allocation{}, err
+          \t} else if found {
+          \t\tif !samePaymentIntent(existing, input) {
+          \t\t\treturn Payment{}, Allocation{}, errors.New("idempotency key was reused for a different payment")
+          \t\t}
+          \t\treturn existing, allocation, nil
+          \t}
+
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('RecordTx context block changed unexpectedly')
+          text = text.replace(old, new)
+
+          old = '''\tpayment, err := loadPayment(ctx, tx, paymentID, true)
+          \tif err != nil {
+          \t\treturn Payment{}, err
+          \t}
+          \tif payment.State == StateReversed {
+          \t\treturn payment, nil
+          \t}
+          \tif err := db.SetObligationContext(ctx, tx, payment.ObligationID); err != nil {
+          \t\treturn Payment{}, err
+          \t}
+          '''
+          new = '''\tif err := db.SetTenantContext(ctx, tx); err != nil {
+          \t\treturn Payment{}, err
+          \t}
+          \tpayment, err := loadPayment(ctx, tx, paymentID, true)
+          \tif err != nil {
+          \t\treturn Payment{}, err
+          \t}
+          \tif payment.State == StateReversed {
+          \t\treturn payment, nil
+          \t}
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('ReverseContext block changed unexpectedly')
+          text = text.replace(old, new)
+
+          old = '''\treturn loadPayment(ctx, s.pool, paymentID, false)
+          '''
+          new = '''\ttx, err := s.pool.Begin(ctx)
+          \tif err != nil {
+          \t\treturn Payment{}, err
+          \t}
+          \tdefer func() { _ = tx.Rollback(ctx) }()
+          \tif err := db.SetTenantContext(ctx, tx); err != nil {
+          \t\treturn Payment{}, err
+          \t}
+          \treturn loadPayment(ctx, tx, paymentID, false)
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('GetContext block changed unexpectedly')
+          text = text.replace(old, new)
+
+          old = '''\trows, err := s.pool.Query(ctx, paymentSelect+` WHERE p.obligation_id=$1::uuid ORDER BY p.recognized_at,p.id`, obligationID)
+          \tif err != nil {
+          \t\treturn nil, err
+          \t}
+          '''
+          new = '''\ttx, err := s.pool.Begin(ctx)
+          \tif err != nil {
+          \t\treturn nil, err
+          \t}
+          \tdefer func() { _ = tx.Rollback(ctx) }()
+          \tif err := db.SetTenantContext(ctx, tx); err != nil {
+          \t\treturn nil, err
+          \t}
+          \trows, err := tx.Query(ctx, paymentSelect+` WHERE p.obligation_id=$1::uuid ORDER BY p.recognized_at,p.id`, obligationID)
+          \tif err != nil {
+          \t\treturn nil, err
+          \t}
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('ReadContext block changed unexpectedly')
+          text = text.replace(old, new)
+          p.write_text(text)
+
+          p = Path('internal/web/credit_handlers.go')
+          text = p.read_text()
+          needle = '\t"kredit/internal/credit"\n'
+          if text.count(needle) != 1:
+              raise SystemExit('credit import anchor changed unexpectedly')
+          text = text.replace(needle, needle + '\t"kredit/internal/db"\n')
+
+          replacements = [
+              ('''\t_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)\n\tif !ok {\n\t\treturn\n\t}\n\tif !s.requireCSRF(w, r) {''',
+               '''\t_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)\n\tif !ok {\n\t\treturn\n\t}\n\tr = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))\n\tif !s.requireCSRF(w, r) {''', 2),
+              ('''\tif _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {\n\t\treturn\n\t}\n\tv, err := s.runtime.Credit.GetForSupplier(requestID, orgID)''',
+               '''\tif _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {\n\t\treturn\n\t}\n\tr = r.WithContext(db.WithTenantContext(r.Context(), "", orgID))\n\tv, err := s.runtime.Credit.GetForSupplier(requestID, orgID)''', 2),
+              ('''\t_, user, ok := s.requireAuth(w, r)\n\tif !ok {\n\t\treturn\n\t}\n\trequestID, _ := pathID(r, "requestID")\n\tv, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)''',
+               '''\t_, user, ok := s.requireAuth(w, r)\n\tif !ok {\n\t\treturn\n\t}\n\tr = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))\n\trequestID, _ := pathID(r, "requestID")\n\tv, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)''', 1),
+              ('''\t_, user, ok := s.requireAuth(w, r)\n\tif !ok {\n\t\treturn\n\t}\n\tobligationID, _ := pathID(r, "obligationID")''',
+               '''\t_, user, ok := s.requireAuth(w, r)\n\tif !ok {\n\t\treturn\n\t}\n\tr = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))\n\tobligationID, _ := pathID(r, "obligationID")''', 1),
+          ]
+          for old, new, expected in replacements:
+              actual = text.count(old)
+              if actual != expected:
+                  raise SystemExit(f'handler anchor expected {expected}, found {actual}: {old[:70]!r}')
+              text = text.replace(old, new)
+          p.write_text(text)
+          PY
+          gofmt -w internal/db/tenant_context.go internal/db/financial_context.go internal/payments/postgres.go internal/web/credit_handlers.go
+          go test ./internal/db ./internal/payments ./internal/web
+      - name: Commit runtime wiring
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/db internal/payments/postgres.go internal/web/credit_handlers.go
+          git diff --cached --check
+          git commit -m 'phase2: wire authoritative tenant context'
+          git push
