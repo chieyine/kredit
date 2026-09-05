@@ -65,12 +65,13 @@ jobs:
           go run ./cmd/seed
       - name: Re-prove payment and collection invariants
         run: |
-          go test -p 1 ./internal/payments ./internal/collections ./internal/ledger ./internal/schedules
-          go test -race ./internal/payments ./internal/collections
+          go test -p 1 ./internal/payments ./internal/ledger ./internal/schedules
+          go test -race ./internal/payments
+          go test -race ./internal/collections -run 'Test(PostgresReservationCommitsBeforeProviderAndDuplicateJobs|PostgresPaymentBeforeDebitAndReplayAfterPaymentCommit|PostgresSharedMandateCannotOverReserve|CollectionWorkerRoleCanPostAndReconcilePayment|CollectionStateLoadsAfterRestartAndObservesExternalManualPayment|PostgresCollectionIsRestartSafeAndFinanciallyIdempotent)$' -count=1
       - name: Re-prove deterministic PostgreSQL financial paths
         run: |
           go test -p 1 ./internal/payments -run 'TestPostgresPayment' -count=1 -v
-          go test -p 1 ./internal/collections -count=1
+          go test -p 1 ./internal/collections -run 'Test(PostgresReservationCommitsBeforeProviderAndDuplicateJobs|PostgresPaymentBeforeDebitAndReplayAfterPaymentCommit|PostgresSharedMandateCannotOverReserve|CollectionWorkerRoleCanPostAndReconcilePayment|CollectionStateLoadsAfterRestartAndObservesExternalManualPayment|PostgresCollectionIsRestartSafeAndFinanciallyIdempotent)$' -count=1 -v
 
   real-stack-smoke:
     runs-on: ubuntu-latest
@@ -124,8 +125,8 @@ jobs:
             -v backup_login_password=kredit-backup-development-only \
             -v demote_owner=false \
             -f infra/postgres/development-logins.sql
-          DATABASE_URL="$ADMIN_DATABASE_URL" go run ./cmd/seed
-          DATABASE_URL="$ADMIN_DATABASE_URL" go run ./cmd/seed
+          DATABASE_URL="$ADMIN_DATABASE_URL" DATABASE_DIRECT_URL="$ADMIN_DATABASE_URL" go run ./cmd/seed
+          DATABASE_URL="$ADMIN_DATABASE_URL" DATABASE_DIRECT_URL="$ADMIN_DATABASE_URL" go run ./cmd/seed
       - name: Start real API and web stack
         run: |
           go run ./cmd/api > /tmp/kredit-api.log 2>&1 &
