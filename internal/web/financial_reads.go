@@ -130,9 +130,6 @@ func (r *Runtime) getCollectionAttemptContext(ctx context.Context, id string) (c
 	}
 	return r.Collections.GetAttempt(id)
 }
-func (r *Runtime) readCollectionsAttempts(id string) ([]collections.Attempt, error) {
-	return r.readCollectionsAttemptsContext(context.Background(), id)
-}
 func (r *Runtime) readCollectionsAttemptsContext(ctx context.Context, id string) ([]collections.Attempt, error) {
 	if source, ok := r.Collections.(interface {
 		ReadAttemptsContext(context.Context, string) ([]collections.Attempt, error)

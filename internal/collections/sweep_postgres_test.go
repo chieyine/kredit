@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"kredit/internal/credit"
+	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/outbox"
 	"kredit/internal/payments"
@@ -19,10 +20,63 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type tenantPaymentStore struct {
+	*payments.PostgresStore
+	ctx context.Context
+}
+
+func (s *tenantPaymentStore) Record(input payments.RecordInput) (payments.Payment, payments.Allocation, error) {
+	return s.RecordContext(s.ctx, input)
+}
+func (s *tenantPaymentStore) Reverse(paymentID, actor, reason string) (payments.Payment, error) {
+	return s.ReverseContext(s.ctx, paymentID, actor, reason)
+}
+func (s *tenantPaymentStore) List(obligationID string) ([]payments.Payment, error) {
+	return s.ReadContext(s.ctx, obligationID)
+}
+func (s *tenantPaymentStore) Get(paymentID string) (payments.Payment, error) {
+	return s.GetContext(s.ctx, paymentID)
+}
+func (s *tenantPaymentStore) Rebuild(obligationID string) (ledger.Money, error) {
+	return s.RebuildContext(s.ctx, obligationID)
+}
+func (s *tenantPaymentStore) RecordTx(ctx context.Context, tx pgx.Tx, input payments.RecordInput) (payments.Payment, payments.Allocation, error) {
+	identity, _ := db.TenantFromContext(s.ctx)
+	return s.PostgresStore.RecordTx(db.WithTenantContext(ctx, identity.UserID, identity.OrganizationID), tx, input)
+}
+
+type fixtureEngine struct {
+	*PostgresEngine
+	ctx context.Context
+}
+
+func (e *fixtureEngine) Start(_ context.Context, id, key string, now time.Time) (Attempt, error) {
+	return e.PostgresEngine.Start(e.ctx, id, key, now)
+}
+func (e *fixtureEngine) ProcessWebhook(_ context.Context, event Webhook) (Attempt, error) {
+	return e.PostgresEngine.ProcessWebhook(e.ctx, event)
+}
+func (e *fixtureEngine) SignalWebhook(_ context.Context, event Webhook) (Attempt, error) {
+	return e.PostgresEngine.SignalWebhook(e.ctx, event)
+}
+func (e *fixtureEngine) Reconcile(_ context.Context, attemptID string) (Attempt, error) {
+	return e.PostgresEngine.Reconcile(e.ctx, attemptID)
+}
+func (e *fixtureEngine) Retry(_ context.Context, attemptID string, now time.Time) (Attempt, error) {
+	return e.PostgresEngine.Retry(e.ctx, attemptID, now)
+}
+func (e *fixtureEngine) Cancel(_ context.Context, attemptID string) (Attempt, error) {
+	return e.PostgresEngine.Cancel(e.ctx, attemptID)
+}
+func (e *fixtureEngine) GetAttempt(attemptID string) (Attempt, bool) {
+	return e.GetAttemptContext(e.ctx, attemptID)
+}
+
 type collectionFixture struct {
 	pool                            *pgxpool.Pool
 	id, user, request, organization string
-	payments                        *payments.PostgresStore
+	ctx                             context.Context
+	payments                        *tenantPaymentStore
 	snapshot                        SnapshotFunc
 }
 
@@ -76,10 +130,13 @@ func financialFixture(t *testing.T, terms ...*ledger.FeeTerms) collectionFixture
 		err := pool.QueryRow(ctx, `SELECT outstanding_kobo FROM app.obligations WHERE id=$1::uuid`, id).Scan(&outstanding)
 		return ObligationSnapshot{ID: id, BuyerUserID: userID, Currency: "NGN", Active: true, OutstandingKobo: ledger.Money(outstanding), MandateActive: true, MandateRemainingKobo: 50000000, CollectionEnabled: true, ProviderSupported: true, Version: 1}, err
 	}
-	return collectionFixture{pool, obligationID, userID, requestID, organizationID, payments.NewPostgresStore(pool, outbox.NewStore(pool), nil), snapshot}
+	tenantCtx := db.WithTenantContext(context.Background(), userID, organizationID)
+	paymentStore := &tenantPaymentStore{PostgresStore: payments.NewPostgresStore(pool, outbox.NewStore(pool), nil), ctx: tenantCtx}
+	return collectionFixture{pool: pool, id: obligationID, user: userID, request: requestID, organization: organizationID, ctx: tenantCtx, payments: paymentStore, snapshot: snapshot}
 }
-func (f collectionFixture) engine(p Provider) *PostgresEngine {
-	return NewPostgresEngine(f.pool, NewEngine(p, f.payments, f.snapshot, func(string, time.Time) (ledger.Money, error) { return 50000000, nil }))
+func (f collectionFixture) engine(p Provider) *fixtureEngine {
+	base := NewPostgresEngine(f.pool, NewEngine(p, f.payments, f.snapshot, func(string, time.Time) (ledger.Money, error) { return 50000000, nil }))
+	return &fixtureEngine{PostgresEngine: base, ctx: f.ctx}
 }
 
 type observedProvider struct {
@@ -230,7 +287,7 @@ func TestCollectionWorkerRoleCanPostAndReconcilePayment(t *testing.T) {
 	}
 	defer worker.Close()
 	f.pool = worker
-	f.payments = payments.NewPostgresStore(worker, outbox.NewStore(worker), nil)
+	f.payments = &tenantPaymentStore{PostgresStore: payments.NewPostgresStore(worker, outbox.NewStore(worker), nil), ctx: f.ctx}
 	p := NewMockProvider("secret")
 	a, err := f.engine(p).Start(ctx, f.id, "worker-role:"+f.id, time.Now())
 	if err != nil {
