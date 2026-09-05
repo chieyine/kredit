@@ -132,6 +132,9 @@ func (r *Runtime) enqueueTenantCollectionPages(ctx context.Context, query, opera
 
 func (r *Runtime) HandleCollectionJob(ctx context.Context, cfg config.Config, args jobs.CollectionArgs) error {
 	operation, id := args.Operation, args.ResourceID
+	if (operation == jobs.OpReconcileProvider || operation == "collect_due") && args.OrganizationID == "" {
+		return errors.New("collection tenant context is required")
+	}
 	if args.OrganizationID != "" {
 		ctx = db.WithTenantContext(ctx, "", args.OrganizationID)
 	}

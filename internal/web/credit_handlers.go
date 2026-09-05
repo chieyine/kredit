@@ -1279,7 +1279,7 @@ func (s *Server) listCollections(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	financialRows10, readErr10 := s.runtime.readCollectionsAttempts(v.Obligation.ID)
+	financialRows10, readErr10 := s.runtime.readCollectionsAttemptsContext(db.WithTenantContext(r.Context(), "", orgID), v.Obligation.ID)
 	if financialReadError(w, readErr10) {
 		return
 	}
