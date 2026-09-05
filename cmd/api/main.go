@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -89,18 +89,20 @@ func main() {
 }
 
 // runSelfHealthcheck lets container healthchecks probe this process without
-// requiring curl or a shell inside the distroless runtime image.
+// requiring curl or a shell inside the distroless runtime image. API_ADDR is
+// used only to discover the listen port; the probe host is always loopback so
+// deployment input cannot turn the healthcheck into an outbound request.
 func runSelfHealthcheck() int {
 	addr := os.Getenv("API_ADDR")
 	if addr == "" {
 		addr = ":8080"
 	}
-	host := addr
-	if strings.HasPrefix(host, ":") {
-		host = "127.0.0.1" + host
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		return 1
 	}
 	client := &http.Client{Timeout: 3 * time.Second}
-	response, err := client.Get("http://" + host + "/api/v1/healthz")
+	response, err := client.Get("http://127.0.0.1:" + port + "/api/v1/healthz")
 	if err != nil {
 		return 1
 	}
