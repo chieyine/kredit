@@ -42,6 +42,20 @@ function fail(file, message) {
 	failures.push(`${file}: ${message}`);
 }
 
+function checkLineEndings(file, text, extension) {
+	const lineBreaks = text.match(/\n/g)?.length ?? 0;
+	const crlfBreaks = text.match(/\r\n/g)?.length ?? 0;
+	if (text.replaceAll('\r\n', '').includes('\r')) {
+		fail(file, 'text file contains a stray carriage return');
+		return;
+	}
+	if (extension === '.csv') {
+		if (crlfBreaks > 0 && crlfBreaks !== lineBreaks) fail(file, 'CSV mixes LF and CRLF line endings');
+		return;
+	}
+	if (crlfBreaks > 0) fail(file, 'text file contains CRLF line endings');
+}
+
 function checkMarkdownLinks(file, text) {
 	const directory = dirname(resolve(root, file));
 	for (const match of text.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
@@ -85,7 +99,7 @@ for (const file of files) {
 		continue;
 	}
 	if (text.includes('\0')) fail(file, 'text file contains a NUL byte');
-	if (text.includes('\r')) fail(file, 'text file contains CRLF or stray carriage returns');
+	checkLineEndings(file, text, extension);
 	if (!text.endsWith('\n')) fail(file, 'text file must end with a newline');
 	const retiredName = ['ti', 'chara'].join('');
 	if (new RegExp(retiredName, 'i').test(text)) fail(file, 'old product name remains');
