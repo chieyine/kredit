@@ -26,13 +26,13 @@ type tenantPaymentStore struct {
 }
 
 func (s *tenantPaymentStore) Record(input payments.RecordInput) (payments.Payment, payments.Allocation, error) {
-	return s.PostgresStore.RecordContext(s.ctx, input)
+	return s.RecordContext(s.ctx, input)
 }
 func (s *tenantPaymentStore) Reverse(paymentID, actor, reason string) (payments.Payment, error) {
-	return s.PostgresStore.ReverseContext(s.ctx, paymentID, actor, reason)
+	return s.ReverseContext(s.ctx, paymentID, actor, reason)
 }
 func (s *tenantPaymentStore) List(obligationID string) ([]payments.Payment, error) {
-	return s.PostgresStore.ReadContext(s.ctx, obligationID)
+	return s.ReadContext(s.ctx, obligationID)
 }
 func (s *tenantPaymentStore) Get(paymentID string) (payments.Payment, error) {
 	return s.PostgresStore.GetContext(s.ctx, paymentID)
@@ -69,7 +69,7 @@ func (e *fixtureEngine) Cancel(_ context.Context, attemptID string) (Attempt, er
 	return e.PostgresEngine.Cancel(e.ctx, attemptID)
 }
 func (e *fixtureEngine) GetAttempt(attemptID string) (Attempt, bool) {
-	return e.PostgresEngine.GetAttemptContext(e.ctx, attemptID)
+	return e.GetAttemptContext(e.ctx, attemptID)
 }
 
 type collectionFixture struct {
