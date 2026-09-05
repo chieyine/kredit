@@ -1,5 +1,6 @@
 name: Phase 3 Financial Proof
 
+# Acceptance gate for deterministic financial invariants and the deliberately small non-mocked browser stack.
 on:
   push:
     branches: [phase3-financial-proof]
