@@ -10,6 +10,9 @@ on:
       - 'internal/db/**'
       - 'internal/payments/**'
       - 'internal/collections/**'
+      - 'internal/jobs/**'
+      - 'internal/web/**'
+      - 'cmd/worker/**'
       - 'tests/integration/tenant_isolation_test.go'
       - '.github/workflows/phase2-tenant-isolation.yml'
   workflow_dispatch:
@@ -62,5 +65,7 @@ jobs:
         run: |
           go run ./cmd/seed
           go run ./cmd/seed
-      - name: Prove cross-tenant denial and worker evidence boundary
-        run: go test -p 1 -tags=integration ./tests/integration -run 'TestFinancialRowsAreTenantBoundAtDatabaseLayer|TestWorkerIsTenantBoundAndCannotForgeBuyerEvidence' -count=1 -v
+      - name: Prove tenant-aware runtime still compiles and passes
+        run: go test ./internal/db ./internal/payments ./internal/collections ./internal/jobs ./internal/web ./cmd/worker
+      - name: Prove cross-tenant denial, evidence boundary and narrow worker discovery
+        run: go test -p 1 -tags=integration ./tests/integration -run 'TestFinancialRowsAreTenantBoundAtDatabaseLayer|TestWorkerIsTenantBoundAndCannotForgeBuyerEvidence|TestCollectionWorkerDiscoveryIsNarrowlyPrivileged' -count=1 -v
