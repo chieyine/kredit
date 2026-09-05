@@ -1,0 +1,48 @@
+name: Refresh Go sums
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/refresh-go-sums.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+
+      - name: Regenerate module checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          go mod download google.golang.org/grpc@v1.83.1
+          go mod tidy
+          git diff --check
+
+      - name: Commit canonical module files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- go.mod go.sum; then
+            echo "Module files already canonical."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add go.mod go.sum
+          git commit -m "security: refresh grpc module checksums"
+          git push origin HEAD:main
