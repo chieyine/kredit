@@ -21,13 +21,11 @@ jobs:
           python3 scripts/phase3_final_alignment.py
           gofmt -w internal/payments/postgres_test.go internal/collections/postgres_test.go
           go test ./internal/payments ./internal/collections
-      - name: Commit verified alignment and remove temporary tooling
+      - name: Commit verified code-only alignment
         run: |
-          rm scripts/phase3_final_alignment.py
-          rm .github/workflows/phase3-final-alignment.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add internal/payments/postgres_test.go internal/collections/postgres_test.go
           git diff --cached --check
-          git commit -m 'phase3: focus and align financial proof gate'
+          git commit -m 'phase3: align financial proof tests'
           git push
