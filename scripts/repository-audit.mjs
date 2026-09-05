@@ -2,10 +2,11 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, extname, resolve } from 'node:path';
+import { dirname, extname, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const root = resolve(import.meta.dirname, '..');
+const temporaryEvidenceRoot = resolve(root, '.tmp');
 const excluded = [
 	'!.git/**', '!node_modules/**', '!web/node_modules/**', '!web/build/**',
 	'!web/.svelte-kit/**', '!web/test-results/**', '!web/playwright-report/**',
@@ -47,7 +48,11 @@ function checkMarkdownLinks(file, text) {
 		let target = match[1].trim().replace(/^<|>$/g, '').split(/\s+["']/)[0];
 		if (!target || /^(?:[a-z]+:|#|\/)/i.test(target)) continue;
 		target = decodeURIComponent(target.split('#')[0]);
-		if (target && !existsSync(resolve(directory, target))) fail(file, `broken relative link: ${target}`);
+		const resolvedTarget = resolve(directory, target);
+		// Audit reports may reference local screenshots under the excluded .tmp tree.
+		// Those are evidence locations, not repository-owned links that should be committed.
+		if (resolvedTarget === temporaryEvidenceRoot || resolvedTarget.startsWith(`${temporaryEvidenceRoot}${sep}`)) continue;
+		if (target && !existsSync(resolvedTarget)) fail(file, `broken relative link: ${target}`);
 	}
 }
 
