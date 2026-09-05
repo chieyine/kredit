@@ -1,0 +1,31 @@
+name: Phase 3 Lint Cleanup
+
+on:
+  push:
+    branches: [phase3-financial-proof]
+    paths: ['.github/workflows/phase3-lint-cleanup.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+      - name: Apply lint cleanup
+        run: |
+          python3 scripts/phase3_lint_cleanup.py
+          gofmt -w internal/collections/sweep_postgres_test.go internal/web/financial_reads.go
+          go test ./internal/collections ./internal/web
+      - name: Commit verified code-only cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/collections/sweep_postgres_test.go internal/web/financial_reads.go
+          git diff --cached --check
+          git commit -m 'phase3: satisfy repository staticcheck'
+          git push
