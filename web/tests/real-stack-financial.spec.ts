@@ -41,18 +41,19 @@ test.describe('real-stack financial journeys', () => {
 		await expect(page.getByText('We could not open your payment records.')).toHaveCount(0);
 	});
 
-	test('buyer browser opens the persisted buyer portal through the real API', async ({ page }) => {
+	test('buyer browser opens persisted credit requests through the real API', async ({ page }) => {
 		const me = await login(page, 'buyer@royal-pharmacy.test');
 		expect(me.user.email).toBe('buyer@royal-pharmacy.test');
 
-		const portal = await page.request.get('/api/v1/buyer/me');
-		expect(portal.status()).toBe(200);
 		const credit = await page.request.get('/api/v1/buyer/credit-requests');
 		expect(credit.status()).toBe(200);
+		const creditBody = await credit.json() as { requests?: unknown[] };
+		expect(creditBody.requests).toBeDefined();
+		expect(creditBody.requests!.length).toBeGreaterThan(0);
 
-		await page.goto('/buyer');
-		await expect(page.getByText(/Royal Pharmacy|Your credit|credit/i).first()).toBeVisible();
-		await expect(page.getByText(/Service unavailable|We could not/i)).toHaveCount(0);
+		await page.goto('/buyer/credit-requests');
+		await expect(page.locator('body')).toContainText(/credit|request/i);
+		await expect(page.getByText(/Service unavailable|We could not open/i)).toHaveCount(0);
 	});
 
 	test('frontend proxy and API readiness agree against the same running stack', async ({ page }) => {

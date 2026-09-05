@@ -7,14 +7,17 @@ import (
 
 	"kredit/internal/access"
 	"kredit/internal/buyers"
+	"kredit/internal/db"
 	"kredit/internal/ledger"
 )
 
 func (s *Server) listOrganizationPayments(w http.ResponseWriter, r *http.Request) {
 	organizationID, _ := pathID(r, "organizationID")
-	if _, _, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadFinancial); !ok {
+	_, user, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadFinancial)
+	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, organizationID))
 	items := []map[string]any{}
 	financialRows1, readErr1 := s.runtime.readCreditForSupplier(r.Context(), organizationID)
 	if financialReadError(w, readErr1) {
@@ -42,9 +45,11 @@ func (s *Server) listOrganizationPayments(w http.ResponseWriter, r *http.Request
 
 func (s *Server) listOrganizationCollections(w http.ResponseWriter, r *http.Request) {
 	organizationID, _ := pathID(r, "organizationID")
-	if _, _, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadFinancial); !ok {
+	_, user, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadFinancial)
+	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, organizationID))
 	items := []map[string]any{}
 	financialRows3, readErr3 := s.runtime.readCreditForSupplier(r.Context(), organizationID)
 	if financialReadError(w, readErr3) {
@@ -54,7 +59,7 @@ func (s *Server) listOrganizationCollections(w http.ResponseWriter, r *http.Requ
 		if view.Obligation == nil {
 			continue
 		}
-		financialRows4, readErr4 := s.runtime.readCollectionsAttempts(view.Obligation.ID)
+		financialRows4, readErr4 := s.runtime.readCollectionsAttemptsContext(r.Context(), view.Obligation.ID)
 		if financialReadError(w, readErr4) {
 			return
 		}
