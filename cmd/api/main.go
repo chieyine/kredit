@@ -15,6 +15,8 @@ import (
 	"kredit/internal/web"
 )
 
+const selfHealthcheckURL = "http://127.0.0.1:8080/api/v1/healthz"
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
 		os.Exit(runSelfHealthcheck())
@@ -92,8 +94,17 @@ func main() {
 // no deployment-controlled host or URL input and cannot be redirected into an
 // outbound request.
 func runSelfHealthcheck() int {
-	client := &http.Client{Timeout: 3 * time.Second}
-	response, err := client.Get("http://127.0.0.1:8080/api/v1/healthz")
+	return runSelfHealthcheckWithClient(&http.Client{Timeout: 3 * time.Second})
+}
+
+// runSelfHealthcheckWithClient keeps the destination fixed while allowing tests
+// to replace only the HTTP transport. Tests therefore do not need to make the
+// production healthcheck URL configurable.
+func runSelfHealthcheckWithClient(client *http.Client) int {
+	if client == nil {
+		return 1
+	}
+	response, err := client.Get(selfHealthcheckURL)
 	if err != nil {
 		return 1
 	}
