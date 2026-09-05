@@ -3,19 +3,44 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 )
 
-// SetObligationContext establishes persisted tenant identity for a financial
-// transaction. Callers must authorize the action before entering the repository.
+// SetTenantContext establishes an already-authorized request or worker identity
+// on the transaction-local settings consumed by PostgreSQL RLS policies.
+func SetTenantContext(ctx context.Context, tx pgx.Tx) error {
+	identity, ok := TenantFromContext(ctx)
+	if !ok {
+		return errors.New("authorized tenant context is required")
+	}
+	_, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, identity.UserID, identity.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("set tenant context: %w", err)
+	}
+	return nil
+}
+
+// SetObligationContext establishes authoritative tenant identity before looking
+// up an obligation. In particular, it never discovers an organization by first
+// reading the target obligation under a service-wide policy.
 func SetObligationContext(ctx context.Context, tx pgx.Tx, obligationID string) error {
-	var buyer, supplier string
-	if err := tx.QueryRow(ctx, `SELECT s.buyer_user_id,s.supplier_organization_id FROM app.credit_aggregate_snapshots s JOIN app.obligations o ON o.credit_request_id::text=s.credit_request_id WHERE o.id=$1::uuid`, obligationID).Scan(&buyer, &supplier); err != nil {
+	identity, ok := TenantFromContext(ctx)
+	if !ok || identity.OrganizationID == "" {
+		return errors.New("authorized supplier organization context is required")
+	}
+	if err := SetTenantContext(ctx, tx); err != nil {
 		return err
 	}
-	_, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, buyer, supplier)
-	return err
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.obligations WHERE id=$1::uuid AND supplier_organization_id=$2::uuid)`, obligationID, identity.OrganizationID).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New("obligation is outside the authorized tenant")
+	}
+	return nil
 }
 
 // GuardUnreservedReduction requires the caller to hold the obligation row lock.

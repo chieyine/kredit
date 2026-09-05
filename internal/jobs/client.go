@@ -92,8 +92,9 @@ func (ProviderWebhookArgs) InsertOpts() river.InsertOpts {
 }
 
 type CollectionArgs struct {
-	Operation  string `json:"operation"`
-	ResourceID string `json:"resource_id"`
+	Operation      string `json:"operation"`
+	ResourceID     string `json:"resource_id"`
+	OrganizationID string `json:"organization_id,omitempty"`
 }
 
 func (CollectionArgs) Kind() string { return KindCollection }
@@ -134,10 +135,11 @@ func (ReportArgs) InsertOpts() river.InsertOpts {
 }
 
 type OperationHandler func(context.Context, string, string) error
+type CollectionHandler func(context.Context, CollectionArgs) error
 
 type Handlers struct {
 	ProviderWebhook func(context.Context, ProviderWebhookArgs) error
-	Collection      OperationHandler
+	Collection      CollectionHandler
 	Notification    OperationHandler
 	Document        OperationHandler
 	Report          OperationHandler
@@ -388,14 +390,14 @@ func (w *ProviderWebhookWorker) Work(ctx context.Context, job *river.Job[Provide
 
 type CollectionWorker struct {
 	river.WorkerDefaults[CollectionArgs]
-	Handler OperationHandler
+	Handler CollectionHandler
 }
 
 func (w *CollectionWorker) Work(ctx context.Context, job *river.Job[CollectionArgs]) error {
 	if w.Handler == nil {
 		return errors.New("collection operation handler is not configured")
 	}
-	return w.Handler(ctx, job.Args.Operation, job.Args.ResourceID)
+	return w.Handler(ctx, job.Args)
 }
 
 type NotificationWorker struct {

@@ -1,0 +1,72 @@
+name: Phase 2 Tenant Isolation
+
+# Permanent gate for Phase 2 tenant-isolation regressions, including supplier collection endpoints.
+on:
+  push:
+    branches: [phase2-tenant-isolation]
+  pull_request:
+    paths:
+      - 'db/migrations/**'
+      - 'infra/postgres/**'
+      - 'internal/db/**'
+      - 'internal/payments/**'
+      - 'internal/collections/**'
+      - 'internal/jobs/**'
+      - 'internal/web/**'
+      - 'cmd/worker/**'
+      - 'tests/integration/tenant_isolation_test.go'
+      - '.github/workflows/phase2-tenant-isolation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2-tenant-isolation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tenant-isolation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_test
+        ports:
+          - '5432:5432'
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Apply migrations and provision restricted runtime roles
+        run: |
+          go run ./cmd/migrate
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false \
+            -f infra/postgres/development-logins.sql
+      - name: Load deterministic acceptance fixtures
+        run: |
+          go run ./cmd/seed
+          go run ./cmd/seed
+      - name: Prove tenant-aware runtime still compiles and passes
+        run: go test ./internal/db ./internal/payments ./internal/collections ./internal/jobs ./internal/web ./cmd/worker
+      - name: Prove cross-tenant denial, evidence boundary and narrow worker discovery
+        run: go test -p 1 -tags=integration ./tests/integration -run 'TestFinancialRowsAreTenantBoundAtDatabaseLayer|TestWorkerIsTenantBoundAndCannotForgeBuyerEvidence|TestCollectionWorkerDiscoveryIsNarrowlyPrivileged' -count=1 -v

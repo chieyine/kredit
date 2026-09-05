@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"kredit/internal/businesspolicy"
+	"kredit/internal/db"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -31,7 +32,10 @@ func (e *PostgresEngine) ProviderStatus() ProviderStatus         { return e.base
 func (e *PostgresEngine) SetFeatureEnabled(value bool)           { e.base.SetFeatureEnabled(value) }
 func (e *PostgresEngine) SetMaxRetries(value int)                { e.base.SetMaxRetries(value) }
 func (e *PostgresEngine) Eligibility(id string, now time.Time) (Eligibility, error) {
-	local, err := e.load(context.Background(), id)
+	return e.EligibilityContext(context.Background(), id, now)
+}
+func (e *PostgresEngine) EligibilityContext(ctx context.Context, id string, now time.Time) (Eligibility, error) {
+	local, err := e.load(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return e.base.Eligibility(id, now)
 	}
@@ -96,7 +100,11 @@ func (e *PostgresEngine) submitPrepared(ctx context.Context, id string, prepare 
 	return e.ProcessWebhook(ctx, event)
 }
 func (e *PostgresEngine) ProcessWebhook(ctx context.Context, event Webhook) (Attempt, error) {
-	id, err := e.obligationForExternal(ctx, event.ExternalReference)
+	id, organizationID, err := e.obligationForExternal(ctx, event.ExternalReference)
+	if err != nil {
+		return Attempt{}, err
+	}
+	ctx, err = e.scopeTenantContext(ctx, organizationID)
 	if err != nil {
 		return Attempt{}, err
 	}
@@ -109,7 +117,11 @@ func (e *PostgresEngine) ProcessWebhook(ctx context.Context, event Webhook) (Att
 	return result, err
 }
 func (e *PostgresEngine) SignalWebhook(ctx context.Context, event Webhook) (Attempt, error) {
-	id, err := e.obligationForExternal(ctx, event.ExternalReference)
+	id, organizationID, err := e.obligationForExternal(ctx, event.ExternalReference)
+	if err != nil {
+		return Attempt{}, err
+	}
+	ctx, err = e.scopeTenantContext(ctx, organizationID)
 	if err != nil {
 		return Attempt{}, err
 	}
@@ -122,7 +134,11 @@ func (e *PostgresEngine) SignalWebhook(ctx context.Context, event Webhook) (Atte
 	return result, err
 }
 func (e *PostgresEngine) Reconcile(ctx context.Context, attemptID string) (Attempt, error) {
-	id, err := e.obligationForAttempt(ctx, attemptID)
+	id, organizationID, err := e.obligationForAttempt(ctx, attemptID)
+	if err != nil {
+		return Attempt{}, err
+	}
+	ctx, err = e.scopeTenantContext(ctx, organizationID)
 	if err != nil {
 		return Attempt{}, err
 	}
@@ -135,14 +151,22 @@ func (e *PostgresEngine) Reconcile(ctx context.Context, attemptID string) (Attem
 	return result, err
 }
 func (e *PostgresEngine) Retry(ctx context.Context, attemptID string, now time.Time) (Attempt, error) {
-	id, err := e.obligationForAttempt(ctx, attemptID)
+	id, organizationID, err := e.obligationForAttempt(ctx, attemptID)
+	if err != nil {
+		return Attempt{}, err
+	}
+	ctx, err = e.scopeTenantContext(ctx, organizationID)
 	if err != nil {
 		return Attempt{}, err
 	}
 	return e.submitPrepared(ctx, id, func(local *Engine) (Attempt, error) { return local.Retry(ctx, attemptID, now) })
 }
 func (e *PostgresEngine) Cancel(ctx context.Context, attemptID string) (Attempt, error) {
-	id, err := e.obligationForAttempt(ctx, attemptID)
+	id, organizationID, err := e.obligationForAttempt(ctx, attemptID)
+	if err != nil {
+		return Attempt{}, err
+	}
+	ctx, err = e.scopeTenantContext(ctx, organizationID)
 	if err != nil {
 		return Attempt{}, err
 	}
@@ -155,11 +179,18 @@ func (e *PostgresEngine) Cancel(ctx context.Context, attemptID string) (Attempt,
 	return result, err
 }
 func (e *PostgresEngine) GetAttempt(attemptID string) (Attempt, bool) {
-	id, err := e.obligationForAttempt(context.Background(), attemptID)
+	return e.GetAttemptContext(context.Background(), attemptID)
+}
+func (e *PostgresEngine) GetAttemptContext(ctx context.Context, attemptID string) (Attempt, bool) {
+	id, organizationID, err := e.obligationForAttempt(ctx, attemptID)
 	if err != nil {
 		return Attempt{}, false
 	}
-	local, err := e.load(context.Background(), id)
+	ctx, err = e.scopeTenantContext(ctx, organizationID)
+	if err != nil {
+		return Attempt{}, false
+	}
+	local, err := e.load(ctx, id)
 	if err != nil {
 		return Attempt{}, false
 	}
@@ -226,6 +257,9 @@ func (e *PostgresEngine) mutate(ctx context.Context, id string, operation func(*
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := db.SetObligationContext(ctx, tx, id); err != nil {
+		return err
+	}
 	policy, err := businesspolicy.ReadTx(ctx, tx)
 	if err != nil {
 		return err
@@ -291,8 +325,16 @@ func (e *PostgresEngine) load(ctx context.Context, id string) (*Engine, error) {
 	if e == nil || e.pool == nil {
 		return nil, errors.New("collection database is not configured")
 	}
+	tx, err := e.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := db.SetObligationContext(ctx, tx, id); err != nil {
+		return nil, err
+	}
 	var payload []byte
-	if err := e.pool.QueryRow(ctx, `SELECT aggregate FROM app.collection_aggregate_snapshots WHERE obligation_id=$1::uuid`, id).Scan(&payload); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT aggregate FROM app.collection_aggregate_snapshots WHERE obligation_id=$1::uuid`, id).Scan(&payload); err != nil {
 		return nil, err
 	}
 	local := e.fresh()
@@ -303,21 +345,30 @@ func (e *PostgresEngine) load(ctx context.Context, id string) (*Engine, error) {
 	installCollection(local, state)
 	return local, nil
 }
-func (e *PostgresEngine) obligationForAttempt(ctx context.Context, id string) (string, error) {
-	var obligation string
-	err := e.pool.QueryRow(ctx, `SELECT obligation_id::text FROM app.collection_attempt_index WHERE attempt_id=$1::uuid`, id).Scan(&obligation)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", errors.New("collection attempt not found")
+func (e *PostgresEngine) scopeTenantContext(ctx context.Context, organizationID string) (context.Context, error) {
+	if existing, ok := db.TenantFromContext(ctx); ok && existing.OrganizationID != "" {
+		if existing.OrganizationID != organizationID {
+			return nil, errors.New("collection resource is outside the authorized tenant")
+		}
+		return ctx, nil
 	}
-	return obligation, err
+	return db.WithTenantContext(ctx, "", organizationID), nil
 }
-func (e *PostgresEngine) obligationForExternal(ctx context.Context, reference string) (string, error) {
-	var obligation string
-	err := e.pool.QueryRow(ctx, `SELECT obligation_id::text FROM app.collection_attempt_index WHERE external_reference=$1`, reference).Scan(&obligation)
+func (e *PostgresEngine) obligationForAttempt(ctx context.Context, id string) (string, string, error) {
+	var obligation, organizationID string
+	err := e.pool.QueryRow(ctx, `SELECT obligation_id::text,organization_id::text FROM app.collection_identity_by_attempt($1::uuid)`, id).Scan(&obligation, &organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", errors.New("collection attempt not found")
+		return "", "", errors.New("collection attempt not found")
 	}
-	return obligation, err
+	return obligation, organizationID, err
+}
+func (e *PostgresEngine) obligationForExternal(ctx context.Context, reference string) (string, string, error) {
+	var obligation, organizationID string
+	err := e.pool.QueryRow(ctx, `SELECT obligation_id::text,organization_id::text FROM app.collection_identity_by_external($1)`, reference).Scan(&obligation, &organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", errors.New("collection attempt not found")
+	}
+	return obligation, organizationID, err
 }
 func syncCollectionTx(ctx context.Context, tx pgx.Tx, state persistedCollection) error {
 	for _, r := range state.Reservations {
@@ -374,7 +425,10 @@ func nullableCollectionTime(value time.Time) any {
 }
 
 func (e *PostgresEngine) ReadAttempts(id string) ([]Attempt, error) {
-	local, err := e.load(context.Background(), id)
+	return e.ReadAttemptsContext(context.Background(), id)
+}
+func (e *PostgresEngine) ReadAttemptsContext(ctx context.Context, id string) ([]Attempt, error) {
+	local, err := e.load(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return []Attempt{}, nil
 	}

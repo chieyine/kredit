@@ -11,6 +11,7 @@ import (
 	"kredit/internal/audit"
 	"kredit/internal/collections"
 	"kredit/internal/credit"
+	"kredit/internal/db"
 	"kredit/internal/disputes"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
@@ -505,6 +506,7 @@ func (s *Server) recordPayment(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireCSRF(w, r) {
 		return
 	}
@@ -555,6 +557,7 @@ func (s *Server) listPayments(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), "", orgID))
 	v, err := s.runtime.Credit.GetForSupplier(requestID, orgID)
 	if err != nil || v.Obligation == nil {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
@@ -573,6 +576,7 @@ func (s *Server) reconcilePayments(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), "", orgID))
 	v, err := s.runtime.Credit.GetForSupplier(requestID, orgID)
 	if err != nil || v.Obligation == nil {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
@@ -618,6 +622,7 @@ func (s *Server) reversePayment(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireCSRF(w, r) {
 		return
 	}
@@ -660,6 +665,7 @@ func (s *Server) listBuyerPayments(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))
 	requestID, _ := pathID(r, "requestID")
 	v, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)
 	if err != nil || v.Obligation == nil {
@@ -677,6 +683,7 @@ func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))
 	obligationID, _ := pathID(r, "obligationID")
 	view, err := s.runtime.Credit.GetByObligationForBuyer(obligationID, user.ID)
 	if err != nil || view.Obligation == nil {
@@ -1214,7 +1221,8 @@ func (s *Server) collectionEligibility(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	eligibility, err := s.runtime.Collections.Eligibility(v.Obligation.ID, time.Now().UTC())
+	ctx := db.WithTenantContext(r.Context(), "", orgID)
+	eligibility, err := s.runtime.collectionEligibilityContext(ctx, v.Obligation.ID, time.Now().UTC())
 	if err != nil {
 		writeProblem(w, 409, "eligibility_failed", err.Error())
 		return
@@ -1229,6 +1237,7 @@ func (s *Server) startCollection(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireSupplierReady(w, orgID, user.ID, "starting a live collection") {
 		return
 	}
@@ -1272,7 +1281,7 @@ func (s *Server) listCollections(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
 		return
 	}
-	financialRows10, readErr10 := s.runtime.readCollectionsAttempts(v.Obligation.ID)
+	financialRows10, readErr10 := s.runtime.readCollectionsAttemptsContext(db.WithTenantContext(r.Context(), "", orgID), v.Obligation.ID)
 	if financialReadError(w, readErr10) {
 		return
 	}
@@ -1286,10 +1295,11 @@ func (s *Server) retryCollection(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireCSRF(w, r) {
 		return
 	}
-	attempt, exists := s.runtime.Collections.GetAttempt(attemptID)
+	attempt, exists := s.runtime.getCollectionAttemptContext(r.Context(), attemptID)
 	if !exists || !s.runtime.Credit.ObligationBelongsToOrganization(attempt.ObligationID, orgID) {
 		writeProblem(w, 404, "collection_not_found", "collection attempt was not found")
 		return
@@ -1310,10 +1320,11 @@ func (s *Server) reconcileCollection(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireCSRF(w, r) {
 		return
 	}
-	attempt, exists := s.runtime.Collections.GetAttempt(attemptID)
+	attempt, exists := s.runtime.getCollectionAttemptContext(r.Context(), attemptID)
 	if !exists || !s.runtime.Credit.ObligationBelongsToOrganization(attempt.ObligationID, orgID) {
 		writeProblem(w, 404, "collection_not_found", "collection attempt was not found")
 		return

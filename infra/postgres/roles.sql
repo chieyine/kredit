@@ -19,6 +19,11 @@ $$;
 
 REVOKE ALL ON SCHEMA app FROM PUBLIC;
 GRANT USAGE ON SCHEMA app TO kredit_app, kredit_worker, kredit_backup;
+
+-- Existing application tables keep their repository-level baseline grants;
+-- row-level security is the tenant authorization boundary. New tables are
+-- deliberately NOT auto-granted to either runtime role: a migration must make
+-- an explicit privilege decision before new data becomes reachable.
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA app TO kredit_app;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA app TO kredit_worker;
 REVOKE UPDATE, DELETE ON app.audit_events FROM kredit_app, kredit_worker;
@@ -26,9 +31,9 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO kredit_app, kredit_worker;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO kredit_app, kredit_worker;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA app
-    GRANT SELECT, INSERT, UPDATE ON TABLES TO kredit_app;
+    REVOKE SELECT, INSERT, UPDATE ON TABLES FROM kredit_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app
-    GRANT SELECT, INSERT, UPDATE ON TABLES TO kredit_worker;
+    REVOKE SELECT, INSERT, UPDATE ON TABLES FROM kredit_worker;
 GRANT SELECT ON ALL TABLES IN SCHEMA app TO kredit_backup;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO kredit_backup;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT ON TABLES TO kredit_backup;
@@ -124,7 +129,21 @@ GRANT EXECUTE ON FUNCTION app.touch_session(UUID,TIMESTAMPTZ) TO kredit_app;
 GRANT EXECUTE ON FUNCTION app.record_rate_limit_attempt(BYTEA,INTERVAL) TO kredit_app;
 GRANT EXECUTE ON FUNCTION app.prune_rate_limits(INTERVAL) TO kredit_worker;
 
--- Keep buyer evidence independent of automated collection workers, including
--- when this provisioning script is rerun after a schema upgrade.
+-- Buyer-originated evidence is independent of autonomous collection workers.
+-- The worker may read evidence needed to decide whether a debit is eligible, but
+-- it cannot create, rewrite, or delete the buyer's decision/evidence records.
+REVOKE INSERT, UPDATE, DELETE ON app.agreement_acceptances FROM kredit_worker;
+REVOKE INSERT, UPDATE, DELETE ON app.receipt_confirmations FROM kredit_worker;
+REVOKE INSERT, UPDATE, DELETE ON app.payment_claims FROM kredit_worker;
 REVOKE INSERT, UPDATE, DELETE ON app.collection_notice_acknowledgements FROM kredit_worker;
 REVOKE UPDATE, DELETE ON app.collection_notice_acknowledgements FROM kredit_app;
+
+-- Phase 2 narrow global collection discovery. These functions expose only
+-- resource and tenant identifiers; financial reads/writes still use RLS.
+GRANT EXECUTE ON FUNCTION app.collection_due_work_page(TEXT,INTEGER) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.collection_attempt_work_page(TEXT,INTEGER) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.collection_identity_by_attempt(UUID) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.collection_identity_by_external(TEXT) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.collection_attempt_identity_by_external(TEXT) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.enqueue_pre_debit_notices() TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.enqueue_due_payment_notices(INTEGER) TO kredit_worker;

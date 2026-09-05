@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"kredit/internal/audit"
+	"kredit/internal/collections"
+	"kredit/internal/db"
 	"kredit/internal/jobs"
 	"kredit/internal/mandates"
 	"kredit/internal/providers/mono"
@@ -52,11 +54,20 @@ func (r *Runtime) HandleProviderNotice(ctx context.Context, args jobs.ProviderWe
 		return nil
 	} // Aggregate final event/periodic lookup owns financial effect.
 	if strings.Contains(notice.Type, ".debit.") {
-		var id string
-		if err := r.Database.Raw().QueryRow(ctx, `SELECT attempt_id::text FROM app.collection_attempt_index WHERE external_reference=$1`, notice.Reference).Scan(&id); err != nil {
+		var id, organizationID string
+		if err := r.Database.Raw().QueryRow(ctx, `SELECT attempt_id::text,organization_id::text FROM app.collection_attempt_identity_by_external($1)`, notice.Reference).Scan(&id, &organizationID); err != nil {
 			return errors.New("debit attempt is not yet available")
 		}
-		attempt, ok := r.Collections.GetAttempt(id)
+		ctx = db.WithTenantContext(ctx, "", organizationID)
+		var attempt collections.Attempt
+		var ok bool
+		if scoped, supported := r.Collections.(interface {
+			GetAttemptContext(context.Context, string) (collections.Attempt, bool)
+		}); supported {
+			attempt, ok = scoped.GetAttemptContext(ctx, id)
+		} else {
+			attempt, ok = r.Collections.GetAttempt(id)
+		}
 		if !ok || attempt.MandateReference != notice.MandateID {
 			return errors.New("debit mandate does not match the reserved attempt")
 		}

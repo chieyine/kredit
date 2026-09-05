@@ -80,6 +80,11 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 		return Payment{}, Allocation{}, errors.New("collected payments require collection-worker provenance, provider identity, and an attempt idempotency key")
 	}
 
+	// Tenant identity must come from an authenticated HTTP boundary or a
+	// tenant-scoped worker job, never from the obligation being requested.
+	if err := db.SetObligationContext(ctx, tx, input.ObligationID); err != nil {
+		return Payment{}, Allocation{}, err
+	}
 	if existing, allocation, found, err := loadByIdempotency(ctx, tx, input.IdempotencyKey); err != nil {
 		return Payment{}, Allocation{}, err
 	} else if found {
@@ -89,16 +94,6 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 		return existing, allocation, nil
 	}
 
-	// Establish the persisted parties before reading tenant-scoped credit rows.
-	// A collection worker has no browser session; relying on session-local
-	// database context would make autonomous repayments disappear under RLS.
-	var buyerContext, supplierContext string
-	if err := tx.QueryRow(ctx, `SELECT s.buyer_user_id,s.supplier_organization_id FROM app.credit_aggregate_snapshots s JOIN app.obligations o ON o.credit_request_id::text=s.credit_request_id WHERE o.id=$1::uuid`, input.ObligationID).Scan(&buyerContext, &supplierContext); err != nil {
-		return Payment{}, Allocation{}, errors.New("obligation context not found")
-	}
-	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, buyerContext, supplierContext); err != nil {
-		return Payment{}, Allocation{}, err
-	}
 	var snapshot ObligationSnapshot
 	var creditRequestID string
 	err := tx.QueryRow(ctx, `
@@ -298,15 +293,15 @@ func (s *PostgresStore) ReverseContext(ctx context.Context, paymentID, actor, re
 		return Payment{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := db.SetTenantContext(ctx, tx); err != nil {
+		return Payment{}, err
+	}
 	payment, err := loadPayment(ctx, tx, paymentID, true)
 	if err != nil {
 		return Payment{}, err
 	}
 	if payment.State == StateReversed {
 		return payment, nil
-	}
-	if err := db.SetObligationContext(ctx, tx, payment.ObligationID); err != nil {
-		return Payment{}, err
 	}
 	var principal ledger.Money
 	var creditRequestID string
@@ -409,7 +404,15 @@ func (s *PostgresStore) GetContext(ctx context.Context, paymentID string) (Payme
 	if s == nil || s.pool == nil {
 		return Payment{}, errors.New("payment database is not configured")
 	}
-	return loadPayment(ctx, s.pool, paymentID, false)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Payment{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := db.SetTenantContext(ctx, tx); err != nil {
+		return Payment{}, err
+	}
+	return loadPayment(ctx, tx, paymentID, false)
 }
 
 func (s *PostgresStore) Rebuild(obligationID string) (ledger.Money, error) {
@@ -569,7 +572,15 @@ func (s *PostgresStore) ReadContext(ctx context.Context, obligationID string) ([
 	if s == nil || s.pool == nil || obligationID == "" {
 		return nil, errors.New("payment database or obligation unavailable")
 	}
-	rows, err := s.pool.Query(ctx, paymentSelect+` WHERE p.obligation_id=$1::uuid ORDER BY p.recognized_at,p.id`, obligationID)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := db.SetTenantContext(ctx, tx); err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(ctx, paymentSelect+` WHERE p.obligation_id=$1::uuid ORDER BY p.recognized_at,p.id`, obligationID)
 	if err != nil {
 		return nil, err
 	}

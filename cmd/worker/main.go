@@ -92,8 +92,8 @@ func main() {
 		ProviderWebhook: runtime.HandleProviderNotice,
 		Tracer:          runtime.Tracer,
 		Metrics:         runtime.Metrics,
-		Collection: func(ctx context.Context, operation, resourceID string) error {
-			return runtime.HandleCollectionJob(ctx, cfg, operation, resourceID)
+		Collection: func(ctx context.Context, args jobs.CollectionArgs) error {
+			return runtime.HandleCollectionJob(ctx, cfg, args)
 		},
 		Notification: func(ctx context.Context, operation, resourceID string) error {
 			if operation != jobs.OpDeliver {
