@@ -170,10 +170,10 @@ func TestPostgresPaymentPartialFullReversalAndOverpaymentInvariants(t *testing.T
 		t.Fatalf("all reversals did not restore original debt: outstanding=%d status=%s", outstanding, status)
 	}
 	var paymentSum, allocationSum int64
-	if err := f.pool.QueryRow(f.ctx, `SELECT COALESCE(SUM(amount_kobo) FILTER (WHERE state='RECOGNIZED'),0) FROM app.payments WHERE obligation_id=$1::uuid`, f.obligationID).Scan(&paymentSum); err != nil {
+	if err := f.pool.QueryRow(f.ctx, `SELECT COALESCE(SUM(amount_kobo) FILTER (WHERE state='recognized'),0) FROM app.payments WHERE obligation_id=$1::uuid`, f.obligationID).Scan(&paymentSum); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.pool.QueryRow(f.ctx, `SELECT COALESCE(SUM(pa.amount_kobo),0) FROM app.payment_allocations pa JOIN app.payments p ON p.id=pa.payment_id WHERE pa.obligation_id=$1::uuid AND p.state='RECOGNIZED'`, f.obligationID).Scan(&allocationSum); err != nil {
+	if err := f.pool.QueryRow(f.ctx, `SELECT COALESCE(SUM(pa.amount_kobo),0) FROM app.payment_allocations pa JOIN app.payments p ON p.id=pa.payment_id WHERE pa.obligation_id=$1::uuid AND p.state='recognized'`, f.obligationID).Scan(&allocationSum); err != nil {
 		t.Fatal(err)
 	}
 	if paymentSum != allocationSum {
@@ -210,7 +210,7 @@ func TestPostgresConcurrentPaymentsNeverOverAllocate(t *testing.T) {
 	if err := f.pool.QueryRow(f.ctx, `SELECT outstanding_kobo FROM app.obligations WHERE id=$1::uuid`, f.obligationID).Scan(&outstanding); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.pool.QueryRow(f.ctx, `SELECT COALESCE(SUM(amount_kobo),0) FROM app.payments WHERE obligation_id=$1::uuid AND state='RECOGNIZED'`, f.obligationID).Scan(&recognized); err != nil {
+	if err := f.pool.QueryRow(f.ctx, `SELECT COALESCE(SUM(amount_kobo),0) FROM app.payments WHERE obligation_id=$1::uuid AND state='recognized'`, f.obligationID).Scan(&recognized); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.pool.QueryRow(f.ctx, `SELECT COALESCE(SUM(amount_kobo),0) FROM app.payment_allocations WHERE obligation_id=$1::uuid`, f.obligationID).Scan(&allocated); err != nil {

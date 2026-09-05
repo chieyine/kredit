@@ -82,7 +82,7 @@ func TestPostgresCollectionIsRestartSafeAndFinanciallyIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider := NewMockProvider("collection-secret")
-	paymentStore := payments.NewPostgresStore(pool, outbox.NewStore(pool), nil)
+	paymentStore := &tenantPaymentStore{PostgresStore: payments.NewPostgresStore(pool, outbox.NewStore(pool), nil), ctx: ctx}
 	snapshot := func(string) (ObligationSnapshot, error) {
 		var outstanding int64
 		if err := pool.QueryRow(ctx, `SELECT outstanding_kobo FROM app.obligations WHERE id=$1::uuid`, obligationID).Scan(&outstanding); err != nil {
