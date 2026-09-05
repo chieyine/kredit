@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   repair:
-    if: github.event.head_commit.message != 'chore: normalize phase 1 audit hygiene'
+    if: ${{ github.event.head_commit.message != 'chore: normalize phase 1 audit hygiene' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
