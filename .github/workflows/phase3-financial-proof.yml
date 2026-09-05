@@ -1,0 +1,142 @@
+name: Phase 3 Financial Proof
+
+on:
+  push:
+    branches: [phase3-financial-proof]
+  pull_request:
+    paths:
+      - 'internal/payments/**'
+      - 'internal/collections/**'
+      - 'internal/ledger/**'
+      - 'internal/schedules/**'
+      - 'internal/web/**'
+      - 'tests/integration/**'
+      - 'web/tests/real-stack-financial.spec.ts'
+      - '.github/workflows/phase3-financial-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase3-financial-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  financial-proof:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_test
+        ports:
+          - '5432:5432'
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+      KREDIT_INTEGRATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Migrate and seed a fresh financial database
+        run: |
+          go run ./cmd/migrate
+          go run ./cmd/seed
+          go run ./cmd/seed
+      - name: Re-prove payment and collection invariants
+        run: |
+          go test -p 1 ./internal/payments ./internal/collections ./internal/ledger ./internal/schedules
+          go test -race ./internal/payments ./internal/collections
+      - name: Re-prove deterministic PostgreSQL financial paths
+        run: |
+          go test -p 1 ./internal/payments -run 'TestPostgresPayment' -count=1 -v
+          go test -p 1 ./internal/collections -count=1
+
+  real-stack-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_test
+        ports:
+          - '5432:5432'
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+      APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
+      API_INTERNAL_URL: http://127.0.0.1:8080
+      KREDIT_REAL_STACK_E2E: '1'
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install frontend dependencies and Chromium
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir web exec playwright install --with-deps chromium
+      - name: Migrate, provision runtime roles, and seed
+        run: |
+          go run ./cmd/migrate
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false \
+            -f infra/postgres/development-logins.sql
+          go run ./cmd/seed
+          go run ./cmd/seed
+      - name: Start real API and web stack
+        run: |
+          go run ./cmd/api > /tmp/kredit-api.log 2>&1 &
+          echo $! > /tmp/kredit-api.pid
+          pnpm --dir web dev --host 127.0.0.1 > /tmp/kredit-web.log 2>&1 &
+          echo $! > /tmp/kredit-web.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/readyz >/dev/null && curl -fsS http://127.0.0.1:5173 >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kredit-api.log || true
+          cat /tmp/kredit-web.log || true
+          exit 1
+      - name: Run only the non-mocked financial browser journeys
+        run: pnpm --dir web exec playwright test tests/real-stack-financial.spec.ts --config playwright.config.ts
+      - name: Show service logs on failure
+        if: failure()
+        run: |
+          cat /tmp/kredit-api.log || true
+          cat /tmp/kredit-web.log || true
