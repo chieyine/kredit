@@ -11,6 +11,7 @@ import (
 	"kredit/internal/audit"
 	"kredit/internal/collections"
 	"kredit/internal/credit"
+	"kredit/internal/db"
 	"kredit/internal/disputes"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
@@ -505,6 +506,7 @@ func (s *Server) recordPayment(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireCSRF(w, r) {
 		return
 	}
@@ -555,6 +557,7 @@ func (s *Server) listPayments(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), "", orgID))
 	v, err := s.runtime.Credit.GetForSupplier(requestID, orgID)
 	if err != nil || v.Obligation == nil {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
@@ -573,6 +576,7 @@ func (s *Server) reconcilePayments(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), "", orgID))
 	v, err := s.runtime.Credit.GetForSupplier(requestID, orgID)
 	if err != nil || v.Obligation == nil {
 		writeProblem(w, 404, "obligation_not_found", "obligation was not found")
@@ -618,6 +622,7 @@ func (s *Server) reversePayment(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	if !s.requireCSRF(w, r) {
 		return
 	}
@@ -660,6 +665,7 @@ func (s *Server) listBuyerPayments(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))
 	requestID, _ := pathID(r, "requestID")
 	v, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)
 	if err != nil || v.Obligation == nil {
@@ -677,6 +683,7 @@ func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))
 	obligationID, _ := pathID(r, "obligationID")
 	view, err := s.runtime.Credit.GetByObligationForBuyer(obligationID, user.ID)
 	if err != nil || view.Obligation == nil {
