@@ -43,13 +43,13 @@ func open(ctx context.Context, databaseURL, runtimeRole string) (*Pool, error) {
 	}
 	maxConns := int32(20)
 	if val := os.Getenv("DATABASE_MAX_CONNS"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+		if n, err := strconv.ParseInt(val, 10, 32); err == nil && n > 0 {
 			maxConns = int32(n)
 		}
 	}
 	minConns := int32(2)
 	if val := os.Getenv("DATABASE_MIN_CONNS"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+		if n, err := strconv.ParseInt(val, 10, 32); err == nil && n >= 0 {
 			minConns = int32(n)
 		}
 	}
