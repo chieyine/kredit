@@ -1,0 +1,33 @@
+name: Phase 3 Final Alignment
+
+on:
+  push:
+    branches: [phase3-financial-proof]
+    paths: ['.github/workflows/phase3-final-alignment.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+      - name: Apply final financial proof alignment
+        run: |
+          python3 scripts/phase3_final_alignment.py
+          gofmt -w internal/payments/postgres_test.go internal/collections/postgres_test.go
+          go test ./internal/payments ./internal/collections
+      - name: Commit verified alignment and remove temporary tooling
+        run: |
+          rm scripts/phase3_final_alignment.py
+          rm .github/workflows/phase3-final-alignment.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'phase3: focus and align financial proof gate'
+          git push
