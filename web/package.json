@@ -3,11 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "generate:api": "pnpm -w exec openapi-typescript api/openapi.yaml -o web/src/lib/api/generated/schema.ts",
+    "predev": "pnpm run generate:api",
     "dev": "vite dev",
+    "prebuild": "pnpm run generate:api",
     "build": "vite build",
     "preview": "vite preview",
+    "precheck": "pnpm run generate:api",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "pretest": "pnpm run generate:api",
     "test": "playwright test",
+    "prelint": "pnpm run generate:api",
     "lint": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
