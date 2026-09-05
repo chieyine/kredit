@@ -19,11 +19,12 @@ jobs:
       - name: Apply collection tenant patch
         run: |
           python3 scripts/phase2_collection_patch.py
+          python3 scripts/phase2_collection_import_fix.py
           gofmt -w internal/jobs/client.go cmd/worker/main.go internal/collections/postgres.go internal/web/financial_reads.go internal/web/collection_jobs.go internal/web/mono_handlers.go
           go test ./internal/jobs ./internal/collections ./internal/web ./cmd/worker
       - name: Commit verified patch and remove temporary tooling
         run: |
-          rm scripts/phase2_collection_patch.py
+          rm scripts/phase2_collection_patch.py scripts/phase2_collection_import_fix.py
           rm .github/workflows/phase2-runtime-patch.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
