@@ -5,6 +5,7 @@ RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/package.json
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+COPY api/openapi.yaml api/openapi.yaml
 COPY web web
 RUN KREDIT_WEB_ADAPTER=node pnpm --dir web build
 
