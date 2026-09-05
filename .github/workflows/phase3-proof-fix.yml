@@ -1,0 +1,33 @@
+name: Phase 3 Proof Harness Fix
+
+on:
+  push:
+    branches: [phase3-financial-proof]
+    paths: ['.github/workflows/phase3-proof-fix.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+      - name: Apply tenant-aware proof harness fixes
+        run: |
+          python3 scripts/phase3_proof_fix.py
+          gofmt -w internal/payments/postgres_test.go internal/collections/sweep_postgres_test.go internal/collections/postgres_test.go
+          go test ./internal/payments ./internal/collections
+      - name: Commit verified fixes and remove temporary tooling
+        run: |
+          rm scripts/phase3_proof_fix.py
+          rm .github/workflows/phase3-proof-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'phase3: align financial tests with tenant context'
+          git push
