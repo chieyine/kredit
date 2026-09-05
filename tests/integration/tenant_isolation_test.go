@@ -95,6 +95,60 @@ func TestWorkerIsTenantBoundAndCannotForgeBuyerEvidence(t *testing.T) {
 	}
 }
 
+func TestCollectionWorkerDiscoveryIsNarrowlyPrivileged(t *testing.T) {
+	ctx := context.Background()
+	app := integrationPool(t, os.Getenv("DATABASE_URL"), "kredit_app_login", appPassword)
+	defer app.Close()
+	worker := integrationPool(t, os.Getenv("DATABASE_URL"), "kredit_worker_login", workerPassword)
+	defer worker.Close()
+
+	t.Run("application role cannot call global discovery", func(t *testing.T) {
+		tx := beginRoleTx(t, ctx, app, "kredit_app")
+		defer tx.Rollback(ctx)
+		var allowed bool
+		if err := tx.QueryRow(ctx, `SELECT has_function_privilege(current_user,'app.collection_due_work_page(text,integer)','EXECUTE')`).Scan(&allowed); err != nil {
+			t.Fatal(err)
+		}
+		if allowed {
+			t.Fatal("application role unexpectedly has global collection discovery privilege")
+		}
+		_, err := tx.Exec(ctx, `SELECT * FROM app.collection_due_work_page('',1)`)
+		if err == nil {
+			t.Fatal("application role unexpectedly executed global collection discovery")
+		}
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "42501" {
+			t.Fatalf("expected discovery permission error 42501, got %v", err)
+		}
+	})
+
+	t.Run("worker can discover identifiers but still cannot read financial rows globally", func(t *testing.T) {
+		tx := beginRoleTx(t, ctx, worker, "kredit_worker")
+		defer tx.Rollback(ctx)
+		var allowed bool
+		if err := tx.QueryRow(ctx, `SELECT has_function_privilege(current_user,'app.collection_due_work_page(text,integer)','EXECUTE')`).Scan(&allowed); err != nil {
+			t.Fatal(err)
+		}
+		if !allowed {
+			t.Fatal("worker is missing the narrow collection discovery privilege")
+		}
+		var financialRows int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM app.obligations`).Scan(&financialRows); err != nil {
+			t.Fatal(err)
+		}
+		if financialRows != 0 {
+			t.Fatalf("worker saw %d obligations without tenant context", financialRows)
+		}
+		var discovered int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM app.collection_due_work_page('',100)`).Scan(&discovered); err != nil {
+			t.Fatalf("worker narrow discovery function is unusable: %v", err)
+		}
+		if discovered < 0 {
+			t.Fatalf("invalid discovery count %d", discovered)
+		}
+	})
+}
+
 func integrationPool(t *testing.T, rawURL, user, password string) *pgxpool.Pool {
 	t.Helper()
 	if rawURL == "" {
