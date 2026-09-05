@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"kredit/internal/db"
+	"kredit/internal/ledger"
 	"kredit/internal/outbox"
 	"kredit/internal/schedules"
 
@@ -64,7 +65,7 @@ func newPaymentFixture(t *testing.T, principal int64) *paymentFixture {
 	if _, err := pool.Exec(base, `INSERT INTO app.credit_aggregate_snapshots(credit_request_id,supplier_organization_id,buyer_user_id,aggregate,version) VALUES($1,$2,$3,$4,1)`, f.requestID, f.organizationID, f.userID, payload); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := schedules.NewPostgresStore(pool).CreateDefault(f.obligationID, principal, time.Now().UTC().AddDate(0, 0, 7).Format("2006-01-02"), time.Now().UTC().AddDate(0, 0, 7), 0); err != nil {
+	if _, _, err := schedules.NewPostgresStore(pool).CreateDefault(f.obligationID, ledger.Money(principal), time.Now().UTC().AddDate(0, 0, 7).Format("2006-01-02"), time.Now().UTC().AddDate(0, 0, 7), 0); err != nil {
 		t.Fatal(err)
 	}
 	f.ctx = db.WithTenantContext(base, f.userID, f.organizationID)
@@ -106,7 +107,7 @@ func TestPostgresPaymentIsAtomicIdempotentAndRestartSafe(t *testing.T) {
 		t.Fatalf("unexpected payment: %+v %+v", payment, allocation)
 	}
 	duplicate, duplicateAllocation, err := store.RecordContext(f.ctx, input)
-	if err != nil || duplicate.ID != payment.ID || duplicateAllocation.ID != allocation.ID {
+	if err != nil || duplicate.ID != payment.ID || duplicateAllocation.PaymentID != allocation.PaymentID || duplicateAllocation.AmountKobo != allocation.AmountKobo {
 		t.Fatalf("idempotent replay failed: %v %+v %+v", err, duplicate, duplicateAllocation)
 	}
 	if _, _, err = store.RecordContext(f.ctx, RecordInput{ObligationID: f.obligationID, SourceType: SourceVoluntary, AmountKobo: 2_501, RecordedBy: f.userID, IdempotencyKey: key}); err == nil {
@@ -190,7 +191,7 @@ func TestPostgresConcurrentPaymentsNeverOverAllocate(t *testing.T) {
 		wg.Add(1)
 		go func(i int, amount int64) {
 			defer wg.Done()
-			_, _, err := store.RecordContext(f.ctx, RecordInput{ObligationID: f.obligationID, SourceType: SourceVoluntary, AmountKobo: Money(amount), RecordedBy: f.userID, IdempotencyKey: fmt.Sprintf("%s-race-%d", f.paymentKeyPrefix, i)})
+			_, _, err := store.RecordContext(f.ctx, RecordInput{ObligationID: f.obligationID, SourceType: SourceVoluntary, AmountKobo: ledger.Money(amount), RecordedBy: f.userID, IdempotencyKey: fmt.Sprintf("%s-race-%d", f.paymentKeyPrefix, i)})
 			results <- err
 		}(i, amount)
 	}

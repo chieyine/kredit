@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"kredit/internal/db"
 	"kredit/internal/identifier"
 	"kredit/internal/ledger"
 	"kredit/internal/outbox"
@@ -49,6 +50,7 @@ func TestPostgresCollectionIsRestartSafeAndFinanciallyIdempotent(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO app.obligations(credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at) SELECT $1::uuid,$2::uuid,$3::uuid,buyer_business_id,principal_kobo,'NGN','ACTIVE','UNPAID',principal_kobo,50,$4::uuid,now() FROM app.credit_requests WHERE id=$1::uuid RETURNING id::text`, requestID, agreementID, organizationID, activationTransactionID).Scan(&obligationID); err != nil {
 		t.Fatal(err)
 	}
+	ctx = db.WithTenantContext(ctx, userID, organizationID)
 	view := map[string]any{"request": map[string]any{"id": requestID, "version": 1}, "obligation": map[string]any{"id": obligationID, "outstanding_kobo": 10000, "payment_status": "UNPAID"}}
 	payload, _ := json.Marshal(view)
 	if _, err := pool.Exec(ctx, `INSERT INTO app.credit_aggregate_snapshots(credit_request_id,supplier_organization_id,buyer_user_id,aggregate,version) VALUES($1,$2,$3,$4,1)`, requestID, organizationID, userID, payload); err != nil {
@@ -66,7 +68,7 @@ func TestPostgresCollectionIsRestartSafeAndFinanciallyIdempotent(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM app.collection_aggregate_snapshots WHERE obligation_id=$1::uuid`, obligationID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.schedule_items WHERE schedule_id IN(SELECT id FROM app.repayment_schedules WHERE obligation_id=$1::uuid)`, obligationID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.repayment_schedules WHERE obligation_id=$1::uuid`, obligationID)
-		_, _ = pool.Exec(ctx, `DELETE FROM app.credit_aggregate_snapshots WHERE credit_request_id=$1::uuid`, requestID)
+		_, _ = pool.Exec(ctx, `DELETE FROM app.credit_aggregate_snapshots WHERE credit_request_id=$1`, requestID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.obligations WHERE id=$1::uuid`, obligationID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.agreement_versions WHERE id=$1::uuid`, agreementID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.credit_requests WHERE id=$1::uuid`, requestID)
@@ -99,7 +101,7 @@ func TestPostgresCollectionIsRestartSafeAndFinanciallyIdempotent(t *testing.T) {
 	}
 
 	restarted := NewPostgresEngine(pool, NewEngine(provider, paymentStore, snapshot, func(string, time.Time) (ledger.Money, error) { return 10000, nil }))
-	loaded, ok := restarted.GetAttempt(attempt.ID)
+	loaded, ok := restarted.GetAttemptContext(ctx, attempt.ID)
 	if !ok || loaded.ID != attempt.ID || loaded.State != AttemptSucceeded {
 		t.Fatalf("restart-safe load failed: ok=%t attempt=%+v", ok, loaded)
 	}
