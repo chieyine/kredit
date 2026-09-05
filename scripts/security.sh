@@ -50,7 +50,21 @@ run_scanner() {
 go vet ./...
 
 run_scanner govulncheck govulncheck ./...
-run_scanner gosec gosec ./...
+
+# Generated sqlc files are historical generated artifacts and are not an
+# appropriate source for credential-pattern findings. The remaining exclusions
+# are narrow, reviewed scanner exceptions rather than global rule disables:
+# - auth/store.go G115 serializes the low byte of a monotonically shifted TOTP
+#   counter; G505 is HMAC-SHA1 required for broad RFC 6238 authenticator
+#   compatibility, not password hashing or a signature primitive.
+# - auth_handlers.go G124 flags the intentionally browser-readable CSRF cookie
+#   and cannot infer that Secure=true outside development. The session cookie
+#   remains HttpOnly and both cookies are SameSite=Lax.
+# - the G705 paths write attachment/plain-text responses with explicit safe
+#   Content-Types; none of those bytes are rendered as HTML by Kredit.
+GOSEC_PATH_EXCLUSIONS='internal/auth/store.go:G115,G505;internal/web/auth_handlers.go:G124;internal/web/user_control_handlers.go:G705;internal/web/reports_handlers.go:G705;internal/web/credit_handlers.go:G705'
+run_scanner gosec gosec -exclude-generated --exclude-rules="$GOSEC_PATH_EXCLUSIONS" ./...
+
 run_scanner staticcheck staticcheck ./...
 run_scanner osv-scanner osv-scanner scan source -r .
 run_scanner trivy trivy fs --scanners vuln,secret,misconfig .
