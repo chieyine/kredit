@@ -30,9 +30,8 @@
 		name: 'Kredit',
 		url: SITE_URL,
 		logo: `${SITE_URL}/icon-512.png`,
-		description:
-			'Kredit helps Nigerian businesses sell goods on credit, track payments and collect money.',
-		areaServed: 'NG',
+		description: 'Kredit helps Nigerian businesses sell goods on credit, track payments and collect money.',
+		areaServed: 'NG'
 	};
 	const websiteSchema = {
 		'@context': 'https://schema.org',
@@ -125,4 +124,4 @@
 	</div>
 	{#if page.url.pathname === '/'}<HomeProof />{/if}
 {/if}
-{#if publicChrome}<SiteFooter />{/if>
+{#if publicChrome}<SiteFooter />{/if}
