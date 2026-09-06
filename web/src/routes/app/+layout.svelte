@@ -11,7 +11,7 @@
 	let ready = $state(false);
 	onMount(() => { ready = true; });
 	const links: [string, string][] = [
-		['Dashboard', '/app/overview'], ['Complete setup', '/app/onboarding'], ['Add credit sale', '/app/credit/quick'], ['Customers', '/app/customers'],
+		['Dashboard', '/app/overview'], ['Search records', '/app/search'], ['Complete setup', '/app/onboarding'], ['Add credit sale', '/app/credit/quick'], ['Customers', '/app/customers'],
 		['Customer limits', '/app/trade-lines'], ['Payments received', '/app/payments'], ['Collections', '/app/collections'],
 		['Disputes', '/app/disputes'], ['Overdue balances', '/app/overdue'], ['Reports', '/app/reports'],
 		['Team access', '/app/team'], ['Activity log', '/app/activity'], ['Message history', '/app/notifications'],
@@ -26,6 +26,7 @@
 		['Payments', '/app/payments', 'payments']
 	];
 	const mobileMore: [string, string, string][] = [
+		['Search records', '/app/search', 'Sales and money'],
 		['Collections', '/app/collections', 'Sales and money'],
 		['Disputes', '/app/disputes', 'Sales and money'],
 		['Overdue balances', '/app/overdue', 'Sales and money'],
