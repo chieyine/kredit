@@ -1,0 +1,125 @@
+name: Phase 4 Provider Verification
+
+on:
+  push:
+    branches: [phase4-provider-verification]
+  pull_request:
+    paths:
+      - 'internal/providers/**'
+      - 'internal/collections/**'
+      - 'internal/mandates/**'
+      - 'internal/identity/**'
+      - 'internal/notifications/**'
+      - 'internal/web/**'
+      - 'internal/jobs/**'
+      - 'internal/db/**'
+      - 'internal/config/**'
+      - 'db/migrations/**'
+      - 'infra/postgres/**'
+      - 'scripts/verify_provider_evidence.py'
+      - 'scripts/test_provider_evidence.py'
+      - 'docs/testing/phase4-provider-*'
+      - 'go.mod'
+      - 'go.sum'
+      - '.go-version'
+      - '.github/workflows/phase4-provider-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-provider-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence-tooling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test evidence validation without provider secrets
+        run: python3 -m unittest discover -s scripts -p 'test_provider_evidence.py' -v
+      - name: Confirm pending template cannot pass certification checks
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+          sys.path.insert(0, 'scripts')
+          from verify_provider_evidence import validate
+          pack = json.loads(pathlib.Path('docs/testing/phase4-provider-evidence.template.json').read_text())
+          assert validate(pack, pathlib.Path('.')), 'Pending template must fail evidence validation'
+          PY
+  provider-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Synthetic provider contracts and boundary regressions
+        run: >-
+          go test -count=1 -race -timeout 180s
+          ./internal/providers/mono ./internal/collections ./internal/mandates
+          ./internal/identity ./internal/notifications ./internal/web ./internal/config
+      - name: Record certification boundary
+        if: always()
+        run: |
+          echo '### Phase 4 provider verification' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Synthetic adapter regression evidence only; not Mono sandbox certification.' >> "$GITHUB_STEP_SUMMARY"
+  provider-persistence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_phase4_test
+        ports:
+          - '5432:5432'
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_phase4_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_phase4_test?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_phase4_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Migrate isolated database and provision restricted logins
+        run: |
+          go run ./cmd/migrate
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false -f infra/postgres/development-logins.sql
+      - name: Prove persisted provider effects with real worker role
+        run: |
+          set -o pipefail
+          go test -tags=integration -count=1 -race -timeout 180s ./internal/providers/mono -run '^TestPhase4Persisted' -v | tee "$RUNNER_TEMP/phase4-persistence.log"
+      - name: Preserve synthetic acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-provider-persistence-${{ github.sha }}
+          path: ${{ runner.temp }}/phase4-persistence.log
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Record evidence boundary
+        if: always()
+        run: |
+          echo 'Real PostgreSQL, restricted worker, production inbox handler and Mono adapter; provider HTTP is local HTTPS fixtures only.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Does not certify hosted consent, real Mono endpoints, notification delivery, settlement or production approval.' >> "$GITHUB_STEP_SUMMARY"
