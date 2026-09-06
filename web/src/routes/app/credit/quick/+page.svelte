@@ -2,16 +2,42 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
-	import { parseNaira, verbalizeNaira } from '$lib/money';
+	import { formatKobo, parseNaira, verbalizeNaira } from '$lib/money';
 	import { productLabel } from '$lib/product-language';
 
+	const DRAFT_KEY='kredit.quick-sale.draft.v1';
+	type QuickSaleDraft={goods:string;principal:string;dueDate:string;updatedAt:string};
 	let organizations:any[]=$state([]), customers:any[]=$state([]), organizationID=$state(''), selectedBuyer=$state('');
 	let buyerUserID=$state(''), buyerBusinessID=$state(''), buyerLegalName=$state('');
 	let principal=$state(''), goods=$state(''), dueDate=$state(''), busy=$state(false), error=$state('');
-	let step=$state(1), createRequestKey=$state('');
+	let step=$state(1), createRequestKey=$state(''), draftReady=$state(false), recoveredDraft=$state(false);
 	let amountWords=$derived(verbalizeNaira(parseNaira(principal)));
 	let selectedCustomer=$derived(customers.find((item)=>item.buyer_user_id===selectedBuyer));
 	let customerWarning=$derived(selectedCustomer?.has_overdue_obligations || selectedCustomer?.overdue_count > 0 || selectedCustomer?.has_network_overdue ? `This customer currently has ${selectedCustomer?.overdue_count ?? 'active'} overdue payment(s) recorded across Kredit.` : '');
+
+	function restoreDraft(){
+		try{
+			const raw=sessionStorage.getItem(DRAFT_KEY);
+			if(!raw)return;
+			const draft=JSON.parse(raw) as Partial<QuickSaleDraft>;
+			if(typeof draft.goods==='string')goods=draft.goods;
+			if(typeof draft.principal==='string')principal=draft.principal;
+			if(typeof draft.dueDate==='string')dueDate=draft.dueDate;
+			recoveredDraft=Boolean(goods||principal||dueDate);
+		}catch{sessionStorage.removeItem(DRAFT_KEY)}
+	}
+	function clearDraft(){
+		try{sessionStorage.removeItem(DRAFT_KEY)}catch{/* storage may be unavailable */}
+		recoveredDraft=false;
+	}
+	$effect(()=>{
+		if(!draftReady)return;
+		try{
+			if(!goods&&!principal&&!dueDate){sessionStorage.removeItem(DRAFT_KEY);return;}
+			const draft:QuickSaleDraft={goods,principal,dueDate,updatedAt:new Date().toISOString()};
+			sessionStorage.setItem(DRAFT_KEY,JSON.stringify(draft));
+		}catch{/* the form remains usable when browser storage is unavailable */}
+	});
 
 	async function loadCustomers(){
 		customers=[]; selectedBuyer=''; buyerUserID=''; buyerBusinessID=''; buyerLegalName='';
@@ -51,23 +77,27 @@
 			const body=await response.json().catch(()=>({}));
 			if(!response.ok){if(response.status<500&&(body.title??body.code)!=='idempotency_in_progress')createRequestKey='';throw new Error(body.detail??'The sale could not be saved.');}
 			createRequestKey='';
+			clearDraft();
 			await goto(`/app/credit/${body.request.id}?organization=${organizationID}`);
 		}catch(cause){error=cause instanceof Error?cause.message:'The sale could not be saved.'}finally{busy=false}
 	}
 	onMount(async()=>{
+		const params=new URLSearchParams(window.location.search);
+		const hasPrefill=params.has('goods')||params.has('amount');
+		if(!hasPrefill)restoreDraft();
 		const response=await fetch('/api/v1/organizations',{credentials:'include'});
 		if(response.status===401){location.assign('/app');return;}
-		if(!response.ok){error='We could not load your business account.';return;}
+		if(!response.ok){error='We could not load your business account.';draftReady=true;return;}
 		organizations=(await response.json()).organizations??[];
 		organizationID=organizations[0]?.id??'';
 		await loadCustomers();
-		const params=new URLSearchParams(window.location.search);
 		selectedBuyer=params.get('customer')??'';
-		goods=params.get('goods')??'';
-		principal=params.get('amount')??'';
+		if(params.has('goods'))goods=params.get('goods')??'';
+		if(params.has('amount'))principal=params.get('amount')??'';
 		if(selectedBuyer)chooseBuyer();
-		if(buyerUserID&&goods&&parseNaira(principal)>0)step=3;
+		if(buyerUserID&&goods&&parseNaira(principal)>0)step=dueDate?4:3;
 		else if(buyerUserID)step=2;
+		draftReady=true;
 	});
 </script>
 
@@ -78,6 +108,7 @@
 		<a href="/app/credit/new?advanced=1">Need instalments or invoice details? Use the full form →</a>
 	</header>
 
+	{#if recoveredDraft}<div class="draft-note" role="status"><span><strong>Unfinished sale details recovered.</strong> Customer selection is intentionally not stored; choose the customer again before continuing.</span><button type="button" onclick={()=>{goods='';principal='';dueDate='';clearDraft()}}>Discard draft</button></div>{/if}
 	<nav class="steps" aria-label="Sale steps">
 		{#each ['Customer','Goods & amount','Payment day','Review'] as label,index}
 			<button class:active={step===index+1} class:done={step>index+1} type="button" onclick={()=>{if(index+1<step)step=index+1}}><span>{step>index+1?'✓':index+1}</span>{label}</button>
@@ -101,7 +132,7 @@
 			<div class="fields"><label>Payment due date<input type="date" bind:value={dueDate} /></label><div class="trust-note"><strong>What Kredit will not do</strong><p>Kredit will not start a bank debit before the agreed date and grace period. Bank debit also requires valid authorization and the applicable payment/dispute checks.</p></div></div>
 		{:else}
 			<div class="stage-copy"><p class="eyebrow">04 — Review</p><h2>Make sure both sides will see the same sale.</h2><p>Nothing is sent to the customer until you save the sale and open it to send for approval.</p></div>
-			<div class="review-card"><dl><div><dt>Customer</dt><dd>{buyerLegalName}</dd></div><div><dt>Goods</dt><dd>{goods}</dd></div><div><dt>Amount</dt><dd>{new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(parseNaira(principal)/100)}</dd></div><div><dt>Pay by</dt><dd>{new Date(`${dueDate}T12:00:00`).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</dd></div></dl><div class="trust-strip"><span>✓ Customer reviews before accepting</span><span>✓ Sale details stay on record</span><span>✓ Payments reduce the balance</span></div></div>
+			<div class="review-card"><dl><div><dt>Customer</dt><dd>{buyerLegalName}</dd></div><div><dt>Goods</dt><dd>{goods}</dd></div><div><dt>Amount</dt><dd>{formatKobo(parseNaira(principal))}</dd></div><div><dt>Pay by</dt><dd>{new Date(`${dueDate}T12:00:00`).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</dd></div></dl><div class="trust-strip"><span>✓ Customer reviews before accepting</span><span>✓ Sale details stay on record</span><span>✓ Payments reduce the balance</span></div></div>
 		{/if}
 	</section>
 
@@ -109,5 +140,5 @@
 </main>
 
 <style>
-	.quick-sale{max-width:72rem;padding-bottom:6rem}.page-head{display:grid;grid-template-columns:1fr auto;gap:3rem;align-items:end;padding:3rem 0 2rem;border-bottom:3px solid #17181b}.page-head h1{max-width:11ch;margin:.5rem 0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3.2rem,7vw,6rem);font-weight:500;line-height:.9;letter-spacing:-.06em}.page-head>a{max-width:18rem;color:#2738d6;font-size:.82rem;font-weight:750;line-height:1.5}.steps{display:grid;grid-template-columns:repeat(4,1fr);margin:1.5rem 0 2rem;border-top:1px solid #cfc9be;border-left:1px solid #cfc9be}.steps button{display:flex;align-items:center;gap:.65rem;min-height:3.3rem;padding:.7rem;border:0;border-right:1px solid #cfc9be;border-bottom:1px solid #cfc9be;background:#fffdf8;color:#6a6c67;text-align:left;font:inherit;font-size:.78rem;font-weight:750}.steps button span{display:grid;place-items:center;width:1.5rem;height:1.5rem;border:1px solid #aaa69e;border-radius:50%;font-size:.68rem}.steps button.active{background:#17181b;color:#fff}.steps button.active span{border-color:#e85f3d;background:#e85f3d;color:#fff}.steps button.done{color:#2738d6}.steps button.done span{border-color:#2738d6;background:#2738d6;color:#fff}.sale-card{display:grid;grid-template-columns:.75fr 1.25fr;gap:clamp(2rem,6vw,6rem);min-height:27rem;padding:clamp(1.5rem,5vw,3.5rem);border:1px solid #cfc9be;background:#fffdf8;box-shadow:12px 12px 0 #2738d6}.stage-copy h2{max-width:11ch;margin:.5rem 0 1rem;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2.2rem,4vw,3.7rem);font-weight:500;line-height:.95;letter-spacing:-.045em}.stage-copy>p:last-child{max-width:30rem;color:#6a6c67;line-height:1.7}.fields{display:grid;align-content:start;gap:1.2rem}.fields label{display:grid;gap:.45rem;font-weight:750}.fields input,.fields select,.fields textarea{box-sizing:border-box;width:100%;min-height:3rem;padding:.8rem;border:1px solid #aaa69e;border-radius:0;background:#fff;font:inherit}.fields textarea{resize:vertical}.amount-words{color:#2738d6;line-height:1.5}.customer-card,.trust-note,.empty-inline{padding:1rem;border-left:4px solid #2738d6;background:#eef0ff}.customer-card{display:grid;gap:.35rem}.customer-card span,.customer-card small{color:#636863;font-size:.72rem}.warning{margin:.5rem 0 0;padding:.65rem;background:#fff5dd;color:#7a4a00;font-size:.8rem;line-height:1.5}.trust-note{border-left-color:#16794e;background:#ecf8f1}.trust-note p,.empty-inline p{margin:.4rem 0;color:#626762;line-height:1.6}.review-card{display:grid;gap:1.5rem}.review-card dl{margin:0;border-top:1px solid #cfc9be}.review-card dl div{display:grid;grid-template-columns:8rem 1fr;gap:1rem;padding:1rem 0;border-bottom:1px solid #cfc9be}.review-card dt{color:#686a66;font-size:.75rem;font-weight:750}.review-card dd{margin:0;font-weight:700;overflow-wrap:anywhere}.trust-strip{display:grid;gap:.45rem;padding:1rem;color:#fff;background:#17181b;font-size:.78rem}.actions{display:flex;justify-content:space-between;gap:1rem;margin-top:2rem}.actions button{min-height:3rem;padding:.75rem 1.1rem;border-radius:0;font:inherit;font-weight:800}.secondary{border:1px solid #aaa69e;background:#fff}.error{margin:1rem 0;padding:1rem;border-left:4px solid #b42318;background:#fff0ed;color:#8a1c14;font-weight:700}@media(max-width:760px){.page-head,.sale-card{grid-template-columns:1fr}.page-head{gap:1rem}.steps{grid-template-columns:1fr 1fr}.steps button{min-height:2.9rem}.sale-card{min-height:auto;box-shadow:7px 7px 0 #2738d6}.actions{position:sticky;bottom:0;z-index:5;margin-inline:-1rem;padding:1rem;background:rgb(245 242 234 / .96);border-top:1px solid #cfc9be}.actions button{min-width:8rem}.review-card dl div{grid-template-columns:1fr;gap:.25rem}}
+	.quick-sale{max-width:72rem;padding-bottom:6rem}.page-head{display:grid;grid-template-columns:1fr auto;gap:3rem;align-items:end;padding:3rem 0 2rem;border-bottom:3px solid #17181b}.page-head h1{max-width:11ch;margin:.5rem 0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3.2rem,7vw,6rem);font-weight:500;line-height:.9;letter-spacing:-.06em}.page-head>a{max-width:18rem;color:#2738d6;font-size:.82rem;font-weight:750;line-height:1.5}.draft-note{display:flex;justify-content:space-between;gap:1rem;align-items:center;margin:1.25rem 0 0;padding:.8rem 1rem;border-left:4px solid #2738d6;background:#eef0ff;font-size:.8rem;line-height:1.5}.draft-note button{border:0;background:transparent;color:#2738d6;font:inherit;font-weight:800;text-decoration:underline;cursor:pointer;white-space:nowrap}.steps{display:grid;grid-template-columns:repeat(4,1fr);margin:1.5rem 0 2rem;border-top:1px solid #cfc9be;border-left:1px solid #cfc9be}.steps button{display:flex;align-items:center;gap:.65rem;min-height:3.3rem;padding:.7rem;border:0;border-right:1px solid #cfc9be;border-bottom:1px solid #cfc9be;background:#fffdf8;color:#6a6c67;text-align:left;font:inherit;font-size:.78rem;font-weight:750}.steps button span{display:grid;place-items:center;width:1.5rem;height:1.5rem;border:1px solid #aaa69e;border-radius:50%;font-size:.68rem}.steps button.active{background:#17181b;color:#fff}.steps button.active span{border-color:#e85f3d;background:#e85f3d;color:#fff}.steps button.done{color:#2738d6}.steps button.done span{border-color:#2738d6;background:#2738d6;color:#fff}.sale-card{display:grid;grid-template-columns:.75fr 1.25fr;gap:clamp(2rem,6vw,6rem);min-height:27rem;padding:clamp(1.5rem,5vw,3.5rem);border:1px solid #cfc9be;background:#fffdf8;box-shadow:12px 12px 0 #2738d6}.stage-copy h2{max-width:11ch;margin:.5rem 0 1rem;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2.2rem,4vw,3.7rem);font-weight:500;line-height:.95;letter-spacing:-.045em}.stage-copy>p:last-child{max-width:30rem;color:#6a6c67;line-height:1.7}.fields{display:grid;align-content:start;gap:1.2rem}.fields label{display:grid;gap:.45rem;font-weight:750}.fields input,.fields select,.fields textarea{box-sizing:border-box;width:100%;min-height:3rem;padding:.8rem;border:1px solid #aaa69e;border-radius:0;background:#fff;font:inherit}.fields textarea{resize:vertical}.amount-words{color:#2738d6;line-height:1.5}.customer-card,.trust-note,.empty-inline{padding:1rem;border-left:4px solid #2738d6;background:#eef0ff}.customer-card{display:grid;gap:.35rem}.customer-card span,.customer-card small{color:#636863;font-size:.72rem}.warning{margin:.5rem 0 0;padding:.65rem;background:#fff5dd;color:#7a4a00;font-size:.8rem;line-height:1.5}.trust-note{border-left-color:#16794e;background:#ecf8f1}.trust-note p,.empty-inline p{margin:.4rem 0;color:#626762;line-height:1.6}.review-card{display:grid;gap:1.5rem}.review-card dl{margin:0;border-top:1px solid #cfc9be}.review-card dl div{display:grid;grid-template-columns:8rem 1fr;gap:1rem;padding:1rem 0;border-bottom:1px solid #cfc9be}.review-card dt{color:#686a66;font-size:.75rem;font-weight:750}.review-card dd{margin:0;font-weight:700;overflow-wrap:anywhere}.trust-strip{display:grid;gap:.45rem;padding:1rem;color:#fff;background:#17181b;font-size:.78rem}.actions{display:flex;justify-content:space-between;gap:1rem;margin-top:2rem}.actions button{min-height:3rem;padding:.75rem 1.1rem;border-radius:0;font:inherit;font-weight:800}.secondary{border:1px solid #aaa69e;background:#fff}.error{margin:1rem 0;padding:1rem;border-left:4px solid #b42318;background:#fff0ed;color:#8a1c14;font-weight:700}@media(max-width:760px){.page-head,.sale-card{grid-template-columns:1fr}.page-head{gap:1rem}.draft-note{align-items:flex-start;flex-direction:column}.steps{grid-template-columns:1fr 1fr}.steps button{min-height:2.9rem}.sale-card{min-height:auto;box-shadow:7px 7px 0 #2738d6}.actions{position:sticky;bottom:0;z-index:5;margin-inline:-1rem;padding:1rem;background:rgb(245 242 234 / .96);border-top:1px solid #cfc9be}.actions button{min-width:8rem}.review-card dl div{grid-template-columns:1fr;gap:.25rem}}
 </style>
