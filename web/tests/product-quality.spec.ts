@@ -21,6 +21,27 @@ test('public navigation is clear, complete and closes after a mobile choice', as
 	await expect(footer.getByRole('link', { name: 'How we keep it safe' })).toBeVisible();
 });
 
+test('homepage trust proof uses verifiable product controls rather than invented social proof', async ({ page }) => {
+	await page.goto('/');
+	const proof = page.locator('.proof');
+	await expect(proof.getByRole('heading', { name: /Trust comes from the record/ })).toBeVisible();
+	await expect(proof).toContainText('The customer sees the terms first.');
+	await expect(proof).toContainText('Delivery evidence stays with the sale.');
+	await expect(proof).toContainText('Every recorded payment changes the balance.');
+	await expect(proof).toContainText('Kredit does not choose your customer.');
+	await expect(proof.getByRole('link', { name: /full sale journey/i })).toHaveAttribute('href', '/how-it-works');
+	await expect(proof.getByRole('link', { name: /security and privacy controls/i })).toHaveAttribute('href', '/security');
+});
+
+test('default sale creation redirects to the quick flow while advanced mode remains addressable', async ({ request }) => {
+	const quick = await request.get('/app/credit/new?customer=u1&goods=Rice&amount=100000', { maxRedirects: 0 });
+	expect(quick.status()).toBe(307);
+	expect(quick.headers().location).toBe('/app/credit/quick?customer=u1&goods=Rice&amount=100000');
+
+	const advanced = await request.get('/app/credit/new?advanced=1', { maxRedirects: 0 });
+	expect(advanced.status()).not.toBe(307);
+});
+
 test('every indexable page has complete, unique search and social metadata', async ({ page }) => {
 	test.setTimeout(180_000);
 	const titles = new Set<string>();
