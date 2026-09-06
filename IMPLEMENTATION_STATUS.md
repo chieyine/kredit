@@ -2,6 +2,16 @@
 
 Last updated: 6 September 2026
 
+## Product and reliability audit implementation (PR #14)
+
+The 6 September follow-up is tracked in `docs/testing/audit-2026-09-06-implementation.md`.
+It corrects financial UI state handling, hosted bank-permission continuation, retry
+identity, Nigerian timing, shared-device drafts, attention ordering, navigation,
+pricing and the working-screen design system. New source changes must pass the
+final-commit CI and product-audit workflows before merge. These implementation
+records do not close external approvals, effective branch protection, manual
+accessibility or actual provider certification. Production collections stay disabled.
+
 ## Current engineering state (6 September 2026)
 
 Repository-owned engineering work through **Phase 6** is implemented on the reviewed branch. Database migrations run through **086**. Phases 2–5 established tenant isolation, financial-core/real-stack proof, provider-adapter verification tooling and production-assurance controls; Phase 6 closes the remaining repository hardening around fail-closed API linting/tool pinning, request cancellation, script CSP, truthful sitemap evidence, analytics request-context/privacy boundaries and status governance.

@@ -23,6 +23,7 @@ import (
 )
 
 type creditRequestInput struct {
+	TimingMode          string    `json:"timing_mode,omitempty"`
 	CollectionPolicy    string    `json:"collection_policy,omitempty"`
 	BuyerUserID         string    `json:"buyer_user_id"`
 	BuyerBusinessID     string    `json:"buyer_business_id"`
@@ -128,6 +129,18 @@ func (s *Server) createCreditRequest(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w, r, &in); err != nil {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
+	}
+	if in.TimingMode != "" {
+		if in.TimingMode != "lagos_end_of_day" {
+			writeProblem(w, 422, "credit_terms_invalid", "That payment timing option is not supported.")
+			return
+		}
+		canonical, timingErr := credit.CollectionInstant(in.DueDate, in.GraceHours)
+		if timingErr != nil || (!in.CollectionAt.IsZero() && !in.CollectionAt.Equal(canonical)) {
+			writeProblem(w, 422, "credit_terms_changed", "Review the payment date again before saving.")
+			return
+		}
+		in.CollectionAt = canonical
 	}
 	org, exists := s.runtime.Organizations.Get(orgID)
 	if !exists {
@@ -534,7 +547,7 @@ func (s *Server) recordPayment(w http.ResponseWriter, r *http.Request) {
 		RecordContext(context.Context, payments.RecordInput) (payments.Payment, payments.Allocation, error)
 	})
 	if !ok {
-		writeProblem(w, 503, "payment_unavailable", "Your payment company cannot cancel a request that has already been sent.")
+		writeProblem(w, 503, "payment_unavailable", "Payment recording is temporarily unavailable. No payment has been confirmed.")
 		return
 	}
 	p, a, err := recorder.RecordContext(r.Context(), payments.RecordInput{ObligationID: v.Obligation.ID, SourceType: in.SourceType, AmountKobo: ledger.Money(in.AmountKobo), Currency: in.Currency, Provider: in.Provider, ProviderReference: in.ProviderReference, PaidAt: in.PaidAt, RecordedBy: user.ID, IdempotencyKey: in.IdempotencyKey})

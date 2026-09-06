@@ -24,11 +24,20 @@
 		mobileMore?: MoreLink[];
 		dark?: boolean;
 		onsearch?: () => void;
-		onsignout?: () => void;
+		onsignout?: () => void | Promise<void>;
 		searchReady?: boolean;
 	} = $props();
 
 	let open = $state(false);
+	let signingOut = $state(false), signOutError = $state('');
+	let dialog = $state<HTMLDialogElement | null>(null);
+	async function leaveAccount() {
+		if (!onsignout || signingOut) return;
+		signingOut = true; signOutError = '';
+		try { await onsignout(); }
+		catch { signOutError = 'Sign-out was not confirmed. Your account may still be open. Try again before leaving this device.'; }
+		finally { signingOut = false; }
+	}
 	let moreOpen = $state(false);
 	let moreTrigger: HTMLButtonElement | null = null;
 	let closeButton = $state<HTMLButtonElement | null>(null);
@@ -57,6 +66,7 @@
 
 	function closeMenus(restoreFocus = false) {
 		open = false;
+		dialog?.close();
 		moreOpen = false;
 		if (restoreFocus) void tick().then(() => moreTrigger?.focus());
 	}
@@ -64,7 +74,7 @@
 	function openMore(event: MouseEvent) {
 		moreTrigger = event.currentTarget as HTMLButtonElement;
 		moreOpen = true;
-		void tick().then(() => closeButton?.focus());
+		void tick().then(() => { dialog?.showModal(); closeButton?.focus(); });
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -106,7 +116,7 @@
 		<div class="portal-actions">
 			{#if hasMobileBar}<button class="desktop-header-menu" type="button" class:active={moreOpen || mobileMore.some(([, href]) => current(href))} aria-controls={moreID} aria-expanded={moreOpen} onclick={openMore}><span aria-hidden="true">☰</span> Menu</button>{/if}
 			{#if onsearch}<button class="search palette-trigger" data-ready={searchReady} disabled={!searchReady} type="button" onclick={onsearch}>Search <kbd>⌘K</kbd></button>{/if}
-			{#if onsignout}<button class="sign-out" type="button" onclick={onsignout}>Sign out</button>{/if}
+			{#if onsignout}<button class="sign-out" type="button" disabled={signingOut} onclick={leaveAccount}>{signingOut ? 'Signing out…' : 'Sign out'}</button>{/if}
 		</div>
 	</div>
 	{#if hasMobileBar}
@@ -127,8 +137,7 @@
 	</div>
 
 	{#if moreOpen}
-		<button class="sheet-backdrop" type="button" aria-label="Close account menu" onclick={() => closeMenus(true)}></button>
-		<div class="more-sheet" id={moreID} role="dialog" aria-modal="true" aria-label={`${label} menu`}>
+		<dialog bind:this={dialog} class="more-sheet" id={moreID} aria-label={`${label} menu`} oncancel={(event) => { event.preventDefault(); closeMenus(true); }}>
 			<header>
 				<div><span>All pages</span><strong id={`${moreID}-title`}>{label}</strong></div>
 				<button bind:this={closeButton} type="button" aria-label="Close account menu" onclick={() => closeMenus(true)}>×</button>
@@ -142,16 +151,20 @@
 						</section>
 					{/each}
 				</div>
+				{#if signOutError}<p class="signout-error" role="alert">{signOutError}</p>{/if}
 				<div class="sheet-actions">
 					{#if onsearch}<button type="button" onclick={() => { closeMenus(); onsearch?.(); }}>Search this account</button>{/if}
-					{#if onsignout}<button class="mobile-sign-out" type="button" onclick={onsignout}>Sign out</button>{/if}
+					{#if onsignout}<button class="mobile-sign-out" type="button" disabled={signingOut} onclick={leaveAccount}>{signingOut ? 'Signing out…' : 'Sign out'}</button>{/if}
 				</div>
 			</div>
-		</div>
+		</dialog>
 	{/if}
 {/if}
+{#if signOutError && !moreOpen}<div class="signout-error" role="alert"><p>{signOutError}</p><button disabled={signingOut} onclick={leaveAccount}>Try signing out again</button></div>{/if}
 
 <style>
+  .signout-error{position:relative;z-index:58;margin:0;padding:1rem;background:#fff3e0;color:#603f16;border-bottom:1px solid #c5a174;line-height:1.6}.signout-error p{margin:0 0 .5rem}.signout-error button{padding:.6rem 1rem;border:1px solid currentColor;background:transparent;color:inherit}.more-sheet:not([open]){display:none}.more-sheet{margin:0 0 0 auto;max-width:none;max-height:none;padding:0;color:var(--color-foreground)}.more-sheet::backdrop{background:rgb(23 24 27 / .48)}
+
 	nav { display:flex;align-items:center;gap:1.2rem;padding:.75rem max(1rem,calc((100vw - 76rem)/2));border-bottom:1px solid #34363c;background:#17181b;position:sticky;top:0;z-index:40 }
 	.brand{display:inline-flex;align-items:center;gap:.65rem;color:#fff;font-family:Georgia,'Times New Roman',serif;font-weight:650;font-size:1.15rem;text-decoration:none;white-space:nowrap}.brand span{display:grid;place-items:center;width:2rem;height:2rem;background:#2738d6;color:#fff}
 	.account-label{display:none;color:#9c9da2;font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
@@ -160,16 +173,16 @@
 	nav.dark{background:#17181b;border-color:#34363c}.dark .brand,.dark .portal-links a,.dark .portal-actions button{color:#e7e5df}.dark .portal-links a:hover,.dark .portal-links a[aria-current='page']{color:#fff;background:#2738d6}
 	.desktop-primary{display:flex;align-items:center;gap:.1rem;min-width:0}.desktop-primary a{display:inline-flex;align-items:center;gap:.45rem;min-height:2.75rem;padding:.15rem .78rem;border:0;background:transparent;color:#aaa9a5;font:inherit;font-size:.84rem;font-weight:680;text-decoration:none;white-space:nowrap;cursor:pointer}.desktop-primary a:hover{color:#fff}.desktop-primary a[aria-current='page']{color:#fff;background:#2738d6}
 	.mobile-nav{display:none}
-	.sheet-backdrop{position:fixed;z-index:60;inset:0;display:block;width:100%;height:100%;border:0;background:rgba(23,24,27,.46);cursor:pointer}.more-sheet{position:fixed;z-index:61;top:3.65rem;right:0;bottom:0;display:block;width:min(26rem,calc(100vw - 2rem));overflow:hidden;border-left:1px solid #cec9bf;border-top:4px solid #2738d6;background:#faf8f2;box-shadow:-24px 0 70px rgba(23,24,27,.2);animation:drawer-in .22s cubic-bezier(.22,.8,.28,1)}
-	.more-sheet header{display:flex;align-items:center;justify-content:space-between;padding:1.05rem 1.25rem;border-bottom:1px solid #d7d2c8}.more-sheet header div{display:flex;flex-direction:column;gap:.14rem}.more-sheet header span{color:#2738d6;font-size:.68rem;font-weight:850;letter-spacing:.14em;text-transform:uppercase}.more-sheet header strong{font-family:Georgia,'Times New Roman',serif;font-size:1.45rem}.more-sheet header button{display:grid;place-items:center;width:2.75rem;height:2.75rem;border:1px solid #b8b4ab;background:transparent;color:#17181b;font-size:1.6rem;cursor:pointer}.sheet-content{max-height:calc(100vh - 8.8rem);overflow-y:auto;padding:.35rem 1.25rem 1.4rem}.more-links{display:grid;gap:.35rem}.menu-group{margin-top:1rem}.menu-group h2{margin:0;padding:.55rem .7rem;background:#e5e1d8;color:#55524c;font-size:.67rem;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.menu-group>div{display:grid}.more-links a{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:3.6rem;padding:.35rem .7rem;border-bottom:1px solid #d7d2c8;color:#17181b;font-size:.92rem;font-weight:740;text-decoration:none}.more-links a span:last-child{color:#ff6848;font-size:1rem}.more-links a[aria-current='page']{color:#2738d6;background:#eef0ff}.sheet-actions{display:flex;gap:.5rem;padding-top:1rem}.sheet-actions button{width:100%;min-height:3.2rem;padding:.65rem;border:1px solid #17181b;background:transparent;color:#17181b;font:inherit;font-size:.82rem;font-weight:780;cursor:pointer}.sheet-actions .mobile-sign-out{border-color:#17181b;background:#17181b;color:#fff}
+	.more-sheet{position:fixed;z-index:61;top:3.65rem;right:0;bottom:0;display:block;width:min(26rem,calc(100vw - 2rem));overflow:hidden;border-left:1px solid #cec9bf;border-top:4px solid #2738d6;background:#faf8f2;box-shadow:-24px 0 70px rgba(23,24,27,.2);animation:drawer-in .22s cubic-bezier(.22,.8,.28,1)}
+	.more-sheet header{display:flex;align-items:center;justify-content:space-between;padding:1.05rem 1.25rem;border-bottom:1px solid #d7d2c8}.more-sheet header div{display:flex;flex-direction:column;gap:.14rem}.more-sheet header span{color:#2738d6;font-size:.68rem;font-weight:850;letter-spacing:.14em;text-transform:uppercase}.more-sheet header strong{font-family:Georgia,'Times New Roman',serif;font-size:1.45rem}.more-sheet header button{display:grid;place-items:center;width:2.75rem;height:2.75rem;border:1px solid #b8b4ab;background:transparent;color:#17181b;font-size:1.6rem;cursor:pointer}.sheet-content{max-height:calc(100vh - 8.8rem);overflow-y:auto;padding:.35rem 1.25rem 1.4rem}.more-links{display:grid;gap:.35rem}.menu-group{margin-top:1rem}.menu-group h2{margin:0;padding:.55rem .7rem;background:#e5e1d8;color:#55524c;font-size:.78rem;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.menu-group>div{display:grid}.more-links a{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:3.6rem;padding:.35rem .7rem;border-bottom:1px solid #d7d2c8;color:#17181b;font-size:.92rem;font-weight:740;text-decoration:none}.more-links a span:last-child{color:#ff6848;font-size:1rem}.more-links a[aria-current='page']{color:#2738d6;background:#eef0ff}.sheet-actions{display:flex;gap:.5rem;padding-top:1rem}.sheet-actions button{width:100%;min-height:3.2rem;padding:.65rem;border:1px solid #17181b;background:transparent;color:#17181b;font:inherit;font-size:.82rem;font-weight:780;cursor:pointer}.sheet-actions .mobile-sign-out{border-color:#17181b;background:#17181b;color:#fff}
 
 	@media(max-width:760px){
 		nav{position:sticky;flex-wrap:wrap;padding:.72rem 1rem}.account-label{display:block;margin-left:auto}.has-mobile-bar .portal-menu{display:none}.hidden-mobile-toggle{display:none!important}.mobile-header-menu{display:inline-flex;min-height:2.65rem;align-items:center;gap:.5rem;padding:0 .8rem;border:1px solid #55565b}
 		.menu-toggle{display:inline-flex;min-height:2.65rem;align-items:center;gap:.5rem;margin-left:auto;padding:0 .85rem;border:1px solid #55565b}.portal-menu{display:none;width:100%;align-items:stretch;flex-direction:column;padding:1rem 0 .35rem}.portal-menu.open{display:flex}.portal-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.35rem;overflow:visible}.portal-links a{min-height:3rem;padding:.4rem .75rem;white-space:normal;border:1px solid #34363c}.portal-actions{width:100%;margin:0;padding-top:.75rem;border-top:1px solid #34363c}.portal-actions .sign-out{margin-left:auto}
-		.mobile-nav{position:fixed;z-index:55;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));min-height:4.7rem;padding:0 .25rem max(.35rem,env(safe-area-inset-bottom));border-top:1px solid #d7d2c8;background:rgba(250,248,242,.98);box-shadow:0 -8px 28px rgba(23,24,27,.09);backdrop-filter:blur(14px)}
-		.mobile-nav a{position:relative;display:flex;min-width:0;min-height:4.35rem;flex-direction:column;align-items:center;justify-content:center;gap:.32rem;padding:.48rem .15rem .25rem;border:0;background:transparent;color:#77746e;font:inherit;font-size:.66rem;font-weight:760;line-height:1.1;text-align:center;text-decoration:none;cursor:pointer;transition:color .16s ease,background-color .18s ease}
+		.mobile-nav{position:fixed;z-index:55;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));min-height:4.7rem;padding:0 .25rem max(.35rem,env(safe-area-inset-bottom));border-top:1px solid #d7d2c8;background:rgba(250,248,242,.98);box-shadow:0 -8px 28px rgba(23,24,27,.09);backdrop-filter:none}
+		.mobile-nav a{position:relative;display:flex;min-width:0;min-height:4.35rem;flex-direction:column;align-items:center;justify-content:center;gap:.32rem;padding:.48rem .15rem .25rem;border:0;background:transparent;color:#555650;font:inherit;font-size:.78rem;font-weight:760;line-height:1.1;text-align:center;text-decoration:none;cursor:pointer;transition:color .16s ease,background-color .18s ease}
 		.mobile-nav a::after{content:'';position:absolute;top:0;left:22%;right:22%;height:3px;background:transparent}
-		.mobile-nav a[aria-current='page']{background:linear-gradient(180deg,rgba(39,56,214,.08),transparent 70%);color:#2738d6}.mobile-nav a[aria-current='page']::after{background:#2738d6}
+		.mobile-nav a[aria-current='page']{background:#eef0ff;color:#2738d6}.mobile-nav a[aria-current='page']::after{background:#2738d6}
 		.mobile-icon{position:relative;display:block;width:1.45rem;height:1.45rem;color:currentColor;transition:transform .18s cubic-bezier(.2,.9,.3,1)}
 		.mobile-nav a[aria-current='page'] .mobile-icon{transform:translateY(-1px) scale(1.06)}
 		.mobile-icon::before,.mobile-icon::after{content:'';position:absolute;box-sizing:border-box}
@@ -185,7 +198,7 @@
 		.mobile-icon[data-icon='sales']::after{width:9px;height:5px;left:7px;top:8px;border-left:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg)}
 		.mobile-icon[data-icon='limits']::before{width:3px;height:10px;left:3px;bottom:2px;background:currentColor;box-shadow:7px -5px 0 currentColor,14px -10px 0 currentColor}
 		.mobile-icon[data-icon='limits']::after{left:1px;right:1px;bottom:0;height:2px;background:currentColor}
-		.sheet-backdrop{z-index:70;background:rgba(23,24,27,.58)}.more-sheet{z-index:71;top:auto;left:0;right:0;bottom:0;width:auto;max-height:min(82vh,46rem);border-left:0;border-top:4px solid #2738d6;box-shadow:0 -24px 70px rgba(23,24,27,.28);animation:sheet-in .2s ease-out}
+		.more-sheet{z-index:71;top:auto;left:0;right:0;bottom:0;width:auto;margin:0;max-height:min(82vh,46rem);border-left:0;border-top:4px solid #2738d6;box-shadow:0 -24px 70px rgba(23,24,27,.28);animation:sheet-in .2s ease-out}
 		.more-sheet header{display:flex;align-items:center;justify-content:space-between;padding:1.05rem 1.15rem;border-bottom:1px solid #d7d2c8}.more-sheet header div{display:flex;flex-direction:column;gap:.14rem}.more-sheet header span{color:#2738d6;font-size:.68rem;font-weight:850;letter-spacing:.14em;text-transform:uppercase}.more-sheet header strong{font-family:Georgia,'Times New Roman',serif;font-size:1.35rem}.more-sheet header button{display:grid;place-items:center;width:2.75rem;height:2.75rem;border:1px solid #b8b4ab;background:transparent;color:#17181b;font-size:1.6rem;cursor:pointer}
 		.sheet-content{max-height:calc(min(72vh,38rem) - 5rem);overflow-y:auto;padding:.3rem 1.15rem max(1.25rem,env(safe-area-inset-bottom))}.more-links a{min-height:3.45rem;font-size:.9rem}
 		.sheet-actions{display:flex;gap:.5rem;padding-top:1rem}.sheet-actions button{flex:1;min-height:3.2rem;padding:.65rem;border:1px solid #17181b;background:transparent;color:#17181b;font:inherit;font-size:.82rem;font-weight:780;cursor:pointer}.sheet-actions .mobile-sign-out{border-color:#17181b;background:#17181b;color:#fff}

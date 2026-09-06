@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('public homepage renders the product promise', async ({ page }) => {
 	await page.goto('/');
-	await expect(page.getByRole('heading', { name: /Give goods now/i })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /Keep track of every credit sale/i })).toBeVisible();
 	await expect(page.getByRole('link', { name: /Add your first sale/i }).first()).toBeVisible();
 });
 
@@ -27,7 +27,7 @@ test('visitor can complete the sample sale without signing in', async ({ page })
 test('mobile homepage remains navigable', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/');
-	await expect(page.getByRole('heading', { name: /Give goods now/i })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /Keep track of every credit sale/i })).toBeVisible();
 	await page.locator('summary', { hasText: 'Menu' }).click();
 	await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Price' })).toBeVisible();
 });

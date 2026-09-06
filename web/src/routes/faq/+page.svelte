@@ -11,7 +11,7 @@
 		},
 		{
 			q: 'What if my customer does not pay?',
-			a: 'Kredit sends reminders first. After the extra days you agreed, Kredit can ask their bank for the money, but only if that customer gave permission and there is no open problem. A bank debit can still fail. Nobody can promise you the money.'
+			a: 'Kredit sends reminders first. After the extra days you agreed, Kredit can ask their bank for the money, only with valid permission and after the agreed payment and dispute checks. A report may hold the disputed amount or all new debits, depending on its recorded effect. A bank debit can still fail. Nobody can promise you the money.'
 		},
 		{
 			q: 'What if money enters and then goes back?',

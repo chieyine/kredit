@@ -1,0 +1,52 @@
+/* Working screens share one calm hierarchy. Marketing retains its editorial voice. */
+:root {
+  --radius-control: .4rem;
+  --radius-panel: .65rem;
+  --motion-fast: 140ms;
+  --motion-panel: 200ms;
+}
+:root body .product-route { min-height:calc(100svh - 4rem); background:var(--color-background); }
+:root body .product-route h1 { font-family:inherit; font-weight:720; font-size:clamp(1.75rem,3.6vw,2.45rem); line-height:1.2; letter-spacing:-.035em; max-width:30ch; }
+:root body .product-route h2 { font-family:inherit; font-weight:700; font-size:clamp(1.15rem,2.2vw,1.4rem); line-height:1.35; letter-spacing:-.015em; }
+:root body .product-route h3 { font-family:inherit; font-weight:680; line-height:1.4; }
+:root body .product-route .lede { font-size:1rem; line-height:1.6; max-width:65ch; }
+:root body .product-route :is(.heading,.page-heading,.page-head) { padding-block:1rem 1.4rem; border-bottom-width:1px; }
+:root body :is(.product-route,.admin-content) :is(input,select,textarea) { font-size:1rem; line-height:1.5; min-height:3rem; border-radius:var(--radius-control); }
+:root body :is(.product-route,.admin-content) :is(button,a.primary,.primary-button) { min-height:3rem; border-radius:var(--radius-control); }
+:root body :is(.product-route,.admin-content) :is(input[type=checkbox],input[type=radio]) { min-height:1.2rem; min-width:1.2rem; }
+:root body :is(.product-route,.admin-content) :is(.card,.form-card,.terms,.claim,.readiness,.settings section) { border-radius:var(--radius-panel); box-shadow:none; }
+:root body :is(.product-route,.admin-content) :is(.money-summary,.summary,.stats,.balance,.outstanding) { font-variant-numeric:tabular-nums; }
+:root body .product-route :is(.money-summary,.summary,.stats) strong { font-family:inherit; font-weight:720; }
+:root body .product-route .money-summary { margin-block:1.5rem 2rem; }
+:root body .product-route .review-section { margin-bottom:2rem; }
+:root body .product-route .claim-list article { box-shadow:none; border-radius:var(--radius-panel); }
+:root body :is(.product-route,.admin-content) :is(.record-row,.payment-row,.sale-list>a):hover { background:#f0eee7; }
+:root body :is(.product-route,.admin-content) :is(.meter span,.status,.status-pill,.balance,.outstanding,.money-summary strong) { animation:none; }
+:root body .product-route > * { animation:none; }
+:root body .product-route :is(.workspace article,.cards article,.stats article):hover { transform:none; }
+:root body .product-route code { overflow-wrap:anywhere; }
+:root body .product-route small { font-size:max(.82rem,.82em); }
+:root body .admin-shell { background:var(--color-background); }
+:root body .admin-content > * { animation:none; }
+:root body .admin-content :is(.panel,.card,article) { box-shadow:none; }
+:root body .admin-content h1 { font-family:inherit; font-size:clamp(1.75rem,3.6vw,2.45rem); line-height:1.2; }
+:root body .admin-content h2 { font-family:inherit; font-size:1.25rem; line-height:1.4; }
+:root body .product-route :is(button,.primary,.primary-button):active { transform:translateY(1px); }
+:root body .product-route :focus-visible { outline:3px solid var(--color-primary); outline-offset:3px; }
+:root body .product-route :is(.primary,button.primary):focus-visible { outline-color:var(--color-foreground); }
+:root body .product-route .eyebrow { font-size:.78rem; letter-spacing:.07em; }
+@media(max-width:760px) {
+  :root body .product-route > main { padding-inline:1rem; }
+  :root body .product-route :is(.page-heading,.heading,.page-head) { gap:1rem; }
+  :root body .product-route .money-summary article { min-height:auto; }
+}
+@media(prefers-reduced-motion:reduce) {
+  :root body :is(.product-route,.admin-content) *,
+  :root body :is(.product-route,.admin-content) *::before,
+  :root body :is(.product-route,.admin-content) *::after { animation:none!important; transition:none!important; scroll-behavior:auto; }
+}
+html.low-data :is(.product-route,.admin-content) * { animation:none!important; transition:none!important; }
+@media(forced-colors:active) {
+  :root body :is(.product-route,.admin-content) :is(button,.primary,.card,.terms,.status,.status-pill) { border:1px solid ButtonText; }
+  :root body .product-route :focus-visible { outline:3px solid Highlight; }
+}

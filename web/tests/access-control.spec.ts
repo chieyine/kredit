@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('logged-out visitors are redirected before protected account pages render', async ({ page }) => {
 	await page.goto('/app/payments');
 	await expect(page).toHaveURL(/\/app\?next=%2Fapp%2Fpayments$/);
-	await expect(page.getByRole('heading', { name: 'Welcome back.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Start or sign in.' })).toBeVisible();
 	await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
 	await expect(page.locator('footer.site-footer')).toBeVisible();
 	await expect(page.locator('footer.site-footer').getByText('How it works')).toBeVisible();
@@ -59,7 +59,7 @@ test('an expired session cannot flash the next page during an account navigation
 	await page.getByRole('link', { name: 'Payments', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Your money, clearly.' })).toHaveCount(0);
 	await expect(page).toHaveURL(/\/app\?next=%2Fapp%2Fpayments$/);
-	await expect(page.getByRole('heading', { name: 'Welcome back.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Start or sign in.' })).toBeVisible();
 	await expect(page.locator('footer.site-footer')).toBeVisible();
 });
 
@@ -93,7 +93,7 @@ test('the signed-in payments page prioritizes money and items needing an answer'
 	await headerMenu.click();
 	const moreMenu = page.getByRole('dialog', { name: 'Seller account menu' });
 	await expect(moreMenu).toBeVisible();
-	await expect(moreMenu.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(9);
+	await expect(moreMenu.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(13);
 	await expect(moreMenu.getByText('Sales and money', { exact: true })).toBeVisible();
 	await expect(moreMenu.getByText('Account and help', { exact: true })).toBeVisible();
 	await expect(moreMenu.getByRole('link', { name: /Settings/ })).toBeVisible();

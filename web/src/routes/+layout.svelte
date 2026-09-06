@@ -1,7 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import '../premium.css';
-	import '../premium-admin.css';
+	import '../product-ui.css';
 	import { onMount } from 'svelte';
 	import SystemBanner from '$lib/components/SystemBanner.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
@@ -92,7 +91,7 @@
 	<meta property="og:description" content={seo.description} />
 	<meta property="og:image" content={`${SITE_URL}/og.png`} />
 	<meta property="og:image:type" content="image/png" />
-	<meta property="og:image:alt" content="Kredit — give goods now, get your money later" />
+	<meta property="og:image:alt" content="Kredit — keep track of every credit sale" />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 	<meta property="og:locale" content="en_NG" />
@@ -103,7 +102,7 @@
 	<meta name="twitter:title" content={seo.title} />
 	<meta name="twitter:description" content={seo.description} />
 	<meta name="twitter:image" content={`${SITE_URL}/og.png`} />
-	<meta name="twitter:image:alt" content="Kredit — give goods now, get your money later" />
+	<meta name="twitter:image:alt" content="Kredit — keep track of every credit sale" />
 	{#if !privateShell}
 		{@html `<script type="application/ld+json">${jsonLd(organizationSchema)}<\/script>`}
 		{@html `<script type="application/ld+json">${jsonLd(websiteSchema)}<\/script>`}
@@ -114,7 +113,7 @@
 
 <a class="skip-link" href="#main-content">Skip to content</a>
 <MotionObserver />
-{#if offline}<SystemBanner tone="warning" message="You are offline. Nothing to do with money is sent until your network comes back." />{/if}
+{#if offline}<SystemBanner tone="warning" message="You are offline. New money actions cannot be sent. An earlier request may still be processing." />{/if}
 {#if publicChrome}<SiteHeader />{/if}
 {#if privateShell}
 	<div id="main-content" tabindex="-1">{@render children()}</div>
