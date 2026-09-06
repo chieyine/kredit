@@ -97,7 +97,12 @@ jobs:
           set -euo pipefail
           exec docker run --rm -i --network host --user "$(id -u):$(id -g)" \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" -v "$RUNNER_TEMP:$RUNNER_TEMP" \
-            -w "$GITHUB_WORKSPACE" -e PGDATABASE --entrypoint "$(basename "$0")" postgres:18 "$@"
+            -w "$GITHUB_WORKSPACE" \
+            -e PGDATABASE -e PGHOST -e PGHOSTADDR -e PGPORT -e PGUSER -e PGPASSWORD \
+            -e PGSSLMODE -e PGSSLROOTCERT -e PGSSLCERT -e PGSSLKEY \
+            -e PGCHANNELBINDING -e PGTARGETSESSIONATTRS -e PGAPPNAME \
+            -e PGCONNECT_TIMEOUT -e PGCLIENTENCODING \
+            --entrypoint "$(basename "$0")" postgres:18 "$@"
           SH
             chmod +x "$RUNNER_TEMP/pgbin/$tool"
           done
