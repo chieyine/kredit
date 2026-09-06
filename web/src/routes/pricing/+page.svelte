@@ -1,7 +1,7 @@
 <script lang="ts">
  import {onMount} from 'svelte';
  let rates:{base_bps:number;collection_bps:number}|null=$state(null),pricingError=$state('');
- onMount(async()=>{try{const r=await fetch('/api/v1/pricing');if(!r.ok)throw new Error();const b=await r.json();if(!Number.isInteger(b.base_bps)||!Number.isInteger(b.collection_bps)||b.base_bps<0||b.base_bps>1000||b.collection_bps<0||b.collection_bps>1000)throw new Error();rates=b}catch{pricingError='Current rates could not be loaded. Please refresh before relying on a fee estimate.'}});
+ onMount(async()=>{try{const r=await fetch('/api/v1/pricing');if(!r.ok)throw new Error();const b=await r.json();if(!Number.isInteger(b.base_bps)||!Number.isInteger(b.collection_bps)||b.base_bps<0||b.base_bps>1000||b.collection_bps<0||b.collection_bps>1000)throw new Error();rates=b}catch{pricingError='We could not load the current rates. Refresh this page before relying on any fee estimate.'}});
  import { parseNaira } from '$lib/money';
 	import Money from '$lib/components/Money.svelte';
 	let principalNaira = $state(500000);
@@ -9,25 +9,24 @@
 	const voluntaryFee = $derived.by(()=>rates?Math.floor(kobo * rates.base_bps / 10000):null);
 	const collectionFee = $derived.by(()=>rates&&voluntaryFee!==null?voluntaryFee + Math.floor(kobo * rates.collection_bps / 10000):null);
 	const questions = [
-		['What if my customer does not pay?', 'Kredit sends reminders. After the agreed grace period, it can request a debit under valid bank authorization, subject to payment and dispute checks. Collection is not guaranteed.'],
-		['Does Kredit give loans?', 'No. You give the goods. You choose the customer. Kredit helps you keep the sale and payment.'],
-		['What does my customer need?', 'Only a private link. They do not need to install an app.']
+		['What happens if my customer pays late?', 'Kredit sends reminders. After the agreed grace period, it may request a debit only where valid bank authorization and the relevant payment and dispute checks allow it. Collection is not guaranteed.'],
+		['Does Kredit lend money?', 'No. The seller provides the goods and chooses the customer. Kredit helps document the credit sale and track payment.'],
+		['Does my customer need the Kredit app?', 'No. They can review and respond through a private link.']
 	];
 	function describe(value: number) { return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value); }
 </script>
 
-
 <main class="pricing-page">
-	<section class="pricing-hero shell"><div><p class="eyebrow">Price</p><h1>Clear fees for<br />trade credit.</h1></div><div class="hero-side"><p>Add sales and see money owed for free. The recorded base fee starts when an accepted sale becomes active. Successful collection adds the recorded collection fee on the amount collected. Existing offers retain their rates.</p><span>No subscription · No joining fee</span></div></section>
+	<section class="pricing-hero shell"><div><p class="eyebrow">Pricing</p><h1>Clear fees.<br />No subscription.</h1></div><div class="hero-side"><p>Creating a credit sale and tracking what is owed costs nothing upfront. A base fee applies when an accepted sale becomes active. If Kredit successfully collects money under an authorized collection flow, an additional collection fee applies to the amount collected. Existing accepted offers keep the rates recorded with them.</p><span>No subscription · No joining fee</span></div></section>
 
  {#if pricingError}<p role="alert" class="shell">{pricingError}</p>{:else if !rates}<p class="shell">Loading current rates…</p>{/if}
- {#if rates}<section class="rates shell" aria-label="Kredit fee rates"><article><span>01 / BASE FEE ON ACTIVATION</span><strong>{rates.base_bps/100}%</strong><p>Payable by the seller when the sale becomes active.</p></article><article><span>02 / ADDITIONAL SUCCESSFUL COLLECTION FEE</span><strong>{rates.collection_bps/100}%</strong><p>Applies only to the amount successfully collected after the permitted collection time.</p></article></section>{/if}
+ {#if rates}<section class="rates shell" aria-label="Kredit fee rates"><article><span>01 / BASE FEE WHEN THE SALE ACTIVATES</span><strong>{rates.base_bps/100}%</strong><p>Charged to the seller when an accepted credit sale becomes active.</p></article><article><span>02 / ADDITIONAL COLLECTION FEE</span><strong>{rates.collection_bps/100}%</strong><p>Applies only to money successfully collected through the permitted Kredit collection flow.</p></article></section>{/if}
 
-	<section class="calculator-section"><div class="shell calculator-layout"><div><p class="eyebrow inverse">Estimate your fees</p><h2>Choose the price of the goods.</h2><p>Choose an amount to estimate the seller’s base fee and the total fee if the full balance is collected.</p></div><div class="calculator"><div class="value"><span>Price of goods</span><strong>{describe(principalNaira)}</strong></div><input type="range" min="50000" max="10000000" step="50000" bind:value={principalNaira} aria-label="Price of goods in naira" /><div class="range-labels"><span>₦50k</span><span>₦10m</span></div><dl><div><dt>Base fee <span>{rates?`${rates.base_bps/100}%`:"—"}</span></dt><dd><Money amountKobo={voluntaryFee} /></dd></div><div><dt>Total if fully collected <span>{rates?`${(rates.base_bps+rates.collection_bps)/100}%`:"—"}</span></dt><dd><Money amountKobo={collectionFee} /></dd></div><div><dt>Add the sale</dt><dd>₦0</dd></div></dl></div></div></section>
+	<section class="calculator-section"><div class="shell calculator-layout"><div><p class="eyebrow inverse">Estimate the cost</p><h2>See the fee before you sell.</h2><p>Choose the value of the goods to estimate the seller’s base fee and the total fee if the full balance is later collected through Kredit.</p></div><div class="calculator"><div class="value"><span>Value of goods</span><strong>{describe(principalNaira)}</strong></div><input type="range" min="50000" max="10000000" step="50000" bind:value={principalNaira} aria-label="Value of goods in naira" /><div class="range-labels"><span>₦50k</span><span>₦10m</span></div><dl><div><dt>Base fee <span>{rates?`${rates.base_bps/100}%`:"—"}</span></dt><dd><Money amountKobo={voluntaryFee} /></dd></div><div><dt>Total if the full balance is collected <span>{rates?`${(rates.base_bps+rates.collection_bps)/100}%`:"—"}</span></dt><dd><Money amountKobo={collectionFee} /></dd></div><div><dt>Create and track the sale</dt><dd>₦0</dd></div></dl></div></div></section>
 
-	<section class="questions shell"><div class="section-head"><p class="eyebrow">Straight answers</p><h2>What you need to know.</h2></div><div class="question-list">{#each questions as [question, answer], index}<article><span>0{index + 1}</span><h3>{question}</h3><p>{answer}</p></article>{/each}</div></section>
+	<section class="questions shell"><div class="section-head"><p class="eyebrow">Good to know</p><h2>Straight answers.</h2></div><div class="question-list">{#each questions as [question, answer], index}<article><span>0{index + 1}</span><h3>{question}</h3><p>{answer}</p></article>{/each}</div></section>
 
-	<section class="pricing-cta shell"><p>Ready to put one credit sale in writing?</p><a href="/app">Start free <span>↗</span></a></section>
+	<section class="pricing-cta shell"><p>Ready to record your first credit sale?</p><a href="/app">Start free <span>↗</span></a></section>
 </main>
 
 <style>
