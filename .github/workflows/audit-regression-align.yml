@@ -21,11 +21,11 @@ jobs:
           fetch-depth: 0
       - run: |
           set -euo pipefail
-          if grep -q 'both sale-creation entry points preserve' web/tests/product-quality.spec.ts; then exit 0; fi
+          if grep -q '/app/credit/new?advanced=1&organization=org-a' web/tests/audit-full-form.spec.ts; then exit 0; fi
           python3 scripts/audit-align-regressions.py
           git diff --check
           git config user.name 'Kredit maintenance'
           git config user.email 'kredit-maintenance@users.noreply.github.com'
           while IFS= read -r path; do git add -- "$path"; done < .tmp/regression-paths.txt
-          git commit -m 'test: align existing behavioural regressions with reviewed product journeys'
+          git commit -m 'test: target the explicit advanced sale route for full-form regressions'
           git push origin HEAD:refs/heads/improvement/audit-2026-09-06
