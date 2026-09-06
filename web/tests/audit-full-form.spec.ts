@@ -1,5 +1,4 @@
 import { test, expect, type Page, type BrowserContext, type Route } from '@playwright/test';
-import { createHash } from 'node:crypto';
 const send=(route:Route,body:unknown,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
 async function prepare(page:Page,context:BrowserContext,baseURL?:string){
  await context.addCookies([{name:'kredit_session',value:'synthetic-audit',url:baseURL??'http://127.0.0.1:5173'},{name:'kredit_csrf',value:'synthetic-csrf',url:baseURL??'http://127.0.0.1:5173'}]);
@@ -19,8 +18,11 @@ async function prepare(page:Page,context:BrowserContext,baseURL?:string){
 }
 test('invoice upload retries preserve one operation before sale creation',async({page,context,baseURL})=>{
  await prepare(page,context,baseURL);
- const bytes=Buffer.from('%PDF-1.4\n% Synthetic upload; provider and scanner are mocked.\n');
- const hash=createHash('sha256').update(bytes).digest('hex');
+ // Use a real, repository-owned PNG as synthetic upload bytes. No bank or personal data.
+ const hash=await page.evaluate(async()=>{
+  const response=await fetch('/icon-192.png');if(!response.ok)throw new Error('Synthetic fixture unavailable');
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await response.arrayBuffer())),byte=>byte.toString(16).padStart(2,'0')).join('');
+ });
  const keys:string[]=[];const creations:Record<string,unknown>[]=[];
  await page.route('**/api/v1/organizations/org-a/documents',route=>{
   keys.push(route.request().headers()['idempotency-key']);
@@ -28,7 +30,7 @@ test('invoice upload retries preserve one operation before sale creation',async(
   return send(route,{document:{sha256:hash}},201);
  });
  await page.route('**/api/v1/organizations/org-a/credit-requests',route=>{creations.push(route.request().postDataJSON());return send(route,{request:{id:'created'}},201);});
- await page.locator('input[type=file]').setInputFiles({name:'invoice.pdf',mimeType:'application/pdf',buffer:bytes});
+ await page.locator('input[type=file]').setInputFiles('static/icon-192.png');
  await page.getByRole('button',{name:'Check terms',exact:true}).click();
  await page.getByRole('button',{name:'Save draft sale',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('not confirmed');
