@@ -1,0 +1,65 @@
+/* Premium treatment for the internal admin shell, which intentionally does not
+ * use the customer-facing product-route wrapper. */
+
+.admin-shell {
+	background:
+		radial-gradient(circle at 90% 0%, rgb(39 56 214 / .06), transparent 30rem),
+		linear-gradient(180deg, #f7f4ed, #f1eee6 34rem) !important;
+}
+
+.admin-content > * {
+	animation: admin-view-in 420ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.admin-shell :is(.card, article, form, dialog, aside, .metrics > *, .panel, .table-wrap) {
+	box-shadow: 0 1px 0 rgb(255 255 255 / .7), 0 10px 28px rgb(23 24 27 / .045);
+	transition: transform 200ms cubic-bezier(.22, .8, .28, 1), border-color 200ms ease, box-shadow 220ms ease, background-color 200ms ease;
+}
+
+.admin-shell :is(input, select, textarea) {
+	background: rgb(255 253 248 / .9);
+	transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.admin-shell :is(input, select, textarea):hover:not(:disabled) {
+	border-color: rgb(39 56 214 / .45);
+}
+
+.admin-shell :is(input, select, textarea):focus {
+	border-color: #2738d6;
+	background: #fff;
+	box-shadow: 0 0 0 3px rgb(39 56 214 / .11), 0 8px 24px rgb(39 56 214 / .06);
+}
+
+.admin-shell table tbody tr {
+	transition: background-color 160ms ease;
+}
+
+.admin-shell .status,
+.admin-shell .status-pill {
+	border: 1px solid rgb(23 24 27 / .06);
+	box-shadow: 0 2px 8px rgb(23 24 27 / .04);
+}
+
+@media (hover: hover) {
+	.admin-shell :is(.metrics article, .cards article, .summary article, .panel):hover {
+		transform: translateY(-3px);
+		border-color: rgb(39 56 214 / .32);
+		box-shadow: 0 20px 52px rgb(23 24 27 / .10), 0 3px 10px rgb(23 24 27 / .05);
+	}
+
+	.admin-shell table tbody tr:hover { background: rgb(39 56 214 / .035); }
+}
+
+@keyframes admin-view-in {
+	from { opacity: .35; transform: translateY(8px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.admin-content > * { animation: none !important; }
+}
+
+html.low-data .admin-shell { background: #f1eee6 !important; }
+html.low-data .admin-content > * { animation: none !important; }
+html.low-data .admin-shell :is(.card, article, form, dialog, aside, .metrics > *, .panel, .table-wrap) { box-shadow: none !important; }

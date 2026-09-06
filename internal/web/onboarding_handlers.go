@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -333,13 +332,13 @@ func (s *Server) finishOnboardingChange(w http.ResponseWriter, r *http.Request, 
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: action, ResourceType: "supplier_onboarding", ResourceID: orgID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"readiness_state": sum.State}})
 	if strings.Contains(action, "settlement") || strings.Contains(action, "billing") {
-		_, _ = s.runtime.EmitNotification(context.Background(), notifications.Event{ID: action + ":" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierSensitiveSettingChanged", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: action, NextAction: "Review the change in supplier settings.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: action + ":" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierSensitiveSettingChanged", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: action, NextAction: "Review the change in supplier settings.", SecurePath: "/app/onboarding"})
 	}
 	if strings.Contains(action, "kyb") {
-		_, _ = s.runtime.EmitNotification(context.Background(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/app/onboarding"})
 	}
 	if sum.Ready && p.ReadinessChangedAt.Equal(p.UpdatedAt) {
-		_, _ = s.runtime.EmitNotification(context.Background(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/app/onboarding"})
 	}
 	writeJSON(w, 200, map[string]any{"profile": p, "readiness": sum})
 }

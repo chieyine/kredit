@@ -186,7 +186,7 @@ func (s *Server) createPaymentLink(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 500, "payment_link_failed", "Payment link could not be created")
 		return
 	}
-	_, _ = s.runtime.Reports.Track("payment_link.created", requestID, "product_improvement", map[string]string{"surface": "buyer_portal"})
+	_, _ = s.runtime.Reports.TrackContext(r.Context(), "payment_link.created", requestID, "product_improvement", map[string]string{"surface": "buyer_portal"})
 	writeJSON(w, 201, map[string]any{"payment_url": strings.TrimRight(s.config.PublicBaseURL, "/") + "/pay/" + token, "expires_in_seconds": 3600})
 }
 

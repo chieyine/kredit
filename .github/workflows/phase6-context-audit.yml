@@ -1,0 +1,23 @@
+name: Phase 6 Request Context Audit
+
+on:
+  push:
+    branches: [phase6-hardening-polish]
+  pull_request:
+    paths:
+      - 'internal/web/**'
+      - 'internal/payments/**'
+      - 'internal/reports/**'
+      - 'scripts/phase6-context-audit.py'
+      - '.github/workflows/phase6-context-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  context-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit synchronous request contexts
+        run: python3 scripts/phase6-context-audit.py

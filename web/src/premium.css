@@ -1,0 +1,414 @@
+/* Kredit premium finishing layer
+ * Keeps the existing editorial / paper-and-ink identity while adding depth,
+ * responsive motion, stronger interaction states and a more finished product shell.
+ */
+
+:root {
+	--premium-ease: cubic-bezier(.22, .8, .28, 1);
+	--premium-ease-out: cubic-bezier(.16, 1, .3, 1);
+	--premium-shadow: 0 18px 45px rgb(23 24 27 / .08), 0 2px 8px rgb(23 24 27 / .04);
+	--premium-shadow-hover: 0 26px 65px rgb(23 24 27 / .13), 0 4px 12px rgb(23 24 27 / .06);
+	--premium-blue-glow: 0 18px 42px rgb(39 56 214 / .20);
+}
+
+/* A little atmosphere without losing Kredit's warm paper character. */
+body {
+	background:
+		radial-gradient(circle at 8% -10%, rgb(255 91 58 / .08), transparent 31rem),
+		radial-gradient(circle at 96% 5%, rgb(39 56 214 / .08), transparent 34rem),
+		var(--color-background);
+}
+
+.site-header {
+	transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+	box-shadow: 0 1px 0 rgb(255 255 255 / .5);
+}
+
+.wordmark span,
+.brand span {
+	position: relative;
+	overflow: hidden;
+}
+
+.wordmark span::after,
+.brand span::after {
+	content: '';
+	position: absolute;
+	inset: -45%;
+	background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / .48) 49%, transparent 63%);
+	transform: translateX(-145%) rotate(8deg);
+	transition: transform 680ms var(--premium-ease-out);
+	pointer-events: none;
+}
+
+.wordmark:hover span::after,
+.brand:hover span::after { transform: translateX(145%) rotate(8deg); }
+
+.nav-links a,
+.nav-actions > a,
+.portal-links a,
+.desktop-primary a {
+	position: relative;
+}
+
+@media (min-width: 721px) {
+	.nav-links a::after,
+	.nav-actions > a:not(.header-cta)::after {
+		content: '';
+		position: absolute;
+		left: .7rem;
+		right: .7rem;
+		bottom: .34rem;
+		height: 2px;
+		background: currentColor;
+		transform: scaleX(0);
+		transform-origin: right;
+		transition: transform 220ms var(--premium-ease);
+	}
+	.nav-links a:hover::after,
+	.nav-links a.active::after,
+	.nav-actions > a:not(.header-cta):hover::after {
+		transform: scaleX(1);
+		transform-origin: left;
+	}
+}
+
+.header-cta,
+.primary,
+.primary-button,
+.button-dark,
+.button-coral {
+	position: relative;
+	overflow: hidden;
+	isolation: isolate;
+}
+
+.header-cta::before,
+.primary::before,
+.primary-button::before,
+.button-dark::before,
+.button-coral::before {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	inset: 0;
+	background: linear-gradient(110deg, transparent 20%, rgb(255 255 255 / .20) 46%, transparent 72%);
+	transform: translateX(-125%);
+	transition: transform 520ms var(--premium-ease-out);
+}
+
+.header-cta:hover::before,
+.primary:hover::before,
+.primary-button:hover::before,
+.button-dark:hover::before,
+.button-coral:hover::before { transform: translateX(125%); }
+
+/* Public pages — more depth and motion around the existing editorial layout. */
+.public-route .hero-copy,
+.public-route .prose-page > :first-child {
+	animation: premium-copy-in 620ms var(--premium-ease-out) both;
+}
+
+.public-route .hero-product {
+	animation: premium-product-in 760ms 80ms var(--premium-ease-out) both;
+}
+
+.public-route .hero-product .agreement-window {
+	transition: transform 520ms var(--premium-ease-out), box-shadow 520ms var(--premium-ease-out);
+}
+
+@media (hover: hover) {
+	.public-route .hero-product:hover .agreement-window {
+		transform: rotate(-.45deg) translateY(-8px);
+		box-shadow: 0 42px 100px rgb(42 37 50 / .28);
+	}
+}
+
+.public-route .product-glow {
+	background:
+		linear-gradient(145deg, rgb(255 255 255 / .10), transparent 35%),
+		#2738d6;
+	box-shadow: 0 28px 80px rgb(39 56 214 / .23);
+}
+
+.public-route .floating-receipt {
+	animation: premium-float 4.8s ease-in-out infinite;
+	box-shadow: var(--premium-shadow);
+}
+
+.public-route :is(.process-grid article, .card-grid article, .price-grid article) {
+	position: relative;
+	overflow: hidden;
+}
+
+.public-route :is(.process-grid article, .card-grid article, .price-grid article)::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 3px;
+	background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform 300ms var(--premium-ease);
+}
+
+@media (hover: hover) {
+	.public-route :is(.process-grid article, .card-grid article, .price-grid article):hover::after { transform: scaleX(1); }
+	.public-route .story-nav button {
+		transition: transform 180ms ease, background-color 180ms ease, color 180ms ease;
+	}
+	.public-route .story-nav button:hover { transform: translateX(5px); }
+}
+
+.public-route .story-canvas,
+.public-route .phone,
+.public-route .agreement-window {
+	box-shadow: var(--premium-shadow);
+}
+
+.public-route .story-canvas {
+	transition: box-shadow 260ms ease, transform 260ms var(--premium-ease);
+}
+
+.public-route .story-canvas:focus-within { box-shadow: var(--premium-shadow-hover); }
+
+.public-route .status-chip,
+.public-route .verified-mark {
+	box-shadow: inset 0 0 0 1px rgb(255 255 255 / .42);
+}
+
+/* Signed-in product — premium but calm. Financial screens should feel trustworthy. */
+.product-route {
+	min-height: calc(100vh - 3.7rem);
+	background:
+		radial-gradient(circle at 88% 0%, rgb(39 56 214 / .055), transparent 27rem),
+		linear-gradient(180deg, rgb(255 253 248 / .52), transparent 20rem);
+}
+
+.product-route > * {
+	animation: premium-workspace-in 440ms var(--premium-ease-out) both;
+}
+
+.product-route :is(.page-shell, main, .workspace) > :is(header, .heading, .page-heading):first-child {
+	position: relative;
+}
+
+.product-route :is(.page-shell, main, .workspace) > :is(header, .heading, .page-heading):first-child::after {
+	content: '';
+	display: block;
+	width: clamp(2.8rem, 7vw, 5.2rem);
+	height: 3px;
+	margin-top: .9rem;
+	background: linear-gradient(90deg, var(--color-primary) 0 70%, var(--color-accent) 70%);
+	transform-origin: left;
+	animation: premium-line-in 520ms 130ms var(--premium-ease-out) both;
+}
+
+.product-route :is(
+	.card,
+	.form-card,
+	.line,
+	.drawdown,
+	.terms,
+	.claim,
+	.readiness,
+	.settings section,
+	.privacy section,
+	.cards article,
+	.summary article,
+	.stats article,
+	.risk-fact,
+	.notice,
+	.empty,
+	dialog,
+	aside
+) {
+	box-shadow: 0 1px 0 rgb(255 255 255 / .7), 0 10px 28px rgb(23 24 27 / .045);
+	transition: transform 200ms var(--premium-ease), border-color 200ms ease, box-shadow 220ms ease, background-color 200ms ease;
+}
+
+@media (hover: hover) {
+	.product-route :is(.cards article, .summary article, .stats article, .risk-fact, .readiness):hover {
+		transform: translateY(-3px);
+		border-color: rgb(39 56 214 / .34);
+		box-shadow: var(--premium-shadow);
+	}
+}
+
+.product-route :is(input, select, textarea) {
+	background: rgb(255 253 248 / .88);
+}
+
+.product-route :is(input, select, textarea):hover:not(:disabled) {
+	border-color: rgb(39 56 214 / .48);
+}
+
+.product-route :is(input, select, textarea):focus {
+	background: #fff;
+	box-shadow: 0 0 0 3px rgb(39 56 214 / .11), 0 8px 24px rgb(39 56 214 / .06);
+}
+
+.product-route table tbody tr {
+	transition: background-color 160ms ease, transform 160ms ease;
+}
+
+@media (hover: hover) {
+	.product-route table tbody tr:hover { background: rgb(39 56 214 / .035); }
+}
+
+.product-route .meter {
+	box-shadow: inset 0 1px 2px rgb(23 24 27 / .08);
+}
+
+.product-route .meter span {
+	background: linear-gradient(90deg, #2738d6, #5364ef);
+	box-shadow: 0 0 14px rgb(39 56 214 / .22);
+}
+
+.product-route .status,
+.product-route .status-pill {
+	border: 1px solid rgb(23 24 27 / .06);
+	box-shadow: 0 2px 8px rgb(23 24 27 / .04);
+}
+
+/* Auth / public action screens get a focused, high-trust card treatment. */
+.public-action-shell {
+	position: relative;
+	isolation: isolate;
+	box-shadow: 0 0 0 1px rgb(23 24 27 / .04), 0 28px 90px rgb(23 24 27 / .08);
+}
+
+.public-action-shell::before {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	inset: 0;
+	background:
+		linear-gradient(135deg, rgb(39 56 214 / .045), transparent 24rem),
+		linear-gradient(315deg, rgb(255 91 58 / .035), transparent 22rem);
+	pointer-events: none;
+}
+
+.public-action-shell :is(.card, form, article) {
+	box-shadow: 0 12px 34px rgb(23 24 27 / .055);
+	transition: box-shadow 220ms ease, transform 220ms var(--premium-ease);
+}
+
+/* Portal chrome. Scoped component styles intentionally stay in charge of layout. */
+.app-shell > nav,
+.admin-shell > nav {
+	box-shadow: 0 8px 26px rgb(23 24 27 / .14);
+	backdrop-filter: blur(16px);
+}
+
+.app-shell > nav a,
+.app-shell > nav button,
+.admin-shell > nav a,
+.admin-shell > nav button {
+	transition: color 160ms ease, background-color 180ms ease, border-color 180ms ease, transform 160ms ease;
+}
+
+@media (hover: hover) {
+	.app-shell > nav a:hover,
+	.app-shell > nav button:hover,
+	.admin-shell > nav a:hover,
+	.admin-shell > nav button:hover { transform: translateY(-1px); }
+}
+
+.mobile-nav {
+	transition: transform 240ms var(--premium-ease), box-shadow 240ms ease;
+}
+
+.more-sheet {
+	box-shadow: -28px 0 90px rgb(23 24 27 / .22) !important;
+}
+
+.sheet-backdrop {
+	backdrop-filter: blur(3px);
+	animation: premium-backdrop-in 180ms ease both;
+}
+
+.more-sheet .more-links a {
+	transition: padding-left 180ms ease, color 180ms ease, background-color 180ms ease;
+}
+
+@media (hover: hover) {
+	.more-sheet .more-links a:hover { padding-left: 1rem; }
+}
+
+/* Buttons feel physical without looking playful. */
+@media (hover: hover) {
+	.product-route :is(button, .primary, a.primary):not(:disabled):hover,
+	.public-action-shell :is(button, .primary, a.primary):not(:disabled):hover {
+		box-shadow: 0 8px 22px rgb(23 24 27 / .10);
+	}
+}
+
+@keyframes premium-copy-in {
+	from { opacity: 0; transform: translateY(16px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes premium-product-in {
+	from { opacity: 0; transform: translateY(24px) scale(.975); }
+	to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes premium-workspace-in {
+	from { opacity: .35; transform: translateY(8px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes premium-line-in {
+	from { transform: scaleX(0); }
+	to { transform: scaleX(1); }
+}
+
+@keyframes premium-float {
+	0%, 100% { transform: translate3d(0, 0, 0); }
+	50% { transform: translate3d(0, -7px, 0); }
+}
+
+@keyframes premium-backdrop-in {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+@media (max-width: 760px) {
+	body {
+		background:
+			radial-gradient(circle at 0 -5%, rgb(255 91 58 / .055), transparent 23rem),
+			var(--color-background);
+	}
+	.product-route { min-height: calc(100vh - 4rem); }
+	.public-action-shell { box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.public-route .hero-copy,
+	.public-route .hero-product,
+	.public-route .floating-receipt,
+	.product-route > *,
+	.product-route :is(.page-shell, main, .workspace) > :is(header, .heading, .page-heading):first-child::after,
+	.sheet-backdrop {
+		animation: none !important;
+	}
+	.wordmark span::after,
+	.brand span::after,
+	.header-cta::before,
+	.primary::before,
+	.primary-button::before,
+	.button-dark::before,
+	.button-coral::before { display: none; }
+}
+
+html.low-data .public-route .floating-receipt,
+html.low-data .public-route .hero-copy,
+html.low-data .public-route .hero-product,
+html.low-data .product-route > * { animation: none !important; }
+
+html.low-data body { background: var(--color-background); }
+html.low-data .product-route { background: transparent; }
+html.low-data :is(.public-action-shell, .product-route .card, .product-route article) { box-shadow: none !important; }

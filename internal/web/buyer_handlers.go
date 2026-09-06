@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -120,7 +119,7 @@ func (s *Server) acceptBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusUnauthorized, "otp_invalid", err.Error())
 		return
 	}
-	portal, err := s.runtime.Buyers.Accept(context.Background(), token, user.ID, buyers.AcceptInput{FullName: input.FullName, LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
+	portal, err := s.runtime.Buyers.Accept(r.Context(), token, user.ID, buyers.AcceptInput{FullName: input.FullName, LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
 	if err != nil {
 		writeProblem(w, http.StatusUnprocessableEntity, "buyer_onboarding_failed", err.Error())
 		return

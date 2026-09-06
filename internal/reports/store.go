@@ -430,6 +430,10 @@ func (s *Store) ExportReceivablesCSV(ctx context.Context, orgID string) ([]byte,
 }
 
 func (s *Store) Track(name, subjectID, purpose string, metadata map[string]string) (AnalyticsEvent, error) {
+	return s.TrackContext(context.Background(), name, subjectID, purpose, metadata)
+}
+
+func (s *Store) TrackContext(ctx context.Context, name, subjectID, purpose string, metadata map[string]string) (AnalyticsEvent, error) {
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(purpose) == "" {
 		return AnalyticsEvent{}, errors.New("analytics name and purpose are required")
 	}
@@ -449,7 +453,7 @@ func (s *Store) Track(name, subjectID, purpose string, metadata map[string]strin
 		if err != nil {
 			return AnalyticsEvent{}, err
 		}
-		if err := s.pool.QueryRow(context.Background(), `INSERT INTO app.analytics_events(id,name,subject_id_hash,purpose,metadata,occurred_at,schema_version,deduplication_key,source) VALUES($1::uuid,$2,$3,$4,$5::jsonb,$6,$7,$8,$9) ON CONFLICT(deduplication_key) DO UPDATE SET deduplication_key=EXCLUDED.deduplication_key RETURNING occurred_at,recorded_at`, e.ID, e.Name, e.SubjectID, e.Purpose, encoded, e.At, e.SchemaVersion, e.DeduplicationKey, e.Source).Scan(&e.At, &e.RecordedAt); err != nil {
+		if err := s.pool.QueryRow(ctx, `INSERT INTO app.analytics_events(id,name,subject_id_hash,purpose,metadata,occurred_at,schema_version,deduplication_key,source) VALUES($1::uuid,$2,$3,$4,$5::jsonb,$6,$7,$8,$9) ON CONFLICT(deduplication_key) DO UPDATE SET deduplication_key=EXCLUDED.deduplication_key RETURNING occurred_at,recorded_at`, e.ID, e.Name, e.SubjectID, e.Purpose, encoded, e.At, e.SchemaVersion, e.DeduplicationKey, e.Source).Scan(&e.At, &e.RecordedAt); err != nil {
 			return AnalyticsEvent{}, err
 		}
 		return e, nil
@@ -461,8 +465,12 @@ func (s *Store) Track(name, subjectID, purpose string, metadata map[string]strin
 }
 
 func (s *Store) ListAnalytics() []AnalyticsEvent {
+	return s.ListAnalyticsContext(context.Background())
+}
+
+func (s *Store) ListAnalyticsContext(ctx context.Context) []AnalyticsEvent {
 	if s.pool != nil {
-		rows, err := s.pool.Query(context.Background(), `SELECT id::text,name,subject_id_hash,purpose,occurred_at,recorded_at,schema_version,deduplication_key,COALESCE(organization_id_hash,''),source,metadata FROM app.analytics_events ORDER BY occurred_at`)
+		rows, err := s.pool.Query(ctx, `SELECT id::text,name,subject_id_hash,purpose,occurred_at,recorded_at,schema_version,deduplication_key,COALESCE(organization_id_hash,''),source,metadata FROM app.analytics_events ORDER BY occurred_at`)
 		if err != nil {
 			return []AnalyticsEvent{}
 		}

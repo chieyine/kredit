@@ -31,7 +31,7 @@ func (s *Server) reportReceivables(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	_, _ = s.runtime.Reports.Track("report.receivables.viewed", orgID, "supplier receivables reporting", nil)
+	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.receivables.viewed", orgID, "supplier receivables reporting", nil)
 	report, err := s.runtime.Reports.ReceivablesForSupplier(r.Context(), orgID)
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "Financial report could not be loaded")
@@ -72,7 +72,7 @@ func (s *Server) reportAgeing(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	_, _ = s.runtime.Reports.Track("report.ageing.viewed", orgID, "supplier ageing reporting", nil)
+	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.ageing.viewed", orgID, "supplier ageing reporting", nil)
 	report, err := s.runtime.Reports.AgeingForSupplier(r.Context(), orgID)
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "Financial report could not be loaded")
@@ -89,7 +89,7 @@ func (s *Server) reportFees(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	_, _ = s.runtime.Reports.Track("report.fees.viewed", orgID, "supplier fee reporting", nil)
+	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.fees.viewed", orgID, "supplier fee reporting", nil)
 	report, err := s.runtime.Reports.FeesForSupplier(r.Context(), orgID)
 	if err != nil {
 		writeProblem(w, 503, "fee_report_unavailable", "Fee report could not be loaded")
@@ -141,7 +141,7 @@ func (s *Server) buyerHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.Shareable = false
-	_, _ = s.runtime.Reports.Track("history.viewed", user.ID, "buyer factual history", nil)
+	_, _ = s.runtime.Reports.TrackContext(r.Context(), "history.viewed", user.ID, "buyer factual history", nil)
 	writeJSON(w, 200, h)
 }
 
