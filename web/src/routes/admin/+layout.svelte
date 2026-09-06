@@ -2,6 +2,7 @@
 	import PortalNav from '$lib/components/PortalNav.svelte';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import ConnectivityBanner from '$lib/components/ConnectivityBanner.svelte';
 	import { signOut } from '$lib/api/client';
 	import { page } from '$app/state';
 	let { children } = $props();
@@ -15,5 +16,5 @@
 	];
 </script>
 <svelte:head><title>Kredit admin</title></svelte:head>
-{#key page.url.pathname}<AuthGate area="admin account"><div class="admin-shell"><PortalNav label="Admin account" homeHref="/admin" {links} {mobilePrimary} {mobileMore} dark onsearch={()=>paletteOpen=true} onsignout={signOut}/><div class="admin-content">{@render children()}</div></div><CommandPalette {links} bind:open={paletteOpen}/></AuthGate>{/key}
+{#key page.url.pathname}<AuthGate area="admin account"><div class="admin-shell"><ConnectivityBanner/><PortalNav label="Admin account" homeHref="/admin" {links} {mobilePrimary} {mobileMore} dark onsearch={()=>paletteOpen=true} onsignout={signOut}/><div class="admin-content">{@render children()}</div></div><CommandPalette {links} bind:open={paletteOpen}/></AuthGate>{/key}
 <style>.admin-shell{min-height:100vh;background:#f1eee6}.admin-content{min-height:calc(100vh - 4rem);padding-bottom:4rem}@media(max-width:760px){.admin-content{padding-bottom:6rem}}</style>
