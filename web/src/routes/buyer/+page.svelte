@@ -3,10 +3,10 @@
 	import { productLabel } from '$lib/product-language';
 	import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
 
-	let portal: any = null;
-	let requests: any[] = [];
-	let error = '';
-	let loading = true;
+	let portal = $state<any>(null);
+	let requests = $state<any[]>([]);
+	let error = $state('');
+	let loading = $state(true);
 	const money = (value = 0) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value / 100);
 	const outstanding = $derived(requests.reduce((sum,item)=>sum+Number(item.obligation?.outstanding_kobo??0),0));
 	const pending = $derived(requests.filter((item)=>['SENT','BUYER_REVIEWING','PENDING_BUYER_CONFIRMATION'].includes(String(item.request?.state??item.state??'').toUpperCase())));
