@@ -1,9 +1,15 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { signOut } from '$lib/api/client';
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import ConnectivityBanner from '$lib/components/ConnectivityBanner.svelte';
 	import PortalNav from '$lib/components/PortalNav.svelte';
 	import { page } from '$app/state';
 	let { children } = $props();
+	let paletteOpen = $state(false);
+	let searchReady = $state(false);
+	onMount(() => { searchReady = true; });
 	const links: [string, string][] = [
 		['Overview', '/buyer'], ['Sales to review', '/buyer/requests'], ['What I owe', '/buyer/obligations'],
 		['My credit limits', '/buyer/trade-lines'], ['Payment history', '/buyer/history'], ['Payment-date changes','/buyer/amendments'], ['Transfers I reported', '/buyer/payments'], ['Bank debit permission', '/buyer/mandates'],
@@ -30,9 +36,11 @@
 <svelte:head><title>Customer account — Kredit</title></svelte:head>
 {#key page.url.pathname}<AuthGate area="customer account">
 	<div class="buyer-shell">
-		<PortalNav label="Customer account" homeHref="/buyer" {links} {mobilePrimary} {mobileMore} onsignout={signOut} />
+		<ConnectivityBanner />
+		<PortalNav label="Customer account" homeHref="/buyer" {links} {mobilePrimary} {mobileMore} onsearch={() => (paletteOpen = true)} onsignout={signOut} {searchReady} />
 		<div class="portal-content"><div class="motion-scope product-route">{@render children()}</div></div>
 	</div>
+	<CommandPalette {links} bind:open={paletteOpen} />
 </AuthGate>{/key}
 
 <style>
