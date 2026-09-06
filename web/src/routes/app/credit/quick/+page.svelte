@@ -68,7 +68,7 @@
 <main class="shell quick-sale">
 	<header class="page-head">
 		<div><p class="eyebrow">New credit sale</p><h1>Four things.<br />Then send it.</h1><p class="lede">Choose the customer, describe the goods, enter the amount and set the payment day. Kredit handles the rest of the record.</p></div>
-		<a href="/app/credit/new">Need instalments or invoice details? Use the full form →</a>
+		<a href="/app/credit/new?advanced=1">Need instalments or invoice details? Use the full form →</a>
 	</header>
 
 	<nav class="steps" aria-label="Sale steps">
