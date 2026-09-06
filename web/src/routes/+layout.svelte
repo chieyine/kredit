@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../app.css';
+	import '../premium.css';
 	import { onMount } from 'svelte';
 	import SystemBanner from '$lib/components/SystemBanner.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
