@@ -770,7 +770,7 @@ func (s *Server) metricsPrometheus(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		durable, err = observability.DurableFinancialMetrics(ctx, s.runtime.Database.Raw())
 		if err != nil {
-			writeProblem(w, 503, "metrics_unavailable", "Financial monitoring data could not be loaded")
+			writeProblem(w, 503, "metrics_unavailable", "We could not load that money data. Please try again.")
 			return
 		}
 	}

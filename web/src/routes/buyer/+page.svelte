@@ -26,7 +26,7 @@
 		loading=true;
 		const [meResponse,requestsResponse] = await Promise.all([fetch('/api/v1/buyer/me'),fetch('/api/v1/buyer/credit-requests')]);
 		if (!meResponse.ok) {
-			error = 'Open the private Kredit link your seller sent you to access this account.';
+			error = 'Open the private link your seller sent you. That link is how you get into this account.';
 			loading=false;
 			return;
 		}
@@ -40,27 +40,27 @@
 
 <main class="shell buyer-home">
 	{#if portal}
-		<header class="buyer-head"><div><p class="eyebrow">Your Kredit account</p><h1>Know what you owe.<br />Know what happens next.</h1><p>Signed in as <strong>{portal.person.full_name}</strong> for {portal.business.legal_name}.</p></div>{#if pending.length}<a class="primary" href="/buyer/requests">Review {pending.length} sale{pending.length===1?'':'s'}</a>{/if}</header>
-		{#if loading}<p role="status">Loading your balances…</p>{:else}
+		<header class="buyer-head"><div><p class="eyebrow">Your Kredit account</p><h1>Here is what you owe.</h1><p>Signed in as <strong>{portal.person.full_name}</strong> for {portal.business.legal_name}.</p></div>{#if pending.length}<a class="primary" href="/buyer/requests">Read {pending.length} sale{pending.length===1?'':'s'} waiting for you</a>{/if}</header>
+		{#if loading}<p role="status">Opening your balances…</p>{:else}
 			<section class="balance-board" aria-label="Your credit summary">
-				<article class="main-balance"><span>Money left to pay</span><strong>{formatKobo(outstanding)}</strong><small>{openBalances.length} open balance{openBalances.length===1?'':'s'}</small><a href="/buyer/obligations">See what I owe →</a></article>
-				<article><span>Next payment</span>{#if nextPayment}<strong>{new Date(nextPayment.date).toLocaleDateString('en-NG',{day:'numeric',month:'short'})}</strong><small>{formatKobo(nextPayment.item.obligation?.outstanding_kobo??0)} remains on that sale</small>{:else}<strong>—</strong><small>No upcoming payment date</small>{/if}<a href="/buyer/obligations">See payment dates →</a></article>
-				<article class:danger={overdueCount>0}><span>Overdue</span><strong>{overdueCount}</strong><small>{overdueCount?`${overdueCount} balance${overdueCount===1?' is':'s are'} past the payment date`:'Nothing is overdue'}</small><a href="/buyer/obligations">Review balances →</a></article>
-				<article><span>Sales waiting for you</span><strong>{pending.length}</strong><small>{pending.length?'Check the details before you accept':'No sale needs your approval'}</small><a href="/buyer/requests">Review sales →</a></article>
+				<article class="main-balance"><span>Money left to pay</span><strong>{formatKobo(outstanding)}</strong><small>Across {openBalances.length} sale{openBalances.length===1?'':'s'}</small><a href="/buyer/obligations">See what I owe →</a></article>
+				<article><span>Next payment</span>{#if nextPayment}<strong>{new Date(nextPayment.date).toLocaleDateString('en-NG',{day:'numeric',month:'short'})}</strong><small>{formatKobo(nextPayment.item.obligation?.outstanding_kobo??0)} left on that sale</small>{:else}<strong>—</strong><small>Nothing due yet</small>{/if}<a href="/buyer/obligations">See payment dates →</a></article>
+				<article class:danger={overdueCount>0}><span>Overdue</span><strong>{overdueCount}</strong><small>{overdueCount?`${overdueCount} sale${overdueCount===1?' has':'s have'} passed the payment day`:'Nothing is late'}</small><a href="/buyer/obligations">Review balances →</a></article>
+				<article><span>Sales waiting for you</span><strong>{pending.length}</strong><small>{pending.length?'Read the details before you agree':'No sale is waiting for you'}</small><a href="/buyer/requests">Read them →</a></article>
 			</section>
 			<section class="next-actions">
-				<div><p class="eyebrow">What needs you</p><h2>{pending.length ? 'Check the sale before you say yes.' : overdueCount ? 'A payment date has passed.' : outstanding === null ? 'We could not verify the balance total.' : outstanding > 0n ? 'Your balances are up to date.' : 'Nothing to pay right now.'}</h2></div>
-				<div class="action-copy">{#if pending.length}<p>A seller has sent you a credit sale. Check the goods, amount and payment date. You control whether you accept it.</p><a href="/buyer/requests">Review sale →</a>{:else if overdueCount}<p>Open your balances to see what is overdue, what you have already paid and what remains.</p><a href="/buyer/obligations">See overdue balance →</a>{:else if outstanding === null}<p>One or more balance values could not be verified. Open your balances instead of relying on an estimated total.</p><a href="/buyer/obligations">Check my balances →</a>{:else if outstanding > 0n}<p>Open your balances anytime to see what you agreed to, what you have paid and what is still left.</p><a href="/buyer/obligations">See my balances →</a>{:else}<p>New sales that need your approval and future balances will appear here.</p><a href="/buyer/history">See my history →</a>{/if}</div>
+				<div><p class="eyebrow">What needs you</p><h2>{pending.length ? 'Read the sale before you say yes.' : overdueCount ? 'A payment day has passed.' : outstanding === null ? 'We could not confirm your total.' : outstanding > 0n ? 'Everything is up to date.' : 'You owe nothing right now.'}</h2></div>
+				<div class="action-copy">{#if pending.length}<p>A seller has sent you a sale. Read what they wrote: the goods, the money, the day. Nobody can force you into it. You decide.</p><a href="/buyer/requests">Read the sale →</a>{:else if overdueCount}<p>Open your balances and see what is late, what you have already paid and what is still left.</p><a href="/buyer/obligations">See what is late →</a>{:else if outstanding === null}<p>We could not confirm one or more of your balances. Open each sale instead of trusting the total above.</p><a href="/buyer/obligations">Check my balances →</a>{:else if outstanding > 0n}<p>You can open your balances any time and see what you agreed to, what you have paid and what is left.</p><a href="/buyer/obligations">See my balances →</a>{:else}<p>If a seller sends you a new sale, it will show up right here.</p><a href="/buyer/history">See how I have paid before →</a>{/if}</div>
 			</section>
-			<section class="trust" aria-label="Your controls"><div><span>01</span><strong>You see the sale before accepting.</strong><p>Check the seller, goods, amount and payment date first.</p></div><div><span>02</span><strong>Bank debit needs separate permission.</strong><p>You can review mandate details and the maximum permitted amount in your account.</p></div><div><span>03</span><strong>You can report a problem.</strong><p>If the goods or amount are wrong, raise it from the sale so it is kept on record.</p></div></section>
-			<section class="account-facts"><article><span>Business verification</span><strong>{productLabel(portal.business.status)}</strong></article><article><span>Verification checks</span><strong>{portal.verification_cases.length}</strong></article><article><span>Permissions on record</span><strong>{portal.consents.length}</strong></article></section>
+			<section class="trust" aria-label="Your controls"><div><span>01</span><strong>You read it before you agree.</strong><p>The seller, the goods, the money and the payment day are all in front of you first.</p></div><div><span>02</span><strong>Bank debit is a separate thing.</strong><p>You can see the most we could ever take, and you can stop that permission whenever you like.</p></div><div><span>03</span><strong>You can always report a problem.</strong><p>If the goods or the amount are wrong, say so from the sale itself, and it stays on record.</p></div></section>
+			<section class="account-facts"><article><span>Your business check</span><strong>{productLabel(portal.business.status)}</strong></article><article><span>Checks done</span><strong>{portal.verification_cases.length}</strong></article><article><span>Permissions you gave</span><strong>{portal.consents.length}</strong></article></section>
 		{/if}
 		<FeedbackPrompt area="buyer" />
 	{:else if error}
 		<p class="eyebrow">Your Kredit account</p>
-		<h1>Use your private link.</h1>
+		<h1>Open your private link.</h1>
 		<p class="error" role="alert">{error}</p>
-		<p class="help">Look for the link in the message from your seller. If it has expired, ask them to send a new one. Do not share your sign-in code with anyone.</p>
+		<p class="help">Look for the link in the message your seller sent you. If it will not open, just ask them for a fresh one. And never give your sign-in code to anybody, not even to somebody who says they are from Kredit.</p>
 	{:else}
 		<p class="eyebrow">Your Kredit account</p>
 		<h1>Opening your account…</h1>

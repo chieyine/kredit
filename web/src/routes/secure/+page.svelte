@@ -11,7 +11,7 @@
 		});
 		const body = await response.json().catch(() => ({}));
 		if (!response.ok || typeof body.redirect_to !== 'string') {
-			error = body.detail ?? 'This private link is invalid or has expired.';
+			error = body.detail ?? 'This private link has expired, or it is not valid. Ask the person who sent it for a new one.';
 			return;
 		}
 		window.location.replace(body.redirect_to);
@@ -24,6 +24,6 @@
 	<p class="eyebrow">Private link</p>
 	<h1>{error ? 'This link cannot be opened.' : 'Opening your secure Kredit page…'}</h1>
 	<p class:error role={error ? 'alert' : undefined}>{error || 'Please wait while the signed link is verified.'}</p>
-	{#if error}<a href="/">Return to Kredit</a>{/if}
+	{#if error}<a href="/">Go to the home page</a>{/if}
 </main>
 

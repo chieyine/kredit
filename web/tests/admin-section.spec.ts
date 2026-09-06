@@ -99,7 +99,7 @@ test('the admin section exposes the main platform work without dead screens', as
 	await expect(page.getByText('unregistered business', { exact: true })).toBeVisible();
 
 	await page.goto('/admin/money');
-	await expect(page.getByRole('heading', { name: 'The platform money position.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Where the platform money stands.' })).toBeVisible();
 	await expect(page.getByText('₦200,000.00')).toBeVisible();
 });
 

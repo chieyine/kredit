@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('guide library exposes individually written guides with search and categories',async({page})=>{
 	await page.goto('/blog');
-	await expect(page.getByRole('heading',{name:'Find the answer you need.'})).toBeVisible();
+	await expect(page.getByRole('heading',{name:'What do you need to know?'})).toBeVisible();
 	await expect(page.getByText('12 helpful guides')).toBeVisible();
 	await page.getByLabel('Search guides').fill('fake bank alert');
 	await expect(page.getByRole('link',{name:/protect your business from fake bank alerts/i})).toBeVisible();
@@ -58,7 +58,7 @@ test('privacy notice gives a complete, readable account of information use and r
 test('terms explain the complete sale, payment and complaint journey', async ({ page }) => {
 	await page.goto('/legal/terms');
 	await expect(page).toHaveTitle('Terms of service — Kredit');
-	await expect(page.getByRole('heading', { name: 'Clear rules for using Kredit.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'The rules for using Kredit.' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: '3. Making a credit sale' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: '5. Payments, balances and Kredit fees' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: '6. Bank-debit permission and late payment' })).toBeVisible();

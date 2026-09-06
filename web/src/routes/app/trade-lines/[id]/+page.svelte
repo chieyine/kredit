@@ -11,7 +11,7 @@
 	let dueDate = $state(''), collectionAt = $state('');
 	let deliveryMethod: Record<string, string> = $state({}), releaseEvidence: Record<string, string> = $state({});
 	const money = (value: number) => `₦${(Number(value || 0) / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
-	const stateLabel = (state: string) => ({ PENDING_BUYER_CONFIRMATION: 'Waiting for buyer confirmation', BUYER_CONFIRMED: 'Buyer confirmed — safe to release', GOODS_RELEASED: 'Released — waiting for receipt', RECEIPT_ISSUE_REPORTED: 'Buyer reported an issue', ACTIVATED: 'Active obligation', CANCELLED: 'Cancelled', EXPIRED: 'Expired', ACTIVE: 'Active' })[state] ?? state;
+	const stateLabel = (state: string) => ({ PENDING_BUYER_CONFIRMATION: 'Waiting for the customer to agree', BUYER_CONFIRMED: 'Customer agreed — you can send the goods', GOODS_RELEASED: 'Goods sent — waiting for them to confirm', RECEIPT_ISSUE_REPORTED: 'Customer reported a problem', ACTIVATED: 'Payment has started', CANCELLED: 'Cancelled', EXPIRED: 'Expired', ACTIVE: 'Active' })[state] ?? state;
 
 	async function load() {
 		error = '';
@@ -19,7 +19,7 @@
 			const response = await fetch(`/api/v1/organizations/${org.id}/trade-lines/${page.params.id}/statement`, { credentials: 'include' });
 			if (response.ok) { organizationID = org.id; statement = await response.json(); limit = String(statement.line.approved_limit_kobo / 100); return; }
 		}
-		error = 'We could not find this customer limit.';
+		error = 'We could not find this limit.';
 	}
 
 	async function command(path: string, body: unknown, key: string) {
@@ -27,16 +27,16 @@
 		try {
 			const response = await fetch(path, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey(), ...csrfHeaders() }, body: JSON.stringify(body) });
 			const result = await response.json().catch(() => ({}));
-			if (!response.ok) throw new Error(result.detail ?? 'The action could not be completed.');
-			notice = 'Your change was saved.'; await load();
-		} catch (cause) { error = cause instanceof Error ? cause.message : 'The action could not be completed.'; }
+			if (!response.ok) throw new Error(result.detail ?? 'That did not go through. Please try again.');
+			notice = 'Saved.'; await load();
+		} catch (cause) { error = cause instanceof Error ? cause.message : 'That did not go through. Please try again.'; }
 		finally { busy = ''; }
 	}
 
 	async function reserve(event: SubmitEvent) {
 		event.preventDefault();
 		const principalKobo = parseNaira(principal);
-		if (principalKobo <= 0 || !goods || !dueDate || !collectionAt) { error = 'Enter an amount, goods, due date and collection time.'; return; }
+		if (principalKobo <= 0 || !goods || !dueDate || !collectionAt) { error = 'Please enter the money, the goods, the payment day and the bank debit time.'; return; }
 		await command(`/api/v1/organizations/${organizationID}/trade-lines/${page.params.id}/drawdowns`, { principal_kobo: principalKobo, goods_description: goods, invoice_reference: invoiceReference, invoice_document_hash: invoiceDocumentHash, due_date: dueDate, collection_at: new Date(collectionAt).toISOString() }, 'reserve');
 		if (!error) { principal = ''; goods = ''; invoiceReference = ''; invoiceDocumentHash = ''; }
 	}
@@ -46,7 +46,7 @@
 		const approved_limit_kobo = parseNaira(limit);
 		const response = await fetch(`/api/v1/organizations/${organizationID}/trade-lines/${page.params.id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey(), ...csrfHeaders() }, body: JSON.stringify({ expected_version: statement.line.version, approved_limit_kobo }) });
 		const result = await response.json().catch(() => ({})); busy = '';
-		if (!response.ok) { error = result.detail ?? 'Limit could not be reduced.'; return; }
+		if (!response.ok) { error = result.detail ?? 'We could not lower this limit. Please try again.'; return; }
 		await load();
 	}
 
@@ -60,19 +60,19 @@
 		<h1>{money(statement.line.available_limit_kobo)} available.</h1>
 		<section class="summary"><article><span>Full limit</span><strong>{money(statement.line.approved_limit_kobo)}</strong></article><article><span>Customer already owes</span><strong>{money(statement.line.current_exposure_kobo)}</strong></article><article><span>Waiting for customer</span><strong>{money(statement.line.reserved_pending_kobo)}</strong></article><article><span>Now</span><strong>{stateLabel(statement.line.state)}</strong></article></section>
 		{#if error}<p class="error" role="alert">{error}</p>{/if}{#if notice}<p class="notice" role="status">{notice}</p>{/if}
-		<section class="card compact"><h2>Pause this limit</h2><p>The customer cannot use a paused limit for a new sale. Existing sales and payments stay safe.</p>{#if statement.line.state === 'ACTIVE'}<button class="danger" disabled={busy==='suspend'} onclick={()=>command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/suspend`,{},'suspend')}>Pause this limit</button>{:else if statement.line.state === 'SUSPENDED'}<button class="primary" disabled={busy==='resume'} onclick={()=>command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/resume`,{},'resume')}>Use this limit again</button>{/if}</section>
-		<section class="card"><h2>Add a sale from this limit</h2><p>Your customer will see the goods, money and payment day before you give them the goods.</p>
-			<form onsubmit={reserve} class="form-grid"><label>Money to pay (₦)<input bind:value={principal} inputmode="decimal" required /></label><label>What are they buying?<textarea bind:value={goods} rows="3" required></textarea></label><label>Invoice number <small>optional</small><input bind:value={invoiceReference} /></label><label>Pay before<input type="date" bind:value={dueDate} required /></label><label>Bank debit may start after<input type="datetime-local" bind:value={collectionAt} required /></label><button class="primary wide" disabled={busy === 'reserve'}>{busy === 'reserve' ? 'Saving…' : `Add ${money(parseNaira(principal))} sale`}</button></form>
+		<section class="card compact"><h2>Pause this limit</h2><p>While a limit is paused, the customer cannot use it for a new sale. Sales already running are not affected.</p>{#if statement.line.state === 'ACTIVE'}<button class="danger" disabled={busy==='suspend'} onclick={()=>command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/suspend`,{},'suspend')}>Pause this limit</button>{:else if statement.line.state === 'SUSPENDED'}<button class="primary" disabled={busy==='resume'} onclick={()=>command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/resume`,{},'resume')}>Use this limit again</button>{/if}</section>
+		<section class="card"><h2>Add a sale from this limit</h2><p>Your customer sees the goods, the money and the payment day before you hand anything over.</p>
+			<form onsubmit={reserve} class="form-grid"><label>Money to pay (₦)<input bind:value={principal} inputmode="decimal" required /></label><label>What are they buying?<textarea bind:value={goods} rows="3" required></textarea></label><label>Invoice number <small>optional</small><input bind:value={invoiceReference} /></label><label>Pay before<input type="date" bind:value={dueDate} required /></label><label>If unpaid, Kredit may debit their bank after<input type="datetime-local" bind:value={collectionAt} required /></label><button class="primary wide" disabled={busy === 'reserve'}>{busy === 'reserve' ? 'Saving…' : `Add ${money(parseNaira(principal))} sale`}</button></form>
 		</section>
-		<section class="card compact"><h2>Lower the limit</h2><p>You can lower only the part the customer has not used. The customer must agree before you raise it.</p><label>New limit (₦)<input bind:value={limit} inputmode="decimal" /></label><button disabled={busy === 'limit'} onclick={reduce}>Change limit to {money(parseNaira(limit))}</button></section>
+		<section class="card compact"><h2>Lower the limit</h2><p>You can only take back what the customer has not used yet. To raise a limit, the customer must agree first.</p><label>New limit (₦)<input bind:value={limit} inputmode="decimal" /></label><button disabled={busy === 'limit'} onclick={reduce}>Change limit to {money(parseNaira(limit))}</button></section>
 		<h2>Sales using this limit</h2>
 		{#if statement.drawdowns.length}<div class="drawdowns">{#each statement.drawdowns as drawdown}<article class="drawdown">
 			<header><strong>{money(drawdown.principal_kobo)}</strong><span class="status">{stateLabel(drawdown.state)}</span></header>
-			<dl><dt>Goods</dt><dd>{drawdown.goods_description}<p>{feeDisclosure(drawdown.fee_terms)}</p></dd><dt>Pay before</dt><dd>{drawdown.due_date}</dd><dt>Bank debit after</dt><dd>{new Date(drawdown.collection_at).toLocaleString('en-NG')}</dd><dt>Extra time</dt><dd>{drawdown.grace_hours} hours</dd><dt>Invoice number</dt><dd>{drawdown.invoice_reference || 'None'}</dd></dl>
-			<details class="hash"><summary>Technical record</summary><code>{drawdown.agreement_hash}</code></details><a href={`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/agreement-document`} target="_blank" rel="noreferrer">Print or save this sale →</a>
+			<dl><dt>Goods</dt><dd>{drawdown.goods_description}<p>{feeDisclosure(drawdown.fee_terms)}</p></dd><dt>Pay before</dt><dd>{drawdown.due_date}</dd><dt>Bank debit after</dt><dd>{new Date(drawdown.collection_at).toLocaleString('en-NG')}</dd><dt>Extra time before that</dt><dd>{drawdown.grace_hours} hours</dd><dt>Invoice number</dt><dd>{drawdown.invoice_reference || 'None'}</dd></dl>
+			<details class="hash"><summary>Technical record (for reference)</summary><code>{drawdown.agreement_hash}</code></details><a href={`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/agreement-document`} target="_blank" rel="noreferrer">Print or save a copy of this sale →</a>
 			{#if drawdown.state === 'BUYER_CONFIRMED'}<div class="action"><label>How will they get the goods?<input bind:value={deliveryMethod[drawdown.id]} placeholder="Delivery or pickup" /></label><label>Delivery or receipt number<input bind:value={releaseEvidence[drawdown.id]} placeholder="Optional" /></label><button class="primary" disabled={busy === drawdown.id} onclick={() => command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/release`, { delivery_method: deliveryMethod[drawdown.id], evidence_reference: releaseEvidence[drawdown.id] }, drawdown.id)}>The goods have left</button></div>{/if}
 			{#if ['PENDING_BUYER_CONFIRMATION', 'BUYER_CONFIRMED'].includes(drawdown.state)}<button class="danger" disabled={busy === drawdown.id} onclick={() => command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/cancel`, {}, drawdown.id)}>Cancel this sale</button>{/if}
-			{#if drawdown.release_actor_id}<p>How the goods left: {drawdown.delivery_method}{drawdown.release_evidence_reference ? ` · ${drawdown.release_evidence_reference}` : ''}</p>{/if}{#if drawdown.receipt_state === 'issue_reported'}<p class="error">Customer's problem: {drawdown.receipt_issue_reason}</p>{/if}
+			{#if drawdown.release_actor_id}<p>How the goods left: {drawdown.delivery_method}{drawdown.release_evidence_reference ? ` · ${drawdown.release_evidence_reference}` : ''}</p>{/if}{#if drawdown.receipt_state === 'issue_reported'}<p class="error">Customer reported: {drawdown.receipt_issue_reason}</p>{/if}
 		</article>{/each}</div>{:else}<p>No sale has used this limit yet.</p>{/if}
 	{:else if error}<h1>We could not open this limit.</h1><p role="alert">{error}</p>{:else}<p>Opening customer limit…</p>{/if}
 </main>

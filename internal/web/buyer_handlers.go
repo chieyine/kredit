@@ -67,12 +67,12 @@ func (s *Server) previewBuyerInvitation(w http.ResponseWriter, r *http.Request) 
 	token := r.PathValue("token")
 	preview, err := s.runtime.Buyers.Preview(token)
 	if err != nil {
-		writeProblem(w, http.StatusNotFound, "buyer_invitation_invalid", "buyer invitation is invalid or expired")
+		writeProblem(w, http.StatusNotFound, "buyer_invitation_invalid", "This invitation has expired, or it is not valid. Ask the seller to send you a new link.")
 		return
 	}
 	organization, ok := s.runtime.Organizations.Get(preview.OrganizationID)
 	if !ok {
-		writeProblem(w, http.StatusNotFound, "organization_not_found", "supplier organization was not found")
+		writeProblem(w, http.StatusNotFound, "organization_not_found", "We could not find that seller.")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"invitation": preview, "supplier": map[string]string{"legal_name": organization.LegalName, "trading_name": organization.TradingName, "industry": organization.Industry}})
@@ -82,7 +82,7 @@ func (s *Server) requestBuyerInvitationOTP(w http.ResponseWriter, r *http.Reques
 	token := r.PathValue("token")
 	targetType, target, err := s.runtime.Buyers.InvitationTarget(token)
 	if err != nil {
-		writeProblem(w, http.StatusNotFound, "buyer_invitation_invalid", "buyer invitation is invalid or expired")
+		writeProblem(w, http.StatusNotFound, "buyer_invitation_invalid", "This invitation has expired, or it is not valid. Ask the seller to send you a new link.")
 		return
 	}
 	challenge, code, err := s.runtime.Auth.RequestOTP(target, targetType, "buyer_invitation")
@@ -91,7 +91,7 @@ func (s *Server) requestBuyerInvitationOTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := s.runtime.Notifications.SendOTP(r.Context(), target, targetType, code); err != nil {
-		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "verification code delivery is unavailable")
+		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "We cannot send codes right now. Please try again shortly.")
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{Action: "buyer.invitation.otp_requested", ResourceType: "otp_challenge", ResourceID: challenge.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"target_type": targetType, "purpose": "buyer_invitation"}})
@@ -106,7 +106,7 @@ func (s *Server) acceptBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	targetType, target, err := s.runtime.Buyers.InvitationTarget(token)
 	if err != nil {
-		writeProblem(w, http.StatusNotFound, "buyer_invitation_invalid", "buyer invitation is invalid or expired")
+		writeProblem(w, http.StatusNotFound, "buyer_invitation_invalid", "This invitation has expired, or it is not valid. Ask the seller to send you a new link.")
 		return
 	}
 	var input buyerInvitationAcceptRequest
@@ -125,7 +125,7 @@ func (s *Server) acceptBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !setSessionCookies(w, s.config.Environment != "development", rawSessionToken) {
-		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "a secure session could not be established")
+		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "We could not sign you in safely. Please try again.")
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "buyer.invitation.accepted", ResourceType: "buyer_invitation", ResourceID: portal.Business.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"authentication_level": session.AuthenticationLevel}})
@@ -139,7 +139,7 @@ func (s *Server) buyerPortal(w http.ResponseWriter, r *http.Request) {
 	}
 	portal, err := s.runtime.Buyers.Portal(user.ID)
 	if err != nil {
-		writeProblem(w, http.StatusNotFound, "buyer_profile_not_found", "buyer portal profile was not found")
+		writeProblem(w, http.StatusNotFound, "buyer_profile_not_found", "We could not find your customer account.")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"portal": portal})

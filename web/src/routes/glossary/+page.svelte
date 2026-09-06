@@ -1,23 +1,23 @@
 <script lang="ts">
 	const terms: [string, string, string][] = [
-		['A', 'Ageing', 'How late a payment is. For example: not yet due, 1–30 days late, or more than 30 days late.'],
-		['D', 'Dispute', 'When a seller or customer reports a problem with the goods or amount owed. Automatic debit pauses for the amount being questioned.'],
-		['D', 'Drawdown', 'A new credit sale made from a credit limit the seller already gave the customer.'],
-		['G', 'Grace period', 'Extra time after the payment date. Reminders can continue, but automatic debit cannot start yet.'],
-		['M', 'Mandate', 'Permission from the customer for an approved payment company to debit up to an agreed amount.'],
-		['O', 'Obligation', 'A credit sale that has started. It shows the amount owed, payment dates and payment history.'],
-		['P', 'Payment claim', 'When a customer says they paid by transfer or cash. The seller must confirm it before the balance changes.'],
-		['P', 'Principal', 'The amount owed for goods sold on credit.'],
-		['P', 'Public receipt', 'A shareable payment receipt that hides names, bank details and private records.'],
-		['T', 'Trade credit', 'When a seller gives goods now and lets the customer pay later. It is not a bank loan.']
+		['A', 'Ageing', 'How late a payment is. For example: not due yet, 1\u201330 days late, or more than 30 days late.'],
+		['D', 'Dispute', 'When a seller or customer reports a problem with the goods or the amount owed. The money being argued about cannot be debited while it is being sorted out.'],
+		['D', 'Drawdown', 'A new sale taken from a limit the seller already gave the customer. Like taking a bag of rice from a store you already agreed on.'],
+		['G', 'Grace period', 'Extra days after the payment day. Reminders continue, but no bank debit can start yet.'],
+		['M', 'Mandate', 'The permission a customer gives so an approved payment company can debit their account, up to an agreed amount and no more.'],
+		['O', 'Obligation', 'A sale that has started. It shows the money owed, the payment days and every payment made so far.'],
+		['P', 'Payment claim', 'When a customer says they paid by transfer or cash. The seller must check their bank and confirm it before the balance drops.'],
+		['P', 'Principal', 'The money owed for the goods themselves, before any fee.'],
+		['P', 'Public receipt', 'A receipt you can forward to anybody. It hides names, bank details and private records.'],
+		['T', 'Trade credit', 'When a seller gives goods now and lets the customer pay later. It is not a bank loan. No bank is involved.']
 	];
 </script>
 
 
 <main class="glossary-page shell">
 	<header>
-		<div><p class="eyebrow">Glossary</p><h1>Trade credit,<br />in plain language.</h1></div>
-		<p>Simple meanings for words you may see on Kredit. If we must use a finance word, we explain it here.</p>
+		<div><p class="eyebrow">What the words mean</p><h1>Business words,<br />in plain language.</h1></div>
+		<p>Plain meanings for words you may see on Kredit. If we ever have to use a big finance word, we explain it here.</p>
 	</header>
 
 	<nav class="letter-index" aria-label="Glossary letters">
@@ -32,7 +32,7 @@
 		{/each}
 	</dl>
 
-	<aside><p>Still have a question?</p><a href="/faq">Read simple answers <span>↗</span></a></aside>
+	<aside><p>Still have a question?</p><a href="/faq">Read the common questions <span>↗</span></a></aside>
 </main>
 
 <style>

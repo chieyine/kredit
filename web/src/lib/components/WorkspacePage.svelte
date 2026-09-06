@@ -30,7 +30,7 @@
 			if (organizationPath && !organizations.length) {
 				const data = await read('/api/v1/organizations');
 				if (version !== requestVersion) return;
-				if (!Array.isArray(data.organizations)) throw new Error('We could not read your businesses. Please try again.');
+				if (!Array.isArray(data.organizations)) throw new Error('We could not open your businesses. Please try again.');
 				organizations = data.organizations;
 				organizationID = organizations[0]?.id ?? '';
 			}
@@ -38,7 +38,7 @@
 			const data = await read(organizationPath ? `/api/v1/organizations/${organizationID}${organizationPath}` : endpoint);
 			if (version !== requestVersion) return;
 			const value = collectionKey ? data[collectionKey] : data;
-			if (!Array.isArray(value)) throw new Error('We could not read these records. Please try again.');
+			if (!Array.isArray(value)) throw new Error('We could not open these records. Please try again.');
 			records = detailBase === '/buyer/obligations' ? value.filter(item => item.obligation) : value;
 		} catch (cause) {
 			if (version === requestVersion && !signal.aborted) error = cause instanceof Error ? cause.message : 'We could not open this page.';

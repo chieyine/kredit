@@ -13,8 +13,8 @@
 
 
 <header class="playbook-head">
-	<div><p class="eyebrow">Helpful guides</p><h1>Simple advice for selling on credit.</h1></div>
-	<p>Short, useful guides for sellers and the customers who buy from them. From setting a credit limit to checking the last payment.</p>
+	<div><p class="eyebrow">Helpful guides</p><h1>Advice from people who have been there.</h1></div>
+	<p>Short guides for sellers, and for the customers who buy from them. How to set a limit, how to check a new customer, what to do when somebody stops paying.</p>
 </header>
 
 <section class="featured">
@@ -29,7 +29,7 @@
 
 <nav class="topic-nav" aria-label="Browse guide categories"><p class="eyebrow">Browse one topic</p><div>{#each topics as topic}<a href={`/blog/topic/${topic.slug}`}><span>{topic.count} {topic.count === 1 ? 'guide' : 'guides'}</span><strong>{topic.category}</strong><i aria-hidden="true">→</i></a>{/each}</div></nav>
 
-<section class="library" aria-labelledby="library-title"><div><p class="eyebrow">{articles.length} guides</p><h2 id="library-title">Find the answer you need.</h2></div><div class="filters"><label>Search guides<input type="search" value={query} oninput={(event)=>query=event.currentTarget.value} placeholder="For example: late payment" /></label><label>Topic<select bind:value={category}><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}>{item}</option>{/each}</select></label></div></section>
+<section class="library" aria-labelledby="library-title"><div><p class="eyebrow">{articles.length} guides</p><h2 id="library-title">What do you need to know?</h2></div><div class="filters"><label>Search guides<input type="search" value={query} oninput={(event)=>query=event.currentTarget.value} placeholder="For example: late payment" /></label><label>Topic<select bind:value={category}><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}>{item}</option>{/each}</select></label></div></section>
 <section class="archive" aria-labelledby="archive-title">
 	<div class="archive-head"><p id="archive-title">{visiblePosts.length} helpful {visiblePosts.length === 1 ? 'guide' : 'guides'}</p><span>Guide / Reading time</span></div>
 	{#each visiblePosts as post}
@@ -39,11 +39,11 @@
 			<span class="post-meta">{post.minutes} min<br />Updated {post.date}</span>
 			<i aria-hidden="true">↗</i>
 		</a>
-	{:else}<div class="no-results"><h2>No guide matches that search.</h2><p>Try a shorter word such as “payment”, “customer” or “credit”.</p><button onclick={()=>{query='';category='All guides'}}>Show every guide</button></div>
+	{:else}<div class="no-results"><h2>Nothing matches that.</h2><p>Try a shorter word, like “payment”, “customer” or “credit”.</p><button onclick={()=>{query='';category='All guides'}}>Show me every guide</button></div>
 	{/each}
 </section>
 
-<aside class="playbook-end"><p>Seen a word you do not understand?</p><a href="/glossary">See simple meanings <span>↗</span></a></aside>
+<aside class="playbook-end"><p>Saw a word you do not understand?</p><a href="/glossary">We explain them here <span>↗</span></a></aside>
 
 <style>
 	.playbook-head { display: grid; grid-template-columns: 1.4fr .6fr; gap: clamp(4rem, 10vw, 10rem); align-items: end; }

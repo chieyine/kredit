@@ -27,59 +27,59 @@ export const publicSitemapEntries = [
 ] as const;
 
 const defaultSEO: PageSEO = {
-	title: 'Kredit — sell goods on credit and get paid',
-	description: 'Write down the deal, get your customer to accept it, keep proof of delivery and track every payment.'
+	title: 'Kredit — give goods now, get your money later',
+	description: 'Write the sale down, let your customer accept it, keep the delivery proof and follow every payment. Built for Nigerian businesses. Free to start.'
 };
 
 export const pageSEOByPath: Record<string, PageSEO> = {
 	'/': defaultSEO,
 	'/demo': {
-		title: 'Try Kredit in 60 seconds — interactive credit-sale demo',
-		description: 'Try a complete sample credit sale as the seller and customer. Accept the deal, confirm the goods and record a payment without signing in.'
+		title: 'Try Kredit free in 60 seconds — no sign-in',
+		description: 'Play both sides of a sample sale. Accept the deal, confirm the goods and enter a payment. No sign-in, no real money, about 60 seconds.'
 	},
 	'/how-it-works': {
-		title: 'How Kredit works — from credit sale to final payment',
-		description: 'See how to write down a credit sale, let your customer accept it, confirm delivery and track every payment in one clear place.'
+		title: 'How Kredit works — from handshake to last naira',
+		description: 'Four steps: write the sale down, let your customer accept it, confirm the goods arrived, then follow every payment in one clear record.'
 	},
 	'/for-suppliers': {
-		title: 'Sell goods on credit with less chasing — Kredit',
-		description: 'Put every credit sale in writing, keep proof that the goods arrived, send simple reminders and see what each customer still owes.'
+		title: 'Sell on credit and stay in control — Kredit for sellers',
+		description: 'Put every sale in writing, keep proof the goods arrived, let Kredit send the reminders and always know what each customer still owes you.'
 	},
 	'/for-buyers': {
-		title: 'Know what you owe and why — Kredit for buyers',
-		description: 'Check the goods, amount and payment day before you accept a sale. Confirm delivery, report a problem and see every payment clearly.'
+		title: 'Know exactly what you owe — Kredit for customers',
+		description: 'Read the goods, the money and the payment day before you say yes. Confirm delivery, report a problem and see every payment you have made.'
 	},
 	'/pricing': {
-		title: 'Pricing — pay only when you get paid — Kredit',
-		description: 'See current supplier fees for activated trade credit and successful collections, with a clear fee calculation before you agree.'
+		title: 'Kredit pricing — no monthly fee, free to start',
+		description: 'Writing a sale down is free. A small base fee only when the sale starts, and a collection fee only on money Kredit actually collects for you.'
 	},
 	'/security': {
-		title: 'How Kredit protects your money and records',
-		description: 'See how Kredit protects account sign-in, private business information, payment records, staff access and links shared with customers.'
+		title: 'Is Kredit safe? How we protect your money',
+		description: 'How Kredit protects your sign-in, your private business records, every payment, your staff permissions and the links you share with customers.'
 	},
 	'/faq': {
-		title: 'Frequently asked questions — Kredit',
-		description: 'Get simple answers about selling goods on credit, customer payments, Kredit fees, late payment, private information and account safety.'
+		title: 'Common questions — Kredit',
+		description: 'Straight answers about selling goods on credit, getting paid, what Kredit costs, late customers, your privacy and keeping your account safe.'
 	},
 	'/glossary': {
-		title: 'Trade credit glossary — Kredit',
-		description: 'Understand the simple meaning of words used for credit sales, customer payments, delivery, late payment and money collection in Nigeria.'
+		title: 'What the words mean — Kredit glossary',
+		description: 'Plain meanings for the business words you will see on Kredit: mandate, grace period, principal, dispute, drawdown and more. No big grammar.'
 	},
 	'/blog': {
-		title: 'Helpful guides for selling on credit — Kredit',
-		description: 'Read simple guides for Nigerian businesses about credit sales, customer checks, delivery proof, payment records and late payment.'
+		title: 'Guides for selling on credit — Kredit',
+		description: 'Simple guides for Nigerian businesses: selling on credit, checking a new customer, keeping delivery proof and what to do when payment is late.'
 	},
 	'/legal/complaints': {
-		title: 'Complaints and support — Kredit',
-		description: 'Report a Kredit service, payment, privacy or accessibility concern and understand how evidence, updates and escalation are handled.'
+		title: 'Get help — Kredit support and complaints',
+		description: 'Tell us what went wrong with a sale, a payment, your privacy or the app. See what to send us, what never to send and how we reply.'
 	},
 	'/legal/privacy': {
 		title: 'Privacy notice — Kredit',
-		description: 'Read how Kredit collects, uses, shares, protects and removes information, and how to use your privacy rights in Nigeria.'
+		description: 'What information Kredit keeps, why we need it, who else can see it, how long we hold it and the rights you have under Nigerian law.'
 	},
 	'/legal/terms': {
 		title: 'Terms of service — Kredit',
-		description: 'Read the clear rules for Kredit accounts, credit sales, delivery, payments, fees, bank-debit permission and complaints.'
+		description: 'The rules for using Kredit: your account, sales on credit, delivery, payments, fees, bank-debit permission and how to complain.'
 	}
 };
 

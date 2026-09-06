@@ -29,15 +29,15 @@ test('operator replays a failed webhook without changing its identity',async({pa
 });
 
 test('operator resolves an unknown provider submission through protected controls',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('resolve_unknown_submission');await page.getByLabel('Target type').fill('collection');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000101');await page.getByLabel('Structured reason').fill('Provider reconciliation confirms final state');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('Safely apply resolve_unknown_submission')).toBeVisible();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied[0]).toMatchObject({command_type:'resolve_unknown_submission'});
+	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('resolve_unknown_submission');await page.getByLabel('Target type').fill('collection');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000101');await page.getByLabel('Structured reason').fill('Provider reconciliation confirms final state');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('Safely apply resolve_unknown_submission')).toBeVisible();await page.getByRole('button',{name:'Apply this change'}).click();expect(applied[0]).toMatchObject({command_type:'resolve_unknown_submission'});
 });
 
 test('operator previews user suspension and restoration consequences',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000202');await page.getByLabel('Structured reason').fill('Confirmed account compromise investigation');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply protected command'}).click();await page.getByLabel('Action').selectOption('restore_user');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000203');await page.getByLabel('Structured reason').fill('Security investigation completed safely');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied.map(x=>x.command_type)).toEqual(['suspend_user','restore_user']);
+	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000202');await page.getByLabel('Structured reason').fill('Confirmed account compromise investigation');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply this change'}).click();await page.getByLabel('Action').selectOption('restore_user');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000203');await page.getByLabel('Structured reason').fill('Security investigation completed safely');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply this change'}).click();expect(applied.map(x=>x.command_type)).toEqual(['suspend_user','restore_user']);
 });
 
 test('operator places an expiring scoped buyer risk hold',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('place_risk_hold');await page.getByLabel('Target type').fill('buyer');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000301');await page.getByLabel('Scope').selectOption('collection');await page.getByLabel('Expires').fill('2026-08-30T12:00');await page.getByLabel('Structured reason').fill('Collection anomaly requires compliance review');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('User notification',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Apply protected command'}).click();expect(applied[0]).toMatchObject({command_type:'place_risk_hold',target_type:'buyer',scope:'collection'});
+	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('place_risk_hold');await page.getByLabel('Target type').fill('buyer');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000301');await page.getByLabel('Scope').selectOption('collection');await page.getByLabel('Expires').fill('2026-08-30T12:00');await page.getByLabel('Structured reason').fill('Collection anomaly requires compliance review');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('User notification',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Apply this change'}).click();expect(applied[0]).toMatchObject({command_type:'place_risk_hold',target_type:'buyer',scope:'collection'});
 });
 
 test('supplier can create exact credit terms with a replay-safe request', async ({ page }) => {
@@ -162,7 +162,7 @@ test('buyer payment claim explains and applies a bounded hold', async ({ page })
 	await page.goto('/buyer/credit-requests/request-3');
 	await page.getByLabel('Money you paid (₦)').fill('125,000');
 	await page.getByLabel('Transfer number').fill('BANK-2026-001');
-	await page.getByRole('button', { name: 'Tell the seller I paid' }).click();
+	await page.getByRole('button', { name: 'Tell the seller I have paid' }).click();
 	await expect(page.getByText('We told the seller. They will check their bank account.')).toBeVisible();
 	await expect.poll(() => submitted).toMatchObject({ amount_kobo: 12500000, transfer_reference: 'BANK-2026-001' });
 });
@@ -345,7 +345,7 @@ test('recovery start is enumeration-safe and explains independent proof', async 
 	await page.goto('/recover');
 	await expect(page.getByText(/ask for more than your phone number/)).toBeVisible();
 	await page.getByLabel('Your email or phone').fill('someone@example.test');
-	await page.getByRole('button', { name: 'Help me sign in' }).click();
+	await page.getByRole('button', { name: 'Start' }).click();
 	await expect(page.getByText('If the account is eligible, recovery instructions have been sent.')).toBeVisible();
 	await expect.poll(() => submitted).toEqual({ identifier: 'someone@example.test', channel: 'email' });
 });
@@ -358,10 +358,10 @@ test('owner changes a role, suspends access, and restores it from the team inter
 	await page.route('**/api/v1/organizations/org-team/members/team-user', async (route) => { const change = route.request().postDataJSON(); changes.push(change); member = { ...member, ...change }; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ membership: member }) }); });
 	await page.goto('/app/team');
 	await page.locator('.controls select').selectOption('finance');
-	await page.getByRole('button', { name: 'Save change' }).click();
-	await page.getByRole('button', { name: 'Stop access' }).click();
-	await expect(page.getByRole('button', { name: 'Allow access again' })).toBeVisible();
-	await page.getByRole('button', { name: 'Allow access again' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.getByRole('button', { name: 'Stop their access' }).click();
+	await expect(page.getByRole('button', { name: 'Let them back in' })).toBeVisible();
+	await page.getByRole('button', { name: 'Let them back in' }).click();
 	await expect.poll(() => changes).toEqual([{ role: 'finance' }, { status: 'suspended' }, { status: 'active' }]);
 });
 

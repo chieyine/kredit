@@ -23,7 +23,7 @@
  function status(c:Change){if(c.state!=='approved')return c.state;return c.revision===data?.current.revision?'active':new Date(c.effective_at).getTime()>Date.now()?'scheduled':'superseded'}
  function reset(){if(!data)return;draft={...data.current.values};units=Object.fromEntries(data.fields.filter(scaled).map(f=>[f.key,decimal(draft[f.key])]));preview=null;reason='';effective='';proposalID=crypto.randomUUID()}
  async function load(){loading=true;error='';try{const r=await fetch('/api/v1/ops/business-policies',{credentials:'include'});const b=await r.json();if(!r.ok)throw new Error(b.detail||'Settings could not be loaded');data=b;reset()}catch(e){error=e instanceof Error?e.message:'Settings could not be loaded'}finally{loading=false}}
- async function post(path:string,body:unknown){const r=await fetch(path,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify(body)});const b=await r.json();if(!r.ok)throw new Error(b.detail||'Change could not be saved')}
+ async function post(path:string,body:unknown){const r=await fetch(path,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify(body)});const b=await r.json();if(!r.ok)throw new Error(b.detail||'That change could not be saved. Please try again.')}
  async function propose(){if(!data)return;busy=true;error='';message='';try{for(const f of data.fields){if(f.kind==='number'||f.kind==='money'){const n=draft[f.key];if(typeof n!=='number'||!Number.isSafeInteger(n)||n<f.min||n>f.max)throw new Error(`Enter a whole number between ${f.min} and ${f.max} for ${label(f)}`)}}if(!effective)throw new Error('Choose an effective date');await post('/api/v1/ops/business-policies',{id:proposalID,base_revision:data.current.revision,values:draft,reason,effective_at:new Date(`${effective}:00+01:00`).toISOString()});await load();message='Proposal saved. Another platform administrator must approve it before its effective date.'}catch(e){error=e instanceof Error?e.message:'Proposal could not be saved'}finally{busy=false}}
  async function decide(c:Change,action:string){busy=true;error='';message='';try{await post(`/api/v1/ops/business-policies/${c.id}/decision`,{action,reason:notes[c.id]||''});await load();message='Decision recorded.'}catch(e){error=e instanceof Error?e.message:'Decision could not be saved'}finally{busy=false}}
  onMount(load);
@@ -31,13 +31,13 @@
 <svelte:head><title>Business settings — Kredit admin</title></svelte:head>
 <main class="shell workspace">
  <p class="eyebrow">Administration / Business settings</p><h1>Business settings</h1><VerifyIdentity/>
- <p>Review the current policy, propose changes, and schedule when they take effect. Every change needs approval from another platform administrator.</p>
- <p class="notice">Existing offers retain their recorded fee terms. Provider approvals and deployment limits still apply. Reconciliation continues when new collections are paused.</p>
+ <p>Review the current policy, propose a change and set when it takes effect. Every change needs approval from a second platform administrator.</p>
+ <p class="notice">Existing offers keep the fee terms recorded with them. Provider approvals and deployment limits still apply. Reconciliation keeps running even when new collections are paused.</p>
  {#if error}<p role="alert" class="error">{error}</p>{/if}{#if message}<p role="status">{message}</p>{/if}
  <button onclick={load} disabled={loading||busy}>Refresh settings</button>
  {#if loading}<p>Loading settings…</p>{:else if data}
  <p>Current policy: <strong>{data.current.revision===0?'Initial deployment settings':`Revision ${data.current.revision}`}</strong>. Times are shown in Lagos time.</p>
- {#if blocked}<p class="notice">A change is awaiting approval or its effective date. Resolve or cancel it before proposing another change.</p>{/if}
+ {#if blocked}<p class="notice">A change is still waiting for approval or for its effective date. Resolve or cancel it before you propose another.</p>{/if}
  <form onsubmit={(e)=>{e.preventDefault();propose()}}>
  {#each ['Collections','Limits','Fees','Notices'] as group}
  <fieldset disabled={busy||blocked||data.can_propose===false}><legend>{group}</legend>
@@ -54,11 +54,11 @@
  <fieldset disabled={busy||blocked||data.can_propose===false}><legend>Review your proposal</legend>
  {#if changed.length}<ul>{#each changed as f}<li><strong>{label(f)}:</strong> {display(f,data.current.values[f.key])} → {display(f,draft[f.key])}</li>{/each}</ul>{:else}<p>No changes selected.</p>{/if}
  <label for="effective">Effective date and time (Lagos)</label><input id="effective" type="datetime-local" bind:value={effective} required/>
- <label for="reason">Reason for the change</label><textarea id="reason" bind:value={reason} required minlength="8" maxlength="2000" placeholder="Explain the business reason and supporting approval or evidence"></textarea>
- <button type="submit" disabled={!changed.length||reason.trim().length<8||!effective}>Submit for independent approval</button>
+ <label for="reason">Reason for the change</label><textarea id="reason" bind:value={reason} required minlength="8" maxlength="2000" placeholder="Give the business reason, and the approval or evidence behind it"></textarea>
+ <button type="submit" disabled={!changed.length||reason.trim().length<8||!effective}>Send for approval</button>
  </fieldset></form>
  <section aria-label="Policy impact"><h2>Impact preview</h2><button disabled={busy||!changed.length} onclick={()=>impact()}>Preview draft impact</button>{#if preview}<p>Preview against policy revision {preview.base_revision}.</p><p>{preview.note}</p><ul>{#each preview.effects as effect}<li>{effect}</li>{/each}</ul><dl>{#each Object.entries(preview.counts) as [key,value]}<dt>{key.replaceAll('_',' ')}</dt><dd>{String(value)}</dd>{/each}</dl>{/if}</section>
- <h2>Changes and decisions</h2><p><a href="/admin/history?kind=policy">Search and export the complete change history</a></p>
+ <h2>Changes and decisions</h2><p><a href="/admin/history?kind=policy">Search and export the full change history</a></p>
  {#if !data.changes.length}<p>No changes have been proposed.</p>{/if}
  {#each data.changes as c (c.id)}<article>
  <h3>Revision {c.revision} · {status(c)}</h3><p>Effective: {when(c.effective_at)}</p><p>{c.reason}</p><p>Proposed by {actor(c.proposed_by)}{#if c.decided_by} · Decision by {actor(c.decided_by)}{/if}</p>
@@ -66,11 +66,11 @@
  {#each data.events.filter(e=>e.change_id===c.id) as event}<p class="history">{when(event.occurred_at)} · {actor(event.actor_id)} · {event.action}: {event.reason}</p>{/each}
  {#if c.state==='pending'||status(c)==='scheduled'}
  <label for={`decision-${c.id}`}>Decision notes</label><textarea id={`decision-${c.id}`} bind:value={notes[c.id]} minlength="8" maxlength="2000"></textarea>
- {#if c.state==='pending'&&c.proposed_by!==data.actor_id&&data.can_approve!==false}<button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'approve')}>Approve exact proposal</button><button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'reject')}>Reject proposal</button>{/if}
+ {#if c.state==='pending'&&c.proposed_by!==data.actor_id&&data.can_approve!==false}<button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'approve')}>Approve exactly this</button><button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'reject')}>Reject proposal</button>{/if}
  {#if c.state==='pending'&&c.proposed_by===data.actor_id}<p>Another platform administrator must approve your proposal.</p>{/if}
  <button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'cancel')}>Cancel change</button>
  {/if}</article>{/each}
- <details><summary>Protected deployment controls</summary><p>Provider connections, credentials, certification evidence, live-money enablement, identity integrations, retention approval, currency, and accounting safeguards are managed through deployment and approval processes. Large corrections and accepted-schedule amendments require their separate supported workflows.</p></details>
+ <details><summary>Protected deployment controls</summary><p>These are not managed here: provider connections, credentials, certification evidence, live-money enablement, identity integrations, retention approval, currency and accounting safeguards. They go through deployment and approval instead. Large corrections and accepted-schedule amendments each have their own workflow.</p></details>
  {/if}
 </main>
 <style>

@@ -28,7 +28,7 @@
 			return;
 		}
 		localStorage.setItem(storageKey, 'done');
-		message = 'Thank you. Your answer will help us make Kredit easier.';
+		message = 'Thank you. This helps us make Kredit easier for everybody.';
 		setTimeout(() => { visible = false; }, 2200);
 	}
 </script>
@@ -36,7 +36,7 @@
 {#if visible}
 	<section class="feedback" aria-labelledby={`feedback-title-${area}`}>
 		<div>
-			<p class="eyebrow">Help us improve Kredit</p>
+			<p class="eyebrow">Help us make Kredit better</p>
 			<h2 id={`feedback-title-${area}`}>Was this page easy to understand?</h2>
 			{#if message}<p class:error={message.startsWith('We could not')} role="status">{message}</p>{/if}
 		</div>

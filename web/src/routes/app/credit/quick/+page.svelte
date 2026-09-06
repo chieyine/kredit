@@ -13,7 +13,7 @@
 	let step=$state(1), createRequestKey=$state(''), draftReady=$state(false), recoveredDraft=$state(false);
 	let amountWords=$derived(verbalizeNaira(parseNaira(principal)));
 	let selectedCustomer=$derived(customers.find((item)=>item.buyer_user_id===selectedBuyer));
-	let customerWarning=$derived(selectedCustomer?.has_overdue_obligations || selectedCustomer?.overdue_count > 0 || selectedCustomer?.has_network_overdue ? `This customer currently has ${selectedCustomer?.overdue_count ?? 'active'} overdue payment(s) recorded across Kredit.` : '');
+	let customerWarning=$derived(selectedCustomer?.has_overdue_obligations || selectedCustomer?.overdue_count > 0 || selectedCustomer?.has_network_overdue ? `Be careful. This customer has ${selectedCustomer?.overdue_count ?? 'unpaid'} late payment(s) on Kredit right now.` : '');
 
 	function restoreDraft(){
 		try{
@@ -53,9 +53,9 @@
 	}
 	function next(){
 		error='';
-		if(step===1&&!buyerUserID){error='Choose a customer before you continue.';return;}
-		if(step===2&&(!goods.trim()||parseNaira(principal)<=0)){error='Add the goods and a valid amount before you continue.';return;}
-		if(step===3&&!dueDate){error='Choose the day your customer should pay.';return;}
+		if(step===1&&!buyerUserID){error='Choose the customer first.';return;}
+		if(step===2&&(!goods.trim()||parseNaira(principal)<=0)){error='Write what the goods are, and how much they must pay.';return;}
+		if(step===3&&!dueDate){error='Choose the day your customer must pay.';return;}
 		step=Math.min(4,step+1);
 	}
 	function back(){error='';step=Math.max(1,step-1)}
@@ -68,18 +68,18 @@
 		error=''; busy=true;
 		try{
 			const amount=parseNaira(principal);
-			if(!organizationID||!buyerUserID||!buyerBusinessID||!buyerLegalName||!goods||!dueDate||amount<=0)throw new Error('Some sale details are missing. Go back and check the sale.');
+			if(!organizationID||!buyerUserID||!buyerBusinessID||!buyerLegalName||!goods||!dueDate||amount<=0)throw new Error('Something is missing. Go back and check the sale.');
 			if(!createRequestKey)createRequestKey=idempotencyKey();
 			const response=await fetch(`/api/v1/organizations/${organizationID}/credit-requests`,{
 				method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':createRequestKey,...csrfHeaders()},
 				body:JSON.stringify({buyer_user_id:buyerUserID,buyer_business_id:buyerBusinessID,buyer_legal_name:buyerLegalName,principal_kobo:amount,goods_description:goods,invoice_reference:'',invoice_document_hash:'',due_date:dueDate,grace_hours:24,collection_at:collectionDate(),schedule_type:'one_time',schedule_count:2,schedule_cadence:'monthly',month_end_policy:'last_day',custom_schedule_items:[]})
 			});
 			const body=await response.json().catch(()=>({}));
-			if(!response.ok){if(response.status<500&&(body.title??body.code)!=='idempotency_in_progress')createRequestKey='';throw new Error(body.detail??'The sale could not be saved.');}
+			if(!response.ok){if(response.status<500&&(body.title??body.code)!=='idempotency_in_progress')createRequestKey='';throw new Error(body.detail??'We could not save this sale. Please try again.');}
 			createRequestKey='';
 			clearDraft();
 			await goto(`/app/credit/${body.request.id}?organization=${organizationID}`);
-		}catch(cause){error=cause instanceof Error?cause.message:'The sale could not be saved.'}finally{busy=false}
+		}catch(cause){error=cause instanceof Error?cause.message:'We could not save this sale. Please try again.'}finally{busy=false}
 	}
 	onMount(async()=>{
 		const params=new URLSearchParams(window.location.search);
@@ -87,7 +87,7 @@
 		if(!hasPrefill)restoreDraft();
 		const response=await fetch('/api/v1/organizations',{credentials:'include'});
 		if(response.status===401){location.assign('/app');return;}
-		if(!response.ok){error='We could not load your business account.';draftReady=true;return;}
+		if(!response.ok){error='We could not open your business account. Please try again.';draftReady=true;return;}
 		organizations=(await response.json()).organizations??[];
 		organizationID=organizations[0]?.id??'';
 		await loadCustomers();
@@ -101,16 +101,16 @@
 	});
 </script>
 
-<svelte:head><title>Add a credit sale — Kredit</title></svelte:head>
+<svelte:head><title>Add a sale — Kredit</title></svelte:head>
 <main class="shell quick-sale">
 	<header class="page-head">
-		<div><p class="eyebrow">New credit sale</p><h1>Four things.<br />Then send it.</h1><p class="lede">Choose the customer, describe the goods, enter the amount and set the payment day. Kredit handles the rest of the record.</p></div>
-		<a href="/app/credit/new?advanced=1">Need instalments or invoice details? Use the full form →</a>
+		<div><p class="eyebrow">New sale</p><h1>This takes about a minute.</h1><p class="lede">Four things: who is taking it, what they are taking, how much and when they pay. We keep the rest of the record for you.</p></div>
+		<a href="/app/credit/new?advanced=1">Paying in parts, or adding an invoice? Use the full form →</a>
 	</header>
 
-	{#if recoveredDraft}<div class="draft-note" role="status"><span><strong>Unfinished sale details recovered.</strong> Customer selection is intentionally not stored; choose the customer again before continuing.</span><button type="button" onclick={()=>{goods='';principal='';dueDate='';clearDraft()}}>Discard draft</button></div>{/if}
+	{#if recoveredDraft}<div class="draft-note" role="status"><span><strong>We kept what you typed last time.</strong> We do not save which customer you picked, so choose them again.</span><button type="button" onclick={()=>{goods='';principal='';dueDate='';clearDraft()}}>Start fresh</button></div>{/if}
 	<nav class="steps" aria-label="Sale steps">
-		{#each ['Customer','Goods & amount','Payment day','Review'] as label,index}
+		{#each ['Customer','Goods & money','Payment day','Check it'] as label,index}
 			<button class:active={step===index+1} class:done={step>index+1} type="button" onclick={()=>{if(index+1<step)step=index+1}}><span>{step>index+1?'✓':index+1}</span>{label}</button>
 		{/each}
 	</nav>
@@ -118,25 +118,25 @@
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	<section class="sale-card">
 		{#if step===1}
-			<div class="stage-copy"><p class="eyebrow">01 — Customer</p><h2>Who is taking the goods?</h2><p>Choose the customer who will receive and approve this sale.</p></div>
+			<div class="stage-copy"><p class="eyebrow">01 — Customer</p><h2>Who is taking the goods?</h2><p>Pick the person taking the goods. They will get this sale and have to agree to it before anything moves.</p></div>
 			<div class="fields">
 				{#if organizations.length>1}<label>Your business<select bind:value={organizationID} onchange={loadCustomers}>{#each organizations as org}<option value={org.id}>{org.trading_name||org.legal_name}</option>{/each}</select></label>{/if}
-				{#if customers.length}<label>Customer<select bind:value={selectedBuyer} onchange={chooseBuyer}><option value="">Choose a customer</option>{#each customers as customer}<option value={customer.buyer_user_id}>{customer.trading_name||customer.legal_name}</option>{/each}</select></label>{:else}<div class="empty-inline"><strong>No customers yet.</strong><p>Add the customer first. They will receive a private link to check their details.</p><a class="primary" href="/app/customers/new">Add customer</a></div>{/if}
-				{#if selectedCustomer}<div class="customer-card"><span>Customer status</span><strong>{selectedCustomer.trading_name||selectedCustomer.legal_name}</strong><small>{productLabel(selectedCustomer.state??selectedCustomer.status,'Customer added')}</small>{#if customerWarning}<p class="warning">⚠ {customerWarning}</p>{/if}</div>{/if}
+				{#if customers.length}<label>Customer<select bind:value={selectedBuyer} onchange={chooseBuyer}><option value="">Choose a customer</option>{#each customers as customer}<option value={customer.buyer_user_id}>{customer.trading_name||customer.legal_name}</option>{/each}</select></label>{:else}<div class="empty-inline"><strong>You have not added a customer yet.</strong><p>Add them first. They get a private link and confirm their own details.</p><a class="primary" href="/app/customers/new">Add a customer</a></div>{/if}
+				{#if selectedCustomer}<div class="customer-card"><span>This customer</span><strong>{selectedCustomer.trading_name||selectedCustomer.legal_name}</strong><small>{productLabel(selectedCustomer.state??selectedCustomer.status,'Customer added')}</small>{#if customerWarning}<p class="warning">⚠ {customerWarning}</p>{/if}</div>{/if}
 			</div>
 		{:else if step===2}
-			<div class="stage-copy"><p class="eyebrow">02 — Goods & amount</p><h2>What are you giving them?</h2><p>Keep this description clear enough that both sides know exactly what the sale covers.</p></div>
-			<div class="fields"><label>Goods<textarea bind:value={goods} rows="5" placeholder="For example: 40 cartons of 5L cooking oil"></textarea></label><label>Amount to pay (₦)<input bind:value={principal} inputmode="decimal" placeholder="1,200,000" />{#if amountWords}<small class="amount-words">{amountWords}</small>{/if}</label></div>
+			<div class="stage-copy"><p class="eyebrow">02 — Goods & money</p><h2>What are they taking?</h2><p>Write it clearly enough that six months from now, nobody can argue about what this sale covered.</p></div>
+			<div class="fields"><label>What goods are they taking?<textarea bind:value={goods} rows="5" placeholder="For example: 40 cartons of 5L cooking oil"></textarea></label><label>How much must they pay? (₦)<input bind:value={principal} inputmode="decimal" placeholder="1,200,000" />{#if amountWords}<small class="amount-words">{amountWords}</small>{/if}</label></div>
 		{:else if step===3}
-			<div class="stage-copy"><p class="eyebrow">03 — Payment day</p><h2>When should they pay?</h2><p>Choose the agreed payment date. The quick flow uses a 24-hour grace period before any permitted collection attempt.</p></div>
-			<div class="fields"><label>Payment due date<input type="date" bind:value={dueDate} /></label><div class="trust-note"><strong>What Kredit will not do</strong><p>Kredit will not start a bank debit before the agreed date and grace period. Bank debit also requires valid authorization and the applicable payment/dispute checks.</p></div></div>
+			<div class="stage-copy"><p class="eyebrow">03 — Payment day</p><h2>When must they pay?</h2><p>Pick the day the two of you agreed. We give them 24 extra hours after that before any bank debit can even be tried.</p></div>
+			<div class="fields"><label>Day they must pay<input type="date" bind:value={dueDate} /></label><div class="trust-note"><strong>What Kredit will never do</strong><p>Kredit will not touch your customer's bank before that day plus the extra hours. Even then, it only happens if they gave permission and there is no open problem.</p></div></div>
 		{:else}
-			<div class="stage-copy"><p class="eyebrow">04 — Review</p><h2>Make sure both sides will see the same sale.</h2><p>Nothing is sent to the customer until you save the sale and open it to send for approval.</p></div>
-			<div class="review-card"><dl><div><dt>Customer</dt><dd>{buyerLegalName}</dd></div><div><dt>Goods</dt><dd>{goods}</dd></div><div><dt>Amount</dt><dd>{formatKobo(parseNaira(principal))}</dd></div><div><dt>Pay by</dt><dd>{new Date(`${dueDate}T12:00:00`).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</dd></div></dl><div class="trust-strip"><span>✓ Customer reviews before accepting</span><span>✓ Sale details stay on record</span><span>✓ Payments reduce the balance</span></div></div>
+			<div class="stage-copy"><p class="eyebrow">04 — Check it</p><h2>Read it once more before you save.</h2><p>Nothing has reached your customer yet. Save it first, then open it and send it to them.</p></div>
+			<div class="review-card"><dl><div><dt>Customer</dt><dd>{buyerLegalName}</dd></div><div><dt>Goods</dt><dd>{goods}</dd></div><div><dt>Money to pay</dt><dd>{formatKobo(parseNaira(principal))}</dd></div><div><dt>Pay by</dt><dd>{new Date(`${dueDate}T12:00:00`).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</dd></div></dl><div class="trust-strip"><span>✓ Your customer reads it before agreeing</span><span>✓ These details stay on record</span><span>✓ Every payment brings the balance down</span></div></div>
 		{/if}
 	</section>
 
-	<footer class="actions"><div>{#if step>1}<button class="secondary" type="button" onclick={back}>← Back</button>{/if}</div>{#if step<4}<button class="primary" type="button" onclick={next}>Continue →</button>{:else}<button class="primary" type="button" onclick={submit} disabled={busy}>{busy?'Saving sale…':'Save sale and continue →'}</button>{/if}</footer>
+	<footer class="actions"><div>{#if step>1}<button class="secondary" type="button" onclick={back}>← Back</button>{/if}</div>{#if step<4}<button class="primary" type="button" onclick={next}>Next →</button>{:else}<button class="primary" type="button" onclick={submit} disabled={busy}>{busy?'Saving…':'Save this sale →'}</button>{/if}</footer>
 </main>
 
 <style>

@@ -20,10 +20,10 @@
 				window.location.replace(signInURL());
 				return;
 			}
-			if (!response.ok) throw new Error('We could not check your account.');
+			if (!response.ok) throw new Error('We could not check your account. Please try again.');
 			gateStatus = 'ready';
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'We could not check your account.';
+			message = cause instanceof Error ? cause.message : 'We could not check your account. Please try again.';
 			gateStatus = 'error';
 		}
 	}
@@ -41,10 +41,10 @@
 			{#if gateStatus === 'checking'}
 				<div class="gate-mark" aria-hidden="true"></div>
 				<h1>Checking your account…</h1>
-				<p>Please wait. We will never show private business information before your account is checked.</p>
+				<p>One moment. We never show private business information until we are sure it is you.</p>
 			{:else}
 				<h1>We cannot open your account.</h1>
-				<p>{message} Check your connection and try again.</p>
+				<p>{message} Check your network and try again.</p>
 				<div class="gate-actions"><button type="button" onclick={verify}>Try again</button><a href="/">Go to the home page</a></div>
 			{/if}
 		</section>

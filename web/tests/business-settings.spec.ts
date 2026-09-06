@@ -20,12 +20,12 @@ test('admin reviews a proposal and a different administrator approves it',async(
  await expect(page.getByText('0.5% → 0.25%')).toBeVisible();
  const tomorrow=new Date(Date.now()+86400000).toISOString().slice(0,16);await page.getByLabel('Effective date and time (Lagos)').fill(tomorrow);
  await page.getByLabel('Reason for the change',{exact:true}).fill('Approved commercial pricing revision');
- await page.getByRole('button',{name:'Submit for independent approval'}).click();
+ await page.getByRole('button',{name:'Send for approval'}).click();
  await expect(page.getByText('Another platform administrator must approve your proposal.',{exact:true})).toBeVisible();
- await expect(page.getByRole('button',{name:'Approve exact proposal'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Approve exactly this'})).toHaveCount(0);
  await expect(page.getByLabel('Supplier base fee (%)')).toBeDisabled();
  state.actor_id='checker';await page.getByRole('button',{name:'Refresh settings'}).click();
- await page.getByLabel('Decision notes').fill('Independently checked pricing and impact');await page.getByRole('button',{name:'Approve exact proposal'}).click();
+ await page.getByLabel('Decision notes').fill('Independently checked pricing and impact');await page.getByRole('button',{name:'Approve exactly this'}).click();
  await expect(page.getByRole('heading',{name:'Revision 1 · scheduled'})).toBeVisible();
  // Scheduled fees have not prematurely replaced the current rate.
  await expect(page.getByText('Current: 0.5%',{exact:true})).toBeVisible();

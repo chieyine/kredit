@@ -33,7 +33,7 @@ func (s *Server) completeDocumentUpload(w http.ResponseWriter, r *http.Request) 
 	}
 	document, exists := s.runtime.Documents.GetForTenant(r.Context(), documentID, user.ID, organizationID)
 	if !exists || document.OrganizationID != organizationID {
-		writeProblem(w, http.StatusNotFound, "document_not_found", "document was not found")
+		writeProblem(w, http.StatusNotFound, "document_not_found", "We could not find that document.")
 		return
 	}
 	document, err = s.runtime.Documents.CompleteUploadForTenant(r.Context(), documentID, user.ID, organizationID)

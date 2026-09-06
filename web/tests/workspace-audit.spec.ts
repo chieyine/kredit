@@ -15,7 +15,7 @@ test('failed business lookup shows an error and can be retried', async ({ page }
 	await page.route('**/api/v1/organizations/*/customers', route => route.fulfill({ json: { customers: [{ id: 'buyer-1', legal_name: 'Ada Stores', outstanding_kobo: 123456 }] } }));
 	await page.goto('/app/customers');
 	await expect(page.getByRole('alert')).toContainText('We could not open this page');
-	await expect(page.getByRole('heading', { name: 'No customers yet' })).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'You have not added a customer yet' })).toHaveCount(0);
 	await page.getByRole('button', { name: 'Try again', exact: true }).click();
 	await expect(page.locator('.records')).toContainText('Ada Stores');
 	await expect(page.locator('.records')).toContainText('₦1,234.56');
@@ -71,7 +71,7 @@ test('customer history and repeat-sale link preserve the selected business', asy
 		return route.fulfill({ json: route.request().url().endsWith('/history') ? { current_active_principal_kobo: 25000, active_obligations: 1, completed_obligations: 0 } : { obligations: [] } });
 	});
 	await page.goto('/app/customers/customer-1?organization=org-b');
-	await expect(page.getByRole('link', { name: 'Make another sale' })).toHaveAttribute('href', '/app/credit/new?customer=customer-1&organization=org-b');
+	await expect(page.getByRole('link', { name: 'Sell to them again' })).toHaveAttribute('href', '/app/credit/new?customer=customer-1&organization=org-b');
 	expect(requested.length).toBe(2);
 	expect(requested.every(url => url.includes('/organizations/org-b/'))).toBe(true);
 });

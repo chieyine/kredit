@@ -34,7 +34,7 @@ func (s *Server) reportReceivables(w http.ResponseWriter, r *http.Request) {
 	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.receivables.viewed", orgID, "supplier receivables reporting", nil)
 	report, err := s.runtime.Reports.ReceivablesForSupplier(r.Context(), orgID)
 	if err != nil {
-		writeProblem(w, 503, "report_unavailable", "Financial report could not be loaded")
+		writeProblem(w, 503, "report_unavailable", "We could not open that report. Please try again.")
 		return
 	}
 	writeJSON(w, 200, report)
@@ -75,7 +75,7 @@ func (s *Server) reportAgeing(w http.ResponseWriter, r *http.Request) {
 	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.ageing.viewed", orgID, "supplier ageing reporting", nil)
 	report, err := s.runtime.Reports.AgeingForSupplier(r.Context(), orgID)
 	if err != nil {
-		writeProblem(w, 503, "report_unavailable", "Financial report could not be loaded")
+		writeProblem(w, 503, "report_unavailable", "We could not open that report. Please try again.")
 		return
 	}
 	writeJSON(w, 200, report)
@@ -92,7 +92,7 @@ func (s *Server) reportFees(w http.ResponseWriter, r *http.Request) {
 	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.fees.viewed", orgID, "supplier fee reporting", nil)
 	report, err := s.runtime.Reports.FeesForSupplier(r.Context(), orgID)
 	if err != nil {
-		writeProblem(w, 503, "fee_report_unavailable", "Fee report could not be loaded")
+		writeProblem(w, 503, "fee_report_unavailable", "We could not open your fee report. Please try again.")
 		return
 	}
 	writeJSON(w, 200, report)
@@ -115,12 +115,12 @@ func (s *Server) exportReceivables(w http.ResponseWriter, r *http.Request) {
 		format = "csv"
 	}
 	if format != "csv" {
-		writeProblem(w, 422, "export_format_invalid", "only csv exports are supported")
+		writeProblem(w, 422, "export_format_invalid", "You can only download this as a CSV file.")
 		return
 	}
 	data, err := s.runtime.Reports.ExportReceivablesCSV(r.Context(), orgID)
 	if err != nil {
-		writeProblem(w, 503, "export_failed", "Financial export could not be prepared")
+		writeProblem(w, 503, "export_failed", "We could not build that file. Please try again.")
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "report.exported", ResourceType: "report", ResourceID: "receivables", Outcome: "success", RequestID: requestIDFromContext(r.Context())})
@@ -137,7 +137,7 @@ func (s *Server) buyerHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	h, err := s.runtime.Reports.HistoryForBuyer(r.Context(), user.ID)
 	if err != nil {
-		writeProblem(w, 503, "report_unavailable", "Financial history could not be loaded")
+		writeProblem(w, 503, "report_unavailable", "We could not open your money history. Please try again.")
 		return
 	}
 	h.Shareable = false
@@ -161,7 +161,7 @@ func (s *Server) supplierCustomerHistory(w http.ResponseWriter, r *http.Request)
 	}
 	h, err := s.runtime.Reports.HistoryForSupplierBuyer(r.Context(), orgID, buyerID)
 	if err != nil {
-		writeProblem(w, 503, "report_unavailable", "Financial history could not be loaded")
+		writeProblem(w, 503, "report_unavailable", "We could not open your money history. Please try again.")
 		return
 	}
 	h.Shareable = false
@@ -184,7 +184,7 @@ func (s *Server) supplierCustomerStatement(w http.ResponseWriter, r *http.Reques
 	}
 	report, err := s.runtime.Reports.CustomerStatement(r.Context(), orgID, buyerID)
 	if err != nil {
-		writeProblem(w, 503, "report_unavailable", "Financial report could not be loaded")
+		writeProblem(w, 503, "report_unavailable", "We could not open that report. Please try again.")
 		return
 	}
 	writeJSON(w, 200, report)
@@ -223,7 +223,7 @@ func (s *Server) openCorrection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if orgID == "" {
-		writeProblem(w, 404, "subject_not_found", "the subject was not found for this buyer")
+		writeProblem(w, 404, "subject_not_found", "We could not find that record for this customer.")
 		return
 	}
 	c, err := s.runtime.Corrections.Open(orgID, in.SubjectType, in.SubjectID, in.SourceEventID, user.ID, in.Reason, in.Evidence)
@@ -272,7 +272,7 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 	}
 	correction, _, err := s.runtime.Corrections.Get(id)
 	if err != nil || correction.OrganizationID != orgID {
-		writeProblem(w, 404, "correction_not_found", "correction was not found")
+		writeProblem(w, 404, "correction_not_found", "We could not find that correction.")
 		return
 	}
 	if in.Outcome == corrections.StateReview {

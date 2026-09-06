@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Kredit Trade Credit",
+  "name": "Kredit: sell on credit, get paid",
   "short_name": "Kredit",
-  "description": "Keep every credit sale, payment day and payment clear.",
+  "description": "Write down who took your goods, how much they owe and when they are paying. Kredit reminds them, and shows you every payment.",
   "start_url": "/app/overview?source=pwa",
   "scope": "/",
   "display": "standalone",

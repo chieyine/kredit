@@ -27,7 +27,7 @@
 	async function loadPreview() {
 		const response = await fetch(`/api/v1/buyer-invitations/${page.params.token}`);
 		if (!response.ok) {
-			error = 'This invitation is unavailable or has expired.';
+			error = 'This invitation has expired, or it is no longer valid. Ask the seller to send you a new link.';
 			return;
 		}
 		preview = await response.json();
@@ -38,7 +38,7 @@
 		const response = await fetch(`/api/v1/buyer-invitations/${page.params.token}/otp`, { method: 'POST' });
 		const body = await response.json();
 		if (!response.ok) {
-			error = body.detail ?? 'We could not send the six-digit code.';
+			error = body.detail ?? 'We could not send your six-digit code. Please try again.';
 			return;
 		}
 		challengeId = body.challenge_id;
@@ -56,7 +56,7 @@
 		const body = await response.json();
 		if (!response.ok) {
 			if (response.status < 500 && (body.title ?? body.code) !== 'idempotency_in_progress') acceptanceKey = '';
-			error = body.detail ?? 'We could not check your details.';
+			error = body.detail ?? 'We could not confirm your details. Check the code and try again.';
 			return;
 		}
 		await goto('/buyer');
@@ -74,25 +74,25 @@
 
 <main class="shell">
 	{#if loading}
-		<p>Loading your invitation…</p>
+		<p>Opening your invitation…</p>
 	{:else if preview}
 		<section class="panel" aria-labelledby="invite-title">
 			<p class="eyebrow">Your private link</p>
 			<h1 id="invite-title">{preview.supplier.trading_name || preview.supplier.legal_name} wants to add you as a customer.</h1>
-			<p>Check the details below. We will send a six-digit code to make sure this phone or email belongs to you.</p>
+			<p>Check that the details below are correct. Then we will send a six-digit code, to be sure this phone or email really belongs to you.</p>
 			<dl>
-				<div><dt>Business</dt><dd>{preview.invitation.proposed_legal_name}</dd></div>
-				<div><dt>Type</dt><dd>{preview.invitation.proposed_business_type}</dd></div>
+				<div><dt>Business name</dt><dd>{preview.invitation.proposed_legal_name}</dd></div>
+				<div><dt>Business type</dt><dd>{preview.invitation.proposed_business_type}</dd></div>
 				<div><dt>Address</dt><dd>{preview.invitation.proposed_address}</dd></div>
-				<div><dt>Industry</dt><dd>{preview.invitation.proposed_industry}</dd></div>
+				<div><dt>What you sell</dt><dd>{preview.invitation.proposed_industry}</dd></div>
 			</dl>
 			{#if !challengeId}
-				<button class="primary" on:click={requestCode}>Send me a code</button>
+				<button class="primary" on:click={requestCode}>Send me my code</button>
 			{:else}
 				<label>Full name<input bind:value={fullName} autocomplete="name" /></label>
-				<label>Six-digit code<input bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
+				<label>The six-digit code we sent you<input bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
 				{#if developmentCode}<p class="hint">Development code: {developmentCode}</p>{/if}
-				<button class="primary" on:click={accept}>Yes, these details are mine</button>
+				<button class="primary" on:click={accept}>Yes, this is my business</button>
 			{/if}
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
 		</section>

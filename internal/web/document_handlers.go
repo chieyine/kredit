@@ -35,11 +35,11 @@ func (s *Server) uploadDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	content, err := base64.StdEncoding.DecodeString(input.ContentBase64)
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_document", "content_base64 must be valid base64")
+		writeProblem(w, http.StatusBadRequest, "invalid_document", "That file could not be read. Please try uploading it again.")
 		return
 	}
 	if len(content) > 2<<20 {
-		writeProblem(w, http.StatusRequestEntityTooLarge, "document_too_large", "inline documents must be 2 MiB or smaller")
+		writeProblem(w, http.StatusRequestEntityTooLarge, "document_too_large", "That file is too big. It must be 2 MB or smaller.")
 		return
 	}
 	doc, err := s.runtime.Documents.Add(r.Context(), organizationID, user.ID, input.Purpose, input.FileName, input.ContentType, input.RetentionClass, int64(len(content)), bytes.NewReader(content))
@@ -73,7 +73,7 @@ func (s *Server) documentDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	doc, exists := s.runtime.Documents.GetForTenant(r.Context(), documentID, user.ID, organizationID)
 	if !exists || doc.OrganizationID != organizationID {
-		writeProblem(w, http.StatusNotFound, "document_not_found", "document was not found")
+		writeProblem(w, http.StatusNotFound, "document_not_found", "We could not find that document.")
 		return
 	}
 	url, err := s.runtime.Documents.SignedDownloadForTenant(r.Context(), documentID, user.ID, organizationID, 10*time.Minute)

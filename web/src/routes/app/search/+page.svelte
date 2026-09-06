@@ -37,7 +37,7 @@
 			sales = saleData.requests ?? [];
 			payments = paymentData.payments ?? [];
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Search data could not be loaded.';
+			error = cause instanceof Error ? cause.message : 'We could not load your records. Please try again.';
 		} finally {
 			loading = false;
 		}
@@ -50,7 +50,7 @@
 			organizationID = organizations[0]?.id ?? '';
 			await loadBusiness();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Search could not be opened.';
+			error = cause instanceof Error ? cause.message : 'We could not open search. Please try again.';
 			loading = false;
 		}
 	});
@@ -58,9 +58,9 @@
 
 <svelte:head><title>Search — Kredit</title></svelte:head>
 <main class="shell workspace search-page">
-	<header><p class="eyebrow">Find anything</p><h1>Customer, sale or payment.</h1><p class="lede">Search names, goods, invoice numbers, Kredit references and payment references inside your business.</p></header>
-	<div class="search-bar"><label>Business<select bind:value={organizationID} onchange={loadBusiness}>{#each organizations as organization}<option value={organization.id}>{organization.trading_name || organization.legal_name}</option>{/each}</select></label><label class="query">Search<input bind:value={query} type="search" placeholder="Name, invoice, sale or payment reference" autocomplete="off" autofocus /></label></div>
-	{#if error}<p class="error" role="alert">{error}</p>{:else if loading}<p>Loading your business records…</p>{:else if !needle}<section class="empty"><strong>Start typing.</strong><p>Only records your seller account is authorized to see are searched.</p></section>{:else if count === 0}<section class="empty"><strong>No match found.</strong><p>Try a customer name, invoice number, goods description, sale ID or payment reference.</p></section>{:else}
+	<header><p class="eyebrow">Find anything</p><h1>A customer, a sale, or a payment.</h1><p class="lede">Search names, goods, invoice numbers, Kredit numbers and transfer references, all inside your own business.</p></header>
+	<div class="search-bar"><label>Business<select bind:value={organizationID} onchange={loadBusiness}>{#each organizations as organization}<option value={organization.id}>{organization.trading_name || organization.legal_name}</option>{/each}</select></label><label class="query">Search<input bind:value={query} type="search" placeholder="Name, invoice, sale or transfer reference" autocomplete="off" autofocus /></label></div>
+	{#if error}<p class="error" role="alert">{error}</p>{:else if loading}<p>Opening your records…</p>{:else if !needle}<section class="empty"><strong>Start typing.</strong><p>You only ever search records your own account is allowed to see.</p></section>{:else if count === 0}<section class="empty"><strong>Nothing matched that.</strong><p>Try a customer name, an invoice number, the goods, a sale number or a transfer reference.</p></section>{:else}
 		<p class="count">{count} match{count === 1 ? '' : 'es'} shown</p>
 		{#if customerResults.length}<section><h2>Customers</h2><div class="results">{#each customerResults as customer}<a href={`/app/customers/${customer.buyer_user_id}?organization=${organizationID}`}><div><strong>{customer.trading_name || customer.legal_name || 'Customer'}</strong><small>{customer.legal_name && customer.trading_name ? customer.legal_name : customer.email || customer.phone || customer.buyer_user_id}</small></div><span>Customer →</span></a>{/each}</div></section>{/if}
 		{#if saleResults.length}<section><h2>Sales</h2><div class="results">{#each saleResults as sale}<a href={`/app/credit/${sale.id}?organization=${organizationID}`}><div><strong>{sale.buyer_legal_name || 'Credit sale'}</strong><small>{sale.goods_description || sale.invoice_reference || sale.id}</small></div><div class="money"><b>{formatKobo(sale.principal_kobo)}</b><span>{sale.state || 'Sale'} →</span></div></a>{/each}</div></section>{/if}

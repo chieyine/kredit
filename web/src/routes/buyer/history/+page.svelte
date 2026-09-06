@@ -11,19 +11,19 @@
 	async function askForCorrection(event:SubmitEvent){event.preventDefault();busy=true;error='';notice='';const response=await fetch('/api/v1/buyer/history/corrections',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify({subject_type:'obligation',subject_id:selectedID,source_event_id:'',reason,evidence:evidence.split('\n').map(item=>item.trim()).filter(Boolean)})});const data=await response.json().catch(()=>({}));busy=false;if(!response.ok){error=data.detail??'We could not send your correction request.';return}reason='';evidence='';notice='Your correction request was sent to the seller.'}
 	onMount(async () => {
 		const { data } = await api.GET('/buyer/history');
-		if (!data) { error = 'Sign in to view your factual trade history.'; return; }
+		if (!data) { error = 'Sign in to see your payment history.'; return; }
 		history = data;
 	});
 </script>
 
 <svelte:head><title>Factual trade history — Kredit</title></svelte:head>
 <main class="shell">
-	<p class="eyebrow">Your history</p><h1>See how you paid before</h1>
-	<p class="intro">This page shows your sales and payments. Kredit does not give you a secret score.</p>
+	<p class="eyebrow">Your history</p><h1>Your own record, in your own hands</h1>
+	<p class="intro">This page shows your real sales and real payments. There is no secret score, and no number deciding your worth.</p>
 	{#if history}
 		<section class="grid">
 			<article><span>Sales fully paid</span><strong>{history.completed_obligations}</strong></article>
-			<article><span>Paid by due date</span><strong>{history.on_time_count ?? 0} ({(history.on_time_percentage ?? 0).toFixed(0)}%)</strong></article>
+			<article><span>Paid on time</span><strong>{history.on_time_count ?? 0} ({(history.on_time_percentage ?? 0).toFixed(0)}%)</strong></article>
 			<article><span>Sales still open</span><strong>{history.active_obligations}</strong></article>
 			<article><span>Open problems</span><strong>{history.dispute_count}</strong></article>
 		</section>
@@ -31,8 +31,8 @@
 		<div class="table-wrap"><table><thead><tr><th>Seller</th><th>Money</th><th>Now</th><th>Pay before</th></tr></thead><tbody>
 			{#each history.obligations as item}<tr><td>{item.buyer_name}</td><td><Money amountKobo={Number(item.principal_kobo)} /></td><td>{productLabel(item.payment_status)}</td><td>{new Date(String(item.due_date)).toLocaleDateString('en-NG')}</td></tr>{/each}
 		</tbody></table></div>
-		<section class="correction"><h2>Is a record wrong?</h2><p>Ask the seller to check a wrong amount, payment or sale detail. Tell them exactly what should change.</p>{#if notice}<p class="notice" role="status">{notice}</p>{/if}<form onsubmit={askForCorrection}><label>Which sale?<select bind:value={selectedID} required><option value="">Choose a sale</option>{#each history.obligations as item}<option value={item.obligation_id}>{item.buyer_name} · {new Date(String(item.due_date)).toLocaleDateString('en-NG')}</option>{/each}</select></label><label>What is wrong?<textarea bind:value={reason} rows="4" required placeholder="For example: I paid ₦50,000 on 28 August, but it is not showing."></textarea></label><label>Proof or reference numbers <small>one on each line, if you have any</small><textarea bind:value={evidence} rows="3"></textarea></label><button disabled={busy||!selectedID||!reason.trim()}>{busy?'Sending…':'Ask for a correction'}</button></form></section>
-	{:else if error}<p class="error" role="alert">{error}</p>{:else}<p>Loading your history…</p>{/if}
+		<section class="correction"><h2>Is something here wrong?</h2><p>Ask the seller to check it. Say exactly what is wrong and what it should be.</p>{#if notice}<p class="notice" role="status">{notice}</p>{/if}<form onsubmit={askForCorrection}><label>Which sale?<select bind:value={selectedID} required><option value="">Choose a sale</option>{#each history.obligations as item}<option value={item.obligation_id}>{item.buyer_name} · {new Date(String(item.due_date)).toLocaleDateString('en-NG')}</option>{/each}</select></label><label>What is wrong?<textarea bind:value={reason} rows="4" required placeholder="For example: I paid ₦50,000 on 28 August, but it is not showing."></textarea></label><label>Proof or reference numbers <small>one on each line, if you have any</small><textarea bind:value={evidence} rows="3"></textarea></label><button disabled={busy||!selectedID||!reason.trim()}>{busy?'Sending…':'Ask for a correction'}</button></form></section>
+	{:else if error}<p class="error" role="alert">{error}</p>{:else}<p>Opening your history…</p>{/if}
 </main>
 
 <style>

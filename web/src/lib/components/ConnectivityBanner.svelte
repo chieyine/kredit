@@ -34,12 +34,12 @@
 {#if !online}
 	<div class="connectivity offline" role="status" aria-live="polite">
 		<strong>You are offline.</strong>
-		<span>Pages already open may remain visible, but Kredit will not claim that a sale, payment, approval, or setting change was saved until the connection returns.</span>
+		<span>You can still read pages that are already open. But nothing to do with a sale, a payment or a setting is saved until your network comes back.</span>
 	</div>
 {:else if restored}
 	<div class="connectivity restored" role="status" aria-live="polite">
 		<strong>Connection restored.</strong>
-		<span>Check any action that was in progress before submitting it again.</span>
+		<span>Before you try anything again, check whether it already went through.</span>
 	</div>
 {/if}
 

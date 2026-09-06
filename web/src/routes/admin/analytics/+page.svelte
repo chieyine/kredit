@@ -16,7 +16,7 @@
 		if (organization.trim()) params.set('organization_id', organization.trim());
 		const response = await fetch(`/api/v1/ops/analytics/scorecard?${params}`, {credentials:'include'});
 		const body = await response.json().catch(()=>({}));
-		if (!response.ok) error = body.detail ?? 'The pilot scorecard is unavailable.';
+		if (!response.ok) error = body.detail ?? 'The scorecard could not be loaded. Try again.';
 		else scorecard = body.scorecard;
 		loading = false;
 	}
@@ -27,7 +27,7 @@
 <main class="shell workspace analytics">
 	<p class="eyebrow">Operations / Application evidence</p>
 	<h1>Show what Kredit has achieved.</h1>
-	<p class="lede">Use real product numbers when you apply for funding or speak to investors. Every money and trade number below comes from Kredit records.</p>
+	<p class="lede">Use real numbers when you apply for funding or talk to investors. Every money and trade figure below comes straight from Kredit records. Nothing here is estimated.</p>
 	<form onsubmit={(event)=>{event.preventDefault();load()}} aria-label="Scorecard filters">
 		<label>From<input type="date" bind:value={from} required /></label>
 		<label>To<input type="date" bind:value={to} required /></label>
@@ -48,7 +48,7 @@
 			</div>
 			<p class="evidence-note"><strong>Evidence check:</strong> {scorecard.reconciliation_ok ? 'The product events match the main trade records for this period.' : 'Some event counts do not match the main records. Fix the differences before using these numbers in an application.'}</p>
 		</section>
-		<section class="feedback-breakdown" aria-labelledby="feedback-title"><div><p class="eyebrow">Direct user signal</p><h2 id="feedback-title">Can people understand Kredit?</h2><p>Seller and customer answers come from the question shown inside their account. Kredit does not collect a comment, phone number or email with this answer.</p></div><dl><div><dt>Yes</dt><dd>{scorecard.feedback.yes}</dd></div><div><dt>Partly</dt><dd>{scorecard.feedback.partly}</dd></div><div><dt>No</dt><dd>{scorecard.feedback.no}</dd></div></dl></section>
+		<section class="feedback-breakdown" aria-labelledby="feedback-title"><div><p class="eyebrow">Direct user signal</p><h2 id="feedback-title">Can people understand Kredit?</h2><p>These answers come from the question shown inside a seller or customer account. We do not collect a comment, a phone number or an email with the answer.</p></div><dl><div><dt>Yes</dt><dd>{scorecard.feedback.yes}</dd></div><div><dt>Partly</dt><dd>{scorecard.feedback.partly}</dd></div><div><dt>No</dt><dd>{scorecard.feedback.no}</dd></div></dl></section>
 		<details class="full-scorecard"><summary>Open the full product scorecard</summary>
 		<h2>Main product numbers</h2>
 		<section class="metrics" aria-label="Primary pilot KPIs">{#each scorecard.kpis as metric}<article><strong>{format(metric)}</strong><h3>{metric.label}</h3><p>{metric.definition}</p><small>Source: {metric.source} · target: baseline required</small></article>{/each}</section>

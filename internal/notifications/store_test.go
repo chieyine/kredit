@@ -97,7 +97,7 @@ func TestNotificationMoneyUsesNairaNotKobo(t *testing.T) {
 	for _, tc := range []struct {
 		amount int64
 		want   string
-	}{{2500, "NGN 25.00"}, {1, "NGN 0.01"}, {-50, "NGN -0.50"}, {9223372036854775807, "NGN 92233720368547758.07"}} {
+	}{{2500, "NGN 25"}, {1, "NGN 0.01"}, {-50, "NGN -0.50"}, {120000000, "NGN 1,200,000"}, {120000050, "NGN 1,200,000.50"}, {9223372036854775807, "NGN 92,233,720,368,547,758.07"}} {
 		if got := formatAmount(tc.amount, "NGN"); got != tc.want {
 			t.Fatalf("money=%s want=%s", got, tc.want)
 		}

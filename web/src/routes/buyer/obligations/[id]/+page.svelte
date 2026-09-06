@@ -15,10 +15,10 @@
 		try {
 			const response = await fetch(`/api/v1/buyer/obligations/${page.params.id}`, { credentials: 'include' });
 			const result = await response.json().catch(() => ({}));
-			if (!response.ok) throw new Error(result.detail ?? 'We could not open this sale.');
+			if (!response.ok) throw new Error(result.detail ?? 'We could not open this sale. Please try again.');
 			data = result;
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not open this sale. Check your connection and try again.';
+			error = cause instanceof Error ? cause.message : 'We could not open this sale. Check your network and try again.';
 		}
 	}
 	onMount(() => { void loadSale(); });
@@ -35,11 +35,11 @@
 			});
 			if (!response.ok) {
 				const result = await response.json().catch(() => ({}));
-				throw new Error(result.detail ?? 'We could not save your acknowledgement.');
+				throw new Error(result.detail ?? 'We could not save your answer. Please try again.');
 			}
-			notice = 'Notice acknowledged. This does not confirm a payment or waive your right to report a problem.';
+			notice = 'Saved. This only says you saw the notice. It does not mean you have paid, and you can still report a problem.';
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not confirm the result. Check your connection and try again.';
+			error = cause instanceof Error ? cause.message : 'We could not confirm what happened. Check your network and try again.';
 		} finally {
 			busy = '';
 		}
@@ -57,24 +57,24 @@
 		{#if notice}<p class="notice" role="status">{notice}</p>{/if}
 		{#if error}<p role="alert">{error}</p>{/if}
 		<section class="summary">
-			<article><span>Money left</span><strong>{money(data.view.obligation.outstanding_kobo)}</strong></article>
-			<article><span>Now</span><strong>{productLabel(data.view.obligation.payment_status)}</strong></article>
-			<article><span>Pay before</span><strong>{data.schedule_items.find((i:any)=>i.state!=='CANCELLED'&&i.principal_due_kobo>i.allocated_kobo)?new Date(data.schedule_items.find((i:any)=>i.state!=='CANCELLED'&&i.principal_due_kobo>i.allocated_kobo).due_at).toLocaleDateString('en-NG',{timeZone:'Africa/Lagos'}):'No scheduled payment due'}</strong></article>
+			<article><span>Money left to pay</span><strong>{money(data.view.obligation.outstanding_kobo)}</strong></article>
+			<article><span>Where this stands</span><strong>{productLabel(data.view.obligation.payment_status)}</strong></article>
+			<article><span>Pay before</span><strong>{data.schedule_items.find((i:any)=>i.state!=='CANCELLED'&&i.principal_due_kobo>i.allocated_kobo)?new Date(data.schedule_items.find((i:any)=>i.state!=='CANCELLED'&&i.principal_due_kobo>i.allocated_kobo).due_at).toLocaleDateString('en-NG',{timeZone:'Africa/Lagos'}):'Nothing due right now'}</strong></article>
 		</section>
-		<h2>When to pay</h2>
-		<p><a href="/buyer/amendments">Review repayment date changes and your acceptance history →</a></p>
+		<h2>Your payment days</h2>
+		<p><a href="/buyer/amendments">See any changes to your payment days, and what you agreed to →</a></p>
 		{#if data.schedule_items.length}
-			<div class="table"><table><thead><tr><th>Pay before</th><th>Money to pay</th><th>Money paid</th><th>Now</th><th>Debit notice</th></tr></thead><tbody>
+			<div class="table"><table><thead><tr><th>Pay before</th><th>Money to pay</th><th>Money paid</th><th>Where it stands</th><th>Debit notice</th></tr></thead><tbody>
 				{#each data.schedule_items as item}
-					<tr><td>{new Date(item.due_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })}</td><td>{money(item.principal_due_kobo)}</td><td>{money(item.allocated_kobo)}</td><td>{productLabel(item.state)}</td><td>{#if item.state !== 'PAID' && item.state !== 'CANCELLED' && new Date(item.collection_at).getTime() <= Date.now()}<button class="secondary" disabled={Boolean(busy)} onclick={() => acknowledgeNotice(item.id)}>{busy === item.id ? 'Saving…' : 'Confirm notice received'}</button>{:else}Not needed{/if}</td></tr>
+					<tr><td>{new Date(item.due_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })}</td><td>{money(item.principal_due_kobo)}</td><td>{money(item.allocated_kobo)}</td><td>{productLabel(item.state)}</td><td>{#if item.state !== 'PAID' && item.state !== 'CANCELLED' && new Date(item.collection_at).getTime() <= Date.now()}<button class="secondary" disabled={Boolean(busy)} onclick={() => acknowledgeNotice(item.id)}>{busy === item.id ? 'Saving…' : 'I have seen this notice'}</button>{:else}Not needed{/if}</td></tr>
 				{/each}
 			</tbody></table></div>
-		{:else}<p>You will pay once.</p>{/if}
-		<h2>Your payments</h2>
-		<p>{data.payments.length} {data.payments.length===1?'payment':'payments'} saved. {data.payment_claims.length} waiting for the seller to check.</p>
-		<a href={`/buyer/credit-requests/${data.view.request.id}`}>Pay or tell us about a problem →</a>
+		{:else}<p>You pay this sale once, all at one time.</p>{/if}
+		<h2>What you have paid</h2>
+		<p>{data.payments.length} {data.payments.length===1?'payment':'payments'} confirmed. {data.payment_claims.length} still waiting for the seller to check their bank.</p>
+		<a href={`/buyer/credit-requests/${data.view.request.id}`}>Pay this sale, or report a problem →</a>
 	{:else if error}<h1>We could not open this sale.</h1><p role="alert">{error}</p><button type="button" onclick={loadSale}>Try again</button>
-	{:else}<p>Opening your sale…</p>{/if}
+	{:else}<p>Opening this sale…</p>{/if}
 </main>
 
 <style>

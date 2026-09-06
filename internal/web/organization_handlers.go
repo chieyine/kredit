@@ -80,7 +80,7 @@ func (s *Server) getOrganization(w http.ResponseWriter, r *http.Request) {
 	}
 	organization, exists := s.runtime.Organizations.Get(organizationID)
 	if !exists {
-		writeProblem(w, http.StatusNotFound, "organization_not_found", "organization was not found")
+		writeProblem(w, http.StatusNotFound, "organization_not_found", "We could not find that business.")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"organization": organization, "membership": membership, "user_id": user.ID})
