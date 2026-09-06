@@ -18,7 +18,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Svelte check
-        run: pnpm --dir web check
+        id: svelte_check
+        shell: bash
+        run: |
+          set +e
+          pnpm --dir web check 2>&1 | tee svelte-check.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload Svelte diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: svelte-check-log
+          path: svelte-check.log
+      - name: Fail after diagnostic capture
+        if: steps.svelte_check.outputs.exit_code != '0'
+        run: exit 1
       - name: Frontend build
         run: pnpm --dir web build
       - name: Product-quality tests
