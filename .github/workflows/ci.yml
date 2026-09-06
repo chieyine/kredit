@@ -42,6 +42,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+      - name: Install pinned OpenAPI linter
+        run: npm install --global @redocly/cli@2.51.2
       - name: Install required Go linter
         uses: golangci/golangci-lint-action@v9
         with:
@@ -54,6 +56,9 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
           go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.4.0
       - uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          version: v0.74.0
+          cache: true
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
@@ -74,6 +79,9 @@ jobs:
         env:
           GOCACHE: ${{ runner.temp }}/go-cache
           SECURITY_STRICT: "1"
+          OPENAPI_LINT_STRICT: "1"
+          REDOCLY_TELEMETRY: "off"
+          REDOCLY_SUPPRESS_UPDATE_NOTICE: "true"
           DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
           DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
           APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
