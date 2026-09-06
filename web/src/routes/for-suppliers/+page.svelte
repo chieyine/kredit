@@ -1,40 +1,39 @@
 <script lang="ts">
 	const capabilities = [
-		['Know your customer', 'Send the sale to the right person. Let them confirm their details.'],
-		['Write the sale down', 'Add the goods, amount and payment day. Nobody can change it after both sides agree.'],
-		['Show that goods arrived', 'Save the delivery. Let your customer say they got the goods.'],
-		['See the money left', 'Every payment brings down the amount your customer owes.'],
-		['Settle problems clearly', 'Keep the message, photo or paper that shows what went wrong.'],
-		['Control your staff', 'Choose who can add sales, confirm money and make changes.']
+		['Know who you are selling to', 'Send the sale to the right customer and let them confirm their details before the goods leave.'],
+		['Put the deal in writing', 'Record the goods, amount and payment date so both sides agree on the same terms.'],
+		['Keep proof of delivery', 'Save delivery evidence and let your customer confirm that the goods arrived.'],
+		['Know exactly what is still owed', 'Every recorded payment reduces the outstanding balance, so you always know what remains.'],
+		['Handle disputes with evidence', 'Keep the messages, photos and documents connected to the sale when something goes wrong.'],
+		['Give staff the right access', 'Choose who can create sales, confirm payments, view records or manage your account.']
 	];
-	const journey = ['Add your business details', 'Invite a trusted customer', 'Write down the deal', 'Confirm delivery', 'Track payment and send reminders', 'Close the deal when fully paid'];
+	const journey = ['Add your business', 'Invite your customer', 'Record the credit sale', 'Confirm delivery', 'Track payments and reminders', 'Close the sale when fully paid'];
 </script>
-
 
 <main class="supplier-page">
 	<section class="supplier-hero shell">
-		<div><p class="eyebrow">For sellers</p><h1>Give goods now.<br /><em>Collect your money later.</em></h1></div>
-		<div class="hero-side"><p>Know who took the goods, how much they owe and when they should pay.</p><div class="actions"><a class="primary-button" href="/app">Add a sale ↗</a><a href="/pricing">See the price</a></div><small>You give the goods. You choose the customer. Kredit does not give loans.</small></div>
+		<div><p class="eyebrow">For sellers</p><h1>Sell on credit.<br /><em>Stay in control.</em></h1></div>
+		<div class="hero-side"><p>Know who owes you, how much is outstanding and when payment is due — with the sale, delivery proof and payments kept together.</p><div class="actions"><a class="primary-button" href="/app">Record a credit sale ↗</a><a href="/pricing">See pricing</a></div><small>You choose who gets credit. Kredit helps you document and collect; Kredit does not lend the money.</small></div>
 	</section>
 
 	<section class="operating shell">
-		<div class="section-head"><p class="eyebrow">Made for sellers</p><h2>Know your money.<br />Chase less.</h2></div>
+		<div class="section-head"><p class="eyebrow">Built for real trade</p><h2>Less chasing.<br />More certainty.</h2></div>
 		<div class="capability-list">{#each capabilities as [title, body], index}<article><span>0{index + 1}</span><div><h3>{title}</h3><p>{body}</p></div></article>{/each}</div>
 	</section>
 
 	<section class="workflow-section">
 		<div class="shell workflow-layout">
-			<div><p class="eyebrow inverse">A better way to sell</p><h2>Do one thing at a time.</h2><p>Add the customer. Add the sale. Give the goods. See the payment.</p></div>
+			<div><p class="eyebrow inverse">One clear workflow</p><h2>From agreement to full payment.</h2><p>Record the terms before goods leave, keep delivery evidence, then follow every payment until the balance reaches zero.</p></div>
 			<ol>{#each journey as step, index}<li><span>0{index + 1}</span><strong>{step}</strong></li>{/each}</ol>
 		</div>
 	</section>
 
 	<section class="facts shell">
-		<div><p class="eyebrow">You choose who you trust</p><h2>No secret score.</h2></div>
-		<div><p>See the customer, the money they owe you and how they paid you before.</p><p>Kredit does not choose your customer. Another seller cannot see your private notes.</p></div>
+		<div><p class="eyebrow">Your customer. Your decision.</p><h2>No mystery credit score.</h2></div>
+		<div><p>You see the customer, your own trading history with them and the money they still owe your business.</p><p>Kredit does not decide who deserves your goods on credit, and another seller cannot see your private business notes.</p></div>
 	</section>
 
-	<section class="supplier-cta shell"><span>START WITH ONE CUSTOMER</span><h2>Add the sale before goods leave.</h2><a href="/app">Add your first sale <b>↗</b></a></section>
+	<section class="supplier-cta shell"><span>START WITH ONE CREDIT SALE</span><h2>Put the terms in writing before the goods leave.</h2><a href="/app">Record your first sale <b>↗</b></a></section>
 </main>
 
 <style>
