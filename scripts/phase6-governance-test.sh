@@ -15,10 +15,11 @@ grep -q "A real OpenAPI linter is required in CI" scripts/api-lint.sh || fail 'O
 grep -q 'version: v0\.74\.0' .github/workflows/ci.yml || fail 'Trivy is not pinned'
 
 # SvelteKit must own script CSP so it can attach framework hashes/nonces. The
-# application hook must not reintroduce a weaker script-src unsafe-inline policy.
+# application hook must not reintroduce a weaker script directive. Match actual
+# directive/header syntax rather than comments that may discuss unsafe-inline.
 grep -q "mode: 'auto'" web/svelte.config.js || fail 'SvelteKit CSP mode is not auto'
 grep -q "'script-src': \['self'\]" web/svelte.config.js || fail 'script CSP is not restricted to self plus framework nonces/hashes'
-if grep -q "script-src[^\n]*unsafe-inline" web/svelte.config.js web/src/hooks.server.ts; then
+if grep -Eiq "(['\"]script-src['\"]\s*:|script-src\s+)[^;\]}]*unsafe-inline" web/svelte.config.js web/src/hooks.server.ts; then
   fail 'script-src unsafe-inline was reintroduced'
 fi
 # Browser/proxy cancellation must reach the upstream Go request as well as the
