@@ -1,0 +1,53 @@
+name: Repair frontend newlines
+
+on:
+  push:
+    branches: [activation-usability-pass]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: activation-usability-pass
+      - name: Append missing final newlines
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          files = [
+              'web/src/lib/components/HomeProof.svelte',
+              'web/src/lib/components/NotificationHistory.svelte',
+              'web/src/routes/+layout.svelte',
+              'web/src/routes/admin/+layout.svelte',
+              'web/src/routes/app/+layout.svelte',
+              'web/src/routes/app/+page.svelte',
+              'web/src/routes/app/credit/quick/+page.svelte',
+              'web/src/routes/app/onboarding/+page.svelte',
+              'web/src/routes/app/overview/+page.svelte',
+              'web/src/routes/app/reports/+page.svelte',
+              'web/src/routes/buyer/+layout.svelte',
+              'web/src/routes/buyer/+page.svelte',
+              'web/src/routes/for-buyers/+page.svelte',
+              'web/src/routes/for-suppliers/+page.svelte',
+              'web/src/routes/how-it-works/+page.svelte',
+              'web/src/routes/pricing/+page.svelte',
+          ]
+          for name in files:
+              path = Path(name)
+              data = path.read_bytes()
+              if data and not data.endswith(b'\n'):
+                  path.write_bytes(data + b'\n')
+          PY
+          if git diff --quiet; then
+            echo "No newline repairs needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/src
+          git commit -m "chore(web): normalize final newlines"
+          git push origin HEAD:activation-usability-pass
