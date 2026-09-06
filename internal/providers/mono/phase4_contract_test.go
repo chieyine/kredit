@@ -190,7 +190,7 @@ func TestPhase4WebhookSignalMatrix(t *testing.T) {
 		"events.mandates.created":                  "",
 		"events.mandates.approved":                 "",
 		"events.mandates.ready":                    "",
-		"events.mandate.action.reinstate":           "",
+		"events.mandate.action.reinstate":          "",
 		"events.mandates.rejected":                 mandates.Failed,
 		"events.mandate.action.pause":              mandates.Paused,
 		"events.mandate.action.cancel":             mandates.Cancelled,

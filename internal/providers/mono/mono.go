@@ -29,12 +29,12 @@ const DefaultBaseURL = "https://api.withmono.com"
 type CustomerResolver func(context.Context, string, string) (string, error)
 
 type Client struct {
-	initiationDisabled                         bool
+	initiationDisabled                          bool
 	baseURL, secret, webhookSecret, redirectURL string
-	partial                                    bool
-	resolve                                    CustomerResolver
-	http                                       *http.Client
-	now                                        func() time.Time
+	partial                                     bool
+	resolve                                     CustomerResolver
+	http                                        *http.Client
+	now                                         func() time.Time
 }
 
 func New(baseURL, secret, webhookSecret, redirectURL string, partial bool, resolver CustomerResolver) (*Client, error) {
