@@ -2,10 +2,10 @@
 	import { page } from '$app/state';
 
 	const links = [
-		['How it works', '/how-it-works'],
+		['How Kredit works', '/how-it-works'],
 		['For sellers', '/for-suppliers'],
 		['For customers', '/for-buyers'],
-		['Price', '/pricing']
+		['Pricing', '/pricing']
 	];
 	let menu: HTMLDetailsElement;
 	function closeMobileMenu() {
@@ -21,8 +21,8 @@
 			{/each}
 		</div>
 		<div class="nav-actions">
-			<a href="/app" onclick={closeMobileMenu}>Sign in</a>
-			<a class="header-cta" href="/demo" onclick={closeMobileMenu}>Try the demo <span aria-hidden="true">↗</span></a>
+			<a href="/app" onclick={closeMobileMenu}>Seller sign in</a>
+			<a class="header-cta" href="/demo" onclick={closeMobileMenu}>See Kredit in action <span aria-hidden="true">↗</span></a>
 		</div>
 	</div>
 {/snippet}
