@@ -162,5 +162,5 @@ func (s *Server) publicPricing(w http.ResponseWriter, r *http.Request) {
 		revision = snapshot.Revision
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"policy_revision": revision, "base_bps": values.BaseFeeBPS, "collection_bps": values.CollectionFeeBPS, "min_fee_kobo": 0})
+	writeJSON(w, 200, map[string]any{"policy_revision": revision, "base_bps": values.BaseFeeBPS, "collection_bps": values.CollectionFeeBPS})
 }

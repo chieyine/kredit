@@ -50,3 +50,6 @@ html.low-data :is(.product-route,.admin-content) * { animation:none!important; t
   :root body :is(.product-route,.admin-content) :is(button,.primary,.card,.terms,.status,.status-pill) { border:1px solid ButtonText; }
   :root body .product-route :focus-visible { outline:3px solid Highlight; }
 }
+
+:root body .product-route :is(main,section,article,fieldset,input,select,textarea,button) { box-sizing:border-box; min-width:0; }
+:root body .product-route :is(dd,code,.amount,.outstanding) { overflow-wrap:anywhere; }

@@ -78,7 +78,14 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && moreOpen) closeMenus(true);
+		if (!moreOpen || !dialog?.open) return;
+        if (event.key === 'Escape') { event.preventDefault(); closeMenus(true); return; }
+        if (event.key !== 'Tab') return;
+        const controls = Array.from(dialog.querySelectorAll<HTMLElement>('a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])')).filter(node => node.tabIndex >= 0 && node.getClientRects().length > 0);
+        const first = controls[0], last = controls.at(-1);
+        if (!first || !last) { event.preventDefault(); dialog.focus(); return; }
+        if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
 	}
 
 	$effect(() => {
