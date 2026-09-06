@@ -1,0 +1,37 @@
+name: Phase 6 Analytics Context Fix
+
+on:
+  push:
+    branches: [phase6-hardening-polish]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase6-hardening-polish
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Apply request-aware analytics persistence
+        run: python3 scripts/phase6-analytics-context-fix.py
+      - name: Format and verify focused packages
+        run: |
+          gofmt -w internal/reports internal/web
+          python3 scripts/phase6-context-audit.py
+          go test ./internal/reports ./internal/web
+      - name: Remove temporary patch harness
+        run: rm scripts/phase6-analytics-context-fix.py .github/workflows/phase6-analytics-context-fix.yml
+      - name: Commit fixes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "phase6: propagate request context through analytics persistence"
+          git push origin HEAD:phase6-hardening-polish
