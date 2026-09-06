@@ -6,6 +6,7 @@
 	import SystemBanner from '$lib/components/SystemBanner.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import HomeProof from '$lib/components/HomeProof.svelte';
 	import MotionObserver from '$lib/components/MotionObserver.svelte';
 	import { jsonLd, nonIndexablePaths, seoForPath, SITE_URL } from '$lib/seo';
 	import { page } from '$app/state';
@@ -80,10 +81,7 @@
 
 <svelte:head>
 	<title>{seo.title}</title>
-	<meta
-		name="description"
-		content={seo.description}
-	/>
+	<meta name="description" content={seo.description}/>
 	<link rel="canonical" href={canonical} />
 	<link rel="alternate" hreflang="en-NG" href={canonical} />
 	<link rel="alternate" hreflang="x-default" href={canonical} />
@@ -125,5 +123,6 @@
 	<div id="main-content" class="motion-scope public-route" tabindex="-1">
 		{#key page.url.pathname}{@render children()}{/key}
 	</div>
+	{#if page.url.pathname === '/'}<HomeProof />{/if}
 {/if}
-{#if publicChrome}<SiteFooter />{/if}
+{#if publicChrome}<SiteFooter />{/if>
