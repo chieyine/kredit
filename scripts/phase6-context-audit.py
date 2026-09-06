@@ -44,6 +44,14 @@ for required in (
     if required not in financial_text:
         issues.append(f"internal/web/financial_reads.go: missing request-aware payment adapter {required.split('(')[0]}")
 
+# Analytics persistence reached from HTTP must use the request-aware API.
+for path in sorted(WEB.glob("*.go")):
+    if path.name.endswith("_test.go"):
+        continue
+    body = path.read_text(encoding="utf-8")
+    if "Reports.Track(" in body:
+        issues.append(f"{path.relative_to(ROOT)}: legacy analytics Track bypasses request context")
+
 if issues:
     print("Phase 6 request-context audit failed:", file=sys.stderr)
     for issue in issues:
