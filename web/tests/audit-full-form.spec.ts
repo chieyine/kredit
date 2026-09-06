@@ -10,7 +10,7 @@ async function prepare(page:Page,context:BrowserContext,baseURL?:string){
   if(path.endsWith('/credit-terms/preview')){const input=route.request().postDataJSON();return send(route,{due_date:input.due_date,grace_hours:input.grace_hours,collection_at:'2026-09-19T22:59:00Z',timezone:'Africa/Lagos',cutoff:'23:59',timing_mode:input.collection_local?'lagos_explicit':'lagos_end_of_day'});}
   return send(route,{},404);
  });
- await page.goto('/app/credit/new?organization=org-a');
+ await page.goto('/app/credit/new?advanced=1&organization=org-a');
  await page.getByRole('combobox',{name:'Customer',exact:true}).selectOption('buyer-1:business-1');
  await page.getByRole('textbox',{name:'Sale amount (₦)'}).fill('127,500.49');
  await page.getByRole('textbox',{name:'What goods are they taking?'}).fill('40 cartons of cooking oil');

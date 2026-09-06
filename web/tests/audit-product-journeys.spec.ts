@@ -169,7 +169,7 @@ test('native account menu traps focus and restores it on Escape', async ({ page,
  await page.keyboard.press('Escape'); await expect(trigger).toBeFocused();
 });
 
-for (const [label, path] of [['home', '/'], ['pricing', '/pricing'], ['supplier', '/app/overview'], ['quick-sale', '/app/credit/quick'], ['full-sale', '/app/credit/new'], ['buyer', '/buyer/credit-requests/sale-1']] as const) {
+for (const [label, path] of [['home', '/'], ['pricing', '/pricing'], ['supplier', '/app/overview'], ['quick-sale', '/app/credit/quick'], ['full-sale', '/app/credit/new?advanced=1'], ['buyer', '/buyer/credit-requests/sale-1']] as const) {
  test(`visual and accessibility evidence: ${label}`, async ({ page, context, baseURL }, testInfo) => {
   await signedIn(page, context, baseURL);
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -195,7 +195,7 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
  await page.route('**/api/v1/organizations/org-a/credit-terms/preview', route => send(route, { due_date:'2026-09-18', grace_hours:24, collection_at:'2026-09-19T22:59:00Z', timezone:'Africa/Lagos', cutoff:'23:59', timing_mode:'lagos_end_of_day' }));
  const saved: Record<string, unknown>[] = [];
  await page.route('**/api/v1/organizations/org-a/credit-requests', route => { if(route.request().method()==='POST'){saved.push(route.request().postDataJSON());return send(route,{request:{id:'created-sale'}},201);}return send(route,{requests:[]}); });
- await page.goto('/app/credit/new?organization=org-a');
+ await page.goto('/app/credit/new?advanced=1&organization=org-a');
  await page.getByRole('combobox',{name:'Customer',exact:true}).selectOption('buyer-1:business-2');
  await page.getByRole('textbox',{name:'Sale amount (₦)'}).fill('127,500.49');
  await page.getByRole('textbox',{name:'What goods are they taking?'}).fill('40 cartons of cooking oil');
@@ -212,7 +212,7 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 test('full sale never presents an unavailable customer list as empty', async ({page,context,baseURL}) => {
  await signedIn(page,context,baseURL);
  await page.route('**/api/v1/organizations/org-a/customers', route=>send(route,{code:'financial_data_unavailable'},503));
- await page.goto('/app/credit/new');
+ await page.goto('/app/credit/new?advanced=1');
  await expect(page.getByRole('alert')).toContainText('Customer list unavailable');
  await expect(page.getByText('You have not added a customer yet.',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Check terms',exact:true})).toBeDisabled();

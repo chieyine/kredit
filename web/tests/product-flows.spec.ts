@@ -56,7 +56,7 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 	});
 	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1', async (route) => route.fulfill({ status: 404, contentType: 'application/json', body: '{}' }));
 	await page.route('**/api/v1/organizations/org-1/credit-terms/preview', route => route.fulfill({json:{due_date:'2026-09-30',grace_hours:24,collection_at:'2026-10-02T08:00:00Z',timezone:'Africa/Lagos',cutoff:'23:59',timing_mode:'lagos_explicit'}}));
-	await page.goto('/app/credit/new');
+	await page.goto('/app/credit/new?advanced=1');
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
 	await page.getByLabel('Sale amount (₦)').fill('1,200,000');
 	await page.getByLabel('What goods are they taking?').fill('Twenty cartons of verified inventory');

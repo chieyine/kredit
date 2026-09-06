@@ -48,7 +48,7 @@ test.beforeEach(async ({ page, context, baseURL }) => {
 for (const journey of [
 	['login', '/app'],
 	['supplier onboarding', '/app/onboarding'],
-	['credit creation', '/app/credit/new'],
+	['credit creation', '/app/credit/new?advanced=1'],
 	['buyer acceptance', '/buyer/credit-requests/request-a11y'],
 	['goods release', '/app/trade-lines/line-a11y'],
 	['goods receipt and drawdown', '/buyer/trade-lines'],
@@ -97,7 +97,7 @@ test('keyboard, focus, reflow, reduced motion, and touch-target safeguards remai
 });
 
 test('credit validation focuses a linked error summary', async ({ page }) => {
-	await page.goto('/app/credit/new');
+	await page.goto('/app/credit/new?advanced=1');
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-a11y:business-a11y');
 	await page.getByLabel('Sale amount (₦)').fill('0');
 	await page.getByLabel('What goods are they taking?').fill('Inventory');
