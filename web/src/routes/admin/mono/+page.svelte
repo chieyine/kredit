@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { readJSON } from '$lib/api/client';
 
 	type MonoStatus = {
 		provider: string;
@@ -17,6 +18,7 @@
 		ready_for_configured_environment: boolean;
 		blockers: string[];
 	};
+	type SettingsResponse = { mono?: MonoStatus };
 
 	let mono = $state<MonoStatus | null>(null);
 	let loading = $state(true);
@@ -25,14 +27,15 @@
 	async function load() {
 		loading = true;
 		error = '';
-		const response = await fetch('/api/v1/ops/business-policies', { credentials: 'include' });
-		const body = await response.json().catch(() => ({}));
-		loading = false;
-		if (!response.ok) {
-			error = body.detail ?? 'Mono configuration could not be loaded.';
-			return;
+		try {
+			const body = await readJSON<SettingsResponse>('/api/v1/ops/business-policies');
+			mono = body.mono ?? null;
+			if (!mono) error = 'Mono configuration is not available in this deployment.';
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : 'Mono configuration could not be loaded.';
+		} finally {
+			loading = false;
 		}
-		mono = body.mono ?? null;
 	}
 
 	onMount(load);
