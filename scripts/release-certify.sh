@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Release certification is intentionally fail-closed.  A green unit suite is
-# not a production-v1 certificate when domain persistence, browser checks, or
-# external approvals are missing.
+# Evidence review does not authorize deployment. The protected human approval
+# remains separate. Empty references or a green unit suite are not sign-off.
+bash scripts/phase5-evidence-gate.sh
 
 export GOCACHE="${GOCACHE:-$PWD/.tmp/go-cache}"
 export CI="${CI:-true}"
@@ -33,6 +33,7 @@ require_command pnpm
 require_command docker
 require_command psql
 require_command rg
+require_command python3
 
 if command -v tofu >/dev/null 2>&1; then
 	run_gate 'OpenTofu formatting' tofu fmt -check -recursive infra/environments
@@ -128,8 +129,7 @@ for evidence in SECURITY_REVIEW_REFERENCE DPIA_REFERENCE LEGAL_APPROVAL_REFERENC
 done
 
 if (( failures > 0 )); then
-	printf '\nRelease certification FAILED with %d unmet gate(s).\n' "$failures" >&2
+	printf '\nRelease checks FAILED with %d unmet gate(s).\n' "$failures" >&2
 	exit 1
 fi
-
-printf '\nRelease certification PASSED: all local and external gates supplied.\n'
+printf '\nLocal release and evidence checks passed. Protected human deployment approval is still required.\n'

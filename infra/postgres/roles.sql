@@ -95,6 +95,10 @@ BEGIN
     IF to_regprocedure('app.delete_expired_idempotency_record(text,text)') IS NOT NULL THEN
         GRANT EXECUTE ON FUNCTION app.delete_expired_idempotency_record(TEXT, TEXT) TO kredit_app;
     END IF;
+    IF to_regprocedure('app.phase5_financial_metrics()') IS NOT NULL THEN
+        REVOKE ALL ON FUNCTION app.phase5_financial_metrics() FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION app.phase5_financial_metrics() TO kredit_app, kredit_worker;
+    END IF;
 END
 $$;
 
