@@ -53,9 +53,9 @@ test('switching businesses cannot show an earlier balance under the new name', a
 test('accepting a sale does not automatically grant bank permission or announce release readiness', async ({ page, context, baseURL }) => {
  await signedIn(page, context, baseURL);
  let state = 'BUYER_REVIEWING'; let mandateCalls = 0;
- await page.route('**/buyer/credit-requests/sale-1', route => send(route, sale('sale-1', state)));
- await page.route('**/buyer/credit-requests/sale-1/accept', route => { state = 'BUYER_ACCEPTED'; return send(route, sale('sale-1', state)); });
- await page.route('**/buyer/credit-requests/sale-1/mandate', route => { mandateCalls++; return send(route, { code: 'unexpected' }, 500); });
+ await page.route('**/api/v1/buyer/credit-requests/sale-1', route => send(route, sale('sale-1', state)));
+ await page.route('**/api/v1/buyer/credit-requests/sale-1/accept', route => { state = 'BUYER_ACCEPTED'; return send(route, sale('sale-1', state)); });
+ await page.route('**/api/v1/buyer/credit-requests/sale-1/mandate', route => { mandateCalls++; return send(route, { code: 'unexpected' }, 500); });
  await page.goto('/buyer/credit-requests/sale-1');
  await page.getByRole('button', { name: /Accept sale for/ }).click();
  await expect(page.getByText('Bank permission must be ready before the seller can release the goods.')).toBeVisible();
@@ -67,7 +67,7 @@ test('accepting a sale does not automatically grant bank permission or announce 
 test('pending hosted permission stays pending after return parameters', async ({ page, context, baseURL }) => {
  await signedIn(page, context, baseURL);
  const current = sale('sale-1', 'BUYER_ACCEPTED'); current.mandate = { id: 'mandate-1', provider_id: 'provider-1', provider: 'mono-sweep', status: 'PENDING', authorization_url: 'https://authorise.mono.co/synthetic-example' };
- await page.route('**/buyer/credit-requests/sale-1', route => send(route, current));
+ await page.route('**/api/v1/buyer/credit-requests/sale-1', route => send(route, current));
  await page.goto('/buyer/credit-requests/sale-1?success=true&status=approved');
  await expect(page.getByRole('link', { name: /Continue securely with Mono/ })).toHaveAttribute('href', 'https://authorise.mono.co/synthetic-example');
  await expect(page.getByText('Permission active', { exact: true })).toHaveCount(0);
@@ -78,7 +78,7 @@ test('pending hosted permission stays pending after return parameters', async ({
 test('untrusted hosted permission links are never rendered', async ({ page, context, baseURL }) => {
  await signedIn(page, context, baseURL);
  const current = sale('sale-1', 'BUYER_ACCEPTED'); current.mandate = { id: 'mandate-1', provider_id: 'provider-1', provider: 'mono-sweep', status: 'PENDING', authorization_url: 'https://bank-permission.evil.test/steal' };
- await page.route('**/buyer/credit-requests/sale-1', route => send(route, current));
+ await page.route('**/api/v1/buyer/credit-requests/sale-1', route => send(route, current));
  await page.goto('/buyer/credit-requests/sale-1');
  await expect(page.locator('a[href*="evil.test"]')).toHaveCount(0);
  await expect(page.getByText(/The provider link is not available/)).toBeVisible();
@@ -169,7 +169,7 @@ test('native account menu traps focus and restores it on Escape', async ({ page,
  await page.keyboard.press('Escape'); await expect(trigger).toBeFocused();
 });
 
-for (const [label, path] of [['home', '/'], ['pricing', '/pricing'], ['supplier', '/app/overview'], ['quick-sale', '/app/credit/quick'], ['buyer', '/buyer/credit-requests/sale-1']] as const) {
+for (const [label, path] of [['home', '/'], ['pricing', '/pricing'], ['supplier', '/app/overview'], ['quick-sale', '/app/credit/quick'], ['full-sale', '/app/credit/new'], ['buyer', '/buyer/credit-requests/sale-1']] as const) {
  test(`visual and accessibility evidence: ${label}`, async ({ page, context, baseURL }, testInfo) => {
   await signedIn(page, context, baseURL);
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -184,3 +184,36 @@ for (const [label, path] of [['home', '/'], ['pricing', '/pricing'], ['supplier'
   }
  });
 }
+
+
+test('full sale keeps business identity and server-reviewed timing on the invoice path', async ({ page, context, baseURL }) => {
+ await signedIn(page, context, baseURL);
+ await page.route('**/api/v1/organizations/org-a/customers', route => send(route, { customers: [
+  { buyer_user_id:'buyer-1', buyer_business_id:'business-1', legal_name:'First shop', trading_name:'First shop', state:'verified' },
+  { buyer_user_id:'buyer-1', buyer_business_id:'business-2', legal_name:'Second shop', trading_name:'Second shop', state:'verified' }
+ ] }));
+ await page.route('**/api/v1/organizations/org-a/credit-terms/preview', route => send(route, { due_date:'2026-09-18', grace_hours:24, collection_at:'2026-09-19T22:59:00Z', timezone:'Africa/Lagos', cutoff:'23:59', timing_mode:'lagos_end_of_day' }));
+ const saved: Record<string, unknown>[] = [];
+ await page.route('**/api/v1/organizations/org-a/credit-requests', route => { if(route.request().method()==='POST'){saved.push(route.request().postDataJSON());return send(route,{request:{id:'created-sale'}},201);}return send(route,{requests:[]}); });
+ await page.goto('/app/credit/new?organization=org-a');
+ await page.getByRole('combobox',{name:'Customer',exact:true}).selectOption('buyer-1:business-2');
+ await page.getByRole('textbox',{name:'Sale amount (₦)'}).fill('127,500.49');
+ await page.getByRole('textbox',{name:'What goods are they taking?'}).fill('40 cartons of cooking oil');
+ await page.getByLabel('First payment date').fill('2026-09-18');
+ await page.getByRole('button',{name:'Check terms',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Save draft sale',exact:true})).toBeEnabled();
+ expect(saved).toHaveLength(0);
+ await expect(page.locator('.review')).toContainText('₦127,500.49');
+ await page.getByRole('button',{name:'Save draft sale',exact:true}).click();
+ await expect.poll(()=>saved.length).toBe(1);
+ expect(saved[0]).toMatchObject({buyer_user_id:'buyer-1',buyer_business_id:'business-2',principal_kobo:12750049,collection_at:'2026-09-19T22:59:00Z',timing_mode:'lagos_end_of_day'});
+});
+
+test('full sale never presents an unavailable customer list as empty', async ({page,context,baseURL}) => {
+ await signedIn(page,context,baseURL);
+ await page.route('**/api/v1/organizations/org-a/customers', route=>send(route,{code:'financial_data_unavailable'},503));
+ await page.goto('/app/credit/new');
+ await expect(page.getByRole('alert')).toContainText('Customer list unavailable');
+ await expect(page.getByText('You have not added a customer yet.',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Check terms',exact:true})).toBeDisabled();
+});

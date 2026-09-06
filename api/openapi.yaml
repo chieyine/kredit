@@ -26,6 +26,7 @@ paths:
               properties:
                 due_date: {type: string, format: date}
                 grace_hours: {type: integer, minimum: 0, maximum: 720}
+                collection_local: {type: string, description: Optional Nigerian local datetime in YYYY-MM-DDTHH:mm format.}
       responses:
         '200':
           description: Canonical timing for review before creating a sale.
@@ -40,7 +41,7 @@ paths:
                   collection_at: {type: string, format: date-time}
                   timezone: {type: string, const: Africa/Lagos}
                   cutoff: {type: string, const: '23:59'}
-                  timing_mode: {type: string, const: lagos_end_of_day}
+                  timing_mode: {type: string, enum: [lagos_end_of_day, lagos_explicit]}
         '400': {description: Invalid input.}
         '401': {description: Sign-in required.}
         '403': {description: Organization access or CSRF check failed.}
@@ -2767,7 +2768,8 @@ components:
       type: object
       required: [buyer_user_id, buyer_business_id, buyer_legal_name, principal_kobo, goods_description, due_date, collection_at]
       properties:
-        timing_mode: {type: string, enum: [lagos_end_of_day], description: Server-validated Africa/Lagos end-of-day collection timing.}
+        timing_mode: {type: string, enum: [lagos_end_of_day, lagos_explicit], description: Server-validated Nigerian collection timing.}
+        collection_local: {type: string, description: Nigerian local datetime for lagos_explicit mode.}
         collection_policy: {type: string, enum: [STANDARD, GRACE, IMMEDIATE]}
         buyer_user_id: {type: string}
         buyer_business_id: {type: string}

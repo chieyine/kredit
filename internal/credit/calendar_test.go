@@ -51,3 +51,15 @@ func TestCollectionInstantMonthAndLeapBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitCollectionInstantRejectsNormalizedDates(t *testing.T) {
+	for _, input := range []string{"2026-02-30T12:00", "2026-09-18T24:00", "2026-09-18T12:00Z", "2026-09-18T12:00+01:00", ""} {
+		if _, err := ExplicitCollectionInstant(input); err == nil {
+			t.Errorf("accepted invalid input %q", input)
+		}
+	}
+	value, err := ExplicitCollectionInstant("2026-09-19T23:59")
+	if err != nil || value.Format(time.RFC3339) != "2026-09-19T22:59:00Z" {
+		t.Fatalf("incorrect Nigerian time: %v %v", value, err)
+	}
+}

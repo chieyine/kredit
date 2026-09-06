@@ -91,7 +91,7 @@ export function clearPrivateBrowserData(): void {
       const store = storage();
       for (let index = store.length - 1; index >= 0; index -= 1) {
         const key = store.key(index);
-        if (key && (key === 'kredit:saved-sale-items' || /^(kredit\.(quick-sale\.|intent\.|bank-return\.|account\.))/.test(key))) store.removeItem(key);
+        if (key && (key === 'kredit:saved-sale-items' || key.startsWith('kredit:sale-draft:') || /^(kredit\.(quick-sale\.|intent\.|bank-return\.|account\.))/.test(key))) store.removeItem(key);
       }
     } catch { /* Server revocation remains authoritative when browser storage is unavailable. */ }
   }

@@ -24,6 +24,7 @@ import (
 
 type creditRequestInput struct {
 	TimingMode          string    `json:"timing_mode,omitempty"`
+	CollectionLocal     string    `json:"collection_local,omitempty"`
 	CollectionPolicy    string    `json:"collection_policy,omitempty"`
 	BuyerUserID         string    `json:"buyer_user_id"`
 	BuyerBusinessID     string    `json:"buyer_business_id"`
@@ -131,11 +132,19 @@ func (s *Server) createCreditRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.TimingMode != "" {
-		if in.TimingMode != "lagos_end_of_day" {
+		if in.TimingMode != "lagos_end_of_day" && in.TimingMode != "lagos_explicit" {
 			writeProblem(w, 422, "credit_terms_invalid", "That payment timing option is not supported.")
 			return
 		}
 		canonical, timingErr := credit.CollectionInstant(in.DueDate, in.GraceHours)
+		if timingErr == nil && in.TimingMode == "lagos_explicit" {
+			earliest := canonical
+			canonical, timingErr = credit.ExplicitCollectionInstant(in.CollectionLocal)
+			if timingErr == nil && canonical.Before(earliest) {
+				writeProblem(w, 422, "credit_terms_invalid", "Bank collection must be after the agreed payment day and extra hours.")
+				return
+			}
+		}
 		if timingErr != nil || (!in.CollectionAt.IsZero() && !in.CollectionAt.Equal(canonical)) {
 			writeProblem(w, 422, "credit_terms_changed", "Review the payment date again before saving.")
 			return
