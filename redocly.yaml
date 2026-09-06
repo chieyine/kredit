@@ -1,0 +1,12 @@
+extends:
+  - recommended
+
+rules:
+  # Structural/schema correctness remains an error. These documentation-quality
+  # rules are useful but are not release blockers for the existing hand-written
+  # contract and are tracked as warnings during incremental cleanup.
+  operation-summary: warn
+  operation-description: warn
+  operation-operationId: error
+  operation-operationId-unique: error
+  spec-strict-refs: error
