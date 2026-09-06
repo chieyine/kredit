@@ -6,6 +6,7 @@ export CI="${CI:-true}"
 mkdir -p "$GOCACHE"
 
 bash scripts/api-lint.sh
+bash scripts/phase6-governance-test.sh
 bash scripts/readme-conformance.sh
 bash scripts/implementation-plan-conformance-test.sh
 bash scripts/load-env-test.sh
