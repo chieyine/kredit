@@ -10,7 +10,7 @@
 	let ready = $state(false);
 	onMount(() => { ready = true; });
 	const links: [string, string][] = [
-		['Dashboard', '/app/overview'], ['Complete setup', '/app/onboarding'], ['Add credit sale', '/app/credit/new'], ['Customers', '/app/customers'],
+		['Dashboard', '/app/overview'], ['Complete setup', '/app/onboarding'], ['Add credit sale', '/app/credit/quick'], ['Customers', '/app/customers'],
 		['Customer limits', '/app/trade-lines'], ['Payments received', '/app/payments'], ['Collections', '/app/collections'],
 		['Disputes', '/app/disputes'], ['Overdue balances', '/app/overdue'], ['Reports', '/app/reports'],
 		['Team access', '/app/team'], ['Activity log', '/app/activity'], ['Message history', '/app/notifications'],
@@ -20,7 +20,7 @@
 	];
 	const mobilePrimary: [string, string, string][] = [
 		['Dashboard', '/app/overview', 'home'],
-		['Add sale', '/app/credit/new', 'add'],
+		['Add sale', '/app/credit/quick', 'add'],
 		['Customers', '/app/customers', 'customers'],
 		['Payments', '/app/payments', 'payments']
 	];
