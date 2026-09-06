@@ -29,7 +29,7 @@
 
 <nav class="topic-nav" aria-label="Browse guide categories"><p class="eyebrow">Browse one topic</p><div>{#each topics as topic}<a href={`/blog/topic/${topic.slug}`}><span>{topic.count} {topic.count === 1 ? 'guide' : 'guides'}</span><strong>{topic.category}</strong><i aria-hidden="true">→</i></a>{/each}</div></nav>
 
-<section class="library" aria-labelledby="library-title"><div><p class="eyebrow">{articles.length} guides</p><h2 id="library-title">Find the answer you need.</h2></div><div class="filters"><label>Search guides<input type="search" value={query} oninput={(event)=>query=event.currentTarget.value} placeholder="For example: late payment" /></label><label>Topic<select value={category} onchange={(event)=>category=event.currentTarget.value}><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}>{item}</option>{/each}</select></label></div></section>
+<section class="library" aria-labelledby="library-title"><div><p class="eyebrow">{articles.length} guides</p><h2 id="library-title">Find the answer you need.</h2></div><div class="filters"><label>Search guides<input type="search" value={query} oninput={(event)=>query=event.currentTarget.value} placeholder="For example: late payment" /></label><label>Topic<select bind:value={category}><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}>{item}</option>{/each}</select></label></div></section>
 <section class="archive" aria-labelledby="archive-title">
 	<div class="archive-head"><p id="archive-title">{visiblePosts.length} helpful {visiblePosts.length === 1 ? 'guide' : 'guides'}</p><span>Guide / Reading time</span></div>
 	{#each visiblePosts as post}
