@@ -1,0 +1,121 @@
+rule_files:
+  - prometheus-rules.yaml
+evaluation_interval: 1m
+tests:
+  - name: missing instrumentation is not healthy
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: KreditFinancialTelemetryMissing
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "Required financial monitoring signals are missing"}
+      - eval_time: 3m
+        alertname: KreditAPIUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical, job: kredit-api}
+            exp_annotations: {summary: "Kredit API or its scrape target is unavailable"}
+  - name: unknown collection alerts immediately and clears after recovery
+    interval: 1m
+    input_series:
+      - series: kredit_collection_unknown_states
+        values: '0 1 1 0 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: KreditCollectionUnknownState
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: KreditCollectionUnknownState
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "A collection outcome is unknown; reconcile before retrying"}
+      - eval_time: 3m
+        alertname: KreditCollectionUnknownState
+        exp_alerts: []
+  - name: imbalance and negative balances are immediate
+    interval: 1m
+    input_series:
+      - series: kredit_ledger_discrepancies
+        values: '1 1 0'
+      - series: kredit_negative_outstanding_balances
+        values: '1 1 0'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: KreditLedgerReconciliationFailure
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "Ledger reconciliation failed; investigate before further financial writes"}
+      - eval_time: 0m
+        alertname: KreditNegativeOutstandingBalance
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "A negative outstanding balance requires immediate investigation"}
+      - eval_time: 2m
+        alertname: KreditLedgerReconciliationFailure
+        exp_alerts: []
+  - name: backlog respects the hold period
+    interval: 1m
+    input_series:
+      - series: kredit_provider_webhook_oldest_unprocessed_seconds
+        values: '301+0x7'
+      - series: kredit_collection_oldest_unresolved_seconds
+        values: '901+0x7'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: KreditProviderWebhookBacklog
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: KreditProviderWebhookBacklog
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "Provider webhook processing is delayed"}
+      - eval_time: 6m
+        alertname: KreditCollectionReconciliationStale
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "An unresolved collection is older than fifteen minutes"}
+  - name: queue and discarded jobs
+    interval: 1m
+    input_series:
+      - series: kredit_river_pending_jobs
+        values: '51+0x12'
+      - series: kredit_river_discarded_jobs
+        values: '1+0x12'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: KreditRiverQueueBacklogHigh
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: KreditRiverQueueBacklogHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "More than fifty due background jobs remain queued"}
+      - eval_time: 1m
+        alertname: KreditRiverDeadLetters
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "A discarded background job requires an assigned operator"}
+  - name: healthy complete financial telemetry
+    interval: 1m
+    input_series:
+      - {series: kredit_ledger_discrepancies, values: '0+0x12'}
+      - {series: kredit_balance_discrepancies, values: '0+0x12'}
+      - {series: kredit_schedule_discrepancies, values: '0+0x12'}
+      - {series: kredit_collection_payment_discrepancies, values: '0+0x12'}
+      - {series: kredit_settlement_discrepancies, values: '0+0x12'}
+      - {series: kredit_provider_webhook_oldest_unprocessed_seconds, values: '0+0x12'}
+      - {series: kredit_collection_unknown_states, values: '0+0x12'}
+      - {series: kredit_notification_dead_letters, values: '0+0x12'}
+      - {series: kredit_outbox_delivery_failures, values: '0+0x12'}
+      - {series: kredit_collection_oldest_unresolved_seconds, values: '0+0x12'}
+      - {series: kredit_river_pending_jobs, values: '0+0x12'}
+      - {series: kredit_river_discarded_jobs, values: '0+0x12'}
+      - {series: kredit_active_obligations, values: '40+0x12'}
+      - {series: kredit_negative_outstanding_balances, values: '0+0x12'}
+    alert_rule_test:
+      - {eval_time: 11m, alertname: KreditFinancialTelemetryMissing, exp_alerts: []}
+      - {eval_time: 11m, alertname: KreditLedgerReconciliationFailure, exp_alerts: []}
+      - {eval_time: 11m, alertname: KreditCollectionUnknownState, exp_alerts: []}
+      - {eval_time: 11m, alertname: KreditFinancialProjectionMismatch, exp_alerts: []}
+      - {eval_time: 11m, alertname: KreditRiverDeadLetters, exp_alerts: []}

@@ -1,0 +1,166 @@
+name: Phase 5 Production Assurance
+
+on:
+  push:
+    branches: [phase5-production-assurance]
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'db/migrations/**'
+      - 'infra/postgres/**'
+      - 'infra/monitoring/**'
+      - 'internal/observability/**'
+      - 'internal/web/**'
+      - 'internal/config/**'
+      - 'docs/release/**'
+      - 'docs/runbooks/phase5-production-assurance.md'
+      - '.github/workflows/phase5-production-assurance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: phase5-assurance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assurance-tooling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test release, backup and load safety
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_phase5_*.py' -v
+          bash -n scripts/backup.sh scripts/restore-drill.sh scripts/phase5-evidence-gate.sh scripts/release-certify.sh
+          python3 scripts/verify_release_evidence.py --write-template > "$RUNNER_TEMP/phase5-pending.json"
+          if python3 scripts/verify_release_evidence.py "$RUNNER_TEMP/phase5-pending.json" --evidence-root "$RUNNER_TEMP" --commit "$GITHUB_SHA" --environment ci --environment-sha256 "$(printf '0%.0s' {1..64})"; then
+            echo 'Pending evidence must never pass.' >&2
+            exit 1
+          fi
+          if bash scripts/phase5-evidence-gate.sh; then
+            echo 'Absent approvals must never pass.' >&2
+            exit 1
+          fi
+  monitoring-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and exercise real Prometheus rules
+        run: |
+          docker run --rm --network none --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            -v "$PWD/infra/monitoring:/rules:ro" -w /rules --entrypoint /bin/promtool \
+            prom/prometheus:v3.14.0 check rules prometheus-rules.yaml
+          docker run --rm --network none --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            -v "$PWD/infra/monitoring:/rules:ro" -w /rules --entrypoint /bin/promtool \
+            prom/prometheus:v3.14.0 test rules phase5-rules.test.yaml
+  recovery-and-api-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_phase5_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_phase5_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_phase5_test?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_phase5_test?sslmode=disable
+      PHASE5_APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_phase5_test?sslmode=disable
+      RESTORE_DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_phase5_restore?sslmode=disable
+      KREDIT_PHASE5_INTEGRATION: '1'
+      KREDIT_PHASE5_LOCAL: '1'
+      MONO_SWEEP_ENABLED: 'false'
+      AUTOMATIC_COLLECTION_ENABLED: 'false'
+      FEATURE_REAL_COLLECTIONS: 'false'
+      FEATURE_REAL_IDENTITY: 'false'
+      FEATURE_PRODUCTION_PILOT: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Use PostgreSQL 18 client tools for the PostgreSQL 18 archive
+        run: |
+          mkdir -p "$RUNNER_TEMP/pgbin"
+          for tool in psql pg_dump pg_restore; do
+            cat > "$RUNNER_TEMP/pgbin/$tool" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec docker run --rm -i --network host --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" -v "$RUNNER_TEMP:$RUNNER_TEMP" \
+            -w "$GITHUB_WORKSPACE" -e PGDATABASE --entrypoint "$(basename "$0")" postgres:18 "$@"
+          SH
+            chmod +x "$RUNNER_TEMP/pgbin/$tool"
+          done
+          echo "$RUNNER_TEMP/pgbin" >> "$GITHUB_PATH"
+      - name: Migrate, provision restricted roles and seed
+        run: |
+          go run ./cmd/migrate
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false -f infra/postgres/development-logins.sql
+          go run ./cmd/seed
+          go run ./cmd/seed
+      - name: Verify global monitoring without bypassing tenant access
+        run: go test -race -tags=integration ./internal/observability -run 'TestPhase5' -count=1 -v
+      - name: Restore a real backup and compare data and security fingerprints
+        run: |
+          export BACKUP_DIR="$RUNNER_TEMP/phase5-backups"
+          export RESTORE_EXPECTED_FINGERPRINT="$RUNNER_TEMP/phase5-source.json"
+          python3 scripts/recovery_fingerprint.py capture "$RESTORE_EXPECTED_FINGERPRINT" --quiesced
+          bash scripts/backup.sh > "$RUNNER_TEMP/phase5-backup.log"
+          dump="$(find "$BACKUP_DIR" -maxdepth 1 -name '*.dump' -type f)"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE kredit_phase5_restore'
+          started=$(date +%s)
+          bash scripts/restore-drill.sh "$dump"
+          echo "isolated_restore_elapsed_seconds=$(( $(date +%s) - started ))"
+          if bash scripts/restore-drill.sh "$dump" > "$RUNNER_TEMP/phase5-refused-restore.log" 2>&1; then
+            echo 'Populated restore destination was accepted.' >&2
+            exit 1
+          fi
+          grep -q 'restore target must be an empty database' "$RUNNER_TEMP/phase5-refused-restore.log"
+          DATABASE_URL="$RESTORE_DATABASE_URL" \
+            PHASE5_APP_DATABASE_URL='postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_phase5_restore?sslmode=disable' \
+            go test -race -tags=integration ./internal/observability -run '^TestPhase5Global' -count=1 -v
+      - name: Run bounded authenticated reads against the real API and database
+        run: |
+          go build -o "$RUNNER_TEMP/phase5-api" ./cmd/api
+          DATABASE_URL="$PHASE5_APP_DATABASE_URL" DATABASE_DIRECT_URL="$PHASE5_APP_DATABASE_URL" \
+            RIVER_DATABASE_URL='postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_phase5_test?sslmode=disable' \
+            "$RUNNER_TEMP/phase5-api" > "$RUNNER_TEMP/phase5-api.log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/readyz >/dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          [[ "$ready" == true ]] || { echo 'Isolated API did not become ready'; exit 1; }
+          python3 scripts/phase5_load.py --output "$RUNNER_TEMP/phase5-load.json"
+      - name: Preserve only synthetic non-sensitive baseline evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase5-assurance-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/phase5-load.json
+            ${{ runner.temp }}/phase5-source.json
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Record limits
+        if: always()
+        run: |
+          echo 'Isolated PostgreSQL logical restore, aggregate telemetry and bounded real API reads only.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Not production backup/PITR, encrypted offsite recovery, provider capacity, penetration-test, legal or manual accessibility approval.' >> "$GITHUB_STEP_SUMMARY"
