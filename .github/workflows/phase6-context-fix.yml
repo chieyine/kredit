@@ -1,0 +1,33 @@
+name: Phase 6 Context Fix
+
+on:
+  push:
+    branches: [phase6-hardening-polish]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase6-hardening-polish
+      - name: Apply deterministic request-context fixes
+        run: python3 scripts/phase6-context-fix.py
+      - name: Verify audit
+        run: python3 scripts/phase6-context-audit.py
+      - name: Remove temporary patch harness
+        run: rm scripts/phase6-context-fix.py .github/workflows/phase6-context-fix.yml
+      - name: Commit fixes
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "phase6: propagate request cancellation through HTTP handlers"
+          git push origin HEAD:phase6-hardening-polish
