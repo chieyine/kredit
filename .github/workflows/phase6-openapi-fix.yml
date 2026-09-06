@@ -1,0 +1,52 @@
+name: Phase 6 OpenAPI Repair
+
+on:
+  push:
+    branches: [phase6-hardening-polish]
+    paths:
+      - 'api/openapi.yaml'
+      - 'redocly.yaml'
+      - 'scripts/phase6-openapi-fix.py'
+      - '.github/workflows/phase6-openapi-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase6-hardening-polish
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+          run_install: false
+      - name: Install dependencies and pinned OpenAPI linter
+        run: |
+          pnpm install --frozen-lockfile
+          npm install --global @redocly/cli@2.51.2
+      - name: Repair legacy OpenAPI constructs
+        run: python3 scripts/phase6-openapi-fix.py
+      - name: Verify structural OpenAPI validity and client generation
+        env:
+          REDOCLY_TELEMETRY: off
+          REDOCLY_SUPPRESS_UPDATE_NOTICE: 'true'
+        run: |
+          redocly lint api/openapi.yaml --max-problems 1000
+          bash scripts/openapi-generate.sh
+          node scripts/frontend-api-coverage.mjs
+      - name: Remove temporary workflow and commit validated contract repair
+        run: |
+          rm -f .github/workflows/phase6-openapi-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add api/openapi.yaml .github/workflows/phase6-openapi-fix.yml
+          git diff --cached --quiet && exit 0
+          git commit -m 'phase6: apply validated OpenAPI 3.1 repair'
+          git push origin HEAD:phase6-hardening-polish
