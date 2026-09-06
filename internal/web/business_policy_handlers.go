@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"kredit/internal/access"
 	"kredit/internal/businesspolicy"
@@ -19,6 +20,52 @@ func policyFailure(w http.ResponseWriter, err error) {
 	}
 	writeProblem(w, 409, "policy_conflict", err.Error())
 }
+
+// monoAdminStatus exposes only non-secret deployment state. Credential values
+// are intentionally never serialized into an admin response; operators only
+// need to know whether the deployment has them and which readiness gates remain.
+func (s *Server) monoAdminStatus() map[string]any {
+	mode := "disabled"
+	if s.config.MonoSweepEnabled {
+		mode = "sandbox"
+		if s.config.Environment == "production" {
+			mode = "live"
+		}
+	}
+	blockers := []string{}
+	if s.config.CollectionProvider != "mono-sweep" {
+		blockers = append(blockers, "Collection provider is not set to Mono Sweep")
+	}
+	if strings.TrimSpace(s.config.MonoSecretKey) == "" {
+		blockers = append(blockers, "Mono secret key is not configured")
+	}
+	if strings.TrimSpace(s.config.MonoWebhookSecret) == "" {
+		blockers = append(blockers, "Mono webhook secret is not configured")
+	}
+	if strings.TrimSpace(s.config.MonoRedirectURL) == "" {
+		blockers = append(blockers, "Mono redirect URL is not configured")
+	}
+	if s.config.Environment == "production" && strings.TrimSpace(s.config.ProviderCertificationReference) == "" {
+		blockers = append(blockers, "Provider certification evidence is not recorded")
+	}
+	return map[string]any{
+		"provider":                       s.config.CollectionProvider,
+		"environment":                    s.config.Environment,
+		"mode":                           mode,
+		"sweep_enabled":                  s.config.MonoSweepEnabled,
+		"partial_sweep_enabled":          s.config.PartialSweepEnabled,
+		"automatic_collection_enabled":   s.config.AutomaticCollectionEnabled,
+		"automatic_retry_enabled":        s.config.AutomaticRetryEnabled,
+		"secret_key_configured":          strings.TrimSpace(s.config.MonoSecretKey) != "",
+		"webhook_secret_configured":      strings.TrimSpace(s.config.MonoWebhookSecret) != "",
+		"redirect_url_configured":        strings.TrimSpace(s.config.MonoRedirectURL) != "",
+		"redirect_url":                   s.config.MonoRedirectURL,
+		"provider_certification_recorded": strings.TrimSpace(s.config.ProviderCertificationReference) != "",
+		"ready_for_configured_environment": len(blockers) == 0,
+		"blockers":                       blockers,
+	}
+}
+
 func (s *Server) businessPolicies(w http.ResponseWriter, r *http.Request) {
 	_, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManagePolicies)
 	if !ok {
@@ -48,8 +95,9 @@ func (s *Server) businessPolicies(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 503, "policy_unavailable", "Policy permissions could not be loaded")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"can_propose": canPropose, "can_approve": canApprove, "actors": json.RawMessage(actors), "current": current, "changes": changes, "events": events, "fields": businesspolicy.Catalog(), "actor_id": user.ID, "deployment_limits": businesspolicy.Defaults(s.config)})
+	writeJSON(w, 200, map[string]any{"can_propose": canPropose, "can_approve": canApprove, "actors": json.RawMessage(actors), "current": current, "changes": changes, "events": events, "fields": businesspolicy.Catalog(), "actor_id": user.ID, "deployment_limits": businesspolicy.Defaults(s.config), "mono": s.monoAdminStatus()})
 }
+
 func (s *Server) proposeBusinessPolicy(w http.ResponseWriter, r *http.Request) {
 	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManagePolicies)
 	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
@@ -71,6 +119,7 @@ func (s *Server) proposeBusinessPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 201, map[string]string{"id": id, "state": "pending"})
 }
+
 func (s *Server) decideBusinessPolicy(w http.ResponseWriter, r *http.Request) {
 	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionManagePolicies)
 	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
