@@ -49,20 +49,20 @@ func (s *Server) monoAdminStatus() map[string]any {
 		blockers = append(blockers, "Provider certification evidence is not recorded")
 	}
 	return map[string]any{
-		"provider":                       s.config.CollectionProvider,
-		"environment":                    s.config.Environment,
-		"mode":                           mode,
-		"sweep_enabled":                  s.config.MonoSweepEnabled,
-		"partial_sweep_enabled":          s.config.PartialSweepEnabled,
-		"automatic_collection_enabled":   s.config.AutomaticCollectionEnabled,
-		"automatic_retry_enabled":        s.config.AutomaticRetryEnabled,
-		"secret_key_configured":          strings.TrimSpace(s.config.MonoSecretKey) != "",
-		"webhook_secret_configured":      strings.TrimSpace(s.config.MonoWebhookSecret) != "",
-		"redirect_url_configured":        strings.TrimSpace(s.config.MonoRedirectURL) != "",
-		"redirect_url":                   s.config.MonoRedirectURL,
-		"provider_certification_recorded": strings.TrimSpace(s.config.ProviderCertificationReference) != "",
+		"provider":                         s.config.CollectionProvider,
+		"environment":                      s.config.Environment,
+		"mode":                             mode,
+		"sweep_enabled":                    s.config.MonoSweepEnabled,
+		"partial_sweep_enabled":            s.config.PartialSweepEnabled,
+		"automatic_collection_enabled":     s.config.AutomaticCollectionEnabled,
+		"automatic_retry_enabled":          s.config.AutomaticRetryEnabled,
+		"secret_key_configured":            strings.TrimSpace(s.config.MonoSecretKey) != "",
+		"webhook_secret_configured":        strings.TrimSpace(s.config.MonoWebhookSecret) != "",
+		"redirect_url_configured":          strings.TrimSpace(s.config.MonoRedirectURL) != "",
+		"redirect_url":                     s.config.MonoRedirectURL,
+		"provider_certification_recorded":  strings.TrimSpace(s.config.ProviderCertificationReference) != "",
 		"ready_for_configured_environment": len(blockers) == 0,
-		"blockers":                       blockers,
+		"blockers":                         blockers,
 	}
 }
 
