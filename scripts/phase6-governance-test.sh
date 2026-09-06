@@ -38,8 +38,10 @@ grep -q 'func (s \*Store) TrackContext(ctx context.Context' internal/reports/sto
 
 # Upload completion must remain distinct from malware/scanner promotion and bounded
 # by private-storage/object validation rather than treating upload success as clean.
-grep -q 'StatePendingScan' internal/documents/store.go || fail 'document pending-scan state is missing'
-grep -q 'CompleteScan' internal/documents/store.go || fail 'scanner promotion boundary is missing'
+grep -q 'ScanPending[[:space:]]\+ScanState' internal/documents/store.go || fail 'document pending-scan state is missing'
+grep -q 'func (s \*Store) CompleteScan' internal/documents/store.go || fail 'scanner promotion boundary is missing'
+grep -q 'if doc.ScanState != ScanClean' internal/documents/store.go || fail 'downloads are not restricted to clean documents'
+grep -q 'ObjectMetadataReader' internal/documents/store.go || fail 'direct-upload metadata verification boundary is missing'
 grep -q 'allowedType' internal/documents/store.go || fail 'document content-type validation is missing'
 
 # Sensitive onboarding changes must retain recent MFA rather than relying only on a
