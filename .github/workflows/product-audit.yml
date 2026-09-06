@@ -25,10 +25,10 @@ jobs:
       - run: pnpm --dir web exec playwright install --with-deps chromium
       - run: pnpm --dir web check
       - run: pnpm --dir web build
-      - name: Execute source-bound reliability and browser regression
+      - name: Execute all frontend regressions
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/product-results.json
-        run: pnpm --dir web exec playwright test tests/audit-reliability-unit.spec.ts tests/audit-product-journeys.spec.ts tests/audit-full-form.spec.ts --reporter=list,json,html
+        run: pnpm --dir web exec playwright test --workers=4 --reporter=list,json,html
       - name: Bind evidence to the checked-out source
         if: always()
         run: |
