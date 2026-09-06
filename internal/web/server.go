@@ -397,6 +397,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/buyer/disputes", s.listBuyerDisputes)
 	s.mux.HandleFunc("GET /api/v1/buyer/disputes/{disputeID}", s.getBuyerDispute)
 	s.mux.HandleFunc("POST /api/v1/buyer/disputes/{disputeID}/evidence", s.addBuyerDisputeEvidence)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-terms/preview", s.previewCreditTerms)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests", s.createCreditRequest)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/credit-requests", s.listCreditRequests)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/payments", s.listOrganizationPayments)

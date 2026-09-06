@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — 6 September product audit
+
+- Separate sale acceptance from hosted bank-debit permission and confirmed readiness.
+- Keep unavailable financial data explicit and reject stale business-switch responses.
+- Preserve request identity across uncertain retries and scope short-lived drafts.
+- Calculate quick-sale timing on the server in Africa/Lagos; retain exact kobo.
+- Add a clear sales list, safer reported-transfer review, and recoverable sign-in/out.
+- Refine working-screen hierarchy, navigation, motion, pricing and respectful copy.
+- Add regression, visual and accessibility evidence without enabling production debits.
+
+
 ## Unreleased — decision register answered in draft
 
 - Drafted a position for every row of the external decision register, and split

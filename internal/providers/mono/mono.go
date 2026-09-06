@@ -123,7 +123,7 @@ func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.Aut
 	if id == "" {
 		id = out.Data.ID
 	}
-	if !successfulEnvelope(out.Status) || id == "" || out.Data.MonoURL == "" {
+	if !successfulEnvelope(out.Status) || id == "" || validateHostedAuthorizationURL(out.Data.MonoURL) != nil {
 		return mandates.Mandate{}, errors.New("mono returned an incomplete mandate authorization")
 	}
 	return mandates.Mandate{Provider: "mono-sweep", ProviderID: id, UserID: in.UserID, BusinessID: in.BusinessID, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, AuthorizationURL: out.Data.MonoURL, StartsAt: start, EndsAt: end, Variable: true, MultiAccount: true, PartialRecovery: c.partial, CreatedAt: c.now()}, nil

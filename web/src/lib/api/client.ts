@@ -1,4 +1,5 @@
 import createClient from 'openapi-fetch';
+import { boundedFetch, clearPrivateBrowserData } from './reliable';
 import type { paths } from './generated/schema';
 
 export const api = createClient<paths>({
@@ -71,10 +72,12 @@ export function idempotencyKey(): string {
 }
 
 export async function signOut(): Promise<void> {
-	await fetch('/api/v1/auth/logout', {
+	const response = await boundedFetch('/api/v1/auth/logout', {
 		method: 'POST',
 		credentials: 'include',
 		headers: csrfHeaders()
 	});
-	location.assign('/app');
+	if (!response.ok && response.status !== 401) throw new Error('Sign-out was not confirmed. Your account may still be open. Try again before leaving this device.');
+	clearPrivateBrowserData();
+	location.assign('/app?signed_out=1');
 }
