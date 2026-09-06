@@ -2,10 +2,10 @@ groups:
   - name: kredit-api
     rules:
       - alert: KreditAPIUnavailable
-        expr: up{job="kredit-api"} == 0
+        expr: up{job="kredit-api"} == 0 or absent(up{job="kredit-api"})
         for: 2m
         labels: {severity: critical}
-        annotations: {summary: "Kredit API is unavailable"}
+        annotations: {summary: "Kredit API or its scrape target is unavailable"}
       - alert: KreditHighServerErrorRate
         expr: sum(rate(kredit_http_responses_5xx[5m])) / clamp_min(sum(rate(kredit_http_requests_total[5m])), 0.001) > 0.01
         for: 10m
@@ -15,20 +15,24 @@ groups:
         expr: kredit_http_request_duration_milliseconds{quantile="0.95"} > 1000
         for: 10m
         labels: {severity: warning}
-        annotations: {summary: "API p95 latency is above one second"}
+        annotations: {summary: "API bounded-sample p95 latency is above one second"}
   - name: kredit-financial
     rules:
-      # Durable financial gauges are emitted by the API metrics endpoint.
-      # Missing instrumentation must be visible rather than silently healthy.
+      # These are current-state gauges, not counters. Never apply rate/increase
+      # to them. Deployment labels must separate independent environments.
       - alert: KreditFinancialTelemetryMissing
-        expr: absent(kredit_ledger_discrepancies) or absent(kredit_provider_webhook_oldest_unprocessed_seconds) or absent(kredit_collection_unknown_states) or absent(kredit_notification_dead_letters)
-        for: 10m
+        expr: absent(kredit_ledger_discrepancies) or absent(kredit_balance_discrepancies) or absent(kredit_schedule_discrepancies) or absent(kredit_collection_payment_discrepancies) or absent(kredit_settlement_discrepancies) or absent(kredit_provider_webhook_oldest_unprocessed_seconds) or absent(kredit_collection_unknown_states) or absent(kredit_notification_dead_letters) or absent(kredit_outbox_delivery_failures) or absent(kredit_collection_oldest_unresolved_seconds) or absent(kredit_river_pending_jobs) or absent(kredit_river_discarded_jobs) or absent(kredit_active_obligations) or absent(kredit_negative_outstanding_balances)
+        for: 5m
         labels: {severity: critical}
         annotations: {summary: "Required financial monitoring signals are missing"}
       - alert: KreditLedgerReconciliationFailure
         expr: kredit_ledger_discrepancies > 0
         labels: {severity: critical}
-        annotations: {summary: "Ledger reconciliation failed; financial writes require investigation"}
+        annotations: {summary: "Ledger reconciliation failed; investigate before further financial writes"}
+      - alert: KreditNegativeOutstandingBalance
+        expr: kredit_negative_outstanding_balances > 0
+        labels: {severity: critical}
+        annotations: {summary: "A negative outstanding balance requires immediate investigation"}
       - alert: KreditProviderWebhookBacklog
         expr: kredit_provider_webhook_oldest_unprocessed_seconds > 300
         for: 5m
@@ -37,7 +41,12 @@ groups:
       - alert: KreditCollectionUnknownState
         expr: kredit_collection_unknown_states > 0
         labels: {severity: critical}
-        annotations: {summary: "A collection entered an unknown provider state"}
+        annotations: {summary: "A collection outcome is unknown; reconcile before retrying"}
+      - alert: KreditCollectionReconciliationStale
+        expr: kredit_collection_oldest_unresolved_seconds > 900
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: "An unresolved collection is older than fifteen minutes"}
       - alert: KreditNotificationDeadLetters
         expr: kredit_notification_dead_letters > 0
         labels: {severity: warning}
@@ -46,23 +55,18 @@ groups:
         expr: kredit_balance_discrepancies > 0 or kredit_schedule_discrepancies > 0 or kredit_collection_payment_discrepancies > 0 or kredit_settlement_discrepancies > 0
         for: 5m
         labels: {severity: critical}
-        annotations: {summary: "Financial records disagree; review the reconciliation cases"}
+        annotations: {summary: "Financial records disagree; review reconciliation cases"}
       - alert: KreditOutboxDeliveryFailure
         expr: kredit_outbox_delivery_failures > 0
         for: 5m
         labels: {severity: critical}
         annotations: {summary: "A committed financial event repeatedly failed delivery"}
-      - alert: KreditHighCollectionFailureRate
-        expr: sum(rate(kredit_collection_attempts_failed_total[10m])) / clamp_min(sum(rate(kredit_collection_attempts_total[10m])), 0.001) > 0.15
-        for: 10m
-        labels: {severity: critical}
-        annotations: {summary: "Collection failure rate exceeds 15% in a 10m window"}
-      - alert: KreditMandateRevocationUnderDebt
-        expr: increase(kredit_mandate_revocations_with_active_debt_total[15m]) > 0
-        labels: {severity: critical}
-        annotations: {summary: "A collection mandate was cancelled or blocked while principal remains outstanding"}
       - alert: KreditRiverQueueBacklogHigh
         expr: kredit_river_pending_jobs > 50
         for: 10m
         labels: {severity: warning}
-        annotations: {summary: "River background job queue backlog exceeds 50 pending jobs for 10m"}
+        annotations: {summary: "More than fifty due background jobs remain queued"}
+      - alert: KreditRiverDeadLetters
+        expr: kredit_river_discarded_jobs > 0
+        labels: {severity: critical}
+        annotations: {summary: "A discarded background job requires an assigned operator"}
