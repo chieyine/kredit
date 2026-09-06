@@ -57,7 +57,7 @@ grep -q 'topicLastmod' web/src/routes/sitemap.xml/+server.ts || fail 'topic last
 
 # Status documentation must track the actual migration frontier and distinguish
 # engineering completion from external launch approval.
-test -f db/migrations/086_phase5_financial_metrics.sql || fail 'expected migration 086 is missing'
+test -f db/migrations/086_phase5_financial_monitoring.sql || fail 'expected migration 086 is missing'
 grep -q 'Last updated: 6 September 2026' IMPLEMENTATION_STATUS.md || fail 'implementation status date is stale'
 grep -q 'migrations run through \*\*086\*\*' IMPLEMENTATION_STATUS.md || fail 'implementation status migration frontier is stale'
 grep -q 'Actual Mono sandbox certification remains open in issue #5' IMPLEMENTATION_STATUS.md || fail 'external provider gate is not explicit'
