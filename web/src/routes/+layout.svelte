@@ -6,6 +6,7 @@
 	import SystemBanner from '$lib/components/SystemBanner.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import HomeProof from '$lib/components/HomeProof.svelte';
 	import MotionObserver from '$lib/components/MotionObserver.svelte';
 	import { jsonLd, nonIndexablePaths, seoForPath, SITE_URL } from '$lib/seo';
 	import { page } from '$app/state';
@@ -29,9 +30,8 @@
 		name: 'Kredit',
 		url: SITE_URL,
 		logo: `${SITE_URL}/icon-512.png`,
-		description:
-			'Kredit helps Nigerian businesses sell goods on credit, track payments and collect money.',
-		areaServed: 'NG',
+		description: 'Kredit helps Nigerian businesses sell goods on credit, track payments and collect money.',
+		areaServed: 'NG'
 	};
 	const websiteSchema = {
 		'@context': 'https://schema.org',
@@ -80,10 +80,7 @@
 
 <svelte:head>
 	<title>{seo.title}</title>
-	<meta
-		name="description"
-		content={seo.description}
-	/>
+	<meta name="description" content={seo.description}/>
 	<link rel="canonical" href={canonical} />
 	<link rel="alternate" hreflang="en-NG" href={canonical} />
 	<link rel="alternate" hreflang="x-default" href={canonical} />
@@ -125,5 +122,6 @@
 	<div id="main-content" class="motion-scope public-route" tabindex="-1">
 		{#key page.url.pathname}{@render children()}{/key}
 	</div>
+	{#if page.url.pathname === '/'}<HomeProof />{/if}
 {/if}
 {#if publicChrome}<SiteFooter />{/if}

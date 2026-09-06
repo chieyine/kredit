@@ -244,11 +244,27 @@ func (c Config) Validate() error {
 		return errors.New("money configuration must remain NGN/kobo")
 	}
 	if c.MonoSweepEnabled {
-		if c.Environment == "production" {
-			return errors.New("mono Sweep production enablement requires completed sandbox certification")
+		if c.CollectionProvider != "mono-sweep" || strings.TrimSpace(c.MonoWebhookSecret) == "" || strings.TrimSpace(c.MonoRedirectURL) == "" {
+			return errors.New("mono Sweep requires COLLECTION_PROVIDER=mono-sweep, webhook secret, and redirect URL")
 		}
-		if c.CollectionProvider != "mono-sweep" || !strings.HasPrefix(c.MonoSecretKey, "test_sk_") || c.MonoWebhookSecret == "" || c.MonoRedirectURL == "" {
-			return errors.New("mono sandbox requires COLLECTION_PROVIDER=mono-sweep, test secret key, webhook secret, and redirect URL")
+		if c.Environment == "production" {
+			if strings.TrimSpace(c.ProviderCertificationReference) == "" {
+				return errors.New("mono Sweep production requires PROVIDER_CERTIFICATION_REFERENCE")
+			}
+			if strings.TrimSpace(c.MonoSecretKey) == "" || strings.HasPrefix(c.MonoSecretKey, "test_sk_") {
+				return errors.New("mono Sweep production requires a live Mono secret key; sandbox keys are refused")
+			}
+			if err := validateSecret("MONO_SECRET_KEY", c.MonoSecretKey); err != nil {
+				return err
+			}
+			if err := validateSecret("MONO_WEBHOOK_SECRET", c.MonoWebhookSecret); err != nil {
+				return err
+			}
+			if err := validateProductionURL("MONO_REDIRECT_URL", c.MonoRedirectURL); err != nil {
+				return err
+			}
+		} else if !strings.HasPrefix(c.MonoSecretKey, "test_sk_") {
+			return errors.New("mono sandbox requires a test secret key")
 		}
 	}
 	if c.PartialSweepEnabled && !c.MonoSweepEnabled {
