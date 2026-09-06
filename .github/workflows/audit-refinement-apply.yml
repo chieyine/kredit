@@ -1,0 +1,32 @@
+name: Materialise audit refinement (temporary)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+concurrency:
+  group: refinement-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  apply:
+    if: github.repository == 'chieyine/kredit' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'improvement/audit-2026-09-06'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Apply fixed-path source refinements
+        run: |
+          set -euo pipefail
+          if test -f docs/testing/audit-2026-09-06-refinement.md; then exit 0; fi
+          python3 scripts/audit-finalize.py
+          git diff --check
+          git config user.name 'Kredit maintenance'
+          git config user.email 'kredit-maintenance@users.noreply.github.com'
+          while IFS= read -r path; do git add -- "$path"; done < .tmp/finalize-paths.txt
+          git commit -m 'fix: close audit regressions and harden the full invoice and instalment journey'
+          git push origin HEAD:refs/heads/improvement/audit-2026-09-06
