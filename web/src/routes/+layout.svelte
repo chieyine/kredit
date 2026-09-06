@@ -30,7 +30,7 @@
 		name: 'Kredit',
 		url: SITE_URL,
 		logo: `${SITE_URL}/icon-512.png`,
-		description: 'Kredit helps Nigerian businesses sell goods on credit, track payments and collect money.',
+		description: 'Kredit helps Nigerian businesses give goods on credit, keep the record clear and follow every payment.',
 		areaServed: 'NG'
 	};
 	const websiteSchema = {
@@ -92,7 +92,7 @@
 	<meta property="og:description" content={seo.description} />
 	<meta property="og:image" content={`${SITE_URL}/og.png`} />
 	<meta property="og:image:type" content="image/png" />
-	<meta property="og:image:alt" content="Kredit — give goods on credit and get paid with confidence" />
+	<meta property="og:image:alt" content="Kredit — give goods now, get your money later" />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 	<meta property="og:locale" content="en_NG" />
@@ -103,7 +103,7 @@
 	<meta name="twitter:title" content={seo.title} />
 	<meta name="twitter:description" content={seo.description} />
 	<meta name="twitter:image" content={`${SITE_URL}/og.png`} />
-	<meta name="twitter:image:alt" content="Kredit — give goods on credit and get paid with confidence" />
+	<meta name="twitter:image:alt" content="Kredit — give goods now, get your money later" />
 	{#if !privateShell}
 		{@html `<script type="application/ld+json">${jsonLd(organizationSchema)}<\/script>`}
 		{@html `<script type="application/ld+json">${jsonLd(websiteSchema)}<\/script>`}
@@ -114,7 +114,7 @@
 
 <a class="skip-link" href="#main-content">Skip to content</a>
 <MotionObserver />
-{#if offline}<SystemBanner tone="warning" message="You are offline. Financial actions are not submitted or queued until you reconnect." />{/if}
+{#if offline}<SystemBanner tone="warning" message="You are offline. Nothing to do with money is sent until your network comes back." />{/if}
 {#if publicChrome}<SiteHeader />{/if}
 {#if privateShell}
 	<div id="main-content" tabindex="-1">{@render children()}</div>

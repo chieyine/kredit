@@ -46,7 +46,7 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.runtime.Notifications.SendOTP(r.Context(), input.Identifier, input.Channel, code); err != nil {
-		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "verification code delivery is unavailable")
+		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "We cannot send codes right now. Please try again shortly.")
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{Action: "auth.otp.requested", ResourceType: "otp_challenge", ResourceID: challenge.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"channel": challenge.TargetType, "purpose": challenge.Purpose}})
@@ -76,7 +76,7 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 	activated := s.runtime.Organizations.ActivateInvitations(user.ID)
 	s.runtime.UserControl.BindUser(user.ID, user.Email, user.Phone)
 	if !setSessionCookies(w, s.config.Environment != "development", token) {
-		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "a secure session could not be established")
+		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "We could not sign you in safely. Please try again.")
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "auth.login.succeeded", ResourceType: "session", ResourceID: session.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"authentication_level": session.AuthenticationLevel}})
@@ -150,14 +150,14 @@ func (s *Server) verifyTOTP(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, auth.ErrMFALocked) {
 			s.recordSecurityEvent(r, "auth.mfa.locked", "mfa_method", "denied", "warning")
 			w.Header().Set("Retry-After", "900")
-			writeProblem(w, http.StatusTooManyRequests, "mfa_locked", "too many incorrect verification codes; try again shortly or use account recovery")
+			writeProblem(w, http.StatusTooManyRequests, "mfa_locked", "Too many wrong codes. Wait a short while and try again, or recover your account.")
 			return
 		}
 		writeProblem(w, http.StatusUnauthorized, "mfa_invalid", err.Error())
 		return
 	}
 	if !setSessionCookies(w, s.config.Environment != "development", rotatedToken) {
-		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "a secure session could not be established")
+		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "We could not sign you in safely. Please try again.")
 		return
 	}
 	session = rotatedSession
@@ -166,7 +166,7 @@ func (s *Server) verifyTOTP(w http.ResponseWriter, r *http.Request) {
 		var err error
 		recoveryCodes, err = s.runtime.UserControl.GenerateRecoveryCodes(r.Context(), user.ID)
 		if err != nil {
-			writeProblem(w, http.StatusServiceUnavailable, "recovery_codes_unavailable", "MFA was enabled but recovery codes could not be issued")
+			writeProblem(w, http.StatusServiceUnavailable, "recovery_codes_unavailable", "Extra sign-in safety is on, but we could not make your backup codes. Open your safety settings and make them now.")
 			return
 		}
 	}
@@ -178,13 +178,13 @@ func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) (auth.Sessi
 	token := sessionTokenFromRequest(r)
 	if token == "" {
 		s.recordSecurityEvent(r, "auth.authentication_required", "authentication", "denied", "warning")
-		writeProblem(w, http.StatusUnauthorized, "authentication_required", "authentication is required")
+		writeProblem(w, http.StatusUnauthorized, "authentication_required", "Please sign in first.")
 		return auth.Session{}, auth.User{}, false
 	}
 	session, user, err := s.runtime.Auth.SessionFromToken(token)
 	if err != nil {
 		s.recordSecurityEvent(r, "auth.session_invalid", "session", "denied", "warning")
-		writeProblem(w, http.StatusUnauthorized, "session_invalid", "session is invalid or expired")
+		writeProblem(w, http.StatusUnauthorized, "session_invalid", "You have been signed out. Please sign in again.")
 		return auth.Session{}, auth.User{}, false
 	}
 	return session, user, true
@@ -197,14 +197,14 @@ func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) (auth.Sessi
 func (s *Server) requireCSRF(w http.ResponseWriter, r *http.Request) bool {
 	if !s.sameOriginRequest(r) {
 		s.recordSecurityEvent(r, "auth.csrf_cross_origin", "csrf", "denied", "warning")
-		writeProblem(w, http.StatusForbidden, "csrf_failed", "cross-origin state change is not permitted")
+		writeProblem(w, http.StatusForbidden, "csrf_failed", "That request did not come from Kredit, so we stopped it.")
 		return false
 	}
 	cookie, err := r.Cookie(csrfCookieName)
 	submitted := r.Header.Get("X-CSRF-Token")
 	if err != nil || cookie.Value == "" || submitted == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(submitted)) != 1 {
 		s.recordSecurityEvent(r, "auth.csrf_failed", "csrf", "denied", "warning")
-		writeProblem(w, http.StatusForbidden, "csrf_failed", "csrf token is required")
+		writeProblem(w, http.StatusForbidden, "csrf_failed", "Your page is out of date. Refresh it and try again.")
 		return false
 	}
 	return true

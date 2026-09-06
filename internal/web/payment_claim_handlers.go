@@ -31,7 +31,7 @@ func (s *Server) createBuyerPaymentClaim(w http.ResponseWriter, r *http.Request)
 	if s.runtime.BusinessPolicies != nil {
 		policy, err := s.runtime.BusinessPolicies.Read(r.Context())
 		if err != nil {
-			writeProblem(w, 503, "policy_unavailable", "Business policies could not be checked")
+			writeProblem(w, 503, "policy_unavailable", "We could not check your business settings. Please try again.")
 			return
 		}
 		enabled = policy.Values.PaymentClaims
@@ -50,7 +50,7 @@ func (s *Server) createBuyerPaymentClaim(w http.ResponseWriter, r *http.Request)
 	requestID, _ := pathID(r, "requestID")
 	view, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)
 	if err != nil || view.Obligation == nil {
-		writeProblem(w, 404, "obligation_not_found", "Active obligation was not found")
+		writeProblem(w, 404, "obligation_not_found", "We could not find an open sale for that.")
 		return
 	}
 	var input paymentClaimInput
@@ -88,7 +88,7 @@ func (s *Server) listPaymentClaims(w http.ResponseWriter, r *http.Request) {
 	}
 	view, err := s.runtime.Credit.GetForSupplier(requestID, orgID)
 	if err != nil || view.Obligation == nil {
-		writeProblem(w, 404, "obligation_not_found", "Obligation was not found")
+		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
 	financialRows2, readErr2 := s.runtime.readPaymentClaimsForObligation(r.Context(), view.Obligation.ID)
@@ -122,7 +122,7 @@ func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {
 	}
 	claim, err := s.runtime.PaymentClaims.Get(r.Context(), claimID)
 	if err != nil || claim.SupplierOrganizationID != orgID {
-		writeProblem(w, 404, "payment_claim_not_found", "Payment claim was not found")
+		writeProblem(w, 404, "payment_claim_not_found", "We could not find that reported payment.")
 		return
 	}
 	var input paymentClaimDecisionInput
@@ -161,7 +161,7 @@ func (s *Server) publicReceipt(w http.ResponseWriter, r *http.Request) {
 	}
 	payment, err := s.runtime.getPayment(r.Context(), paymentID)
 	if err != nil {
-		writeProblem(w, 404, "receipt_not_found", "Receipt was not found")
+		writeProblem(w, 404, "receipt_not_found", "We could not find that receipt.")
 		return
 	}
 	writeJSON(w, 200, map[string]any{"receipt": map[string]any{"reference": payment.ID, "amount_kobo": payment.AmountKobo, "currency": payment.Currency, "source_type": payment.SourceType, "state": payment.State, "paid_at": payment.PaidAt, "recognized_at": payment.RecognizedAt}})
@@ -178,12 +178,12 @@ func (s *Server) createPaymentLink(w http.ResponseWriter, r *http.Request) {
 	requestID, _ := pathID(r, "requestID")
 	view, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)
 	if err != nil || view.Obligation == nil {
-		writeProblem(w, 404, "obligation_not_found", "Active obligation was not found")
+		writeProblem(w, 404, "obligation_not_found", "We could not find an open sale for that.")
 		return
 	}
 	token, err := s.issuePublicToken("payment", requestID, time.Hour)
 	if err != nil {
-		writeProblem(w, 500, "payment_link_failed", "Payment link could not be created")
+		writeProblem(w, 500, "payment_link_failed", "We could not create the payment link. Please try again.")
 		return
 	}
 	_, _ = s.runtime.Reports.TrackContext(r.Context(), "payment_link.created", requestID, "product_improvement", map[string]string{"surface": "buyer_portal"})
@@ -193,12 +193,12 @@ func (s *Server) createPaymentLink(w http.ResponseWriter, r *http.Request) {
 func (s *Server) publicPaymentIntent(w http.ResponseWriter, r *http.Request) {
 	requestID, err := publictoken.Parse(runtimeDomainKey(s.config.TokenHashKey, s.config.SessionSigningKey, "public-payments"), r.PathValue("token"), "payment", time.Now().UTC())
 	if err != nil {
-		writeProblem(w, 410, "payment_link_unavailable", "Payment link is invalid or expired")
+		writeProblem(w, 410, "payment_link_unavailable", "This payment link has expired, or it is not valid. Ask the seller for a new one.")
 		return
 	}
 	view, err := s.runtime.Credit.GetPublic(requestID)
 	if err != nil || view.Obligation == nil {
-		writeProblem(w, 404, "obligation_not_found", "Payment obligation was not found")
+		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
 	writeJSON(w, 200, map[string]any{"payment_intent": map[string]any{"reference": view.Request.ID, "supplier_name": view.Request.SupplierTradingName, "description": view.Request.GoodsDescription, "amount_kobo": view.Obligation.OutstandingKobo, "currency": view.Obligation.Currency, "payment_status": view.Obligation.PaymentStatus, "provider_action": "Sign in to the buyer portal to choose an approved payment method."}})

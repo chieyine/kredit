@@ -30,7 +30,7 @@ func (s *Server) cancelBuyerMandate(w http.ResponseWriter, r *http.Request) {
 	}
 	current, views, found := s.findBuyerMandate(r.Context(), user.ID, mandateID)
 	if !found {
-		writeProblem(w, 404, "mandate_not_found", "Mandate was not found")
+		writeProblem(w, 404, "mandate_not_found", "We could not find that bank debit permission.")
 		return
 	}
 	cancelled, err := s.runtime.Mandates.CancelMandate(r.Context(), current.ProviderID, input.Reason)
@@ -39,7 +39,7 @@ func (s *Server) cancelBuyerMandate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.applyMandateToBuyerResources(user.ID, current, cancelled, views); err != nil {
-		writeProblem(w, 503, "mandate_sync_pending", "Bank authorization changed; affected credit records require synchronization. Retry this request.")
+		writeProblem(w, 503, "mandate_sync_pending", "The bank debit permission changed while we were working. Please try this again.")
 		return
 	}
 	for _, view := range views {
@@ -60,7 +60,7 @@ func (s *Server) restoreBuyerMandate(w http.ResponseWriter, r *http.Request) {
 	mandateID, _ := pathID(r, "mandateID")
 	current, views, found := s.findBuyerMandate(r.Context(), user.ID, mandateID)
 	if !found {
-		writeProblem(w, 404, "mandate_not_found", "Mandate was not found")
+		writeProblem(w, 404, "mandate_not_found", "We could not find that bank debit permission.")
 		return
 	}
 	restored, err := s.runtime.Mandates.RestoreAuthorization(r.Context(), current.ProviderID)
@@ -69,7 +69,7 @@ func (s *Server) restoreBuyerMandate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.applyMandateToBuyerResources(user.ID, current, restored, views); err != nil {
-		writeProblem(w, 503, "mandate_sync_pending", "Bank authorization changed; affected credit records require synchronization. Retry this request.")
+		writeProblem(w, 503, "mandate_sync_pending", "The bank debit permission changed while we were working. Please try this again.")
 		return
 	}
 	for _, view := range views {

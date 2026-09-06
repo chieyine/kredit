@@ -505,80 +505,87 @@ func (s *Store) ListDeliveries(recipient string) []Delivery {
 	return out
 }
 func render(template string, event Event) string {
-	return strings.NewReplacer("{{amount}}", formatAmount(event.AmountKobo, event.Currency), "{{date}}", event.Date.In(time.FixedZone("Africa/Lagos", 3600)).Format("2 January 2006"), "{{reference}}", event.Reference, "{{next_action}}", event.NextAction, "{{support_link}}", event.SupportLink).Replace(template)
+	return strings.NewReplacer("{{amount}}", formatAmount(event.AmountKobo, event.Currency), "{{date}}", event.Date.In(time.FixedZone("Africa/Lagos", 3600)).Format("2 Jan 2006"), "{{reference}}", event.Reference, "{{next_action}}", event.NextAction, "{{support_link}}", event.SupportLink).Replace(template)
 }
 func defaultTemplate(eventType string) string {
 	switch eventType {
 	case "MandateRevoked":
-		return "Your bank-debit authorization is no longer active. Check your repayment arrangements in Kredit."
+		return "Your bank debit permission is now off. Kredit can no longer take money from your account. Open Kredit to arrange how you will pay."
 	case "CollectionRetryScheduled":
-		return "An unpaid bank-debit request may be retried after {{date}}. Review your current sale balance in Kredit."
+		return "We may try your bank again after {{date}} for money still unpaid. Check what you owe in Kredit."
 	case "ObligationAccepted":
-		return "Your acceptance of the trade-credit agreement was recorded. Review the agreed payment dates in Kredit."
+		return "You have agreed to this sale. Your payment days are saved in Kredit. Open it any time to see them."
 	case "GoodsReleased":
-		return "Your supplier has released goods for {{amount}}. Confirm receipt or report a problem in Kredit. If we do not hear from you by {{date}}, this sale may be treated as received."
+		return "Your seller sent goods worth {{amount}}. Confirm they arrived or report a problem in Kredit. If we hear nothing by {{date}}, we record them as received."
 	case "ObligationRepaid":
-		return "No principal remains payable on this sale. Review the payment record in Kredit."
+		return "You have finished paying this sale. Nothing is left to pay. The full payment record is in Kredit."
 	case "MandateExpiring":
-		return "Your bank-debit authorization expires on {{date}}. Review your repayment arrangements in Kredit."
+		return "Your bank debit permission ends on {{date}}. Open Kredit to renew it, or arrange another way to pay."
 	case "CollectionUncertain":
-		return "The bank-debit result for {{amount}} is still being checked. Do not make a duplicate payment before checking your sale."
+		return "We are still checking with the bank about {{amount}}. Do not pay again until you have checked this sale in Kredit."
 	case "CollectionFailed":
-		return "The bank-debit request was unsuccessful. Check your sale for the remaining amount and next steps."
+		return "The bank debit did not go through. Open Kredit to see what is still owed and what to do next."
 	case "CollectionCancelled":
-		return "The bank-debit request was cancelled. Check your sale for any amount still owed."
+		return "The bank debit was cancelled. Open Kredit to see if anything is still owed."
 	case "PaymentRecorded":
-		return "{{amount}} received. Reference: {{reference}}."
+		return "{{amount}} received and recorded. Reference: {{reference}}."
 	case "PriorDebitNotice":
-		return "Your agreed bank debit of up to {{amount}} may be requested on or after {{date}} if it remains unpaid. Review your payment schedule or raise an issue in Kredit before collection."
+		return "If unpaid, we may debit your bank up to {{amount}} on or after {{date}}, as you agreed. Open Kredit first to check your payment days or report a problem."
 	case "PaymentDueSoon":
-		return "Your {{amount}} payment is due on {{date}}. Next action: {{next_action}}."
+		return "Your {{amount}} payment is due on {{date}}. {{next_action}}"
 	case "CollectionSubmitted":
-		return "{{amount}} remained unpaid after the agreed grace period. A collection request has been submitted. Reference: {{reference}}."
+		return "{{amount}} was still unpaid after the extra days agreed, so we have asked your bank for it. Reference: {{reference}}."
 	case "PaymentReversed":
-		return "A payment of {{amount}} has been reversed. Review your updated balance in Kredit. Reference: {{reference}}. {{next_action}}"
+		return "A payment of {{amount}} has come back, so that money is owed again. Check your balance in Kredit. Reference: {{reference}}. {{next_action}}"
 	case "FinancialAdjustmentRecorded":
-		return "A financial adjustment of {{amount}} was recorded. Review the updated statement in Kredit. Reference: {{reference}}."
+		return "We have adjusted this sale by {{amount}}. Open Kredit to see the new balance. Reference: {{reference}}."
 	case "DisputeUpdated":
-		return "A dispute affecting {{amount}} has been updated. Review the decision and remaining balance in Kredit. Reference: {{reference}}. {{next_action}}"
+		return "There is an update on the problem about {{amount}}. Open Kredit to see the decision and what is left. Reference: {{reference}}. {{next_action}}"
 	case "DisputeOpened":
-		return "A dispute was opened for {{amount}}. Review securely for next steps: {{support_link}}"
+		return "A problem was reported about {{amount}}. See what happens next: {{support_link}}"
 	case "SupplierSensitiveSettingChanged":
-		return "A sensitive supplier setting changed: {{reference}}. If this was not you, contact support now."
+		return "An important setting on your Kredit account was changed: {{reference}}. If this was not you, contact us now."
 	case "ScheduleAmendment":
-		return "A repayment-date change needs your attention. {{next_action}}. Reference: {{reference}}"
+		return "Somebody wants to change your payment days. Nothing changes until you agree. {{next_action}}. Reference: {{reference}}"
 	case "OperationsControlApplied":
-		return "A protected operations control was applied: {{reference}}. Next action: {{next_action}}"
+		return "A protected control was applied to this account: {{reference}}. Next: {{next_action}}"
 	case "SupplierVerificationOutcome":
-		return "Your supplier verification is now {{reference}}. Next action: {{next_action}}"
+		return "Your business check is now {{reference}}. {{next_action}}"
 	case "SupplierPilotReady":
-		return "Your supplier workspace is pilot ready. Next action: {{next_action}}"
+		return "Your Kredit account is ready to use. {{next_action}}"
 	case "SupplierOnboardingRequirementExpired":
-		return "A supplier onboarding requirement expired. Review your readiness steps before financial activity."
+		return "One of your setup steps has expired. Finish it in Kredit before money can move again."
 	case "NotificationPreferencesChanged":
-		return "Your Kredit notification preferences changed. If this was not you, secure your account."
+		return "Your Kredit message settings were changed. If this was not you, secure your account now."
 	case "AccountRecoveryRequested":
-		return "Account recovery was requested. If this was not you, cancel it from a signed-in device immediately."
+		return "Somebody asked to recover this Kredit account. If it was not you, cancel it now from a device where you are still signed in."
 	case "AccountRecoveryCoolingOff":
-		return "Account recovery was approved and is in a security waiting period. Sensitive financial changes remain blocked."
+		return "Your account recovery was approved. There is a short safety wait before it finishes. Until then, money changes stay blocked."
 	case "AccountRecoveryCancelled":
-		return "Account recovery was cancelled."
+		return "The account recovery request was cancelled."
 	case "AccountRecoveryCompleted":
-		return "Account recovery completed. Existing sessions and recovery codes were revoked."
+		return "Your account recovery is done. Anyone signed in before has been signed out, and your old recovery codes no longer work."
 	case "PrivacyRequestReceived":
-		return "Your privacy request was received. Reference: {{reference}}."
+		return "We have received your request about your information. Reference: {{reference}}."
 	case "PrivacyClarificationRequired":
-		return "Your privacy request needs clarification. Review it securely."
+		return "We need a little more detail about your information request. Open Kredit to answer."
 	case "PrivacyRequestDecided":
-		return "A decision is available for your privacy request. Reference: {{reference}}."
+		return "There is a decision on your information request. Reference: {{reference}}."
 	case "PrivacyExportReady":
-		return "Your protected privacy export is ready for a limited time."
+		return "Your copy of your information is ready to download. The link works for a short time only."
 	case "PrivacyRequestCompleted":
-		return "Your privacy request is complete. Reference: {{reference}}."
+		return "Your information request is finished. Reference: {{reference}}."
 	default:
-		return "Kredit update {{reference}}. Next action: {{next_action}}."
+		return "Kredit update: {{reference}}. {{next_action}}"
 	}
 }
+
+// formatAmount renders a kobo amount for a notification body.
+// Thousands separators are added so the figure is readable on a phone, and a
+// whole amount drops the ".00" tail. The currency stays as an ISO code rather
+// than the naira sign on purpose: the sign is outside the GSM-7 alphabet, so
+// including it would force SMS bodies into UCS-2 and cut a paid segment from
+// 160 characters to 70.
 func formatAmount(amount int64, currency string) string {
 	if currency == "" {
 		currency = "NGN"
@@ -587,7 +594,18 @@ func formatAmount(amount int64, currency string) string {
 	if amount < 0 {
 		sign, whole, fraction = "-", -whole, -fraction
 	}
-	return fmt.Sprintf("%s %s%d.%02d", currency, sign, whole, fraction)
+	digits := strconv.FormatInt(whole, 10)
+	var grouped strings.Builder
+	for index, digit := range digits {
+		if index > 0 && (len(digits)-index)%3 == 0 {
+			grouped.WriteByte(',')
+		}
+		grouped.WriteRune(digit)
+	}
+	if fraction == 0 {
+		return fmt.Sprintf("%s %s%s", currency, sign, grouped.String())
+	}
+	return fmt.Sprintf("%s %s%s.%02d", currency, sign, grouped.String(), fraction)
 }
 func inQuietHours(now time.Time, prefs Preferences) bool {
 	if prefs.QuietStart == prefs.QuietEnd {

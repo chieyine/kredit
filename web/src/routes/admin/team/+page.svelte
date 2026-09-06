@@ -85,7 +85,7 @@
 <svelte:head><title>Admin team — Kredit</title></svelte:head>
 
 <main class="shell workspace team">
-	<header><p class="eyebrow">Admin / Team</p><h1>Who can run Kredit.</h1><p>Admin access is separate from business accounts. Every change needs recent verification and is permanently recorded.</p></header>
+	<header><p class="eyebrow">Admin / Team</p><h1>Who can run Kredit.</h1><p>Admin access is separate from business accounts. Every change needs recent verification, and every change is recorded permanently.</p></header>
 	{#if message}<p class="notice" role="status">{message}</p>{/if}
 	{#if error}
 		<p class="error" role="alert">{error}</p>

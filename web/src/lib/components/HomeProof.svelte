@@ -1,14 +1,14 @@
 <section class="proof" aria-labelledby="proof-title">
 	<div class="shell proof-layout">
-		<div class="proof-heading"><p class="eyebrow">What Kredit can prove today</p><h2 id="proof-title">Trust comes from the record.<br />Not from a promise.</h2><p>Kredit is still early, so we will not invent customer counts, collection rates or testimonials. These are the product controls you can verify in every real sale.</p></div>
+		<div class="proof-heading"><p class="eyebrow">What Kredit can prove today</p><h2 id="proof-title">Trust comes from the record.<br />Not from a promise.</h2><p>Kredit is new, so we will not invent customer numbers, success rates or fake reviews. Here is what you can check for yourself in every real sale.</p></div>
 		<div class="proof-grid">
-			<article><span>01</span><h3>The customer sees the terms first.</h3><p>The goods, amount and payment date are shown before the customer accepts the credit sale.</p></article>
-			<article><span>02</span><h3>Delivery evidence stays with the sale.</h3><p>Receipts, delivery confirmation and reported problems are kept beside the financial record.</p></article>
-			<article><span>03</span><h3>Every recorded payment changes the balance.</h3><p>Seller and customer can see what has been paid and what remains instead of relying on scattered messages.</p></article>
-			<article><span>04</span><h3>Kredit does not choose your customer.</h3><p>Kredit is not a lender and does not promise collection. The seller decides who receives trade credit.</p></article>
+			<article><span>01</span><h3>The customer sees the terms first.</h3><p>The goods, the money and the payment day are on the screen before your customer says yes.</p></article>
+			<article><span>02</span><h3>The delivery proof stays with the sale.</h3><p>Receipts, delivery confirmations and reported problems sit right beside the money record.</p></article>
+			<article><span>03</span><h3>Every payment changes the balance.</h3><p>Seller and customer both see what has been paid and what is left, instead of scrolling through old messages.</p></article>
+			<article><span>04</span><h3>Kredit does not choose your customer.</h3><p>Kredit does not lend money and cannot promise you will be paid. You decide who takes your goods on credit.</p></article>
 		</div>
 	</div>
-	<div class="shell proof-links"><a href="/how-it-works">See the full sale journey →</a><a href="/security">See security and privacy controls →</a></div>
+	<div class="shell proof-links"><a href="/how-it-works">See how a sale works →</a><a href="/security">See how we keep it safe →</a></div>
 </section>
 
 <style>

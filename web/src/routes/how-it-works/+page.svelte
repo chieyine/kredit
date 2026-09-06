@@ -1,23 +1,23 @@
 <script lang="ts">
 	const steps = [
-		{ number: '01', title: 'Record the credit sale.', body: 'Add the goods, amount, due date and any agreed grace period.', facts: [['Amount owed', '₦1,200,000'], ['Due in', '30 days'], ['Grace period', '3 days']] },
-		{ number: '02', title: 'Let your customer approve it.', body: 'Send a private link. Your customer checks the terms and accepts before the sale moves forward.', facts: [['Customer', 'Confirmed'], ['Terms', 'Accepted'], ['Bank debit', 'Separate permission']] },
-		{ number: '03', title: 'Record delivery.', body: 'Mark the goods as released and keep the delivery evidence with the sale.', facts: [['Goods released', 'Saved'], ['Goods received', 'Confirmed'], ['Evidence', 'Saved']] },
-		{ number: '04', title: 'Track every payment.', body: 'See reminders, transfers, disputes and the remaining balance in one record.', facts: [['Reminders', 'WhatsApp'], ['Disputes', 'Can be raised'], ['Bank debit', 'Only when permitted']] }
+		{ number: '01', title: 'Write down the sale.', body: 'Put in what they are taking, how much it costs, the day they must pay and any extra days you are giving them.', facts: [['Money owed', '₦1,200,000'], ['Pay in', '30 days'], ['Extra days', '3 days']] },
+		{ number: '02', title: 'Let your customer say yes.', body: 'Send them a private link. They read exactly what you wrote, and nothing moves until they agree to it.', facts: [['Customer', 'Confirmed'], ['Terms', 'Accepted'], ['Bank debit', 'Asked separately']] },
+		{ number: '03', title: 'Send the goods.', body: 'Mark the day the goods left, and keep the delivery note sitting with the sale.', facts: [['Goods sent', 'Saved'], ['Goods received', 'Confirmed'], ['Proof', 'Saved']] },
+		{ number: '04', title: 'Follow every payment.', body: 'Reminders, transfers, problems and the money still owed all live in the same record.', facts: [['Reminders', 'WhatsApp'], ['Problems', 'Can be reported'], ['Bank debit', 'Only if allowed']] }
 	];
 
 	const events = [
-		['10 Sep · 09:14', 'Credit sale created', 'Payment due in 30 days'],
-		['10 Sep · 10:42', 'Customer accepted', 'Customer and terms confirmed'],
-		['12 Sep · 14:06', 'Goods received', 'Delivery evidence saved'],
-		['12 Sep · 14:07', 'Payment tracking started', '₦1,200,000 outstanding']
+		['10 Sep · 09:14', 'Sale written down', 'Payment due in 30 days'],
+		['10 Sep · 10:42', 'Customer said yes', 'Customer and terms confirmed'],
+		['12 Sep · 14:06', 'Goods received', 'Delivery proof saved'],
+		['12 Sep · 14:07', 'Payment now being followed', '₦1,200,000 left to pay']
 	];
 </script>
 
 <main class="how-page">
 	<section class="intro shell">
-		<div><p class="eyebrow">How Kredit works</p><h1>From credit sale<br />to final payment.</h1></div>
-		<div class="intro-note"><span>One clear process</span><p>Agree the sale. Confirm delivery. Track what is paid. Keep the balance clear for both sides.</p></div>
+		<div><p class="eyebrow">How Kredit works</p><h1>From the handshake<br />to the last naira.</h1></div>
+		<div class="intro-note"><span>Four steps. That is all.</span><p>You agree the sale. They confirm the goods arrived. Then you both watch the same balance come down.</p></div>
 	</section>
 
 	<section class="journey shell" aria-label="The Kredit credit sale journey">
@@ -32,23 +32,23 @@
 
 	<section class="record-section">
 		<div class="shell record-layout">
-			<div class="record-copy"><p class="eyebrow inverse">One record for the whole sale</p><h2>Less searching.<br />Fewer arguments.</h2><p>The seller and customer can see the same agreed amount, due date, delivery history and payment record.</p></div>
+			<div class="record-copy"><p class="eyebrow inverse">One record for the whole sale</p><h2>Both of you are looking at the same page.</h2><p>You open the page. They open the page. Same amount, same payment day, same delivery history, same payments. There is nothing left to argue about.</p></div>
 			<div class="record" aria-label="Example credit sale record">
 				<div class="record-head"><span>TC–2048</span><strong>Adebayo Stores</strong><span>ACTIVE</span></div>
 				<ol>{#each events as [time, title, detail]}<li><time>{time}</time><div><strong>{title}</strong><span>{detail}</span></div><i>✓</i></li>{/each}</ol>
-				<div class="record-total"><span>Outstanding balance</span><strong>₦1,200,000</strong></div>
+				<div class="record-total"><span>Money left to pay</span><strong>₦1,200,000</strong></div>
 			</div>
 		</div>
 	</section>
 
 	<section class="exceptions shell">
-		<div class="exceptions-title"><p class="eyebrow">When something goes wrong</p><h2>The next step stays clear.</h2></div>
+		<div class="exceptions-title"><p class="eyebrow">When something goes wrong</p><h2>You always know the next step.</h2></div>
 		<div class="exception-list">
-			<article><span>01</span><div><h3>There is a problem with the goods</h3><p>Your customer can report the issue and add evidence. The disputed amount is handled according to the applicable dispute and payment rules.</p></div></article>
-			<article><span>02</span><div><h3>Your customer pays you directly</h3><p>They report the payment. You confirm it. Once recognized, the outstanding balance is updated.</p></div></article>
-			<article><span>03</span><div><h3>Payment becomes overdue</h3><p>Kredit sends reminders. After the agreed grace period, it may request a debit only where valid authorization and the relevant payment and dispute checks allow it. Collection is not guaranteed.</p></div></article>
+			<article><span>01</span><div><h3>Something is wrong with the goods</h3><p>They report it and add a photo or a paper. The money in question goes on hold while the two of you sort it out.</p></div></article>
+			<article><span>02</span><div><h3>Your customer pays you directly</h3><p>They tell us they have paid. You open your bank, see the money and confirm it. The balance drops the moment you do.</p></div></article>
+			<article><span>03</span><div><h3>The payment day passes</h3><p>Kredit sends reminders first. After the extra days you agreed, Kredit can ask the customer's bank for the money, but only if that customer gave permission and there is no open problem. A bank debit can still fail. Nobody can promise you the money.</p></div></article>
 		</div>
-		<div class="next"><p>Want to understand the fees?</p><a href="/pricing">See Kredit pricing <span>↗</span></a></div>
+		<div class="next"><p>Wondering what it costs?</p><a href="/pricing">See what Kredit charges <span>↗</span></a></div>
 	</section>
 </main>
 

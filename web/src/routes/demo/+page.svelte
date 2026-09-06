@@ -3,11 +3,11 @@
 	let amount = $state(500_000);
 	const amounts = [250_000, 500_000, 1_200_000];
 	const stages = [
-		{ role: 'Seller', title: 'Write down the sale', action: 'Send to my customer' },
-		{ role: 'Customer', title: 'Check every detail', action: 'Accept this sale' },
-		{ role: 'Seller', title: 'Release the goods', action: 'The goods have left' },
-		{ role: 'Customer', title: 'Confirm the goods', action: 'I received the goods' },
-		{ role: 'Seller', title: 'Record a payment', action: 'Record sample payment' },
+		{ role: 'Seller', title: 'Write down the sale', action: 'Send it to my customer' },
+		{ role: 'Customer', title: 'Read every detail', action: 'Yes, I accept this sale' },
+		{ role: 'Seller', title: 'Send out the goods', action: 'The goods have left' },
+		{ role: 'Customer', title: 'Confirm the goods came', action: 'Yes, I got the goods' },
+		{ role: 'Seller', title: 'Enter a payment', action: 'Enter a sample payment' },
 		{ role: 'Both sides', title: 'One clear record', action: '' }
 	] as const;
 	const payment = $derived(Math.round(amount / 3));
@@ -23,8 +23,8 @@
 
 <main class="demo-page">
 	<section class="demo-intro shell" aria-labelledby="demo-title">
-		<div><p class="eyebrow"><span></span> Try Kredit yourself</p><h1 id="demo-title">See a credit sale<br /><em>from start to payment.</em></h1></div>
-		<div class="intro-copy"><p>Take both sides of a sample sale. This guided example shows the steps for the seller and customer.</p><div class="demo-promise"><b>No sign-in</b><b>No real money</b><b>About 60 seconds</b></div></div>
+		<div><p class="eyebrow"><span></span> Try it yourself</p><h1 id="demo-title">One sale,<br /><em>start to finish.</em></h1></div>
+		<div class="intro-copy"><p>Play both sides of a sample sale: first as the seller, then as the customer. Nothing here is real.</p><div class="demo-promise"><b>No sign-in</b><b>No real money</b><b>About 60 seconds</b></div></div>
 	</section>
 
 	<section class="experience" aria-label="Interactive Kredit demonstration">
@@ -33,43 +33,43 @@
 				<div class="journey-top"><span>Sample sale</span><strong>{stage + 1} of {stages.length}</strong></div>
 				<div class="progress" aria-hidden="true"><span style={`width:${progress}%`}></span></div>
 				<ol>{#each stages as item, index}<li class:done={index < stage} class:active={index === stage}><span>{index < stage ? '✓' : index + 1}</span><div><small>{item.role}</small><strong>{item.title}</strong></div></li>{/each}</ol>
-				<p class="sample-note">This is only a sample. Nothing is saved and no message is sent.</p>
+				<p class="sample-note">This is only a sample. Nothing is saved, and no message is sent to anybody.</p>
 			</aside>
 
 			<div class="demo-stage">
 				<header><div><p>You are now the</p><strong>{current.role}</strong></div><span class="live-mark"><i></i> Live sample</span></header>
 				<div class="stage-copy">
 					<p class="stage-number">STEP {String(stage + 1).padStart(2, '0')}</p><h2>{current.title}</h2>
-					{#if stage === 0}<p>Start with the goods, money and payment day. Your customer will see the same details.</p>
-					{:else if stage === 1}<p>Nothing is hidden. The customer checks the goods, amount and date before saying yes.</p>
-					{:else if stage === 2}<p>The seller records when the goods leave and keeps the delivery proof with the sale.</p>
-					{:else if stage === 3}<p>The customer confirms what arrived. A problem can be reported before payment continues.</p>
-					{:else if stage === 4}<p>When money arrives, the seller records it once. Kredit changes the balance for both sides.</p>
-					{:else}<p>The seller and customer now have the same answer about the goods, payment and money left.</p>{/if}
+					{#if stage === 0}<p>Start with the goods, the money and the payment day. Your customer will see exactly the same thing.</p>
+					{:else if stage === 1}<p>Nothing is hidden. The customer reads the goods, the money and the day before saying yes.</p>
+					{:else if stage === 2}<p>The seller marks when the goods left, and keeps the delivery note with the sale.</p>
+					{:else if stage === 3}<p>The customer confirms what arrived. If something is wrong, they can say so before paying.</p>
+					{:else if stage === 4}<p>When money lands, the seller enters it once. The balance changes for both sides at the same time.</p>
+					{:else}<p>Seller and customer now give the same answer about the goods, the payment and the money left. No argument.</p>{/if}
 				</div>
 
 				<div class="product-frame" class:complete={stage === 5}>
 					<div class="product-bar"><a href="/" aria-label="Kredit home"><span>K</span>Kredit</a><b>{current.role} view</b></div>
 					{#if stage === 0}<div class="amount-choice"><p>Choose a sample amount</p><div>{#each amounts as option}<button class:chosen={amount === option} onclick={() => amount = option}>{money(option)}</button>{/each}</div></div>{/if}
 					<div class="deal-head"><div><small>Customer</small><h3>Adebayo Stores</h3></div><span class:accepted={stage >= 2}>{stage === 0 ? 'Not sent' : stage === 1 ? 'Waiting for you' : 'Accepted'}</span></div>
-					{#if stage === 1}<div class="plain-notice"><b>Please check before you accept</b><span>The seller cannot quietly change these details after you say yes.</span></div>{/if}
+					{#if stage === 1}<div class="plain-notice"><b>Read this before you accept</b><span>Once you say yes, the seller cannot quietly change these details.</span></div>{/if}
 					<div class="deal-facts"><div><small>Goods</small><strong>40 cartons of cooking oil</strong></div><div><small>Total to pay</small><strong>{money(amount)}</strong></div><div><small>Pay before</small><strong>18 September 2026</strong></div><div><small>Extra time</small><strong>3 days</strong></div></div>
 					{#if stage >= 2}<div class="record-line"><span>✓</span><div><b>Sale accepted</b><small>Adebayo Stores · Today, 10:42</small></div></div>{/if}
 					{#if stage >= 3}<div class="record-line"><span>✓</span><div><b>Goods released</b><small>Delivery note saved by Kora Wholesale</small></div></div>{/if}
 					{#if stage >= 4}<div class="record-line"><span>✓</span><div><b>Goods received</b><small>Customer confirmed · No problem reported</small></div></div>{/if}
 					{#if stage >= 4}<div class="balance-card"><div><small>{stage === 5 ? 'Money left to pay' : 'Current balance'}</small><strong>{stage === 5 ? money(balance) : money(amount)}</strong></div><span>{stage === 5 ? `Payment of ${money(payment)} recorded` : `Sample payment: ${money(payment)}`}</span></div>{/if}
 					{#if stage < 5}<button class="next-action" onclick={next}>{current.action}<span aria-hidden="true">→</span></button>
-					{:else}<div class="finish-panel" aria-live="polite"><span class="finish-check">✓</span><div><small>SAMPLE COMPLETE</small><h3>Everyone sees {money(balance)} left.</h3><p>One sale. One balance. Every important step kept together.</p></div></div>{/if}
+					{:else}<div class="finish-panel" aria-live="polite"><span class="finish-check">✓</span><div><small>SAMPLE FINISHED</small><h3>Both sides see {money(balance)} left.</h3><p>One sale. One balance. Every step kept in one place.</p></div></div>{/if}
 				</div>
-				<div class="stage-footer">{#if stage > 0}<button class="restart" onclick={restart}>Start again</button>{/if}{#if stage === 5}<a class="start-real" href="/app">Add my first real sale <span>↗</span></a>{:else}<span>Your choices stay on this device.</span>{/if}</div>
+				<div class="stage-footer">{#if stage > 0}<button class="restart" onclick={restart}>Start again</button>{/if}{#if stage === 5}<a class="start-real" href="/app">Now add my first real sale <span>↗</span></a>{:else}<span>Your choices stay on this device.</span>{/if}</div>
 			</div>
 		</div>
 	</section>
 
 	<section class="after-demo shell">
-		<div><p class="eyebrow"><span></span> What just happened?</p><h2>The details worth keeping together.</h2></div>
+		<div><p class="eyebrow"><span></span> What just happened?</p><h2>Six things nobody can argue about later.</h2></div>
 		<div class="answers"><p><span>01</span><b>What goods?</b>40 cartons of cooking oil.</p><p><span>02</span><b>How much?</b>{money(amount)}.</p><p><span>03</span><b>Who agreed?</b>The customer accepted.</p><p><span>04</span><b>Did goods arrive?</b>Both sides confirmed.</p><p><span>05</span><b>What was paid?</b>{money(payment)}.</p><p><span>06</span><b>What is left?</b>{money(balance)}.</p></div>
-		<a class="final-cta" href="/app">Start with one customer <span aria-hidden="true">↗</span></a>
+		<a class="final-cta" href="/app">Start with one customer — free <span aria-hidden="true">↗</span></a>
 	</section>
 </main>
 

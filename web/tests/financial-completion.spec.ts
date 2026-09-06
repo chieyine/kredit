@@ -15,14 +15,14 @@ test('financial review shows unresolved evidence and closes only after records a
  });
  await page.goto('/admin/reconciliation');
  await expect(page.getByText('₦1,000.00',{exact:true})).toBeVisible();
- await expect(page.getByRole('button',{name:'Close resolved review'})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Close this review'})).toBeDisabled();
  await page.getByLabel('Investigation notes').fill('Checked the supporting payment evidence');
- await page.getByRole('button',{name:'Claim review'}).click();
+ await page.getByRole('button',{name:'Take this review'}).click();
  await expect(page.getByText('Assigned to a reviewer')).toBeVisible();
- await page.getByRole('button',{name:'Close resolved review'}).click();
+ await page.getByRole('button',{name:'Close this review'}).click();
  await expect(page.getByRole('alert')).toHaveText('Financial discrepancy remains unresolved');
  agrees=true;
- await page.getByRole('button',{name:'Close resolved review'}).click();
+ await page.getByRole('button',{name:'Close this review'}).click();
  await expect(page.getByText('No open financial reviews.')).toBeVisible();
 });
 

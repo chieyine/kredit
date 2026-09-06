@@ -2,10 +2,10 @@
 	import { page } from '$app/state';
 
 	const notFound = $derived(page.status === 404);
-	const title = $derived(notFound ? 'Page not found' : 'Something went wrong');
+	const title = $derived(notFound ? 'This page is not here' : 'Something went wrong');
 	const detail = $derived(notFound
-		? 'The link may be expired, mistyped, or no longer available.'
-		: 'Your action was not submitted again. Return to a safe page and retry only after checking its current status.');
+		? 'The link may have expired, been typed wrongly, or been removed.'
+		: 'Nothing was sent twice. Go back to a safe page, check what happened, then try again.');
 </script>
 
 <svelte:head>
@@ -18,10 +18,10 @@
 	<h1>{title}</h1>
 	<p class="lede">{detail}</p>
 	<div class="actions">
-		<a class="primary" href="/">Go to Kredit home</a>
+		<a class="primary" href="/">Go to the home page</a>
 		<button type="button" onclick={() => history.back()}>Go back</button>
 	</div>
-	<p class="support">Still stuck? <a href="/legal/complaints">Ask for help</a>. Share the page address, but never send your password, one-time code or full bank details.</p>
+	<p class="support">Still stuck? <a href="/legal/complaints">Ask for help</a>. Send us the page address, but never send your password, one-time code or bank details.</p>
 </main>
 
 <style>

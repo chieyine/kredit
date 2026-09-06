@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	let { open = $bindable(false), title, description, confirmLabel, previewLabel = 'Preview impact', preview, onconfirm }: { open?: boolean; title: string; description: string; confirmLabel: string; previewLabel?: string; preview?: (reason: string) => Promise<string | undefined>; onconfirm: (reason: string) => Promise<boolean> } = $props();
+	let { open = $bindable(false), title, description, confirmLabel, previewLabel = 'Show me what will change', preview, onconfirm }: { open?: boolean; title: string; description: string; confirmLabel: string; previewLabel?: string; preview?: (reason: string) => Promise<string | undefined>; onconfirm: (reason: string) => Promise<boolean> } = $props();
 	let dialog: HTMLDialogElement = $state()!;
 	let reason = $state(''), impact = $state(''), error = $state(''), busy = $state(false), wasOpen = false;
 	$effect(() => {
@@ -9,18 +9,18 @@
 	});
 	function close(){if(!busy)open=false}
 	async function proceed(){
-		if(reason.trim().length<8){error='Give a specific reason using at least 8 characters.';return}
+		if(reason.trim().length<8){error='Please give a clear reason. At least 8 characters.';return}
 		busy=true;error='';
 		try{if(preview&&!impact){impact=(await preview(reason.trim()))??'';if(!impact)error='The impact preview could not be loaded. Nothing was changed.'}else if(await onconfirm(reason.trim()))open=false}
-		catch(cause){error=cause instanceof Error?cause.message:'The action could not be completed.'}finally{busy=false}
+		catch(cause){error=cause instanceof Error?cause.message:'That did not go through. Please try again.'}finally{busy=false}
 	}
 </script>
 {#if open}
 	<dialog bind:this={dialog} aria-labelledby="protected-action-title" oncancel={(event)=>{event.preventDefault();close()}}>
 		<form method="dialog" onsubmit={(event)=>{event.preventDefault();proceed()}}>
 			<div class="dialog-mark" aria-hidden="true">!</div><h2 id="protected-action-title">{title}</h2><p class="muted">{description}</p>
-			<label>Reason for this action<textarea bind:value={reason} rows="4" minlength="8" maxlength="1000" required disabled={busy||Boolean(impact)}></textarea></label>
-			{#if impact}<aside aria-live="polite"><strong>Verified impact preview</strong><p>{impact}</p><p>No action has been applied yet.</p></aside>{/if}
+			<label>Why are you doing this?<textarea bind:value={reason} rows="4" minlength="8" maxlength="1000" required disabled={busy||Boolean(impact)}></textarea></label>
+			{#if impact}<aside aria-live="polite"><strong>What this will change</strong><p>{impact}</p><p>Nothing has changed yet.</p></aside>{/if}
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
 			<div class="actions"><button type="button" onclick={close} disabled={busy}>Cancel</button><button class="primary" disabled={busy||reason.trim().length<8}>{busy?'Working…':preview&&!impact?previewLabel:confirmLabel}</button></div>
 		</form>

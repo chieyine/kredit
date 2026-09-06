@@ -16,12 +16,12 @@ test('public product routes expose clear conversion and trust content', async ({
 
 test('visitor can complete the sample sale without signing in', async ({ page }) => {
 	await page.goto('/demo');
-	await expect(page.getByRole('heading', { name: /See a credit sale/i })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /One sale,/i })).toBeVisible();
 	for (const label of ['Send to my customer', 'Accept this sale', 'The goods have left', 'I received the goods', 'Record sample payment']) {
 		await page.getByRole('button', { name: label }).click();
 	}
 	await expect(page.getByRole('heading', { name: /Everyone sees .* left/i })).toBeVisible();
-	await expect(page.getByRole('link', { name: /Add my first real sale/i })).toBeVisible();
+	await expect(page.getByRole('link', { name: /Now add my first real sale/i })).toBeVisible();
 });
 
 test('mobile homepage remains navigable', async ({ page }) => {

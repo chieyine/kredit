@@ -85,7 +85,7 @@ func (s *Server) requestOnboardingContactOTP(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if membership.Role != access.RoleOwner {
-		writeProblem(w, 403, "owner_required", "only the organization owner may verify owner contacts")
+		writeProblem(w, 403, "owner_required", "Only the business owner can confirm the owner's phone or email.")
 		return
 	}
 	if !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
@@ -104,7 +104,7 @@ func (s *Server) requestOnboardingContactOTP(w http.ResponseWriter, r *http.Requ
 	// leaves the supplier stuck on an onboarding step with no way to know why.
 	// The login OTP route already reports this; report it here too.
 	if err := s.runtime.Notifications.SendOTP(r.Context(), in.Identifier, in.Channel, code); err != nil {
-		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "verification code delivery is unavailable")
+		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "We cannot send codes right now. Please try again shortly.")
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "supplier.onboarding.contact_verification_requested", ResourceType: "supplier_onboarding", ResourceID: orgID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"channel": in.Channel}})
@@ -122,7 +122,7 @@ func (s *Server) verifyOnboardingContact(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if membership.Role != access.RoleOwner {
-		writeProblem(w, 403, "owner_required", "only the organization owner may verify owner contacts")
+		writeProblem(w, 403, "owner_required", "Only the business owner can confirm the owner's phone or email.")
 		return
 	}
 	if !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
@@ -177,7 +177,7 @@ func (s *Server) submitSupplierKYB(w http.ResponseWriter, r *http.Request) {
 	}
 	organization, exists := s.runtime.Organizations.Get(orgID)
 	if !exists {
-		writeProblem(w, http.StatusNotFound, "organization_not_found", "organization was not found")
+		writeProblem(w, http.StatusNotFound, "organization_not_found", "We could not find that business.")
 		return
 	}
 	verification, providerErr := s.runtime.Identity.CreateBusinessVerification(r.Context(), identity.BusinessVerificationInput{SubjectID: orgID, LegalName: organization.LegalName, BusinessType: organization.BusinessType, Address: organization.BusinessAddress, Registration: organization.RegistrationInfo})
@@ -297,7 +297,7 @@ func (s *Server) acceptSupplierConsents(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if m.Role != access.RoleOwner {
-		writeProblem(w, 403, "owner_required", "only the organization owner may accept supplier terms")
+		writeProblem(w, 403, "owner_required", "Only the business owner can accept these terms.")
 		return
 	}
 	if !s.requireFreshMFA(w, session) {
@@ -316,7 +316,7 @@ func (s *Server) acceptSupplierConsents(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) requireFreshMFA(w http.ResponseWriter, session auth.Session) bool {
 	if session.AuthenticationLevel != auth.AAL2 || session.MFAVerifiedAt.IsZero() || time.Since(session.MFAVerifiedAt) > 15*time.Minute {
-		writeProblem(w, 403, "step_up_required", "recent MFA verification is required for this sensitive action")
+		writeProblem(w, 403, "step_up_required", "Please prove it is really you first. Open your authenticator app and enter the code.")
 		return false
 	}
 	return true
@@ -387,7 +387,7 @@ func (s *Server) requireSupplierReady(w http.ResponseWriter, organizationID, act
 	for _, requirement := range summary.Missing {
 		codes = append(codes, requirement.Code)
 	}
-	writeProblem(w, http.StatusConflict, "supplier_not_ready", fmt.Sprintf("Complete these onboarding steps before %s: %s", action, strings.Join(codes, ", ")))
+	writeProblem(w, http.StatusConflict, "supplier_not_ready", fmt.Sprintf("Finish these setup steps before %s: %s", action, strings.Join(codes, ", ")))
 	return false
 }
 

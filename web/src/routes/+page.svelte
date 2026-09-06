@@ -4,20 +4,20 @@
 
 	let activeView = $state<'terms' | 'evidence' | 'repayment'>('terms');
 	const views = [
-		{ id: 'terms', label: '01 / The sale', title: 'Write down the amount and date.' },
-		{ id: 'evidence', label: '02 / The goods', title: 'Show that the goods arrived.' },
-		{ id: 'repayment', label: '03 / The money', title: 'See what your customer still owes.' }
+		{ id: 'terms', label: '01 / The sale', title: 'The amount and the day are written down.' },
+		{ id: 'evidence', label: '02 / The goods', title: 'Proof that the goods arrived.' },
+		{ id: 'repayment', label: '03 / The money', title: 'What your customer still owes.' }
 	] as const;
 	const sectors = ['Wholesale', 'Distribution', 'Manufacturing', 'FMCG', 'Agriculture'];
 	const steps = [
-		{ number: '01', title: 'Add the sale', body: 'Write the goods, amount and day your customer will pay.' },
-		{ number: '02', title: 'Send it to your customer', body: 'Your customer opens a private link and says yes to the sale.' },
-		{ number: '03', title: 'See every payment', body: 'Kredit keeps the delivery, reminders and payments together.' }
+		{ number: '01', title: 'Add the sale', body: 'Write down what they took, how much it costs and the day they are paying you.' },
+		{ number: '02', title: 'Send it to your customer', body: 'They open a private link on their phone, read the same thing you wrote and agree to it.' },
+		{ number: '03', title: 'Follow the money', body: 'Kredit does the reminding. You just watch the money come in.' }
 	];
 </script>
 
 <svelte:head>
-	{@html `<script type="application/ld+json">${jsonLd({ '@context':'https://schema.org', '@type':'SoftwareApplication', name:'Kredit', applicationCategory:'BusinessApplication', operatingSystem:'Web', description:'A simple way for businesses to record credit sales, delivery and payment', offers:{'@type':'Offer', price:'0', priceCurrency:'NGN'} })}<\/script>`}
+	{@html `<script type="application/ld+json">${jsonLd({ '@context':'https://schema.org', '@type':'SoftwareApplication', name:'Kredit', applicationCategory:'BusinessApplication', operatingSystem:'Web', description:'A simple way for Nigerian businesses to record goods sold on credit, keep delivery proof and follow every payment', offers:{'@type':'Offer', price:'0', priceCurrency:'NGN'} })}<\/script>`}
 </svelte:head>
 
 <main class="home">
@@ -25,12 +25,12 @@
 		<div class="hero-copy">
 			<p class="kicker"><span></span> Sell now. Let them pay later.</p>
 			<h1 id="page-title">Give goods now.<br /><em>Get your money later.</em></h1>
-			<p class="hero-lede">Kredit writes down who took the goods, how much they will pay and when. It sends reminders and keeps every payment.</p>
+			<p class="hero-lede">Write down who took your goods, how much they owe and when they are paying. Kredit reminds them for you. Every payment shows up here.</p>
 			<div class="hero-actions">
 				<a class="button button-dark" href="/app">Add your first sale <span aria-hidden="true">↗</span></a>
-				<a class="text-link" href="/demo">Try the 60-second demo <span aria-hidden="true">→</span></a>
+				<a class="text-link" href="/demo">See it work in 60 seconds <span aria-hidden="true">→</span></a>
 			</div>
-			<div class="assurances" aria-label="Product assurances"><span>We do not give loans</span><span>No monthly payment</span><span>You choose your customer</span></div>
+			<div class="assurances" aria-label="Product assurances"><span>We do not lend money</span><span>No monthly fee</span><span>Free until a sale starts</span></div>
 		</div>
 
 		<div class="hero-product" aria-label="Example Kredit credit sale">
@@ -38,7 +38,7 @@
 			<div class="agreement-window">
 				<div class="window-top"><div class="mini-brand"><span>K</span></div><span class="demo-label">Credit sale</span><button aria-label="More options">•••</button></div>
 				<div class="agreement-head"><div><p>Customer</p><h2>Adebayo Stores</h2></div><span class="verified-mark">✓ Accepted</span></div>
-				<div class="amount-block"><p>Amount left to pay</p><strong><Money amountKobo={120000000} /></strong><div class="balance-line"><span style="width: 68%"></span></div><div class="amount-meta"><span>Paid ₦400,000</span><span>Pay by 18 Sep</span></div></div>
+				<div class="amount-block"><p>Money left to pay</p><strong><Money amountKobo={120000000} /></strong><div class="balance-line"><span style="width: 68%"></span></div><div class="amount-meta"><span>Paid ₦400,000</span><span>Pay by 18 Sep</span></div></div>
 				<div class="agreement-timeline">
 					<div class="event done"><span>✓</span><p><strong>Deal accepted</strong><small>Customer confirmed · 10:42</small></p></div>
 					<div class="event done"><span>✓</span><p><strong>Goods received</strong><small>Delivery proof saved</small></p></div>
@@ -54,12 +54,12 @@
 
 	<section class="belief shell">
 		<div class="section-number">01 — WHY KREDIT</div>
-		<div class="belief-copy"><h2>Trust your customer.<br /><em>But write it down.</em></h2><div class="belief-text"><p>It is easy to forget an amount or payment date. Paper can get lost. Old WhatsApp messages can be hard to find.</p><p>Kredit keeps the sale, the goods and every payment in one place.</p></div></div>
+		<div class="belief-copy"><h2>Trust your customer.<br /><em>But write it down.</em></h2><div class="belief-text"><p>You will forget the exact amount. The paper will get lost. And nobody wants to scroll through three months of WhatsApp to prove who said what.</p><p>So Kredit holds all of it in one place: the sale, the goods and every payment.</p></div></div>
 	</section>
 
 	<section id="how-it-works" class="process-section">
 		<div class="shell">
-			<div class="section-heading"><div><div class="section-number light">02 — HOW IT WORKS</div><h2>Three easy<br />steps.</h2></div><p>Add the sale. Let your customer accept it. Then see every payment.</p></div>
+			<div class="section-heading"><div><div class="section-number light">02 — HOW IT WORKS</div><h2>Three easy<br />steps.</h2></div><p>You add the sale. Your customer accepts it. After that you just watch the payments come in.</p></div>
 			<div class="process-grid">{#each steps as step}<article><span>{step.number}</span><div class="process-icon" aria-hidden="true">{step.number === '01' ? '✦' : step.number === '02' ? '↗' : '✓'}</div><h3>{step.title}</h3><p>{step.body}</p></article>{/each}</div>
 		</div>
 	</section>
@@ -67,20 +67,20 @@
 	<section class="product-story shell">
 		<div class="section-number">03 — ONE CLEAR RECORD</div>
 		<div class="story-layout">
-			<div class="story-nav"><p class="story-intro">Know what is happening with every sale.</p>{#each views as view}<button class:active={activeView === view.id} onclick={() => activeView = view.id} aria-pressed={activeView === view.id}><span>{view.label}</span><strong>{view.title}</strong><i aria-hidden="true">→</i></button>{/each}</div>
+			<div class="story-nav"><p class="story-intro">You always know where a sale stands.</p>{#each views as view}<button class:active={activeView === view.id} onclick={() => activeView = view.id} aria-pressed={activeView === view.id}><span>{view.label}</span><strong>{view.title}</strong><i aria-hidden="true">→</i></button>{/each}</div>
 			<div class="story-canvas">
 				{#if activeView === 'terms'}
-					<div class="canvas-top"><span>Sale details</span><span class="status-chip">Waiting for customer</span></div><h3>The amount and payment day are clear.</h3>
-					<div class="terms-grid"><div><small>Money to pay</small><strong>₦1,200,000</strong></div><div><small>Pay before</small><strong>18 Sep 2026</strong></div><div><small>Extra days</small><strong>3 days</strong></div><div><small>If payment is late</small><strong>Debit after 3 days</strong></div></div>
-					<div class="accept-bar"><span><b>✓</b> Your customer sees it before saying yes</span><button>Check the sale</button></div>
+					<div class="canvas-top"><span>Sale details</span><span class="status-chip">Waiting for customer</span></div><h3>Both of you see the same amount and the same day.</h3>
+					<div class="terms-grid"><div><small>Money to pay</small><strong>₦1,200,000</strong></div><div><small>Pay before</small><strong>18 Sep 2026</strong></div><div><small>Extra days</small><strong>3 days</strong></div><div><small>If they still do not pay</small><strong>Bank debit after 3 days</strong></div></div>
+					<div class="accept-bar"><span><b>✓</b> Your customer reads it before saying yes</span><button>See the sale</button></div>
 				{:else if activeView === 'evidence'}
-					<div class="canvas-top"><span>The goods</span><span class="status-chip">2 items saved</span></div><h3>Show that the goods arrived.</h3>
+					<div class="canvas-top"><span>The goods</span><span class="status-chip">2 items saved</span></div><h3>Keep the proof that the goods arrived.</h3>
 					<div class="evidence-list"><div><span class="evidence-thumb">DR</span><p><strong>Delivery receipt</strong><small>Added by Chidi Okafor · 14 Sep, 11:24</small></p><i>Saved</i></div><div><span class="evidence-thumb photo">IMG</span><p><strong>Customer confirmation</strong><small>Confirmed from the customer's private link</small></p><i>Saved</i></div></div>
-					<div class="accept-bar"><span><b>✓</b> Delivery and receipt stay together</span><button>See proof</button></div>
+					<div class="accept-bar"><span><b>✓</b> The delivery note stays with the sale</span><button>See the proof</button></div>
 				{:else}
-					<div class="canvas-top"><span>Payments</span><span class="status-chip">On track</span></div><h3>See what has been paid and what is left.</h3>
+					<div class="canvas-top"><span>Payments</span><span class="status-chip">On track</span></div><h3>See what they paid, and what is left.</h3>
 					<div class="repayment-visual"><div class="ring"><div><strong>33%</strong><small>paid</small></div></div><div class="repayment-facts"><p><span>Starting amount</span><strong>₦1,200,000</strong></p><p><span>Paid so far</span><strong>₦400,000</strong></p><p><span>Left to pay</span><strong>₦800,000</strong></p></div></div>
-					<div class="accept-bar"><span><b>✓</b> Every payment updates the balance</span><button>See payments</button></div>
+					<div class="accept-bar"><span><b>✓</b> Every payment brings the balance down</span><button>See payments</button></div>
 				{/if}
 			</div>
 		</div>
@@ -89,11 +89,11 @@
 	<section class="whatsapp-section">
 		<div class="shell whatsapp-layout">
 			<div class="phone-scene" aria-label="Example WhatsApp payment conversation"><div class="phone"><div class="phone-bar"><span>‹</span><div class="avatar">K</div><p><strong>Kredit</strong><small>business account</small></p><span>•••</span></div><div class="chat-date">TODAY</div><div class="chat incoming">Hello Adebayo Stores. Your ₦800,000 payment to <strong>Kora Wholesale</strong> is due on 18 September.<small>09:16</small></div><div class="chat outgoing">I’ve paid ₦400,000 now.<small>09:22 ✓✓</small></div><div class="chat incoming receipt-chat"><span>✓</span><div><strong>Payment confirmed</strong><p>₦400,000 recorded<br />Left to pay: ₦400,000</p></div><small>09:23</small></div><div class="chat-input">Message <span>➤</span></div></div></div>
-			<div class="whatsapp-copy"><div class="section-number light">04 — ON WHATSAPP</div><h2>We remind them.<br /><em>You chase less.</em></h2><p>Your customer does not need a new app. Kredit sends the reminder, payment link and receipt on WhatsApp.</p><ul><li><span>01</span>Reminder before payment day</li><li><span>02</span>A safe link to pay</li><li><span>03</span>Receipt after payment</li></ul></div>
+			<div class="whatsapp-copy"><div class="section-number light">04 — ON WHATSAPP</div><h2>Your customer hears from us <em>before you have to call.</em></h2><p>Your customer does not have to install anything. The reminder, the payment link and the receipt all land in their WhatsApp, where they already are.</p><ul><li><span>01</span>A reminder before the payment day</li><li><span>02</span>A safe link to pay</li><li><span>03</span>A receipt once the money lands</li></ul></div>
 		</div>
 	</section>
 
-	<section class="closing shell"><p class="kicker"><span></span> Start with one customer</p><h2>Give the goods.<br /><em>Keep the payment clear.</em></h2><p>Add your next sale before the goods leave.</p><div class="closing-actions"><a class="button button-coral" href="/app">Add your first sale <span aria-hidden="true">↗</span></a><a class="text-link" href="/demo">Try a sample sale first →</a></div></section>
+	<section class="closing shell"><p class="kicker"><span></span> Start with one customer</p><h2>You can start with <em>just one customer.</em></h2><p>Add your next sale before the goods leave your shop. It costs nothing to start.</p><div class="closing-actions"><a class="button button-coral" href="/app">Add your first sale <span aria-hidden="true">↗</span></a><a class="text-link" href="/demo">Or try a sample sale first →</a></div></section>
 </main>
 
 <style>

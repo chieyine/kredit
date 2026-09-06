@@ -23,7 +23,7 @@
  <p>{item.owner_id?'Assigned to a reviewer':'Awaiting a reviewer'}</p>
  <details><summary>Review history</summary>{#each item.history as event (event.id)}<p>{new Date(event.occurred_at).toLocaleString()} · {event.action.toLowerCase()}: {event.reason}</p>{/each}</details>
  <label for={`reason-${item.id}`}>Investigation notes</label><textarea id={`reason-${item.id}`} bind:value={reasons[item.id]} minlength="8" maxlength="2000" placeholder="Explain what you checked and the outcome"></textarea>
- <div><button disabled={!!busy||(reasons[item.id]||'').trim().length<8} onclick={()=>decide(item,'claim')}>Claim review</button><button disabled={!!busy||!item.owner_id||(reasons[item.id]||'').trim().length<8} onclick={()=>decide(item,'resolve')}>Close resolved review</button></div>
+ <div><button disabled={!!busy||(reasons[item.id]||'').trim().length<8} onclick={()=>decide(item,'claim')}>Take this review</button><button disabled={!!busy||!item.owner_id||(reasons[item.id]||'').trim().length<8} onclick={()=>decide(item,'resolve')}>Close this review</button></div>
  </article>{/each}
 </main>
 <style>article{padding:1.5rem;border:1px solid var(--color-border);border-radius:1rem;margin:1.5rem 0}label,textarea{display:block;margin:.75rem 0}textarea{width:100%;min-height:6rem}button{padding:.7rem 1rem;margin:.25rem;border:1px solid var(--color-border);border-radius:.5rem}code{overflow-wrap:anywhere}</style>

@@ -15,7 +15,7 @@ import (
 func policyFailure(w http.ResponseWriter, err error) {
 	var pg *pgconn.PgError
 	if errors.As(err, &pg) {
-		writeProblem(w, 409, "policy_conflict", "The change could not be applied. Refresh the settings and try again.")
+		writeProblem(w, 409, "policy_conflict", "We could not save that change. Refresh the page and try again.")
 		return
 	}
 	writeProblem(w, 409, "policy_conflict", err.Error())
@@ -72,27 +72,27 @@ func (s *Server) businessPolicies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.runtime.BusinessPolicies == nil {
-		writeProblem(w, 503, "policy_unavailable", "Business policies require database persistence")
+		writeProblem(w, 503, "policy_unavailable", "Business settings cannot be saved right now. Please try again shortly.")
 		return
 	}
 	current, err := s.runtime.BusinessPolicies.Read(r.Context())
 	if err != nil {
-		writeProblem(w, 503, "policy_unavailable", "Business policies could not be loaded")
+		writeProblem(w, 503, "policy_unavailable", "We could not open your business settings. Please try again.")
 		return
 	}
 	changes, events, err := s.runtime.BusinessPolicies.History(r.Context())
 	if err != nil {
-		writeProblem(w, 503, "policy_unavailable", "Policy history could not be loaded")
+		writeProblem(w, 503, "policy_unavailable", "We could not open the history of your settings. Please try again.")
 		return
 	}
 	var actors []byte
 	if err = s.runtime.Database.Raw().QueryRow(r.Context(), `WITH visible AS (SELECT id,proposed_by,decided_by FROM app.business_policy_changes ORDER BY revision DESC LIMIT 100) SELECT COALESCE(jsonb_object_agg(id,app.admin_actor_name(id)),'{}'::jsonb) FROM (SELECT proposed_by id FROM visible UNION SELECT decided_by FROM visible WHERE decided_by IS NOT NULL UNION SELECT actor_id FROM app.business_policy_events WHERE change_id IN(SELECT id FROM visible))a`).Scan(&actors); err != nil {
-		writeProblem(w, 503, "policy_unavailable", "Administrator names could not be loaded")
+		writeProblem(w, 503, "policy_unavailable", "We could not load the administrator names. Please try again.")
 		return
 	}
 	var canPropose, canApprove bool
 	if err = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT app.has_admin_role($1::uuid,ARRAY['platform_admin','policy_manager']),app.has_admin_role($1::uuid,ARRAY['platform_admin','approver'])`, user.ID).Scan(&canPropose, &canApprove); err != nil {
-		writeProblem(w, 503, "policy_unavailable", "Policy permissions could not be loaded")
+		writeProblem(w, 503, "policy_unavailable", "We could not check who is allowed to change this. Please try again.")
 		return
 	}
 	writeJSON(w, 200, map[string]any{"can_propose": canPropose, "can_approve": canApprove, "actors": json.RawMessage(actors), "current": current, "changes": changes, "events": events, "fields": businesspolicy.Catalog(), "actor_id": user.ID, "deployment_limits": businesspolicy.Defaults(s.config), "mono": s.monoAdminStatus()})
@@ -104,12 +104,12 @@ func (s *Server) proposeBusinessPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.runtime.BusinessPolicies == nil {
-		writeProblem(w, 503, "policy_unavailable", "Business policies require database persistence")
+		writeProblem(w, 503, "policy_unavailable", "Business settings cannot be saved right now. Please try again shortly.")
 		return
 	}
 	var in businesspolicy.Proposal
 	if err := decodeJSON(w, r, &in); err != nil {
-		writeProblem(w, 400, "invalid_request", "Provide valid complete settings, a reason, and an effective date")
+		writeProblem(w, 400, "invalid_request", "Fill in every setting, say why, and choose the day it starts.")
 		return
 	}
 	id, err := s.runtime.BusinessPolicies.Propose(r.Context(), user.ID, in)
@@ -126,12 +126,12 @@ func (s *Server) decideBusinessPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.runtime.BusinessPolicies == nil {
-		writeProblem(w, 503, "policy_unavailable", "Business policies require database persistence")
+		writeProblem(w, 503, "policy_unavailable", "Business settings cannot be saved right now. Please try again shortly.")
 		return
 	}
 	id, err := pathID(r, "changeID")
 	if err != nil {
-		writeProblem(w, 400, "invalid_request", "Invalid change identifier")
+		writeProblem(w, 400, "invalid_request", "That change reference is not valid.")
 		return
 	}
 	var in struct {
@@ -139,7 +139,7 @@ func (s *Server) decideBusinessPolicy(w http.ResponseWriter, r *http.Request) {
 		Reason string `json:"reason"`
 	}
 	if err = decodeJSON(w, r, &in); err != nil {
-		writeProblem(w, 400, "invalid_request", "Provide a decision and reason")
+		writeProblem(w, 400, "invalid_request", "Choose a decision and say why.")
 		return
 	}
 	if err = s.runtime.BusinessPolicies.Decide(r.Context(), id, user.ID, in.Action, in.Reason); err != nil {
@@ -155,7 +155,7 @@ func (s *Server) publicPricing(w http.ResponseWriter, r *http.Request) {
 	if s.runtime.BusinessPolicies != nil {
 		snapshot, err := s.runtime.BusinessPolicies.Read(r.Context())
 		if err != nil {
-			writeProblem(w, 503, "pricing_unavailable", "Current pricing could not be loaded")
+			writeProblem(w, 503, "pricing_unavailable", "We could not load today's rates. Please try again.")
 			return
 		}
 		values = snapshot.Values

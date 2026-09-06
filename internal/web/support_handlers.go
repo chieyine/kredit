@@ -37,12 +37,12 @@ func (s *Server) openSupportCase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.BreakGlass {
-		writeProblem(w, http.StatusForbidden, "break_glass_forbidden", "break-glass support access requires an approved platform support role")
+		writeProblem(w, http.StatusForbidden, "break_glass_forbidden", "You need an approved support role to open this.")
 		return
 	}
 	note := strings.TrimSpace(input.Message)
 	if len(note) > 2000 {
-		writeProblem(w, http.StatusUnprocessableEntity, "support_message_invalid", "Your message must be 2,000 characters or less.")
+		writeProblem(w, http.StatusUnprocessableEntity, "support_message_invalid", "Your message is too long. Keep it to 2,000 characters or less.")
 		return
 	}
 	item, err := s.runtime.Support.Open(input.SubjectType, input.SubjectID, user.ID, organizationID, input.BreakGlass)
@@ -53,7 +53,7 @@ func (s *Server) openSupportCase(w http.ResponseWriter, r *http.Request) {
 	if note != "" {
 		updated, _, transitionErr := s.runtime.Support.Transition(item.ID, user.ID, support.Open, note)
 		if transitionErr != nil {
-			writeProblem(w, http.StatusServiceUnavailable, "support_case_invalid", "Your request could not be saved.")
+			writeProblem(w, http.StatusServiceUnavailable, "support_case_invalid", "We could not save your message. Please try again.")
 			return
 		}
 		item = updated
@@ -91,7 +91,7 @@ func (s *Server) transitionSupportCase(w http.ResponseWriter, r *http.Request) {
 	}
 	item, exists := s.runtime.Support.Get(caseID)
 	if !exists || item.OrganizationID != organizationID {
-		writeProblem(w, http.StatusNotFound, "support_case_not_found", "support case was not found")
+		writeProblem(w, http.StatusNotFound, "support_case_not_found", "We could not find that support case.")
 		return
 	}
 	var input supportTransitionRequest

@@ -6,5 +6,5 @@
 	}
 </script>
 
-<label class="field">Add a receipt or photo <small>optional</small><input type="file" {accept} {disabled} onchange={selectFile} /></label>
-<small>Files are scanned before they become available.</small>
+<label class="field">Add a receipt or a photo <small>optional</small><input type="file" {accept} {disabled} onchange={selectFile} /></label>
+<small>We check every file for viruses before anybody can open it.</small>

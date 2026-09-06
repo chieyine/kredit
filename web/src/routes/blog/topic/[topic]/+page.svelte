@@ -30,10 +30,10 @@
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/blog">Helpful guides</a><span>/</span><span>{data.category}</span></nav>
 <main class="topic-hub">
 	<header><p class="eyebrow">{data.articles.length} simple guides</p><h1>{data.details.title}</h1><p>{data.details.description}</p></header>
-	<section aria-labelledby="topic-list-title"><div class="list-head"><h2 id="topic-list-title">Start with the question you need to answer.</h2><span>{data.category}</span></div>
+	<section aria-labelledby="topic-list-title"><div class="list-head"><h2 id="topic-list-title">Start with whatever you need to know today.</h2><span>{data.category}</span></div>
 		<div class="topic-list">{#each data.articles as article, index}<a href={`/blog/${article.slug}`}><b>{String(index + 1).padStart(2, '0')}</b><div><h3>{article.title}</h3><p>{article.description}</p></div><span>{article.readingMinutes} min <i aria-hidden="true">→</i></span></a>{/each}</div>
 	</section>
-	<aside><div><strong>Not sure where to begin?</strong><p>See every Kredit guide or check the meaning of a word.</p></div><a href="/blog">All helpful guides</a><a href="/glossary">Meaning of words</a></aside>
+	<aside><div><strong>Not sure where to start?</strong><p>Read every guide, or look up a word you do not understand.</p></div><a href="/blog">Every guide</a><a href="/glossary">What the words mean</a></aside>
 </main>
 
 <style>

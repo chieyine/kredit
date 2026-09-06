@@ -38,7 +38,7 @@ test.describe('real-stack financial journeys', () => {
 
 		await page.goto('/app/payments');
 		await expect(page.getByRole('heading', { name: 'Your money, clearly.' })).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'Payments received.' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Money received.' })).toBeVisible();
 		await expect(page.getByText('We could not open your payment records.')).toHaveCount(0);
 	});
 
@@ -53,7 +53,7 @@ test.describe('real-stack financial journeys', () => {
 		expect(creditBody.requests!.length).toBeGreaterThan(0);
 
 		await page.goto('/buyer/requests');
-		await expect(page.getByRole('heading', { name: 'Check before you say yes.' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Read it before you say yes.' })).toBeVisible();
 		await expect(page.getByText(/Service unavailable|We could not open/i)).toHaveCount(0);
 	});
 

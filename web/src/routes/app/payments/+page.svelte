@@ -15,7 +15,7 @@
 		const words = `${payment.buyer_legal_name ?? ''} ${payment.description ?? ''} ${payment.reference ?? ''}`.toLowerCase();
 		return (status === 'all' || payment.state === status) && words.includes(query.trim().toLowerCase());
 	}));
-	const date = (value: string) => value ? new Date(value).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Date not available';
+	const date = (value: string) => value ? new Date(value).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date';
 	const source = (value: string) => ({ integrated_voluntary: 'Paid online', supplier_recorded_transfer: 'Bank transfer', buyer_payment_claim: 'Customer reported payment', cash_recorded: 'Cash', kredit_collection: 'Collected by Kredit', adjustment: 'Account correction' } as Record<string, string>)[value] ?? 'Payment';
 	const stateLabel = (value: string) => ({ recognized: 'Received', reversed: 'Reversed', pending: 'Check now', confirmed: 'Received', rejected: 'Not received', expired: 'Time ended' } as Record<string, string>)[value] ?? value?.replaceAll('_', ' ') ?? 'Recorded';
 
@@ -26,44 +26,44 @@
 		try {
 			const [p, c] = await Promise.all([fetch(`/api/v1/organizations/${organizationID}/payments`, { credentials: 'include' }), fetch(`/api/v1/organizations/${organizationID}/payment-claims`, { credentials: 'include' })]);
 			if (p.status === 401 || c.status === 401) { signIn(); return; }
-			if (!p.ok || !c.ok) throw new Error('We could not open your payment records.');
+			if (!p.ok || !c.ok) throw new Error('We could not open your payments. Please try again.');
 			payments = (await p.json()).payments ?? []; claims = (await c.json()).payment_claims ?? [];
-		} catch (cause) { error = cause instanceof Error ? cause.message : 'We could not open your payment records.'; }
+		} catch (cause) { error = cause instanceof Error ? cause.message : 'We could not open your payments. Please try again.'; }
 		finally { loading = false; }
 	}
  async function decide(claim: any, decision: 'confirmed' | 'rejected') {
   busy=claim.id;error='';
   try {
-   const reason=decision==='confirmed'?'Seller confirmed the money arrived':'Seller could not find this payment';
+   const reason=decision==='confirmed'?'You confirmed this money arrived':'You could not find this money';
    const response=await fetch(`/api/v1/organizations/${organizationID}/payment-claims/${claim.id}/decide`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify({decision,reason})});
    const result=await response.json().catch(()=>({}));
-   if(!response.ok)throw new Error(result.detail??'We could not save your answer.');
+   if(!response.ok)throw new Error(result.detail??'We could not save your answer. Please try again.');
    await load();
-  }catch(cause){error=cause instanceof Error?cause.message:'We could not save your answer.'}finally{busy=''}
+  }catch(cause){error=cause instanceof Error?cause.message:'We could not save your answer. Please try again.'}finally{busy=''}
  }
 
 	onMount(async () => {
 		try {
 			const response = await fetch('/api/v1/organizations', { credentials: 'include' });
 			if (response.status === 401) { signIn(); return; }
-			if (!response.ok) throw new Error('We could not open your business.');
+			if (!response.ok) throw new Error('We could not open your business. Please try again.');
 			organizations = (await response.json()).organizations ?? []; organizationID = organizations[0]?.id ?? '';
 			if (organizationID) await load(); else loading = false;
-		} catch (cause) { error = cause instanceof Error ? cause.message : 'We could not open your business.'; loading = false; }
+		} catch (cause) { error = cause instanceof Error ? cause.message : 'We could not open your business. Please try again.'; loading = false; }
 	});
 </script>
 
 <svelte:head><title>Payments — Kredit</title></svelte:head>
 <main class="shell workspace payments-page">
-	<header class="page-heading"><div><p class="eyebrow">Payments</p><h1>Your money, clearly.</h1><p class="lede">See what has entered your account and check payments customers say they made.</p></div>{#if organizations.length > 1}<label>Business<select bind:value={organizationID} onchange={load}>{#each organizations as organization}<option value={organization.id}>{organization.trading_name || organization.legal_name}</option>{/each}</select></label>{/if}</header>
-	{#if error}<div class="error-box" role="alert"><div><strong>Payments could not open.</strong><p>{error}</p></div><button type="button" onclick={load}>Try again</button></div>{/if}
+	<header class="page-heading"><div><p class="eyebrow">Payments</p><h1>Your money, clearly.</h1><p class="lede">See what has actually entered your account, and check the payments customers say they made.</p></div>{#if organizations.length > 1}<label>Business<select bind:value={organizationID} onchange={load}>{#each organizations as organization}<option value={organization.id}>{organization.trading_name || organization.legal_name}</option>{/each}</select></label>{/if}</header>
+	{#if error}<div class="error-box" role="alert"><div><strong>We could not open your payments.</strong><p>{error}</p></div><button type="button" onclick={load}>Try again</button></div>{/if}
 	{#if loading}<div class="loading" role="status"><span class="sr-only">Opening your payments</span><Skeleton rows={5} tall /></div>{:else if !error}
-		<section class="money-summary" aria-label="Payment summary"><article class="total"><span>Money received</span><strong><Money amountKobo={receivedTotal} /></strong><small>All confirmed payments</small></article><article class:needs-action={pendingClaims.length > 0}><span>Waiting for your answer</span><strong><Money amountKobo={pendingTotal} /></strong><small>{pendingClaims.length} {pendingClaims.length === 1 ? 'payment' : 'payments'} to check</small></article><article><span>Payments recorded</span><strong>{payments.length}</strong><small>Complete payment history</small></article></section>
-		<section class="review-section" aria-labelledby="review-title"><header><div><p class="eyebrow">Needs your answer</p><h2 id="review-title">Check these payments.</h2></div><span>{pendingClaims.length}</span></header>
-		{#if pendingClaims.length}<div class="claim-list">{#each pendingClaims as claim}<article><div class="claim-amount"><span>Customer says they paid</span><strong><Money amountKobo={claim.amount_kobo} /></strong></div><dl><div><dt>Transfer number</dt><dd>{claim.transfer_reference}</dd></div><div><dt>Payment day</dt><dd>{date(claim.paid_at)}</dd></div><div><dt>Check before</dt><dd>{date(claim.hold_expires_at)}</dd></div></dl><p>Look at your bank account before answering.</p><div class="claim-actions"><button disabled={busy === claim.id} onclick={() => decide(claim, 'confirmed')}>{busy === claim.id ? 'Saving…' : 'Yes, I got the money'}</button><button class="secondary" disabled={busy === claim.id} onclick={() => decide(claim, 'rejected')}>I cannot find it</button></div></article>{/each}</div>{:else}<div class="all-clear"><span aria-hidden="true">✓</span><div><h3>Nothing to check.</h3><p>You have answered every payment report.</p></div></div>{/if}</section>
-		<section class="history" aria-labelledby="history-title"><header><div><p class="eyebrow">Your records</p><h2 id="history-title">Payments received.</h2></div><div class="filters"><label><span>Find a payment</span><input type="search" bind:value={query} placeholder="Customer or transfer number" /></label><label><span>Show</span><select bind:value={status}><option value="all">All payments</option><option value="recognized">Received</option><option value="reversed">Reversed</option></select></label></div></header>
+		<section class="money-summary" aria-label="Payment summary"><article class="total"><span>Money received</span><strong><Money amountKobo={receivedTotal} /></strong><small>Every payment you confirmed</small></article><article class:needs-action={pendingClaims.length > 0}><span>Waiting for your answer</span><strong><Money amountKobo={pendingTotal} /></strong><small>{pendingClaims.length} {pendingClaims.length === 1 ? 'payment' : 'payments'} to check</small></article><article><span>Payments saved</span><strong>{payments.length}</strong><small>Your full payment history</small></article></section>
+		<section class="review-section" aria-labelledby="review-title"><header><div><p class="eyebrow">Needs your answer</p><h2 id="review-title">Check your bank for these.</h2></div><span>{pendingClaims.length}</span></header>
+		{#if pendingClaims.length}<div class="claim-list">{#each pendingClaims as claim}<article><div class="claim-amount"><span>Your customer says they paid</span><strong><Money amountKobo={claim.amount_kobo} /></strong></div><dl><div><dt>Transfer number</dt><dd>{claim.transfer_reference}</dd></div><div><dt>Payment day</dt><dd>{date(claim.paid_at)}</dd></div><div><dt>Check before</dt><dd>{date(claim.hold_expires_at)}</dd></div></dl><p>Open your bank app and look for the money before you answer.</p><div class="claim-actions"><button disabled={busy === claim.id} onclick={() => decide(claim, 'confirmed')}>{busy === claim.id ? 'Saving…' : 'Yes, I got the money'}</button><button class="secondary" disabled={busy === claim.id} onclick={() => decide(claim, 'rejected')}>I cannot find this money</button></div></article>{/each}</div>{:else}<div class="all-clear"><span aria-hidden="true">✓</span><div><h3>Nothing to check right now.</h3><p>You have answered every payment your customers reported.</p></div></div>{/if}</section>
+		<section class="history" aria-labelledby="history-title"><header><div><p class="eyebrow">Your records</p><h2 id="history-title">Money received.</h2></div><div class="filters"><label><span>Find a payment</span><input type="search" bind:value={query} placeholder="Customer or transfer number" /></label><label><span>Show</span><select bind:value={status}><option value="all">All payments</option><option value="recognized">Received</option><option value="reversed">Reversed</option></select></label></div></header>
 		{#if visiblePayments.length}<div class="payment-table" role="table" aria-label="Payments received"><div class="table-head" role="row"><span role="columnheader">Customer</span><span role="columnheader">Amount</span><span role="columnheader">How</span><span role="columnheader">Date</span><span role="columnheader">Status</span><span aria-hidden="true"></span></div>{#each visiblePayments as payment}<div class="payment-row" role="row"><div role="cell"><strong>{payment.buyer_legal_name || 'Customer'}</strong><small>{payment.description || payment.reference || 'Sale payment'}</small></div><div role="cell"><strong><Money amountKobo={payment.amount_kobo} /></strong></div><span role="cell">{source(payment.source_type)}</span><span role="cell">{date(payment.paid_at)}</span><span role="cell" class:reversed={payment.state === 'reversed'} class="payment-state">{stateLabel(payment.state)}</span><a role="cell" href={`/app/credit/${payment.id}?organization=${organizationID}`}>Open sale →</a></div>{/each}</div>
-		{:else if payments.length}<div class="empty-history"><h3>No payment matches.</h3><p>Try another customer, transfer number or status.</p></div>{:else}<div class="empty-history"><span aria-hidden="true">₦</span><h3>No payment has arrived yet.</h3><p>When a customer pays, the money and payment details will appear here.</p><a class="primary" href="/app/credit/new">Add a sale</a></div>{/if}</section>
+		{:else if payments.length}<div class="empty-history"><h3>No payment matches that.</h3><p>Try a different customer name, transfer number or status.</p></div>{:else}<div class="empty-history"><span aria-hidden="true">₦</span><h3>No money has arrived yet.</h3><p>The moment a customer pays you, it will show up here.</p><a class="primary" href="/app/credit/new">Add a sale</a></div>{/if}</section>
 	{/if}
 </main>
 
