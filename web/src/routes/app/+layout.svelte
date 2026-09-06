@@ -2,6 +2,7 @@
 	import { signOut } from '$lib/api/client';
 	import { onMount } from 'svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import ConnectivityBanner from '$lib/components/ConnectivityBanner.svelte';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import PortalNav from '$lib/components/PortalNav.svelte';
 	import { page } from '$app/state';
@@ -44,6 +45,7 @@
 {:else}
 	{#key page.url.pathname}<AuthGate area="seller account">
 		<div class="app-shell">
+			<ConnectivityBanner />
 			<PortalNav label="Seller account" homeHref="/app/overview" {links} {mobilePrimary} {mobileMore} onsearch={() => (paletteOpen = true)} onsignout={signOut} searchReady={ready} />
 			<div class="portal-content">{#key page.url.pathname}<div class="motion-scope product-route">{@render children()}</div>{/key}</div>
 		</div>
