@@ -55,13 +55,16 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 		await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ request: { id: 'request-1' } }) });
 	});
 	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1', async (route) => route.fulfill({ status: 404, contentType: 'application/json', body: '{}' }));
+	await page.route('**/api/v1/organizations/org-1/credit-terms/preview', route => route.fulfill({json:{due_date:'2026-09-30',grace_hours:24,collection_at:'2026-10-02T08:00:00Z',timezone:'Africa/Lagos',cutoff:'23:59',timing_mode:'lagos_explicit'}}));
 	await page.goto('/app/credit/new');
-	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1');
-	await page.getByLabel('Money to pay (₦)').fill('1,200,000');
-	await page.getByLabel('What goods did they take?').fill('Twenty cartons of verified inventory');
-	await page.getByLabel('First payment day').fill('2026-09-30');
-	await page.getByLabel('Day Kredit may debit if unpaid').fill('2026-10-02T09:00');
-	await page.getByRole('button', { name: 'Save this sale' }).click();
+	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
+	await page.getByLabel('Sale amount (₦)').fill('1,200,000');
+	await page.getByLabel('What goods are they taking?').fill('Twenty cartons of verified inventory');
+	await page.getByLabel('First payment date').fill('2026-09-30');
+	await page.getByLabel('Optional later collection time (Nigerian time)').fill('2026-10-02T09:00');
+	await page.getByRole('button', { name: 'Check terms', exact:true }).click();
+	expect(submitted).toBeUndefined();
+	await page.getByRole('button', { name: 'Save draft sale', exact:true }).click();
 	await expect(page).toHaveURL(/\/app\/credit\/request-1\?organization=org-1/);
 	expect(idempotency.length).toBeGreaterThanOrEqual(8);
 	await expect.poll(() => submitted).toMatchObject({ buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', principal_kobo: 120000000, goods_description: 'Twenty cartons of verified inventory' });
@@ -143,27 +146,28 @@ test('supplier can amend and cancel a draft before immutable terms are sent', as
 
 test('buyer can decline exact terms without creating an obligation', async ({ page }) => {
 	let declined = false;
-	const request = { id: 'request-2', state: 'BUYER_REVIEWING', supplier_legal_name: 'Adebayo Supplies', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Verified inventory', due_date: '2026-09-30' };
-	await page.route('**/api/v1/buyer/credit-requests/request-2', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request, agreement: { document_hash: 'agreement-hash' } }) }));
+	const request = { id: 'request-2', state: 'BUYER_REVIEWING', supplier_legal_name: 'Adebayo Supplies', buyer_legal_name: 'Kano Retail Limited', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Verified inventory', due_date: '2026-09-30' };
+	await page.route('**/api/v1/buyer/credit-requests/request-2', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request, agreement: { id:'agreement-1', document_hash: 'a'.repeat(64) } }) }));
 	await page.route('**/api/v1/buyer/credit-requests/request-2/payments', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payments: [] }) }));
 	await page.route('**/api/v1/buyer/credit-requests/request-2/decline', async (route) => { declined = true; request.state = 'DECLINED'; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request }) }); });
 	await page.goto('/buyer/credit-requests/request-2');
-	await page.getByRole('button', { name: 'No, I do not agree' }).click();
-	await expect(page.getByText('You said no. This sale will not start.')).toBeVisible();
+	await page.getByRole('button', { name: 'Decline sale', exact:true }).click();
+	await expect(page.getByText('You declined this sale.')).toBeVisible();
 	await expect.poll(() => declined).toBe(true);
 });
 
 test('buyer payment claim explains and applies a bounded hold', async ({ page }) => {
 	let submitted: Record<string, unknown> | undefined;
-	const request = { id: 'request-3', state: 'ACTIVE', supplier_legal_name: 'Adebayo Supplies', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Verified inventory', due_date: '2026-09-30' };
-	await page.route('**/api/v1/buyer/credit-requests/request-3', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request, obligation: { id: 'obligation-3', outstanding_kobo: 50000000 }, agreement: { document_hash: 'agreement-hash' } }) }));
+	const request = { id: 'request-3', state: 'ACTIVE', supplier_legal_name: 'Adebayo Supplies', buyer_legal_name: 'Kano Retail Limited', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Verified inventory', due_date: '2026-09-30' };
+	await page.route('**/api/v1/buyer/credit-requests/request-3', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request, obligation: { id: 'obligation-3', outstanding_kobo: 50000000 }, agreement: { id:'agreement-1', document_hash: 'a'.repeat(64) } }) }));
 	await page.route('**/api/v1/buyer/credit-requests/request-3/payments', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payments: [] }) }));
 	await page.route('**/api/v1/buyer/credit-requests/request-3/payment-claims', async (route) => { submitted = route.request().postDataJSON(); await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ payment_claim: { id: 'claim-1', state: 'pending' } }) }); });
 	await page.goto('/buyer/credit-requests/request-3');
-	await page.getByLabel('Money you paid (₦)').fill('125,000');
-	await page.getByLabel('Transfer number').fill('BANK-2026-001');
-	await page.getByRole('button', { name: 'Tell the seller I have paid' }).click();
-	await expect(page.getByText('We told the seller. They will check their bank account.')).toBeVisible();
+	await page.getByText('Already paid by bank transfer?', {exact:true}).click();
+	await page.getByLabel('Amount transferred (₦)').fill('125,000');
+	await page.getByLabel('Transfer reference').fill('BANK-2026-001');
+	await page.getByRole('button', { name: 'Report my transfer', exact:true }).click();
+	await expect(page.getByText('Transfer reported. The seller must confirm receipt before your balance changes.')).toBeVisible();
 	await expect.poll(() => submitted).toMatchObject({ amount_kobo: 12500000, transfer_reference: 'BANK-2026-001' });
 });
 

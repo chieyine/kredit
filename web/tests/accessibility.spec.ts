@@ -4,7 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 const organization = { id: 'org-a11y', legal_name: 'Accessible Supplies Limited', trading_name: 'Accessible Supplies' };
 const line = { id: 'line-a11y', buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', approved_limit_kobo: 100_000_000, current_exposure_kobo: 0, reserved_pending_kobo: 25_000_000, available_limit_kobo: 75_000_000, state: 'ACTIVE', version: 2 };
 const drawdown = { id: 'drawdown-a11y', principal_kobo: 25_000_000, goods_description: 'Twenty bags of rice', invoice_reference: 'INV-A11Y', due_date: '2026-10-30', collection_at: '2026-10-31T09:00:00Z', grace_hours: 24, agreement_hash: 'accessible-agreement-hash', state: 'GOODS_RELEASED', delivery_method: 'Courier', release_evidence_reference: 'TRACK-A11Y' };
-const creditRequest = { id: 'request-a11y', state: 'BUYER_REVIEWING', supplier_legal_name: 'Accessible Supplies Limited', buyer_legal_name: 'Inclusive Retail Limited', buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', principal_kobo: 50_000_000, goods_description: 'Verified inventory', due_date: '2026-10-30', collection_at: '2026-10-31T09:00:00Z', grace_hours: 24, schedule_type: 'one_time' };
+const creditRequest = { id: 'request-a11y', state: 'BUYER_REVIEWING', supplier_legal_name: 'Accessible Supplies Limited', buyer_legal_name: 'Inclusive Retail Limited', buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', principal_kobo: 50_000_000, goods_description: 'Verified inventory', due_date: '2026-10-30', collection_at: '2026-10-31T09:00:00Z', grace_hours: 24, schedule_type: 'one_time', fee_terms:{policy_revision:1,base_bps:50,collection_bps:50} };
 const dispute = { id: 'dispute-a11y', obligation_id: 'obligation-a11y', supplier_organization_id: organization.id, buyer_user_id: 'buyer-a11y', total_disputed_kobo: 10_000_000, remaining_disputed_kobo: 10_000_000, reason: 'Goods quality', explanation: 'The delivered batch did not match the accepted specification.', state: 'OPEN', collection_effect: 'CONTESTED_ONLY', opened_at: '2026-08-29T08:00:00Z' };
 
 async function mockAPI(page: Page) {
@@ -23,7 +23,7 @@ async function mockAPI(page: Page) {
 		else if (path.endsWith('/trade-lines')) body = { trade_lines: [line] };
 		else if (path.endsWith('/payments')) body = { payments: [] };
 		else if (path.endsWith('/payment-claims')) body = { payment_claims: [] };
-		else if (path === '/api/v1/buyer/credit-requests/request-a11y') body = { request: creditRequest, agreement: { id: 'agreement-a11y', document_hash: 'accessible-agreement-hash' } };
+		else if (path === '/api/v1/buyer/credit-requests/request-a11y') body = { request: creditRequest, agreement: { id: 'agreement-a11y', document_hash: 'a'.repeat(64) } };
 		else if (path === '/api/v1/buyer/credit-requests/request-a11y/payments') body = { payments: [] };
 		else if (path.endsWith('/disputes/dispute-a11y')) body = { dispute, evidence: [], decisions: [] };
 		else if (path.endsWith('/disputes')) body = { disputes: [dispute] };
@@ -98,14 +98,14 @@ test('keyboard, focus, reflow, reduced motion, and touch-target safeguards remai
 
 test('credit validation focuses a linked error summary', async ({ page }) => {
 	await page.goto('/app/credit/new');
-	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-a11y');
-	await page.getByLabel('Money to pay (₦)').fill('0');
-	await page.getByLabel('What goods did they take?').fill('Inventory');
-	await page.getByLabel('First payment day').fill('2026-10-30');
-	await page.getByLabel('Day Kredit may debit if unpaid').fill('2026-10-31T09:00');
-	await page.getByRole('button', { name: 'Save this sale' }).click();
+	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-a11y:business-a11y');
+	await page.getByLabel('Sale amount (₦)').fill('0');
+	await page.getByLabel('What goods are they taking?').fill('Inventory');
+	await page.getByLabel('First payment date').fill('2026-10-30');
+	await page.getByLabel('Optional later collection time (Nigerian time)').fill('2026-10-31T09:00');
+	await page.getByRole('button', { name: 'Check terms', exact:true }).click();
 	const summary = page.getByRole('alert');
-	await expect(summary).toContainText('Complete every required field');
+	await expect(summary).toContainText('Check the customer, goods, amount and first payment date.');
 	await expect(summary).toBeFocused();
 });
 
