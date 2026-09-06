@@ -27,8 +27,13 @@ def quote(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
+def row_bytes(line: str) -> bytes:
+    # Hash exact PostgreSQL JSON output, not Python float reserialization.
+    # Numerics inside JSON/NUMERIC columns must not lose precision in the hash.
+    return line.rstrip('\n').encode('utf-8') + b'\n'
+
+
 def capture() -> dict:
-    # PGDATABASE may contain a libpq URI; never put credentials in arguments/logs.
     if not os.environ.get('DATABASE_URL'):
         raise ValueError('DATABASE_URL is required')
     os.environ['PGDATABASE'] = os.environ['DATABASE_URL']
@@ -52,7 +57,6 @@ def capture() -> dict:
         "COMMIT;",
     ])
     digests, counts = {}, {}
-    # Avoid deadlock or unbounded stderr buffering on a failed database command.
     with tempfile.TemporaryFile(mode='w+t') as errors, tempfile.TemporaryFile(mode='w+t') as command_file:
         command_file.write('\n'.join(commands))
         command_file.seek(0)
@@ -68,8 +72,7 @@ def capture() -> dict:
                         raise ValueError('duplicate fingerprint section')
                     digests[name], counts[name] = hashlib.sha256(), 0
                 else:
-                    encoded = json.dumps(record['row'], sort_keys=True, ensure_ascii=True, separators=(',', ':')).encode()
-                    digests[name].update(encoded + b'\n')
+                    digests[name].update(row_bytes(line))
                     counts[name] += 1
             if process.wait() != 0:
                 raise ValueError('fingerprint capture failed; no evidence was accepted')

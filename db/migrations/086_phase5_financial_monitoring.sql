@@ -1,16 +1,19 @@
 -- +goose Up
 
--- Platform monitoring must not silently count only the current tenant. Expose
--- fixed aggregate values, not row identifiers or a caller-supplied query. The
--- owner must have complete visibility; row_security=off raises an error rather
--- than returning a misleading partial result if that ownership contract breaks.
+-- Expose fixed platform-wide aggregates, never row identifiers or arbitrary
+-- queries. Insufficient owner visibility is an error, not a partial count.
+-- Goose runs before River creates its job tables. PL/pgSQL defers relation
+-- resolution until invocation after both migration sets complete. Missing
+-- runtime tables still fail visibly; no fabricated zero fallback is used.
 -- +goose StatementBegin
 CREATE FUNCTION app.phase5_financial_metrics()
 RETURNS TABLE(metric text, value double precision)
-LANGUAGE sql STABLE SECURITY DEFINER
+LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, app, jobs
 SET row_security = off
 AS $$
+BEGIN
+    RETURN QUERY
     SELECT 'ledger_discrepancies'::text, count(*)::double precision FROM app.financial_discrepancies WHERE kind='ledger'
     UNION ALL SELECT 'balance_discrepancies', count(*)::double precision FROM app.financial_discrepancies WHERE kind='balance'
     UNION ALL SELECT 'schedule_discrepancies', count(*)::double precision FROM app.financial_discrepancies WHERE kind='schedule'
@@ -25,6 +28,7 @@ AS $$
     UNION ALL SELECT 'river_discarded_jobs', count(*)::double precision FROM jobs.river_job WHERE state='discarded'
     UNION ALL SELECT 'active_obligations', count(*)::double precision FROM app.obligations WHERE lifecycle_status='ACTIVE' AND outstanding_kobo>0
     UNION ALL SELECT 'negative_outstanding_balances', count(*)::double precision FROM app.obligations WHERE outstanding_kobo<0;
+END;
 $$;
 -- +goose StatementEnd
 REVOKE ALL ON FUNCTION app.phase5_financial_metrics() FROM PUBLIC;
