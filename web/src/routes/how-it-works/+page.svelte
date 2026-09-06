@@ -1,27 +1,26 @@
 <script lang="ts">
 	const steps = [
-		{ number: '01', title: 'Add the sale.', body: 'Write the goods, amount and day the customer will pay.', facts: [['Money to pay', '₦1,200,000'], ['Pay in', '30 days'], ['Extra days', '3 days']] },
-		{ number: '02', title: 'Your customer says yes.', body: 'Send a private link. Your customer checks the sale and accepts it.', facts: [['Customer', 'Confirmed'], ['Sale', 'Accepted'], ['Debit', 'Separate permission']] },
-		{ number: '03', title: 'Confirm the goods.', body: 'You mark the goods as sent. Your customer says they received them.', facts: [['You sent it', 'Saved'], ['They got it', 'Confirmed'], ['Proof', 'Saved']] },
-		{ number: '04', title: 'See the money.', body: 'See reminders, transfers, problems and payments in one place.', facts: [['Reminders', 'WhatsApp'], ['Problems', 'Can be reported'], ['Debit', 'Only if late']] }
+		{ number: '01', title: 'Record the credit sale.', body: 'Add the goods, amount, due date and any agreed grace period.', facts: [['Amount owed', '₦1,200,000'], ['Due in', '30 days'], ['Grace period', '3 days']] },
+		{ number: '02', title: 'Let your customer approve it.', body: 'Send a private link. Your customer checks the terms and accepts before the sale moves forward.', facts: [['Customer', 'Confirmed'], ['Terms', 'Accepted'], ['Bank debit', 'Separate permission']] },
+		{ number: '03', title: 'Record delivery.', body: 'Mark the goods as released and keep the delivery evidence with the sale.', facts: [['Goods released', 'Saved'], ['Goods received', 'Confirmed'], ['Evidence', 'Saved']] },
+		{ number: '04', title: 'Track every payment.', body: 'See reminders, transfers, disputes and the remaining balance in one record.', facts: [['Reminders', 'WhatsApp'], ['Disputes', 'Can be raised'], ['Bank debit', 'Only when permitted']] }
 	];
 
 	const events = [
-		['10 Sep · 09:14', 'Deal created', 'Payment due in 30 days'],
-		['10 Sep · 10:42', 'Customer accepted', 'Customer details confirmed'],
-		['12 Sep · 14:06', 'Goods received', 'Delivery proof saved'],
-		['12 Sep · 14:07', 'Payment tracking started', '₦1,200,000 left to pay']
+		['10 Sep · 09:14', 'Credit sale created', 'Payment due in 30 days'],
+		['10 Sep · 10:42', 'Customer accepted', 'Customer and terms confirmed'],
+		['12 Sep · 14:06', 'Goods received', 'Delivery evidence saved'],
+		['12 Sep · 14:07', 'Payment tracking started', '₦1,200,000 outstanding']
 	];
 </script>
 
-
 <main class="how-page">
 	<section class="intro shell">
-		<div><p class="eyebrow">How it works</p><h1>From order to payment.</h1></div>
-		<div class="intro-note"><span>The sale journey</span><p>Add the sale. Your customer says yes. Confirm the goods. See the payments.</p></div>
+		<div><p class="eyebrow">How Kredit works</p><h1>From credit sale<br />to final payment.</h1></div>
+		<div class="intro-note"><span>One clear process</span><p>Agree the sale. Confirm delivery. Track what is paid. Keep the balance clear for both sides.</p></div>
 	</section>
 
-	<section class="journey shell" aria-label="The Kredit agreement journey">
+	<section class="journey shell" aria-label="The Kredit credit sale journey">
 		{#each steps as step}
 			<article>
 				<span class="step-number">{step.number}</span>
@@ -33,23 +32,23 @@
 
 	<section class="record-section">
 		<div class="shell record-layout">
-			<div class="record-copy"><p class="eyebrow inverse">Everything in one place</p><h2>No lost paper.<br />No long search.</h2><p>You and your customer see the same amount, payment day and payment record.</p></div>
-			<div class="record" aria-label="Example agreement record">
+			<div class="record-copy"><p class="eyebrow inverse">One record for the whole sale</p><h2>Less searching.<br />Fewer arguments.</h2><p>The seller and customer can see the same agreed amount, due date, delivery history and payment record.</p></div>
+			<div class="record" aria-label="Example credit sale record">
 				<div class="record-head"><span>TC–2048</span><strong>Adebayo Stores</strong><span>ACTIVE</span></div>
 				<ol>{#each events as [time, title, detail]}<li><time>{time}</time><div><strong>{title}</strong><span>{detail}</span></div><i>✓</i></li>{/each}</ol>
-				<div class="record-total"><span>Amount left to pay</span><strong>₦1,200,000</strong></div>
+				<div class="record-total"><span>Outstanding balance</span><strong>₦1,200,000</strong></div>
 			</div>
 		</div>
 	</section>
 
 	<section class="exceptions shell">
-		<div class="exceptions-title"><p class="eyebrow">If there is a problem</p><h2>Kredit shows what to do.</h2></div>
+		<div class="exceptions-title"><p class="eyebrow">When something goes wrong</p><h2>The next step stays clear.</h2></div>
 		<div class="exception-list">
-			<article><span>01</span><div><h3>The goods have a problem</h3><p>Your customer shows the problem. Kredit will not debit that amount until both of you settle it.</p></div></article>
-			<article><span>02</span><div><h3>Your customer pays you directly</h3><p>They tell Kredit. You confirm the payment. The money left to pay goes down.</p></div></article>
-			<article><span>03</span><div><h3>Your customer pays late</h3><p>Kredit sends reminders. After the agreed grace period, it can request a debit under valid bank authorization, subject to payment and dispute checks. Collection is not guaranteed.</p></div></article>
+			<article><span>01</span><div><h3>There is a problem with the goods</h3><p>Your customer can report the issue and add evidence. The disputed amount is handled according to the applicable dispute and payment rules.</p></div></article>
+			<article><span>02</span><div><h3>Your customer pays you directly</h3><p>They report the payment. You confirm it. Once recognized, the outstanding balance is updated.</p></div></article>
+			<article><span>03</span><div><h3>Payment becomes overdue</h3><p>Kredit sends reminders. After the agreed grace period, it may request a debit only where valid authorization and the relevant payment and dispute checks allow it. Collection is not guaranteed.</p></div></article>
 		</div>
-		<div class="next"><p>Want to know the cost?</p><a href="/pricing">See simple pricing <span>↗</span></a></div>
+		<div class="next"><p>Want to understand the fees?</p><a href="/pricing">See Kredit pricing <span>↗</span></a></div>
 	</section>
 </main>
 

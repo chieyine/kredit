@@ -11,7 +11,7 @@
 		if (!organizationID) { requests = []; payments = []; overdue = []; claims = []; disputes = []; return; }
 		const endpoints = ['credit-requests', 'payments', 'overdue', 'payment-claims', 'disputes'];
 		const responses = await Promise.all(endpoints.map((name) => fetch(`/api/v1/organizations/${organizationID}/${name}`, { credentials: 'include' })));
-		if (!responses[0].ok) { error = 'We could not open your sales.'; return; }
+		if (!responses[0].ok) { error = 'We could not load your sales. Please try again.'; return; }
 		requests = (await responses[0].json()).requests ?? [];
 		payments = responses[1].ok ? ((await responses[1].json()).payments ?? []) : [];
 		overdue = responses[2].ok ? ((await responses[2].json()).overdue ?? []) : [];
@@ -22,7 +22,7 @@
 		loading = true; error = '';
 		const response = await fetch('/api/v1/organizations', { credentials: 'include' });
 		if (response.status === 401) { location.assign('/app'); return; }
-		if (!response.ok) { error = 'We could not load your workspace.'; loading = false; return; }
+		if (!response.ok) { error = 'We could not load your business account. Please try again.'; loading = false; return; }
 		organizations = (await response.json()).organizations ?? [];
 		organizationID = organizations[0]?.id ?? '';
 		await loadRequests(); loading = false;
@@ -31,7 +31,7 @@
 		error = '';
 		const response = await fetch('/api/v1/organizations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ legal_name: legalName, trading_name: tradingName, business_type: businessType, business_address: address, industry, timezone: 'Africa/Lagos', currency: 'NGN' }) });
 		const body = await response.json().catch(() => ({}));
-		if (!response.ok) { error = body.detail ?? 'We could not add your business.'; return; }
+		if (!response.ok) { error = body.detail ?? 'We could not add your business. Check the details and try again.'; return; }
 		await load();
 	}
 
@@ -39,38 +39,38 @@
 		const progressed = requests.some((view) => view.request && view.request.state !== 'DRAFT');
 		return [
 			{ done: organizations.length > 0, label: 'Add your business', href: undefined as string | undefined },
-			{ done: requests.length > 0, label: 'Add your first sale', href: '/app/credit/new' },
-			{ done: progressed, label: 'Send the sale to your customer', href: requests.length ? `/app/credit/${requests[0]?.request?.id}?organization=${organizationID}` : '/app/credit/new' },
-			{ done: payments.length > 0, label: 'Get your first payment', href: '/app/payments' }
+			{ done: requests.length > 0, label: 'Create your first credit sale', href: '/app/credit/new' },
+			{ done: progressed, label: 'Send the sale for customer approval', href: requests.length ? `/app/credit/${requests[0]?.request?.id}?organization=${organizationID}` : '/app/credit/new' },
+			{ done: payments.length > 0, label: 'Record your first payment', href: '/app/payments' }
 		];
 	});
 	const remainingSteps = $derived(checklist.filter((item) => !item.done).length);
 	const attention = $derived.by(() => {
 		const items: { key:string; tone:string; title:string; detail:string; href:string; action:string }[] = [];
-		for (const claim of claims.filter((item) => item.state === 'pending')) items.push({ key:`claim-${claim.id}`, tone:'money', title:'Check a payment', detail:`A customer says they paid ${new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(Number(claim.amount_kobo||0)/100)}.`, href:'/app/payments', action:'Check the payment' });
-		for (const item of overdue) items.push({ key:`late-${item.id}`, tone:'late', title:`${item.buyer_legal_name} should have paid`, detail:`${item.description} · ${new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(Number(item.amount_kobo||0)/100)} is late.`, href:`/app/credit/${item.id}?organization=${organizationID}`, action:'Open this sale' });
+		for (const claim of claims.filter((item) => item.state === 'pending')) items.push({ key:`claim-${claim.id}`, tone:'money', title:'A payment needs confirmation', detail:`A customer reported paying ${new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(Number(claim.amount_kobo||0)/100)}.`, href:'/app/payments', action:'Review payment' });
+		for (const item of overdue) items.push({ key:`late-${item.id}`, tone:'late', title:`Payment from ${item.buyer_legal_name} is overdue`, detail:`${item.description} · ${new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(Number(item.amount_kobo||0)/100)} remains unpaid.`, href:`/app/credit/${item.id}?organization=${organizationID}`, action:'View sale' });
 		for (const view of requests) {
 			const state=view.request?.state;
-			if(state==='DRAFT')items.push({key:`draft-${view.request.id}`,tone:'normal',title:'Finish this sale',detail:`${view.request.buyer_legal_name} has not received it yet.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'Finish and send'});
-			if(state==='SENT'||state==='BUYER_REVIEWING')items.push({key:`wait-${view.request.id}`,tone:'normal',title:'Customer has not answered',detail:`${view.request.buyer_legal_name} still needs to check this sale.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'Open sale'});
-			if(state==='READY_TO_RELEASE')items.push({key:`goods-${view.request.id}`,tone:'goods',title:'The goods can now leave',detail:`${view.request.buyer_legal_name} has agreed to the sale.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'Record the goods'});
+			if(state==='DRAFT')items.push({key:`draft-${view.request.id}`,tone:'normal',title:'Finish this credit sale',detail:`${view.request.buyer_legal_name} has not received it yet.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'Finish and send'});
+			if(state==='SENT'||state==='BUYER_REVIEWING')items.push({key:`wait-${view.request.id}`,tone:'normal',title:'Waiting for customer approval',detail:`${view.request.buyer_legal_name} still needs to review and accept this sale.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'View sale'});
+			if(state==='READY_TO_RELEASE')items.push({key:`goods-${view.request.id}`,tone:'goods',title:'Customer accepted — goods can be released',detail:`${view.request.buyer_legal_name} has accepted the sale terms.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'Record delivery'});
 		}
-		for(const item of disputes.filter((entry)=>entry.state==='OPEN'||entry.state==='UNDER_REVIEW'))items.push({key:`problem-${item.id}`,tone:'problem',title:'A problem needs an answer',detail:item.reason||'Open the problem and check what happened.',href:`/app/disputes/${item.id}?organization=${organizationID}`,action:'Check the problem'});
+		for(const item of disputes.filter((entry)=>entry.state==='OPEN'||entry.state==='UNDER_REVIEW'))items.push({key:`problem-${item.id}`,tone:'problem',title:'A dispute needs your attention',detail:item.reason||'Open the dispute to see what happened and what you need to do next.',href:`/app/disputes/${item.id}?organization=${organizationID}`,action:'Review dispute'});
 		return items.slice(0,8);
 	});
 	onMount(load);
 </script>
-<svelte:head><title>Workspace overview — Kredit</title></svelte:head>
+<svelte:head><title>Seller dashboard — Kredit</title></svelte:head>
 <main class="shell workspace">
-	<header class="heading"><div><p class="eyebrow">Your business</p><h1>Good day.<br />Here is your money.</h1><p class="lede">See who owes you, when they should pay and what has come in.</p></div>{#if organizations.length}<a class="primary" href="/app/credit/new">Add a sale</a>{/if}</header>
+	<header class="heading"><div><p class="eyebrow">Your business</p><h1>Know what is owed.<br />Know what is next.</h1><p class="lede">See outstanding balances, due dates, payments and anything that needs your attention.</p></div>{#if organizations.length}<a class="primary" href="/app/credit/new">Add credit sale</a>{/if}</header>
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	{#if loading}<Skeleton rows={4} tall />
 	{:else if !organizations.length}
-		<section class="card onboarding"><p class="eyebrow">First step</p><h2>Tell us about your business</h2><p>Your business does not need to be registered before you add it. We may ask for other proof before money can move.</p><form onsubmit={(event) => { event.preventDefault(); createOrganization(); }}><label>Your name or registered business name<input bind:value={legalName} required /></label><label>Shop or business name <small>if different</small><input bind:value={tradingName} /></label><label>Business type<select bind:value={businessType}><option value="unregistered_business">Not registered yet</option><option value="registered_business">Business name registered with CAC</option><option value="sole_proprietor">One-person business</option><option value="limited_company">Limited company</option><option value="partnership">Partnership</option></select></label><label>What do you sell?<input bind:value={industry} placeholder="For example: food, medicine or building materials" required /></label><label class="wide">Where is the business?<textarea bind:value={address} placeholder="Shop number, street, area, town and state" required></textarea></label><button class="primary wide">Add my business</button></form></section>
+		<section class="card onboarding"><p class="eyebrow">Start here</p><h2>Add your business</h2><p>You can add your business even if it is not yet registered. Before money can move, Kredit may ask for additional verification.</p><form onsubmit={(event) => { event.preventDefault(); createOrganization(); }}><label>Your name or registered business name<input bind:value={legalName} required /></label><label>Trading or shop name <small>if different</small><input bind:value={tradingName} /></label><label>Business type<select bind:value={businessType}><option value="unregistered_business">Not registered yet</option><option value="registered_business">Business name registered with CAC</option><option value="sole_proprietor">Sole proprietor</option><option value="limited_company">Limited company</option><option value="partnership">Partnership</option></select></label><label>What does your business sell?<input bind:value={industry} placeholder="For example: food, medicine or building materials" required /></label><label class="wide">Business address<textarea bind:value={address} placeholder="Shop number, street, area, town and state" required></textarea></label><button class="primary wide">Add business</button></form></section>
 	{:else}
 		{#if remainingSteps > 0}
 			<section class="card setup" aria-label="Getting started">
-				<h2>Getting started <span class="count">{checklist.length - remainingSteps}/{checklist.length}</span></h2>
+				<h2>Set up Kredit <span class="count">{checklist.length - remainingSteps}/{checklist.length}</span></h2>
 				<ol>
 					{#each checklist as item}
 						<li class:done={item.done}>
@@ -81,9 +81,9 @@
 				</ol>
 			</section>
 		{/if}
-		<div class="toolbar"><label>Business<select bind:value={organizationID} onchange={loadRequests}>{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}</select></label><button onclick={loadRequests}>Check again</button></div>
-		<section class="today" aria-labelledby="today-title"><header><div><p class="eyebrow">What needs you today</p><h2 id="today-title">{attention.length ? `${attention.length} ${attention.length===1?'thing':'things'} to do` : 'Nothing needs your answer'}</h2></div><a href="/app/credit/new">Add another sale →</a></header>{#if attention.length}<div class="attention-list">{#each attention as item}<article class={item.tone}><div><strong>{item.title}</strong><p>{item.detail}</p></div><a href={item.href}>{item.action} →</a></article>{/each}</div>{:else}<p>Your sales are up to date. We will put late money, customer answers and payment checks here.</p>{/if}</section>
-		{#if requests.length}<section class="records">{#each requests as view}<article><div><strong>{view.request?.buyer_legal_name ?? 'Customer'}</strong><span>{productLabel(view.request?.state)}</span></div><p>{view.request?.goods_description}</p><p><strong><Money amountKobo={view.request?.principal_kobo ?? 0} /></strong> · pay before {view.request?.due_date}</p><a href={`/app/credit/${view.request?.id}?organization=${organizationID}`}>Open sale →</a></article>{/each}</section>{:else}<section class="empty-state"><h2>No sales here yet</h2><p>When a customer takes goods and will pay later, add the sale here.</p><a class="primary" href="/app/credit/new">Add your first sale</a></section>{/if}
+		<div class="toolbar"><label>Business<select bind:value={organizationID} onchange={loadRequests}>{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}</select></label><button onclick={loadRequests}>Refresh</button></div>
+		<section class="today" aria-labelledby="today-title"><header><div><p class="eyebrow">Needs your attention</p><h2 id="today-title">{attention.length ? `${attention.length} ${attention.length===1?'item':'items'} to review` : 'You are all caught up'}</h2></div><a href="/app/credit/new">Add credit sale →</a></header>{#if attention.length}<div class="attention-list">{#each attention as item}<article class={item.tone}><div><strong>{item.title}</strong><p>{item.detail}</p></div><a href={item.href}>{item.action} →</a></article>{/each}</div>{:else}<p>No action is needed right now. Late payments, customer responses and payment checks will appear here when they need you.</p>{/if}</section>
+		{#if requests.length}<section class="records">{#each requests as view}<article><div><strong>{view.request?.buyer_legal_name ?? 'Customer'}</strong><span>{productLabel(view.request?.state)}</span></div><p>{view.request?.goods_description}</p><p><strong><Money amountKobo={view.request?.principal_kobo ?? 0} /></strong> · due {view.request?.due_date}</p><a href={`/app/credit/${view.request?.id}?organization=${organizationID}`}>View sale →</a></article>{/each}</section>{:else}<section class="empty-state"><h2>No credit sales yet</h2><p>When a customer takes goods now and will pay later, record the sale before the goods leave.</p><a class="primary" href="/app/credit/new">Create first credit sale</a></section>{/if}
 		<FeedbackPrompt area="seller" {organizationID} />
 	{/if}
 </main>

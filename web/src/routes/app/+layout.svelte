@@ -10,34 +10,35 @@
 	let ready = $state(false);
 	onMount(() => { ready = true; });
 	const links: [string, string][] = [
-		['Home', '/app/overview'], ['Finish setup', '/app/onboarding'], ['Add a sale', '/app/credit/new'], ['Customers', '/app/customers'],
-		['Customer limits', '/app/trade-lines'], ['Money received', '/app/payments'], ['Late payments', '/app/collections'],
-		['Problems', '/app/disputes'], ['Money overdue', '/app/overdue'], ['Reports', '/app/reports'],
-		['Your staff', '/app/team'], ['Business activity', '/app/activity'], ['Message history', '/app/notifications'],
-		['Account safety', '/app/settings/security'], ['Message choices', '/app/settings/notifications'], ['Your details', '/app/settings/privacy'],
-		['Kredit fees', '/app/settings/billing'], ['Bank account', '/app/settings/settlement'],
-		['Get help', '/app/help']
+		['Dashboard', '/app/overview'], ['Complete setup', '/app/onboarding'], ['Add credit sale', '/app/credit/new'], ['Customers', '/app/customers'],
+		['Customer limits', '/app/trade-lines'], ['Payments received', '/app/payments'], ['Collections', '/app/collections'],
+		['Disputes', '/app/disputes'], ['Overdue balances', '/app/overdue'], ['Reports', '/app/reports'],
+		['Team access', '/app/team'], ['Activity log', '/app/activity'], ['Message history', '/app/notifications'],
+		['Account security', '/app/settings/security'], ['Notification settings', '/app/settings/notifications'], ['Privacy & data', '/app/settings/privacy'],
+		['Fees & billing', '/app/settings/billing'], ['Settlement account', '/app/settings/settlement'],
+		['Help & support', '/app/help']
 	];
 	const mobilePrimary: [string, string, string][] = [
-		['Home', '/app/overview', 'home'],
+		['Dashboard', '/app/overview', 'home'],
 		['Add sale', '/app/credit/new', 'add'],
 		['Customers', '/app/customers', 'customers'],
 		['Payments', '/app/payments', 'payments']
 	];
 	const mobileMore: [string, string, string][] = [
-		['Money owed', '/app/collections', 'Sales and money'],
-		['Problems', '/app/disputes', 'Sales and money'],
+		['Collections', '/app/collections', 'Sales and money'],
+		['Disputes', '/app/disputes', 'Sales and money'],
+		['Overdue balances', '/app/overdue', 'Sales and money'],
 		['Reports', '/app/reports', 'Sales and money'],
 		['Customer limits', '/app/trade-lines', 'Sales and money'],
-		['Your staff', '/app/team', 'Your business'],
-		['Business activity', '/app/activity', 'Your business'],
+		['Team access', '/app/team', 'Your business'],
+		['Activity log', '/app/activity', 'Your business'],
 		['Message history', '/app/notifications', 'Your business'],
 		['Settings', '/app/settings', 'Account and help'],
-		['Get help', '/app/help', 'Account and help']
+		['Help & support', '/app/help', 'Account and help']
 	];
 </script>
 
-<svelte:head><title>Workspace — Kredit</title></svelte:head>
+<svelte:head><title>Seller workspace — Kredit</title></svelte:head>
 {#if page.url.pathname === '/app'}
 	{@render children()}
 {:else}

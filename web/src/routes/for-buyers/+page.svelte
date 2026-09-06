@@ -1,36 +1,35 @@
 <script lang="ts">
 	const controls = [
-		['See everything first', 'Check the seller, goods, amount and payment day before you say yes.'],
-		['Control money from your bank', 'See the most Kredit can debit. You can stop the permission.'],
-		['Say when goods arrive', 'Tell Kredit that you got the goods, or report a problem.'],
-		['Show the problem', 'Choose the goods or amount. Add a photo or paper if you have one.'],
-		['See every payment', 'See transfers, cash and bank debits in one place.'],
-		['No secret score', 'Your page shows only what happened in your sales.']
+		['See the full deal before accepting', 'Check the seller, goods, amount and payment date before you agree to anything.'],
+		['Stay in control of bank debit', 'See the maximum amount Kredit may request under your authorization, and manage that permission.'],
+		['Confirm what you received', 'Tell Kredit when the goods arrive, or report a delivery problem before it is forgotten.'],
+		['Raise a problem with evidence', 'Identify the goods or amount in question and add a photo or document when you have one.'],
+		['See every recorded payment', 'Keep transfers, cash payments and authorized bank debits in one payment history.'],
+		['Your record is not a public score', 'Your account shows what happened in your Kredit sales; it is not a public credit rating.']
 	];
-	const sequence = ['Check the sale', 'Say yes', 'Check the goods', 'Confirm or report a problem'];
+	const sequence = ['Review the sale', 'Accept the terms', 'Receive the goods', 'Confirm delivery or report a problem'];
 </script>
-
 
 <main class="buyer-page">
 	<section class="buyer-hero shell">
-		<div><p class="eyebrow">For customers</p><h1>Know what to pay.<br /><em>Know when to pay.</em></h1></div>
-		<div class="hero-side"><p>See the goods you took, the money you owe and every payment you made.</p><div class="actions"><a class="primary-button" href="/buyer">See my payments ↗</a><a href="/how-it-works">See how it works</a></div></div>
+		<div><p class="eyebrow">For customers</p><h1>Know what you owe.<br /><em>Know exactly when it is due.</em></h1></div>
+		<div class="hero-side"><p>See the sale you agreed to, the balance still outstanding and every payment recorded against it.</p><div class="actions"><a class="primary-button" href="/buyer">Open my Kredit account ↗</a><a href="/how-it-works">See how Kredit works</a></div></div>
 	</section>
 
 	<section class="sequence-section">
-		<div class="shell"><div class="sequence-head"><p class="eyebrow inverse">Review before accepting</p><h2>You must say yes first.</h2></div><ol>{#each sequence as step, index}<li><span>0{index + 1}</span><strong>{step}</strong></li>{/each}</ol></div>
+		<div class="shell"><div class="sequence-head"><p class="eyebrow inverse">Nothing hidden</p><h2>Review first. Accept only when it is right.</h2></div><ol>{#each sequence as step, index}<li><span>0{index + 1}</span><strong>{step}</strong></li>{/each}</ol></div>
 	</section>
 
 	<section class="controls-section shell">
-		<div class="section-head"><p class="eyebrow">You are in control</p><h2>See it before you say yes.</h2></div>
+		<div class="section-head"><p class="eyebrow">You stay in control</p><h2>See the terms before you commit.</h2></div>
 		<div class="control-list">{#each controls as [title, body], index}<article><span>0{index + 1}</span><div><h3>{title}</h3><p>{body}</p></div></article>{/each}</div>
 	</section>
 
 	<section class="privacy-section">
-		<div class="shell privacy-layout"><div><p class="eyebrow inverse">Your details stay private</p><h2>Your payments are not public.</h2></div><div><p>A shared receipt does not show your name or bank details.</p><p>You, permitted seller staff and authorized Kredit staff can access the records needed for the sale or support. See the privacy notice for details.</p><a href="/security">See how we keep it safe <span>↗</span></a></div></div>
+		<div class="shell privacy-layout"><div><p class="eyebrow inverse">Private by design</p><h2>Your payment details are not public.</h2></div><div><p>A shared receipt does not expose your name or bank details.</p><p>You, permitted seller staff and authorized Kredit staff can access only the records needed for the sale, payment or support. See the privacy notice for full details.</p><a href="/security">See how Kredit protects your account <span>↗</span></a></div></div>
 	</section>
 
-	<section class="buyer-cta shell"><span>DID A SELLER INVITE YOU?</span><h2>Open the private link they sent.</h2><p>The link expires for your safety. If it no longer works, ask the seller to send a new one. Never share your code.</p><a href="/buyer">Continue safely <b>↗</b></a></section>
+	<section class="buyer-cta shell"><span>WERE YOU INVITED BY A SELLER?</span><h2>Use the private link they sent you.</h2><p>The link expires for your protection. If it no longer works, ask the seller for a new one. Never share your sign-in code.</p><a href="/buyer">Open my account <b>↗</b></a></section>
 </main>
 
 <style>

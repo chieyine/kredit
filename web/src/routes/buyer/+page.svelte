@@ -9,33 +9,33 @@
 	onMount(async () => {
 		const response = await fetch('/api/v1/buyer/me');
 		if (!response.ok) {
-			error = 'Open the private link the seller sent you.';
+			error = 'Open the private Kredit link your seller sent you to access this account.';
 			return;
 		}
 		portal = (await response.json()).portal;
 	});
 </script>
 
-<svelte:head><title>Buyer portal — Kredit</title></svelte:head>
+<svelte:head><title>Customer account — Kredit</title></svelte:head>
 
 <main class="shell">
 	{#if portal}
-		<p class="eyebrow">Your customer account</p>
+		<p class="eyebrow">Your Kredit account</p>
 		<h1>{portal.business.legal_name}</h1>
-		<p>Signed in as {portal.person.full_name}</p>
+		<p>Signed in as {portal.person.full_name}. Review your sales, payments and permissions here.</p>
 		<section class="grid">
-			<article><span>Your business check</span><strong>{productLabel(portal.business.status)}</strong></article>
-			<article><span>Checks completed</span><strong>{portal.verification_cases.length}</strong></article>
-			<article><span>Rules you agreed to</span><strong>{portal.consents.length}</strong></article>
+			<article><span>Business verification</span><strong>{productLabel(portal.business.status)}</strong></article>
+			<article><span>Verification checks</span><strong>{portal.verification_cases.length}</strong></article>
+			<article><span>Permissions you have given</span><strong>{portal.consents.length}</strong></article>
 		</section>
 		<FeedbackPrompt area="buyer" />
 	{:else if error}
-		<p class="eyebrow">Your customer account</p>
-		<h1>Open your private link.</h1>
+		<p class="eyebrow">Your Kredit account</p>
+		<h1>Use your private link.</h1>
 		<p class="error" role="alert">{error}</p>
-		<p class="help">The link is in the message from the seller. If it has expired, ask the seller to send another one.</p>
+		<p class="help">Look for the link in the message from your seller. If it has expired, ask them to send a new one. Do not share your sign-in code with anyone.</p>
 	{:else}
-		<p class="eyebrow">Your customer account</p>
+		<p class="eyebrow">Your Kredit account</p>
 		<h1>Opening your account…</h1>
 	{/if}
 </main>
