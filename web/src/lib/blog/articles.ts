@@ -1,3 +1,4 @@
+import { firstWaveDrafts } from './first-wave-drafts.js';
 import { guideDrafts } from './guides.js';
 
 export type ArticleCategory = 'Credit sales' | 'Customer checks' | 'Agreements' | 'Payments' | 'Late payment' | 'Cash flow' | 'Business records' | 'Safe payments' | 'Industry guides' | 'Business growth';
@@ -11,18 +12,79 @@ export type Article = {
 	related: { slug: string; title: string }[];
 };
 
+type ArticleDraft = {
+	slug: string;
+	title: string;
+	description: string;
+	category: string;
+	keyphrase?: string;
+	published?: string;
+	modified?: string;
+	intro: string;
+	sections: ArticleSection[];
+	faq: { question: string; answer: string }[];
+	sources: ArticleSource[];
+	relatedSlugs: string[];
+	draft?: boolean;
+	editorialNotes?: string[];
+};
+
+const DEFAULT_MODIFIED = '2026-09-04';
 const words = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
-export const articles: Article[] = guideDrafts.map(draft => {
- const { relatedSlugs, ...content } = draft;
- const wordCount = words([draft.intro, ...draft.sections.flatMap(section => [section.heading, ...section.paragraphs, ...('points' in section ? section.points ?? [] : [])]), ...draft.faq.flatMap(item => [item.question, item.answer])].join(' '));
- return { ...content, category: draft.category as ArticleCategory, keyphrase: draft.title, modified: '2026-09-04', wordCount, readingMinutes: Math.max(1, Math.ceil(wordCount / 220)), related: relatedSlugs.map(slug => {
-  const target = guideDrafts.find(candidate => candidate.slug === slug);
-  if (!target) throw new Error(`Missing related guide: ${slug}`);
-  return { slug, title: target.title };
- }) };
+const allGuideDrafts = [...guideDrafts, ...firstWaveDrafts] as ArticleDraft[];
+
+export function validateArticleSlugs(slugs: string[]) {
+	const seen = new Set<string>();
+	for (const slug of slugs) {
+		if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+			throw new Error(`Invalid article slug: ${slug}`);
+		}
+		if (seen.has(slug)) {
+			throw new Error(`Duplicate article slug: ${slug}`);
+		}
+		seen.add(slug);
+	}
+}
+
+validateArticleSlugs(allGuideDrafts.map((draft) => draft.slug));
+
+export const draftGuideSlugs = allGuideDrafts
+	.filter((draft) => draft.draft === true)
+	.map((draft) => draft.slug);
+
+const publishableGuideDrafts = allGuideDrafts.filter((draft) => draft.draft !== true);
+
+export const articles: Article[] = publishableGuideDrafts.map((draft) => {
+	const wordCount = words([
+		draft.intro,
+		...draft.sections.flatMap((section) => [section.heading, ...section.paragraphs, ...(section.points ?? [])]),
+		...draft.faq.flatMap((item) => [item.question, item.answer])
+	].join(' '));
+
+	return {
+		slug: draft.slug,
+		title: draft.title,
+		description: draft.description,
+		category: draft.category as ArticleCategory,
+		keyphrase: draft.keyphrase ?? draft.title,
+		published: draft.published,
+		modified: draft.modified ?? DEFAULT_MODIFIED,
+		readingMinutes: Math.max(1, Math.ceil(wordCount / 220)),
+		wordCount,
+		intro: draft.intro,
+		sections: draft.sections,
+		faq: draft.faq,
+		sources: draft.sources,
+		related: draft.relatedSlugs.map((slug) => {
+			const target = publishableGuideDrafts.find((candidate) => candidate.slug === slug);
+			if (!target) throw new Error(`Missing related guide: ${slug}`);
+			return { slug, title: target.title };
+		})
+	};
 });
-export const articleCategories = [...new Set(articles.map(article => article.category))];
-export const articlesBySlug = new Map(articles.map(article => [article.slug, article]));
+
+export const articleCategories = [...new Set(articles.map((article) => article.category))];
+export const articlesBySlug = new Map(articles.map((article) => [article.slug, article]));
 export function articleForSlug(slug: string) { return articlesBySlug.get(slug); }
 
 export function categorySlug(category: ArticleCategory) {
@@ -43,5 +105,5 @@ export const articleCategoryDetails: Record<ArticleCategory, { slug: string; tit
 };
 
 export function categoryForSlug(slug: string) {
-	return articleCategories.find(category => articleCategoryDetails[category].slug === slug);
+	return articleCategories.find((category) => articleCategoryDetails[category].slug === slug);
 }
