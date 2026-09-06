@@ -61,6 +61,13 @@
 		organizations=(await response.json()).organizations??[];
 		organizationID=organizations[0]?.id??'';
 		await loadCustomers();
+		const params=new URLSearchParams(window.location.search);
+		selectedBuyer=params.get('customer')??'';
+		goods=params.get('goods')??'';
+		principal=params.get('amount')??'';
+		if(selectedBuyer)chooseBuyer();
+		if(buyerUserID&&goods&&parseNaira(principal)>0)step=3;
+		else if(buyerUserID)step=2;
 	});
 </script>
 
