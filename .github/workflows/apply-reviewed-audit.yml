@@ -1,16 +1,12 @@
 name: Apply reviewed audit patch (temporary)
-
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-
 permissions:
   contents: read
-
 concurrency:
   group: apply-reviewed-audit-${{ github.event.pull_request.number }}
   cancel-in-progress: false
-
 jobs:
   apply:
     if: >-
@@ -18,7 +14,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'improvement/audit-2026-09-06'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
@@ -26,11 +22,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: Apply only the pinned, reviewed source transformations
+      - name: Apply the hash-bound source transformations
         run: |
           set -euo pipefail
-          if test -f docs/testing/audit-2026-09-06-implementation.md || ! test -f scripts/apply-reviewed-audit.py; then
-            echo 'No pending materialisation; snapshot source for isolated review.'
+          if test -f docs/testing/audit-2026-09-06-implementation.md; then
+            echo 'Already materialised.'
             exit 0
           fi
           python3 scripts/apply-reviewed-audit.py
@@ -46,19 +42,4 @@ jobs:
         with:
           name: kredit-audit-source
           path: /tmp/kredit-audit-source.zip
-          retention-days: 1
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-      - name: Install locked frontend tooling without lifecycle scripts
-        run: |
-          pnpm install --frozen-lockfile --ignore-scripts
-          tar -czf /tmp/kredit-frontend-tooling.tar.gz node_modules web/node_modules
-      - uses: actions/upload-artifact@v4
-        with:
-          name: kredit-frontend-tooling
-          path: /tmp/kredit-frontend-tooling.tar.gz
           retention-days: 1

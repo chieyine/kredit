@@ -78,6 +78,7 @@ jobs:
       - name: Run repository checks
         env:
           GOCACHE: ${{ runner.temp }}/go-cache
+          CI_REQUIRE_DATABASE: "1"
           SECURITY_STRICT: "1"
           OPENAPI_LINT_STRICT: "1"
           REDOCLY_TELEMETRY: "off"
@@ -92,3 +93,13 @@ jobs:
           docker build -f infra/containers/Dockerfile.api --target api -t kredit-api:${{ github.sha }} .
           docker build -f infra/containers/Dockerfile.api --target worker -t kredit-worker:${{ github.sha }} .
           docker build -f infra/containers/Dockerfile.web -t kredit-web:${{ github.sha }} .
+      - name: Preserve synthetic regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-evidence-${{ github.sha }}
+          path: |
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

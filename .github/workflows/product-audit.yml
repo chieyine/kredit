@@ -1,0 +1,39 @@
+name: Product audit
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: product-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  product-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir web exec playwright install --with-deps chromium
+      - run: pnpm --dir web check
+      - run: pnpm --dir web build
+      - name: Execute source-bound reliability and browser regression
+        run: pnpm --dir web exec playwright test tests/audit-reliability-unit.spec.ts tests/audit-product-journeys.spec.ts --reporter=list,html
+      - name: Preserve synthetic screenshots and test traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-audit-${{ github.sha }}
+          path: |
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: error
+          retention-days: 7
