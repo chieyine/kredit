@@ -16,8 +16,9 @@ on:
       - 'internal/config/**'
       - 'db/migrations/**'
       - 'infra/postgres/**'
-      - 'scripts/verify-provider-evidence.py'
+      - 'scripts/verify_provider_evidence.py'
       - 'scripts/test_provider_evidence.py'
+      - 'docs/testing/phase4-provider-*'
       - 'go.mod'
       - 'go.sum'
       - '.go-version'
@@ -32,6 +33,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  evidence-tooling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test evidence validation without provider secrets
+        run: python3 -m unittest discover -s scripts -p 'test_provider_evidence.py' -v
+      - name: Confirm pending template cannot pass certification checks
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+          sys.path.insert(0, 'scripts')
+          from verify_provider_evidence import validate
+          pack = json.loads(pathlib.Path('docs/testing/phase4-provider-evidence.template.json').read_text())
+          assert validate(pack, pathlib.Path('.')), 'Pending template must fail evidence validation'
+          PY
   provider-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 15

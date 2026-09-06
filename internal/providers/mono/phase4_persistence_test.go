@@ -5,7 +5,6 @@ package mono_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -123,16 +122,18 @@ func (p *phase4Payments) Record(in payments.RecordInput) (payments.Payment, paym
 }
 
 type phase4Fixture struct {
-	admin                                *pgxpool.Pool
-	worker                               *db.Pool
-	workerURL                            string
-	ctx                                  context.Context
-	user, organization, obligation       string
-	mandateID                            string
-	client                               *mono.Client
-	provider                             *phase4Provider
-	engine                               *collections.PostgresEngine
-	runtime                              *web.Runtime
+	admin        *pgxpool.Pool
+	worker       *db.Pool
+	workerURL    string
+	ctx          context.Context
+	user         string
+	organization string
+	obligation   string
+	mandateID    string
+	client       *mono.Client
+	provider     *phase4Provider
+	engine       *collections.PostgresEngine
+	runtime      *web.Runtime
 }
 
 func phase4NewFixture(t *testing.T) *phase4Fixture {
@@ -155,7 +156,11 @@ func phase4NewFixture(t *testing.T) *phase4Fixture {
 	if err := admin.QueryRow(ctx, `INSERT INTO app.organizations(legal_name,business_type,business_address,industry) VALUES('Phase 4 fixture','limited_company','test','test') RETURNING id::text`).Scan(&f.organization); err != nil {
 		t.Fatal(err)
 	}
-	businessID = uuid.NewString()
+	// Provider mandate lookup resolves the owner through app.businesses, not
+	// through metadata. Seed a real ownership relationship for lifecycle tests.
+	if err := admin.QueryRow(ctx, `INSERT INTO app.businesses(owner_user_id,legal_name,business_type,business_address,industry) VALUES($1::uuid,'Phase 4 buyer fixture','limited_company','test','test') RETURNING id::text`, f.user).Scan(&businessID); err != nil {
+		t.Fatal(err)
+	}
 	if err := admin.QueryRow(ctx, `INSERT INTO app.credit_requests(supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,goods_description,due_date,collection_at,state,created_by) VALUES($1::uuid,$2::uuid,$3::uuid,$4,'test goods',current_date,now()-interval '1 day','ACTIVE',$2::uuid) RETURNING id::text`, f.organization, f.user, businessID, phase4Principal).Scan(&requestID); err != nil {
 		t.Fatal(err)
 	}
@@ -423,6 +428,6 @@ func TestPhase4PersistedUnauthenticatedJobCannotPostMoney(t *testing.T) {
 	f.assertMoney(t, 0, 0)
 	var count int
 	if err := f.admin.QueryRow(context.Background(), `SELECT count(*) FROM app.provider_webhook_inbox WHERE event_id=$1`, args.EventID).Scan(&count); err != nil || count != 0 {
-		t.Fatal(fmt.Sprintf("unauthenticated notice persisted: %d %v", count, err))
+		t.Fatalf("unauthenticated notice persisted: %d %v", count, err)
 	}
 }

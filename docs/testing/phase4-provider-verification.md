@@ -1,52 +1,80 @@
 # Phase 4 — External-provider verification
 
-Status: **started; not certified or approved for production**.
+Status: **engineering verification implemented; actual Mono sandbox certification remains pending**.
 
-This is the external-dependency phase of the audit, not implementation Milestone 4. It starts on `phase4-provider-verification` from Phase 3 candidate `82bfd4f868d41ed4e085e8b437611bd39a1b0d2f`. Phase 3 PR #3 is still unmerged; its repository-wide CI must pass before the dependent work is promoted to main. Starting this branch does not close Phase 3 or bypass its gate.
+This is the external-dependency phase of the audit, not implementation Milestone 4. The branch is `phase4-provider-verification`, stacked on Phase 3 candidate `82bfd4f868d41ed4e085e8b437611bd39a1b0d2f`. Phase 3 PR #3 remains an upstream merge prerequisite. Neither a passing focused test nor this document waives the repository-wide CI gate.
 
-## First slice
+## Adapter contract coverage
 
-The new `internal/providers/mono/phase4_contract_test.go` exercises the real adapter code with synthetic responses and local HTTPS servers:
+`internal/providers/mono/phase4_contract_test.go` exercises the real adapter with synthetic responses and local HTTPS servers. It covers full, failed, processing, unknown, partial and malformed monetary outcomes; mandate/reference identity binding; loss of the submission response followed by reads using the original reference; mandate readiness and lifecycle mappings; refusal to restore a cancelled mandate without fresh authorization; all twelve accepted callback types; authentication, duplicate receipt identity and restricted-data discard.
 
-- full, failed, processing, unknown, partial and malformed monetary outcomes;
-- reference and mandate identity binding during reconciliation;
-- a lost submission response followed by repeated reads using the original reference, without another POST;
-- approval and ready-to-debit flags, pause, suspension, cancellation, expiry and rejection mappings;
-- refusal to reinstate a cancelled mandate without fresh authorization;
-- all twelve accepted callback types, duplicate receipt identity, restricted-data discard and authentication;
-- correlation requirements for aggregate and individual partial-debit notifications.
+Negative provider monetary values and invalid requested amounts remain pending with zero recognized money. Contradictory full-success results with positive pending amounts also remain unresolved. Aggregate and individual debit-attempt notices must contain a correlation reference. These are conservative validation rules, not claims that every fixture represents an observed provider response.
 
-The first review found two fail-open validation gaps and a contradictory-result case. Negative provider amounts could fall through to a positive requested amount; individual debit-attempt notices could omit their correlation reference; a full-success result with positive pending amount was accepted. The guards now classify malformed monetary evidence as pending with zero recognized money and reject uncorrelated debit-attempt notices. They do not turn ambiguity into a retryable failure.
+## Persisted provider-boundary coverage
 
-Run the same focused gate locally:
+`internal/providers/mono/phase4_persistence_test.go` uses the actual Mono adapter, PostgreSQL 18, a dedicated non-owner `kredit_worker_login`, transaction-local tenant context, production collection/payment repositories, `ProviderWebhookWorker.Work`, and `Runtime.HandleProviderNotice`.
+
+The tests prove, for their fixtures:
+
+- a reservation and original reference are committed before the outbound debit request;
+- individual partial-debit notices do not themselves recognize money;
+- five deliveries of the same final notice produce one payment and four recorded inbox duplicates;
+- distinct late processing/failure/success notices reconcile against the authoritative lookup rather than overwrite a completed payment from their labels;
+- partial results change balances only by the collected amount, failed results recognize zero, and unknown results retain the reservation;
+- a lost submission response recovers after reconstructing the worker pool and repositories, without another POST;
+- a foreign mandate identity cannot recognize money, and the same failed inbox item can be retried after a matching authoritative result;
+- cancellation/expiry survive repository restart and cannot be reactivated by a subsequent lookup;
+- an unauthenticated job cannot persist an inbox item or post a payment;
+- payment totals, allocations and outstanding balances agree, ledger transactions remain balanced, and durable receipts do not contain the private fixture payload fields.
+
+The active obligation/mandate, due function and eligibility facts are synthetic fixtures. These tests do not prove hosted consent, the full authorization/notice-gate lifecycle, real notification delivery, real settlement/refund behavior or the Mono service. They invoke the production worker directly; they do not prove HTTP ingress or the River dispatcher end to end. The first run exposed an incomplete test fixture: mandate lookup needs the real buyer business/owner relationship, not merely metadata. That fixture was corrected without weakening production ownership checks.
+
+## Repeatable gates
+
+The permanent `Phase 4 Provider Verification` workflow has three checks: `provider-contracts`, `provider-persistence`, and `evidence-tooling`. Read the result for the exact proposed commit before merging. Synthetic persistence logs are retained as CI artifacts for 14 days; they are not uploaded as provider certification evidence.
 
 ```sh
 go test -count=1 -race -timeout 180s \
   ./internal/providers/mono ./internal/collections ./internal/mandates \
   ./internal/identity ./internal/notifications ./internal/web ./internal/config
+
+# Against a fresh isolated database migrated with all current migrations,
+# infra/postgres/roles.sql and infra/postgres/development-logins.sql:
+go test -tags=integration -count=1 -race -timeout 180s \
+  ./internal/providers/mono -run '^TestPhase4Persisted' -v
+
+python3 -m unittest discover -s scripts -p 'test_provider_evidence.py' -v
 ```
 
-The `Phase 4 Provider Verification / provider-contracts` workflow runs this gate without provider credentials. CI results must be read from the exact commit being reviewed. This document does not claim a run passed before it has completed.
+The integration test requires `DATABASE_URL` for fixture setup and `RIVER_DATABASE_URL` for the dedicated restricted worker. It fails rather than silently skipping when either is absent. Never point the fixture suite at production or at a database containing customer data.
 
-## Evidence levels and outstanding work
+## Actual provider certification: blocked pending external evidence
 
-| Layer | What it establishes | Phase 4 status |
-| --- | --- | --- |
-| Synthetic adapter tests | How Kredit handles specified provider-shaped inputs | First slice implemented; consult exact-commit CI |
-| Persisted worker/ledger integration | Reservations, deduplication and tenant boundaries survive asynchronous delivery and restart | Existing Phase 2/3 evidence retained; targeted Mono notice-to-ledger replay still required |
-| Actual Mono sandbox | What the provider really accepts and returns for this account | Pending; not run in this slice |
-| Provider/legal/operational approval | Whether the integration may be enabled for a controlled pilot | Pending; no enablement changes |
+All 21 real scenarios in [Mono Sweep acceptance evidence](mono-sweep-evidence.md) still require actual sandbox execution. Follow [the sandbox runbook](../runbooks/mono-sweep.md), using all current migrations rather than its historical migration counts. Required external inputs are a Mono payments sandbox with Sweep enabled, separate Partial Sweep entitlement where applicable, approved test identities, an isolated database, a reachable HTTPS callback, and hosted buyer authorization. Store `MONO_SECRET_KEY`, `MONO_WEBHOOK_SECRET` and `MONO_REDIRECT_URL` in approved secret/environment management; never in this repository, CI logs or chat.
 
-Next required provider evidence remains the scenario list in [Mono Sweep acceptance evidence](mono-sweep-evidence.md) and [the sandbox runbook](../runbooks/mono-sweep.md). Capture successful, failed, pending, partial and timeout/unknown outcomes; duplicate, delayed and out-of-order callbacks; mandate pause/cancel/expiry/rejection and fresh authorization; and authoritative debit/settlement reconciliation. Do not equate parser-level duplicate identity with proof of exactly-once ledger effects. Do not treat status mapping alone as proof that an old ready callback cannot reactivate a persisted cancelled mandate.
+Record the exact adapter commit, run date, expected and actual assertions, provider references and reviewer in restricted evidence storage. The [pending manifest template](phase4-provider-evidence.template.json) intentionally contains no passes. Copy it outside the repository; do not commit a completed pack with private references, authorization links, BVNs, account inventories or credentials.
 
-Before running against Mono, confirm sandbox Sweep access and separate Partial Sweep entitlement, use an isolated database and approved test identities, and store sandbox credentials in secret management. Do not request or commit real BVNs, account inventories, private provider references, authorization URLs or tokens. The hosted buyer consent step and provider certification review require human participation. No real debit, external notification, deployment or provider feature flag was enabled by this slice.
+```sh
+python3 scripts/verify_provider_evidence.py /restricted/phase4/manifest.json \
+  --evidence-dir /restricted/phase4
+```
 
-Resolve these contract questions through actual sandbox evidence rather than guessing: the singular/plural retrieve-debit URL discrepancy; final partial-result fields and field presence; request versus provider references; mandate date formats and validity; cancellation/reinstatement semantics; partial-sweep entitlement; settlement and refund evidence. The current adapter remains sandbox-only. Existing production rejection and kill-switch behavior are unchanged.
+This validator checks completeness, required confirmations and SHA-256 consistency of local evidence files. It cannot authenticate provenance or distinguish a forged assertion from an actual provider observation; a human reviewer must inspect the evidence and provider confirmation. A valid manifest does not enable features or constitute production approval. A pending, missing, incomplete, synthetic-labelled or hash-mismatched pack exits unsuccessfully.
 
-## Official reference check — 5 September 2026
+Resolve the singular/plural retrieve-debit URL discrepancy, final partial-result fields, reference identity, mandate validity/date formats and cancellation semantics with actual sandbox/provider evidence. Never add an alternate debit-submission retry or guess that a callback is proof of settlement. Pilot approval also requires the independent legal/security/operational gates.
 
-- [Mono Partial Sweep](https://docs.mono.co/docs/payments/direct-debit/mono-sweep/partial-sweep) documents processing, individual attempt notices, aggregate partial/full results and the collected/pending amounts. Partial Sweep requires separate account access.
-- [Mono direct-debit events](https://docs.mono.co/docs/payments/direct-debit/webhook-events) documents mandate and debit callbacks. Callbacks remain signals for server-to-server reconciliation, never direct authority for posting money.
-- [Mono Sweep integration](https://docs.mono.co/docs/payments/direct-debit/mono-sweep/integration-guide) distinguishes mandate approval from readiness to debit.
+## Completion boundary
 
-The references support test inputs and the verification checklist; they are not proof that Kredit has passed provider certification.
+| Evidence | Status |
+| --- | --- |
+| Synthetic adapter behavior | Implemented; exact-commit CI is authoritative |
+| Persisted inbox/reconciliation/payment behavior | Implemented; exact-commit CI is authoritative |
+| Evidence-pack validator | Implemented; cannot certify authenticity |
+| Actual Mono sandbox scenarios and human authorization | Pending |
+| Provider confirmation and human certification review | Pending |
+| Upstream Phase 3 merge and repository-wide green CI | Still required |
+| Production collection enablement | Unchanged and not approved by this phase |
+
+## Official reference check
+
+The official [Partial Sweep guide](https://docs.mono.co/docs/payments/direct-debit/mono-sweep/partial-sweep), [webhook events](https://docs.mono.co/docs/payments/direct-debit/webhook-events) and [retrieve-debit reference](https://docs.mono.co/api/direct-debit/account/retrieve-a-debit) were reviewed on 6 September 2026. The retrieve-debit operation URL and cURL example still differ. These sources guide the contract checks; they are not evidence that Kredit passed provider certification.

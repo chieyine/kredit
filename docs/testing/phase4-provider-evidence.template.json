@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "provider": "mono-sweep",
+  "environment": "mono-sandbox",
+  "adapter_commit": "",
+  "completed_at": "",
+  "sweep_access_confirmed": false,
+  "partial_sweep_access_confirmed": false,
+  "human_review_complete": false,
+  "reviewer": "",
+  "provider_confirmation_reference": "",
+  "contract_confirmations": {
+    "retrieve_debit_path": false,
+    "partial_result_shape": false,
+    "reference_identity": false,
+    "mandate_validity": false,
+    "cancellation_semantics": false
+  },
+  "scenarios": [
+    {"id": 1, "name": "Create supplier", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 2, "name": "Create buyer", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 3, "name": "Create 50000000-kobo obligation", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 4, "name": "Buyer accepts exact agreement", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 5, "name": "Create Variable Sweep", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 6, "name": "Receive authorization URL", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 7, "name": "Complete hosted authorization", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 8, "name": "Confirm ACTIVE mandate", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 9, "name": "Make obligation due", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 10, "name": "Initiate debit after reservation", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 11, "name": "Process authenticated event", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 12, "name": "Update balanced ledger", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 13, "name": "Update outstanding correctly", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 14, "name": "Duplicate webhook", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 15, "name": "Duplicate request", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 16, "name": "Failed debit", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 17, "name": "Partial recovery", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 18, "name": "Bounded authorized retry", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 19, "name": "Manual payment before debit", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 20, "name": "Revoke or expire mandate", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []},
+    {"id": 21, "name": "Ambiguous result and reconciliation", "status": "pending", "source": "", "assertions_verified": false, "expected": "", "actual": "", "evidence": []}
+  ]
+}
