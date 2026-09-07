@@ -107,10 +107,10 @@ test('guide filters preserve user input and no-match recovery after hydration', 
   await page.goto('/blog');
   await page.getByLabel('Search guides').fill('fake bank alert');
   await expect(page.locator('.post-row')).toHaveCount(1);
-  await page.getByLabel('Topic', { exact: true }).selectOption('Industry guides');
+  await page.getByRole('combobox', { name: 'Topic', exact: true }).selectOption('Industry guides');
   await expect(page.getByRole('heading', { name: 'Nothing matches that.' })).toBeVisible();
   await page.getByLabel('Search guides').fill('');
-  await expect(page.getByLabel('Topic', { exact: true })).toHaveValue('Industry guides');
+  await expect(page.getByRole('combobox', { name: 'Topic', exact: true })).toHaveValue('Industry guides');
   await expect(page.locator('.post-row')).toHaveCount(1);
   await page.getByLabel('Search guides').fill('not-a-guide-title-987654321');
   await page.getByRole('button', { name: 'Show me every guide' }).click();

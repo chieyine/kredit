@@ -296,7 +296,7 @@ test('incomplete supplier sees precise recovery steps before financial activity'
 	await page.route('**/api/v1/organizations/org-incomplete/onboarding', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ profile: { organization_id: 'org-incomplete', version: 2, kyb_state: 'not_started', settlement_state: 'not_started', billing_state: 'configured' }, readiness: { state: 'incomplete', ready: false, requirements: missing, missing }, permissions: { business: false, settlement: false, billing: false, credit_policy: false, consents: false }, current_terms_version: 'supplier-terms-v1', current_privacy_version: 'privacy-v1' }) }));
 	await page.goto('/app/onboarding');
 	await expect(page.getByText('3 things still to do before money can move in or out.')).toBeVisible();
-	await expect(page.getByText('Add the bank account for your money')).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Setup progress' }).getByText('Where we send your money', { exact: true })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Where we send your money →' })).toBeVisible();
 });
 

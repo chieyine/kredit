@@ -22,11 +22,11 @@ authorization, tenant isolation, mandate, dispute or reconciliation guard is rem
 | K-04 Device-dependent timing | Authenticated server preview and opt-in server validation for new quick-sale drafts, fixed to Africa/Lagos. | Go tests cover Lagos, UTC, New York, Dubai, leap/year boundaries and invalid dates. Existing accepted terms unchanged. |
 | K-05 Sign-in network recovery | Bounded requests and busy-state cleanup on all outcomes. | Browser aborted-request and resend/expiry scenarios. |
 | K-06 Unconfirmed sign-out | Logout response checked, visible failure, private draft/intent data cleared only after confirmed revocation or expired session. | Browser failed-logout scenario; shared-device acceptance requires manual review. |
-| K-07 Browser draft privacy | User/business namespaces, validated 12-hour lifetime, shared-device opt-out, legacy record removal and logout cleanup. | Account/business/expiry/tamper unit tests. |
+| K-07 Browser draft privacy | User/business namespaces, validated 12-hour lifetime, explicit opt-in (off by default), shared-device warning, legacy record removal and logout cleanup. | Account/business/expiry/tamper unit tests. |
 | K-08 Attention ordering and totals | Entire queue counted before pagination; disputes and transfer checks precede ordinary drafts. | More-than-eight-items regression. |
 | K-09 Money display | Exact-kobo helpers on overview and reports; no failed-value-to-zero conversion. | Money, summary validation and exact pricing tests. |
 | K-10 Readability and contrast | Dark-text overdue notice, larger working controls, semantic states, consolidated working-screen typography. | Automated axe/reflow evidence; manual device/assistive-technology sign-off remains required. |
-| K-11 Safe mutation retries | Persistent per-account operation identity and payload digest, no automatic mutation retry or unknown-operation expiry reset. Buyer actions, quick-sale creation, business creation and supplier transfer decisions use it. | Lost response, navigation, changed payload, duplicate click, malformed response, storage and offline unit tests; browser transfer-decision retry. |
+| K-11 Safe mutation retries | Persistent per-account operation identity and payload digest, no automatic mutation retry or unknown-operation expiry reset. Buyer actions, quick-sale creation, business creation and supplier transfer decisions and sale-detail money operations use it. | Lost response, navigation, changed payload, duplicate click, malformed response, storage and offline unit tests; browser transfer-decision retry. |
 | K-12 First-use authentication | Start-or-sign-in flow, phone-first/email choice, Nigerian number normalisation, masked target, expiry and resend countdown. | Phone/redirect unit tests and OTP browser scenarios. |
 | K-13 Truthful debit/dispute copy | Shared wording matches partial/full/no automatic block and in-flight debit caveats. | State/copy assertions; approved legal wording remains a human gate. |
 | K-14 Consistent examples | One labelled sample sale, computed balances/progress and working demo links. No fake live activity. | Sample arithmetic and public-route browser checks. |
@@ -45,7 +45,7 @@ Use the pinned versions in `.go-version`, `.node-version` and `package.json`.
 pnpm install --frozen-lockfile
 pnpm --dir web check
 pnpm --dir web build
-pnpm --dir web exec playwright test tests/audit-reliability-unit.spec.ts tests/audit-product-journeys.spec.ts
+pnpm --dir web exec playwright test
 # Full regression, database, security and container verification:
 bash scripts/ci.sh
 ```

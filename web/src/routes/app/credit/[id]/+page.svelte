@@ -82,9 +82,10 @@
    const requestID = id, org = organizationID;
    try {
      await intentFor(url).run(body, value => entity(value, field), method);
-     if (id === requestID && organizationID === org) await load();
+     if (id !== requestID || organizationID !== org) return false;
+     await load();
      return true;
-   } catch (cause) { error = cause instanceof Error ? cause.message : 'We have not confirmed the result. Check the record before submitting another request.'; return false; }
+   } catch (cause) { if (id === requestID && organizationID === org) error = cause instanceof Error ? cause.message : 'We have not confirmed the result. Check the record before submitting another request.'; return false; }
    finally { busy = false; }
  }
  async function updateDraft() {
