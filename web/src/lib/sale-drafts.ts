@@ -1,5 +1,6 @@
 export type SaleDraft = { goods: string; principal: string; dueDate: string };
-const PREFIX = 'kredit.quick-sale.v2:';
+// v2 could have been saved without explicit consent. Never restore it as an opt-in.
+const PREFIX = 'kredit.quick-sale.v3:';
 const TTL = 12 * 60 * 60 * 1000;
 function key(userID: string, organizationID: string) {
   if (!userID || !organizationID) throw new Error('An authenticated business is required for draft storage.');
@@ -9,6 +10,7 @@ export function readDraft(userID: string, organizationID: string, store: Storage
   try {
     store.removeItem('kredit.quick-sale.draft.v1');
     const storageKey = key(userID, organizationID);
+    store.removeItem(`kredit.quick-sale.v2:${encodeURIComponent(userID)}:${encodeURIComponent(organizationID)}`);
     const raw = store.getItem(storageKey);
     if (!raw) return null;
     const value = JSON.parse(raw);
@@ -17,7 +19,7 @@ export function readDraft(userID: string, organizationID: string, store: Storage
   } catch { return null; }
 }
 export function saveDraft(userID: string, organizationID: string, draft: SaleDraft, store: Storage, now = Date.now()): boolean {
-  try { store.setItem(key(userID, organizationID), JSON.stringify({ ...draft, userID, organizationID, expiresAt: now + TTL })); return true; }
+  try { store.setItem(key(userID, organizationID), JSON.stringify({ goods: draft.goods, principal: draft.principal, dueDate: draft.dueDate, userID, organizationID, expiresAt: now + TTL })); return true; }
   catch { return false; }
 }
 export function deleteDraft(userID: string, organizationID: string, store: Storage): void {

@@ -11,7 +11,7 @@
 		},
 		{
 			q: 'What if my customer does not pay?',
-			a: 'Kredit sends reminders first. After the extra days you agreed, Kredit can ask their bank for the money, only with valid permission and after the agreed payment and dispute checks. A report may hold the disputed amount or all new debits, depending on its recorded effect. A bank debit can still fail. Nobody can promise you the money.'
+			a: 'Kredit sends reminders first. After the extra days you agreed, Kredit can ask their bank for the money, only with valid permission and after the agreed payment and dispute checks. A report may hold the disputed amount or all new debits, depending on its recorded effect. A debit can fail; repayment is not guaranteed.'
 		},
 		{
 			q: 'What if money enters and then goes back?',
@@ -27,7 +27,7 @@
 		},
 		{
 			q: 'How much does it cost?',
-			a: 'Writing a sale down is free. You pay the base fee only when your customer accepts the sale and it starts. If Kredit later collects money from their bank, a collection fee applies on the money actually collected. There is no monthly fee. A sale keeps the rates it was agreed on, even if rates change later.'
+			a: 'Writing a sale down is free. The seller owes the agreed base fee when the accepted sale becomes active after the required goods steps. If Kredit later collects money from their bank, a collection fee applies on the money actually collected. There is no monthly fee. A sale keeps the rates it was agreed on, even if rates change later.'
 		},
 		{
 			q: 'Can other sellers see my business?',

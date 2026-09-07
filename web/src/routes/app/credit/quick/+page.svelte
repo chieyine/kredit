@@ -14,7 +14,7 @@
   let organizations = $state<Resource<Organization[]>>({ state: 'loading', scope: '' });
   let customers = $state<Resource<Customer[]>>({ state: 'loading', scope: '' });
   let organizationID = $state(''), selectedBuyer = $state(''), goods = $state(''), principal = $state(''), dueDate = $state('');
-  let step = $state(1), busy = $state(false), error = $state(''), recoveredDraft = $state(false), draftReady = $state(false), keepDraft = $state(true), draftWarning = $state('');
+  let step = $state(1), busy = $state(false), error = $state(''), recoveredDraft = $state(false), draftReady = $state(false), keepDraft = $state(false), draftWarning = $state('');
   let timing = $state<{ dueDate: string; collectionAt: string; organizationID: string } | null>(null);
   let heading = $state<HTMLHeadingElement>();
   let creation: MutationIntent | null = null;
@@ -24,10 +24,10 @@
   const customerKey = (item: Customer) => `${item.buyer_user_id}:${item.buyer_business_id}`;
   const buyer = $derived(customers.state === 'ready' ? customers.data.find(item => customerKey(item) === selectedBuyer) : undefined);
   function restoreForBusiness() {
-    draftReady = false; recoveredDraft = false; goods = ''; principal = ''; dueDate = ''; timing = null; error = ''; creation = null;
+    draftReady = false; keepDraft = false; draftWarning = ''; recoveredDraft = false; goods = ''; principal = ''; dueDate = ''; timing = null; error = ''; creation = null;
     try {
-      const saved = keepDraft ? readDraft(account.userID, organizationID, sessionStorage) : null;
-      if (saved) { goods = saved.goods; principal = saved.principal; dueDate = saved.dueDate; recoveredDraft = true; }
+      const saved = readDraft(account.userID, organizationID, sessionStorage);
+      if (saved) { keepDraft = true; goods = saved.goods; principal = saved.principal; dueDate = saved.dueDate; recoveredDraft = true; }
     } catch { draftWarning = 'This browser cannot keep a draft. Keep this page open until you finish.'; }
     draftReady = true;
   }
@@ -109,7 +109,7 @@
   <ResourceNotice resource={organizations} label="Businesses" retry={load} />
   {#if organizations.state === 'ready' && !organizations.data.length}<div class="empty-state"><h2>Add your business first</h2><a class="primary" href="/app/overview">Add business details</a></div>
   {:else if organizationID}
-    {#if recoveredDraft}<div class="inline-notice" role="status"><p>Your draft for this business was restored. Choose the customer again.</p><button type="button" disabled={busy} onclick={() => { goods = ''; principal = ''; dueDate = ''; timing = null; recoveredDraft = false; }}>Start fresh</button></div>{/if}
+    {#if recoveredDraft}<div class="inline-notice" role="status"><p>Your draft for this business was restored. Choose the customer again.</p><button type="button" disabled={busy} onclick={() => { keepDraft = false; goods = ''; principal = ''; dueDate = ''; timing = null; recoveredDraft = false; }}>Start fresh</button></div>{/if}
     <ol class="steps" aria-label="Sale steps">{#each ['Customer', 'Goods & amount', 'Payment date', 'Review'] as label, index}<li aria-current={step === index + 1 ? 'step' : undefined}><span aria-hidden="true">{index + 1}</span>{label}</li>{/each}</ol>
     {#if error}<p class="error" role="alert">{error}</p>{/if}
     <section class="sale-card" aria-busy={busy}>
@@ -130,7 +130,7 @@
       {/if}
     </section>
     <footer class="form-actions"><div>{#if step > 1}<button class="secondary" type="button" disabled={busy} onclick={back}>Back</button>{/if}</div>{#if step < 4}<button class="primary" type="button" onclick={next} disabled={busy || (step === 1 && !buyer)}>{busy ? 'Checking date…' : 'Continue'}</button>{:else}<button class="primary" type="button" onclick={submit} disabled={busy || !timing}>{busy ? 'Saving…' : 'Save draft sale'}</button>{/if}</footer>
-    <label class="draft-choice"><input type="checkbox" bind:checked={keepDraft} />Keep this draft on this device for up to 12 hours</label><p class="field-help">Turn this off on a shared device. The selected customer is never saved in a browser draft.</p>{#if draftWarning}<p role="status">{draftWarning}</p>{/if}
+    <label class="draft-choice"><input type="checkbox" bind:checked={keepDraft} />Keep this draft on this device for up to 12 hours</label><p class="field-help">Draft saving is off until you choose it. Avoid using it on a shared device. The selected customer is never saved in a browser draft.</p>{#if draftWarning}<p role="status">{draftWarning}</p>{/if}
   {/if}
 </main>
 <style>
