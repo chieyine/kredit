@@ -160,8 +160,13 @@ func claimFields(claim *Claim) []any {
 	return []any{&claim.ID, &claim.ObligationID, &claim.BuyerUserID, &claim.SupplierOrganizationID, &claim.AmountKobo, &claim.Currency, &claim.PaidAt, &claim.SourceAccountMasked, &claim.TransferReference, &claim.EvidenceDocumentID, &claim.State, &claim.HoldExpiresAt, &claim.ReviewedBy, &claim.ReviewReason, &claim.PaymentID, &claim.CreatedAt, &claim.ReviewedAt}
 }
 
+type transactionalRecorder interface {
+	RecordTx(context.Context, pgx.Tx, payments.RecordInput) (payments.Payment, payments.Allocation, error)
+	AfterCommit(string)
+}
+
 func (s *PostgresStore) Confirm(ctx context.Context, id, actor, reason string, recorder payments.Service) (Claim, error) {
-	pg, ok := recorder.(*payments.PostgresStore)
+	pg, ok := recorder.(transactionalRecorder)
 	if !ok || strings.TrimSpace(actor) == "" || strings.TrimSpace(reason) == "" {
 		return Claim{}, errors.New("reviewer, reason, and transactional payment service are required")
 	}
@@ -173,6 +178,9 @@ func (s *PostgresStore) Confirm(ctx context.Context, id, actor, reason string, r
 	var claim Claim
 	if err = tx.QueryRow(ctx, claimSelect+` WHERE id=$1::uuid`, id).Scan(claimFields(&claim)...); err != nil {
 		return Claim{}, err
+	}
+	if _, ok := db.TenantFromContext(ctx); !ok {
+		ctx = db.WithTenantContext(ctx, actor, claim.SupplierOrganizationID)
 	}
 	if err = db.SetObligationContext(ctx, tx, claim.ObligationID); err != nil {
 		return Claim{}, err
