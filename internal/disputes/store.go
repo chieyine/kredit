@@ -64,12 +64,13 @@ type Decision struct {
 	DecidedAt             time.Time    `json:"decided_at"`
 }
 type OpenInput struct {
-	ObligationID       string
-	OpenedBy           string
-	DisputedAmountKobo ledger.Money
-	Reason             string
-	Explanation        string
-	CollectionEffect   string
+	ObligationID           string
+	OpenedBy               string
+	SupplierOrganizationID string
+	DisputedAmountKobo     ledger.Money
+	Reason                 string
+	Explanation            string
+	CollectionEffect       string
 }
 type DecideInput struct {
 	DisputeID             string

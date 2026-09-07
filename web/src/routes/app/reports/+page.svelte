@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { formatKobo, type KoboValue } from '$lib/money';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import ShareActions from '$lib/components/ShareActions.svelte';
@@ -14,7 +15,7 @@
 	let sharePeriod = $state('today');
 	let loading = $state(true);
 	let error = $state('');
-	const money = (value = 0) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value / 100);
+	const money = (value: KoboValue) => formatKobo(value);
 	const paidTotal = $derived((summary?.voluntary_paid_kobo ?? 0) + (summary?.collected_paid_kobo ?? 0));
 	const trackedValue = $derived(paidTotal + (summary?.outstanding_kobo ?? 0));
 	const receivedRate = $derived(trackedValue > 0 ? Math.round((paidTotal / trackedValue) * 100) : 0);

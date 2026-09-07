@@ -24,22 +24,24 @@ test('public navigation is clear, complete and closes after a mobile choice', as
 test('homepage trust proof uses verifiable product controls rather than invented social proof', async ({ page }) => {
 	await page.goto('/');
 	const proof = page.locator('.proof');
-	await expect(proof.getByRole('heading', { name: /Trust comes from the record/ })).toBeVisible();
+	await expect(proof.getByRole('heading', { name: /Both sides can.*check the details/ })).toBeVisible();
 	await expect(proof).toContainText('The customer sees the terms first.');
-	await expect(proof).toContainText('Delivery evidence stays with the sale.');
-	await expect(proof).toContainText('Every recorded payment changes the balance.');
+	await expect(proof).toContainText('The delivery proof stays with the sale.');
+	await expect(proof).toContainText('Confirmed payments update the balance.');
 	await expect(proof).toContainText('Kredit does not choose your customer.');
-	await expect(proof.getByRole('link', { name: /full sale journey/i })).toHaveAttribute('href', '/how-it-works');
-	await expect(proof.getByRole('link', { name: /security and privacy controls/i })).toHaveAttribute('href', '/security');
+	await expect(proof.getByRole('link', { name: /See how a sale works/i })).toHaveAttribute('href', '/how-it-works');
+	await expect(proof.getByRole('link', { name: /See how we keep it safe/i })).toHaveAttribute('href', '/security');
 });
 
-test('default sale creation redirects to the quick flow while advanced mode remains addressable', async ({ request }) => {
-	const quick = await request.get('/app/credit/new?customer=u1&goods=Rice&amount=100000', { maxRedirects: 0 });
-	expect(quick.status()).toBe(307);
-	expect(quick.headers().location).toBe('/app/credit/quick?customer=u1&goods=Rice&amount=100000');
-
-	const advanced = await request.get('/app/credit/new?advanced=1', { maxRedirects: 0 });
-	expect(advanced.status()).not.toBe(307);
+test('both sale-creation entry points preserve authentication and the intended destination', async ({ request }) => {
+ for (const path of ['/app/credit/quick?customer=u1&goods=Rice&amount=100000','/app/credit/new?advanced=1']) {
+  const response=await request.get(path,{maxRedirects:0});
+  expect(response.status()).toBe(303);
+  const location=new URL(response.headers().location,'http://127.0.0.1:5173');
+  expect(location.pathname).toBe('/app');
+  expect(location.searchParams.get('next')).toBe(path);
+  expect(response.headers()['cache-control']).toContain('no-store');
+ }
 });
 
 test('every indexable page has complete, unique search and social metadata', async ({ page }) => {
@@ -90,7 +92,7 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 		if (!path.startsWith('/legal/')) expect(response?.headers()['cache-control'], path).toContain('no-store');
 	}
 	await page.goto('/this-page-does-not-exist');
-	await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'This page is not here' })).toBeVisible();
 	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
 
 	const sitemap = await (await request.get('/sitemap.xml')).text();

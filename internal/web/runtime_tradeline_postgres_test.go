@@ -59,7 +59,7 @@ func TestPostgresTradeLineActivationCommitsAsOneFinancialTransaction(t *testing.
 			_, _ = pool.Exec(ctx, `DELETE FROM app.agreement_acceptances WHERE credit_request_id=$1::uuid`, drawdownID)
 			_, _ = pool.Exec(ctx, `UPDATE app.credit_requests SET agreement_version_id=NULL,acceptance_id=NULL,release_id=NULL,receipt_id=NULL,obligation_id=NULL WHERE id=$1::uuid`, drawdownID)
 			_, _ = pool.Exec(ctx, `DELETE FROM app.agreement_versions WHERE credit_request_id=$1::uuid`, drawdownID)
-			_, _ = pool.Exec(ctx, `DELETE FROM app.credit_aggregate_snapshots WHERE credit_request_id=$1::uuid`, drawdownID)
+			_, _ = pool.Exec(ctx, `DELETE FROM app.credit_aggregate_snapshots WHERE credit_request_id=$1`, drawdownID)
 			_, _ = pool.Exec(ctx, `DELETE FROM app.credit_requests WHERE id=$1::uuid`, drawdownID)
 			_, _ = pool.Exec(ctx, `DELETE FROM ledger.transactions WHERE reference_id=$1`, obligationID)
 		}

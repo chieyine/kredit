@@ -5,6 +5,12 @@ export GOCACHE="${GOCACHE:-$PWD/.tmp/go-cache}"
 export CI="${CI:-true}"
 mkdir -p "$GOCACHE"
 
+if [[ "${CI_REQUIRE_DATABASE:-0}" == "1" ]]; then
+  : "${DATABASE_URL:?Required database integration configuration is missing}"
+  : "${APP_DATABASE_URL:?Required application-role database configuration is missing}"
+  : "${RIVER_DATABASE_URL:?Required worker-role database configuration is missing}"
+fi
+
 bash scripts/api-lint.sh
 bash scripts/phase6-governance-test.sh
 python3 scripts/phase6-context-audit.py

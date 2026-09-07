@@ -11,6 +11,7 @@
  let preview:any=$state(null);let units:Record<string,string>=$state({});
  let data:Data|null=$state(null),draft:Values=$state({}),reason=$state(''),effective=$state(''),notes:Record<string,string>=$state({});
  let loading=$state(true),busy=$state(false),error=$state(''),message=$state(''),proposalID=$state(crypto.randomUUID());
+ let isPlatformOwner=$state(false),governanceMode=$state('solo_owner');
  let changed=$derived.by(()=>data?data.fields.filter(f=>draft[f.key]!==data?.current.values[f.key]):[]);
  let blocked=$derived.by(()=>data?.changes.some(c=>c.state==='pending'||(c.state==='approved'&&new Date(c.effective_at).getTime()>Date.now()))??false);
  function decimal(value:Values[string]){const n=BigInt(Number(value));return `${n/100n}.${(n%100n).toString().padStart(2,'0')}`}
@@ -22,9 +23,10 @@
  function when(value:string){return new Intl.DateTimeFormat('en-NG',{dateStyle:'medium',timeStyle:'short',timeZone:'Africa/Lagos'}).format(new Date(value))}
  function status(c:Change){if(c.state!=='approved')return c.state;return c.revision===data?.current.revision?'active':new Date(c.effective_at).getTime()>Date.now()?'scheduled':'superseded'}
  function reset(){if(!data)return;draft={...data.current.values};units=Object.fromEntries(data.fields.filter(scaled).map(f=>[f.key,decimal(draft[f.key])]));preview=null;reason='';effective='';proposalID=crypto.randomUUID()}
- async function load(){loading=true;error='';try{const r=await fetch('/api/v1/ops/business-policies',{credentials:'include'});const b=await r.json();if(!r.ok)throw new Error(b.detail||'Settings could not be loaded');data=b;reset()}catch(e){error=e instanceof Error?e.message:'Settings could not be loaded'}finally{loading=false}}
+ async function load(){loading=true;error='';try{const [r,caps,gov]=await Promise.all([fetch('/api/v1/ops/business-policies',{credentials:'include'}),fetch('/api/v1/ops/capabilities',{credentials:'include'}).then(x=>x.ok?x.json():{} as any),fetch('/api/v1/platform/capabilities',{credentials:'include'}).then(x=>x.ok?x.json():{} as any)]);const b=await r.json();if(!r.ok)throw new Error(b.detail||'Settings could not be loaded');data=b;isPlatformOwner=(caps as any).roles?.includes('platform_owner')||false;if((gov as any).governance_mode)governanceMode=(gov as any).governance_mode;reset()}catch(e){error=e instanceof Error?e.message:'Settings could not be loaded'}finally{loading=false}}
  async function post(path:string,body:unknown){const r=await fetch(path,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify(body)});const b=await r.json();if(!r.ok)throw new Error(b.detail||'That change could not be saved. Please try again.')}
- async function propose(){if(!data)return;busy=true;error='';message='';try{for(const f of data.fields){if(f.kind==='number'||f.kind==='money'){const n=draft[f.key];if(typeof n!=='number'||!Number.isSafeInteger(n)||n<f.min||n>f.max)throw new Error(`Enter a whole number between ${f.min} and ${f.max} for ${label(f)}`)}}if(!effective)throw new Error('Choose an effective date');await post('/api/v1/ops/business-policies',{id:proposalID,base_revision:data.current.revision,values:draft,reason,effective_at:new Date(`${effective}:00+01:00`).toISOString()});await load();message='Proposal saved. Another platform administrator must approve it before its effective date.'}catch(e){error=e instanceof Error?e.message:'Proposal could not be saved'}finally{busy=false}}
+ async function soloApprove(c:Change){if(!confirm('Confirm solo-owner self-approval for this policy proposal? This will be permanently recorded in the audit trail.'))return;busy=true;error='';message='';try{await post('/api/v1/ops/solo-owner/approve',{target_type:'policy',target_id:c.id,reason:notes[c.id]||'Solo-owner self-approval execution',confirm:true});await load();message='Solo-owner self-approval applied successfully.'}catch(e){error=e instanceof Error?e.message:'Solo-owner self-approval failed'}finally{busy=false}}
+ async function propose(){if(!data)return;busy=true;error='';message='';try{for(const f of data.fields){if(f.kind==='number'||f.kind==='money'){const n=draft[f.key];if(typeof n!=='number'||!Number.isSafeInteger(n)||n<f.min||n>f.max)throw new Error(`Enter a whole number between ${f.min} and ${f.max} for ${label(f)}`)}}if(!effective)throw new Error('Choose an effective date');await post('/api/v1/ops/business-policies',{id:proposalID,base_revision:data.current.revision,values:draft,reason,effective_at:new Date(`${effective}:00+01:00`).toISOString()});await load();message='Proposal saved.'+(governanceMode==='solo_owner'&&isPlatformOwner?' You can self-approve as platform owner or wait for review.':' Another platform administrator must approve it before its effective date.')}catch(e){error=e instanceof Error?e.message:'Proposal could not be saved'}finally{busy=false}}
  async function decide(c:Change,action:string){busy=true;error='';message='';try{await post(`/api/v1/ops/business-policies/${c.id}/decision`,{action,reason:notes[c.id]||''});await load();message='Decision recorded.'}catch(e){error=e instanceof Error?e.message:'Decision could not be saved'}finally{busy=false}}
  onMount(load);
 </script>
@@ -67,7 +69,13 @@
  {#if c.state==='pending'||status(c)==='scheduled'}
  <label for={`decision-${c.id}`}>Decision notes</label><textarea id={`decision-${c.id}`} bind:value={notes[c.id]} minlength="8" maxlength="2000"></textarea>
  {#if c.state==='pending'&&c.proposed_by!==data.actor_id&&data.can_approve!==false}<button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'approve')}>Approve exactly this</button><button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'reject')}>Reject proposal</button>{/if}
- {#if c.state==='pending'&&c.proposed_by===data.actor_id}<p>Another platform administrator must approve your proposal.</p>{/if}
+ {#if c.state==='pending'&&c.proposed_by===data.actor_id}
+  {#if isPlatformOwner&&governanceMode==='solo_owner'}
+   <button class="solo-approve-btn" disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>soloApprove(c)}>Self-Approve (Solo Owner)</button>
+  {:else}
+   <p>Another platform administrator must approve your proposal.</p>
+  {/if}
+ {/if}
  <button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'cancel')}>Cancel change</button>
  {/if}</article>{/each}
  <details><summary>Protected deployment controls</summary><p>These are not managed here: provider connections, credentials, certification evidence, live-money enablement, identity integrations, retention approval, currency and accounting safeguards. They go through deployment and approval instead. Large corrections and accepted-schedule amendments each have their own workflow.</p></details>

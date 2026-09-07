@@ -34,5 +34,5 @@ test('admin reviews a proposal and a different administrator approves it',async(
 test('pricing follows published policy and fails visibly when pricing is unavailable',async({page})=>{
  await page.route('**/api/v1/pricing',r=>r.fulfill({json:{base_bps:25,collection_bps:75,policy_revision:9}}));
  await page.goto('/pricing');await expect(page.getByText('0.25%',{exact:true}).first()).toBeVisible();await expect(page.getByText('0.75%',{exact:true})).toBeVisible();
- await page.route('**/api/v1/pricing',r=>r.fulfill({status:503,json:{detail:'Pricing unavailable'}}));await page.reload();await expect(page.getByRole('alert')).toContainText('Current rates could not be loaded');await expect(page.getByText('0.25%',{exact:true})).toHaveCount(0);
+ await page.route('**/api/v1/pricing',r=>r.fulfill({status:503,json:{detail:'Pricing unavailable'}}));await page.reload();await expect(page.getByRole('alert')).toContainText('We could not verify the current fees');await expect(page.getByText('0.25%',{exact:true})).toHaveCount(0);
 });

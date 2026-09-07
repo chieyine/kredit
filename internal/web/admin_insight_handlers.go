@@ -7,11 +7,13 @@ import (
 
 	"kredit/internal/access"
 	"kredit/internal/businesspolicy"
+	"kredit/internal/db"
 	"kredit/internal/operations"
 )
 
 func (s *Server) adminChangeContext(w http.ResponseWriter, r *http.Request) {
-	_, _, _, ok := s.requirePlatformAccess(w, r, access.PermissionAdminFinancial)
+	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionAdminFinancial)
+	_ = session
 	if !ok {
 		return
 	}
@@ -25,13 +27,17 @@ func (s *Server) adminChangeContext(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "reference_required", "Enter the obligation or credit request reference")
 		return
 	}
-	var id string
-	err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT o.id::text FROM app.obligations o JOIN app.credit_aggregate_snapshots s ON s.credit_request_id=o.credit_request_id::text WHERE o.id::text=$1 OR s.credit_request_id=$1 LIMIT 1`, q).Scan(&id)
+	var id, supplierOrgID string
+	err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT o.id::text, o.supplier_organization_id::text FROM app.obligations o JOIN app.credit_aggregate_snapshots s ON s.credit_request_id=o.credit_request_id::text WHERE o.id::text=$1 OR s.credit_request_id=$1 LIMIT 1`, q).Scan(&id, &supplierOrgID)
 	if err != nil {
 		writeProblem(w, 404, "reference_not_found", "No active obligation was found for that reference")
 		return
 	}
-	v, err := store.ChangeContext(r.Context(), id)
+	reqCtx := r.Context()
+	if supplierOrgID != "" {
+		reqCtx = db.WithTenantContext(reqCtx, user.ID, supplierOrgID)
+	}
+	v, err := store.ChangeContext(reqCtx, id)
 	if err != nil {
 		policyFailure(w, err)
 		return
