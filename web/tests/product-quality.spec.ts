@@ -92,7 +92,7 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 		if (!path.startsWith('/legal/')) expect(response?.headers()['cache-control'], path).toContain('no-store');
 	}
 	await page.goto('/this-page-does-not-exist');
-	await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'This page is not here' })).toBeVisible();
 	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
 
 	const sitemap = await (await request.get('/sitemap.xml')).text();

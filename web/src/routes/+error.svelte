@@ -5,7 +5,7 @@
 	const title = $derived(notFound ? 'This page is not here' : 'Something went wrong');
 	const detail = $derived(notFound
 		? 'The link may have expired, been typed wrongly, or been removed.'
-		: 'Nothing was sent twice. Go back to a safe page, check what happened, then try again.');
+		: 'We could not confirm what happened. An earlier request may still be processing. Check its status before trying again.');
 </script>
 
 <svelte:head>

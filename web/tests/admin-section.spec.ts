@@ -119,7 +119,7 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 
 	const more = page.getByRole('dialog', { name: 'Admin account menu' });
 	await expect(more).toBeVisible();
-	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(18);
+	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(19);
  await expect(more.getByRole('link', { name: 'Business settings' })).toBeVisible();
 	await expect(more.getByText('Customer support', { exact: true })).toBeVisible();
 	await expect(more.getByText('Access and control', { exact: true })).toBeVisible();

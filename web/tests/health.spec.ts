@@ -17,11 +17,11 @@ test('public product routes expose clear conversion and trust content', async ({
 test('visitor can complete the sample sale without signing in', async ({ page }) => {
 	await page.goto('/demo');
 	await expect(page.getByRole('heading', { name: /One sale,/i })).toBeVisible();
-	for (const label of ['Send to my customer', 'Accept this sale', 'The goods have left', 'I received the goods', 'Record sample payment']) {
+	for (const label of ['Send it to my customer', 'Yes, I accept this sale', 'Complete sample bank permission', 'The goods have left', 'Yes, I got the goods', 'Enter a sample payment']) {
 		await page.getByRole('button', { name: label }).click();
 	}
-	await expect(page.getByRole('heading', { name: /Everyone sees .* left/i })).toBeVisible();
-	await expect(page.getByRole('link', { name: /Now add my first real sale/i })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /Both sides see .* left/i })).toBeVisible();
+	await expect(page.getByRole('link', { name: /Add my first real sale/i })).toBeVisible();
 });
 
 test('mobile homepage remains navigable', async ({ page }) => {
@@ -29,7 +29,7 @@ test('mobile homepage remains navigable', async ({ page }) => {
 	await page.goto('/');
 	await expect(page.getByRole('heading', { name: /Keep track of every credit sale/i })).toBeVisible();
 	await page.locator('summary', { hasText: 'Menu' }).click();
-	await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Price' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Pricing' })).toBeVisible();
 });
 
 test('private pages are excluded from indexing', async ({ page }) => {

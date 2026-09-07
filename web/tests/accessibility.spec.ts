@@ -113,6 +113,6 @@ test('offline mode is announced and financial actions remain unqueued', async ({
 	await page.goto('/app/settings');
 	await expect(page.locator('.palette-trigger')).toHaveAttribute('data-ready', 'true');
 	await context.setOffline(true);
-	await expect(page.getByText('You are offline. Financial actions are not submitted or queued until you reconnect.')).toBeVisible();
+	await expect(page.getByText('You are offline. New money actions cannot be sent. An earlier request may still be processing.')).toBeVisible();
 	await context.setOffline(false);
 });
