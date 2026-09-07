@@ -16,10 +16,13 @@ jobs:
           docker pull postgres:18-bookworm
           cid=$(docker create postgres:18-bookworm)
           trap 'docker rm -f "$cid"' EXIT
-          mkdir -p /tmp/pg-tools/usr/lib/postgresql /tmp/pg-tools/usr/share/postgresql
+          mkdir -p /tmp/pg-tools/usr/lib/postgresql /tmp/pg-tools/usr/share/postgresql /tmp/pg-tools/libs
           docker cp "$cid:/usr/lib/postgresql/18" /tmp/pg-tools/usr/lib/postgresql/
           docker cp "$cid:/usr/share/postgresql/18" /tmp/pg-tools/usr/share/postgresql/
-          tar -C /tmp/pg-tools -czf /tmp/kredit-pg-tools.tgz usr
+          for lib in libicudata.so.72 libicui18n.so.72 libicuuc.so.72 libldap-2.5.so.0 liblber-2.5.so.0 liburing.so.2; do
+            docker cp -L "$cid:/usr/lib/x86_64-linux-gnu/$lib" "/tmp/pg-tools/libs/$lib"
+          done
+          tar -C /tmp/pg-tools -czf /tmp/kredit-pg-tools.tgz usr libs
       - uses: actions/upload-artifact@v4
         with:
           name: owner-pg-tooling
