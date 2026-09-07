@@ -145,6 +145,13 @@ VALUES
     ('00000000-0000-7000-8000-000000000063','00000000-0000-7000-8000-000000000053',1,'{"fixture":"trade-line-drawdown-3"}',encode(digest('{"fixture":"trade-line-drawdown-3"}','sha256'),'hex'),'trade-line-v1','privacy-v1','00000000-0000-7000-8000-000000000003',TIMESTAMPTZ '2026-08-15 09:00:00+01')
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO app.agreement_acceptances (id,credit_request_id,agreement_version_id,accepting_user_id,person_id,business_id,acceptance_method,authentication_level,agreement_hash,mandate_provider_id,accepted_at)
+VALUES
+    ('00000000-0000-7000-8000-000000000065','00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000061','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000020','00000000-0000-7000-8000-000000000021','digital_signature','AAL2',encode(digest('{"fixture":"trade-line-drawdown-1"}','sha256'),'hex'),'mock-collection',TIMESTAMPTZ '2026-08-02 09:30:00+01'),
+    ('00000000-0000-7000-8000-000000000066','00000000-0000-7000-8000-000000000052','00000000-0000-7000-8000-000000000062','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000020','00000000-0000-7000-8000-000000000021','digital_signature','AAL2',encode(digest('{"fixture":"trade-line-drawdown-2"}','sha256'),'hex'),'mock-collection',TIMESTAMPTZ '2026-08-08 09:30:00+01'),
+    ('00000000-0000-7000-8000-000000000067','00000000-0000-7000-8000-000000000053','00000000-0000-7000-8000-000000000063','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000020','00000000-0000-7000-8000-000000000021','digital_signature','AAL2',encode(digest('{"fixture":"trade-line-drawdown-3"}','sha256'),'hex'),'mock-collection',TIMESTAMPTZ '2026-08-15 09:30:00+01')
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO app.obligations (id,credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at)
 VALUES
     ('00000000-0000-7000-8000-000000000071','00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000061','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000021',120000000,'NGN','ACTIVE','PARTIALLY_PAID',20000000,600000,'00000000-0000-7000-8000-000000000081',TIMESTAMPTZ '2026-08-02 10:05:00+01'),
@@ -152,12 +159,12 @@ VALUES
     ('00000000-0000-7000-8000-000000000073','00000000-0000-7000-8000-000000000053','00000000-0000-7000-8000-000000000063','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000021',65000000,'NGN','ACTIVE','UNPAID',65000000,325000,'00000000-0000-7000-8000-000000000083',TIMESTAMPTZ '2026-08-15 10:05:00+01')
 ON CONFLICT (id) DO NOTHING;
 
-UPDATE app.credit_requests r SET agreement_version_id=v.agreement_id, obligation_id=v.obligation_id
+UPDATE app.credit_requests r SET agreement_version_id=v.agreement_id, acceptance_id=v.acceptance_id, obligation_id=v.obligation_id
 FROM (VALUES
-    ('00000000-0000-7000-8000-000000000051'::uuid,'00000000-0000-7000-8000-000000000061'::uuid,'00000000-0000-7000-8000-000000000071'::uuid),
-    ('00000000-0000-7000-8000-000000000052'::uuid,'00000000-0000-7000-8000-000000000062'::uuid,'00000000-0000-7000-8000-000000000072'::uuid),
-    ('00000000-0000-7000-8000-000000000053'::uuid,'00000000-0000-7000-8000-000000000063'::uuid,'00000000-0000-7000-8000-000000000073'::uuid)
-) AS v(request_id,agreement_id,obligation_id) WHERE r.id=v.request_id;
+    ('00000000-0000-7000-8000-000000000051'::uuid,'00000000-0000-7000-8000-000000000061'::uuid,'00000000-0000-7000-8000-000000000065'::uuid,'00000000-0000-7000-8000-000000000071'::uuid),
+    ('00000000-0000-7000-8000-000000000052'::uuid,'00000000-0000-7000-8000-000000000062'::uuid,'00000000-0000-7000-8000-000000000066'::uuid,'00000000-0000-7000-8000-000000000072'::uuid),
+    ('00000000-0000-7000-8000-000000000053'::uuid,'00000000-0000-7000-8000-000000000063'::uuid,'00000000-0000-7000-8000-000000000067'::uuid,'00000000-0000-7000-8000-000000000073'::uuid)
+) AS v(request_id,agreement_id,acceptance_id,obligation_id) WHERE r.id=v.request_id;
 
 INSERT INTO app.drawdowns (id,trade_line_id,principal_kobo,goods_description,invoice_reference,due_date,collection_at,grace_hours,terms_version,agreement_hash,state,obligation_id,buyer_confirmed_at,release_actor_id,delivery_method,release_evidence_reference,released_at,receipt_state,receipt_actor_id,receipt_at,activated_at)
 VALUES

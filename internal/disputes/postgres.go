@@ -32,6 +32,13 @@ func (s *PostgresStore) Open(input OpenInput) (Dispute, error) {
 		return Dispute{}, errors.New("obligation, opener, positive disputed amount, and reason are required")
 	}
 	ctx := context.Background()
+	supplierID := input.SupplierOrganizationID
+	if supplierID == "" {
+		_ = s.pool.QueryRow(ctx, `SELECT supplier_organization_id::text FROM app.obligations WHERE id=$1::uuid`, input.ObligationID).Scan(&supplierID)
+	}
+	if supplierID != "" {
+		ctx = db.WithTenantContext(ctx, input.OpenedBy, supplierID)
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Dispute{}, err
@@ -40,7 +47,7 @@ func (s *PostgresStore) Open(input OpenInput) (Dispute, error) {
 	if err := db.SetObligationContext(ctx, tx, input.ObligationID); err != nil {
 		return Dispute{}, err
 	}
-	var supplierID, buyerID string
+	var buyerID string
 	var outstanding ledger.Money
 	if err := tx.QueryRow(ctx, `SELECT o.supplier_organization_id::text,c.buyer_user_id::text,o.outstanding_kobo FROM app.obligations o JOIN app.credit_requests c ON c.id=o.credit_request_id WHERE o.id=$1::uuid FOR UPDATE OF o`, input.ObligationID).Scan(&supplierID, &buyerID, &outstanding); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -98,6 +105,7 @@ func (s *PostgresStore) Decide(input DecideInput) (Dispute, Decision, error) {
 	if err != nil {
 		return Dispute{}, Decision{}, err
 	}
+	ctx = db.WithTenantContext(ctx, input.ReviewerID, dispute.SupplierOrganizationID)
 	if dispute.State == StateResolved || dispute.State == StateWithdrawn {
 		return Dispute{}, Decision{}, errors.New("dispute is already closed")
 	}

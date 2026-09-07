@@ -50,7 +50,7 @@ func proposal(f collectionFixture, kind string) operations.ChangeProposal {
 func TestAdminWorkflowIndependentCorrectionAndConcurrentApproval(t *testing.T) {
 	f := financialFixture(t)
 	maker, checker, s := workflowActors(t, f)
-	ctx := context.Background()
+	ctx := f.ctx
 	in := proposal(f, "write_off")
 	if err := s.ProposeChange(ctx, checker, in); err == nil {
 		t.Fatal("approver created their own proposal")
@@ -113,7 +113,7 @@ func TestAdminWorkflowStaleAndReservedCorrections(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			f := financialFixture(t)
 			maker, checker, s := workflowActors(t, f)
-			ctx := context.Background()
+			ctx := f.ctx
 			in := proposal(f, "write_off")
 			if err := s.ProposeChange(ctx, maker, in); err != nil {
 				t.Fatal(err)
@@ -141,7 +141,7 @@ func TestAdminWorkflowStaleAndReservedCorrections(t *testing.T) {
 func TestAdminWorkflowScheduleNeedsExactBuyerConsent(t *testing.T) {
 	f := financialFixture(t)
 	maker, checker, s := workflowActors(t, f)
-	ctx := context.Background()
+	ctx := f.ctx
 	before, err := s.ChangeContext(ctx, f.id)
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +190,7 @@ func TestAdminWorkflowBuyerRejectsAndStaleAcceptanceIsBlocked(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			f := financialFixture(t)
 			maker, checker, s := workflowActors(t, f)
-			ctx := context.Background()
+			ctx := f.ctx
 			before, err := s.ChangeContext(ctx, f.id)
 			if err != nil {
 				t.Fatal(err)
@@ -236,7 +236,7 @@ func TestAdminWorkflowBuyerRejectsAndStaleAcceptanceIsBlocked(t *testing.T) {
 func TestAdminWorkflowClosedObligationCanCancelButNotApply(t *testing.T) {
 	f := financialFixture(t)
 	maker, checker, s := workflowActors(t, f)
-	ctx := context.Background()
+	ctx := f.ctx
 	in := proposal(f, "write_off")
 	if err := s.ProposeChange(ctx, maker, in); err != nil {
 		t.Fatal(err)

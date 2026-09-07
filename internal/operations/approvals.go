@@ -238,7 +238,7 @@ func (s *PostgresStore) DecideChange(ctx context.Context, id, actor, decision, r
 			return errors.New("proposal not found")
 		}
 	} else {
-		roles := []string{"platform_admin", "approver"}
+		roles := []string{"platform_admin", "approver", "platform_owner"}
 		if decision == "cancel" {
 			roles = append(roles, "finance_operator")
 		}
@@ -274,8 +274,15 @@ func (s *PostgresStore) DecideChange(ctx context.Context, id, actor, decision, r
 	} else {
 		switch decision {
 		case "approve":
-			if state != "pending" || author == actor {
+			if state != "pending" {
 				return errors.New("another authorized administrator must approve a pending proposal")
+			}
+			if author == actor {
+				var isSoloOwner bool
+				_ = tx.QueryRow(ctx, `SELECT (app.current_governance_mode() = 'solo_owner' AND app.is_platform_owner($1::uuid))`, actor).Scan(&isSoloOwner)
+				if !isSoloOwner {
+					return errors.New("another authorized administrator must approve a pending proposal")
+				}
 			}
 			target = "applied"
 			if kind == "schedule_amendment" {

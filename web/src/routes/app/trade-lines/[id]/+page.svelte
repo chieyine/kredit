@@ -50,7 +50,15 @@
 		await load();
 	}
 
-	onMount(async () => { const response = await fetch('/api/v1/organizations', { credentials: 'include' }); if (response.ok) { organizations = (await response.json()).organizations ?? []; await load(); } });
+	let canAddDrawdown = $state(true);
+	onMount(async () => {
+		fetch('/api/v1/platform/capabilities', { credentials: 'include' })
+			.then(r => r.ok ? r.json() : {})
+			.then((c: any) => { if (c.features && c.features.drawdowns === false) canAddDrawdown = false; })
+			.catch(() => {});
+		const response = await fetch('/api/v1/organizations', { credentials: 'include' });
+		if (response.ok) { organizations = (await response.json()).organizations ?? []; await load(); }
+	});
 </script>
 
 <svelte:head><title>Customer limit — Kredit</title></svelte:head>
@@ -61,9 +69,11 @@
 		<section class="summary"><article><span>Full limit</span><strong>{money(statement.line.approved_limit_kobo)}</strong></article><article><span>Customer already owes</span><strong>{money(statement.line.current_exposure_kobo)}</strong></article><article><span>Waiting for customer</span><strong>{money(statement.line.reserved_pending_kobo)}</strong></article><article><span>Now</span><strong>{stateLabel(statement.line.state)}</strong></article></section>
 		{#if error}<p class="error" role="alert">{error}</p>{/if}{#if notice}<p class="notice" role="status">{notice}</p>{/if}
 		<section class="card compact"><h2>Pause this limit</h2><p>While a limit is paused, the customer cannot use it for a new sale. Sales already running are not affected.</p>{#if statement.line.state === 'ACTIVE'}<button class="danger" disabled={busy==='suspend'} onclick={()=>command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/suspend`,{},'suspend')}>Pause this limit</button>{:else if statement.line.state === 'SUSPENDED'}<button class="primary" disabled={busy==='resume'} onclick={()=>command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/resume`,{},'resume')}>Use this limit again</button>{/if}</section>
+		{#if canAddDrawdown}
 		<section class="card"><h2>Add a sale from this limit</h2><p>Your customer sees the goods, the money and the payment day before you hand anything over.</p>
 			<form onsubmit={reserve} class="form-grid"><label>Money to pay (₦)<input bind:value={principal} inputmode="decimal" required /></label><label>What are they buying?<textarea bind:value={goods} rows="3" required></textarea></label><label>Invoice number <small>optional</small><input bind:value={invoiceReference} /></label><label>Pay before<input type="date" bind:value={dueDate} required /></label><label>If unpaid, Kredit may debit their bank after<input type="datetime-local" bind:value={collectionAt} required /></label><button class="primary wide" disabled={busy === 'reserve'}>{busy === 'reserve' ? 'Saving…' : `Add ${money(parseNaira(principal))} sale`}</button></form>
 		</section>
+		{/if}
 		<section class="card compact"><h2>Lower the limit</h2><p>You can only take back what the customer has not used yet. To raise a limit, the customer must agree first.</p><label>New limit (₦)<input bind:value={limit} inputmode="decimal" /></label><button disabled={busy === 'limit'} onclick={reduce}>Change limit to {money(parseNaira(limit))}</button></section>
 		<h2>Sales using this limit</h2>
 		{#if statement.drawdowns.length}<div class="drawdowns">{#each statement.drawdowns as drawdown}<article class="drawdown">
