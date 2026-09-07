@@ -496,6 +496,11 @@ func (s *Server) grantOperationsRole(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_platform_role", "choose a valid admin role")
 		return
 	}
+	if role == access.PlatformOwner {
+		if _, _, _, ok = s.requirePlatformAccess(w, r, access.PermissionPlatformOwner); !ok {
+			return
+		}
+	}
 	if role == access.PlatformAdministrator || role == access.PlatformAccessAdministrator {
 		if _, _, _, ok = s.requirePlatformAccess(w, r, access.PermissionBreakGlass); !ok {
 			return
@@ -546,6 +551,11 @@ func (s *Server) revokeOperationsRole(w http.ResponseWriter, r *http.Request) {
 	if err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT role FROM app.platform_role_assignments WHERE id=$1::uuid`, r.PathValue("assignmentID")).Scan(&targetRole); err != nil {
 		writeProblem(w, 404, "role_not_found", "Role assignment not found")
 		return
+	}
+	if targetRole == "platform_owner" {
+		if _, _, _, ok = s.requirePlatformAccess(w, r, access.PermissionPlatformOwner); !ok {
+			return
+		}
 	}
 	if targetRole == "platform_admin" || targetRole == "access_administrator" {
 		if _, _, _, ok = s.requirePlatformAccess(w, r, access.PermissionBreakGlass); !ok {

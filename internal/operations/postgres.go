@@ -54,7 +54,7 @@ func (s *PostgresStore) adjust(actor, org, obligation string, amount ledger.Mone
 		return Action{}, errors.New("a caller-supplied approver is not evidence of approval")
 	}
 	actionID := identifier.FromKey("operation:"+kind+":"+obligation, key)
-	ctx := context.Background()
+	ctx := db.WithTenantContext(context.Background(), actor, org)
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Action{}, err

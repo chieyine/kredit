@@ -791,6 +791,10 @@ func (s *Server) getBuyerSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createTradeLine(w http.ResponseWriter, r *http.Request) {
+	if !s.isFeatureEnabled(r.Context(), "features.trade_lines", false) {
+		writeProblem(w, http.StatusForbidden, "feature_disabled", "Trade lines are currently unavailable")
+		return
+	}
 	orgID, _ := pathID(r, "organizationID")
 	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)
 	if !ok {
@@ -879,6 +883,10 @@ func (s *Server) reduceTradeLineLimit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"trade_line": updated})
 }
 func (s *Server) reserveDrawdown(w http.ResponseWriter, r *http.Request) {
+	if !s.isFeatureEnabled(r.Context(), "features.drawdowns", false) {
+		writeProblem(w, http.StatusForbidden, "feature_disabled", "Drawdowns are currently unavailable")
+		return
+	}
 	orgID, _ := pathID(r, "organizationID")
 	lineID, _ := pathID(r, "lineID")
 	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)
@@ -1375,6 +1383,10 @@ func (s *Server) collectionWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) openDispute(w http.ResponseWriter, r *http.Request) {
+	if !s.isFeatureEnabled(r.Context(), "features.disputes", true) {
+		writeProblem(w, http.StatusForbidden, "feature_disabled", "Disputes are currently unavailable")
+		return
+	}
 	orgID, _ := pathID(r, "organizationID")
 	requestID, _ := pathID(r, "requestID")
 	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageDisputes)
@@ -1394,7 +1406,7 @@ func (s *Server) openDispute(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
+	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, SupplierOrganizationID: orgID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
 	if err != nil {
 		writeProblem(w, 422, "dispute_invalid", err.Error())
 		return
@@ -1403,6 +1415,10 @@ func (s *Server) openDispute(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"dispute": dispute})
 }
 func (s *Server) openBuyerDispute(w http.ResponseWriter, r *http.Request) {
+	if !s.isFeatureEnabled(r.Context(), "features.disputes", true) {
+		writeProblem(w, http.StatusForbidden, "feature_disabled", "Disputes are currently unavailable")
+		return
+	}
 	_, user, ok := s.requireAuth(w, r)
 	if !ok {
 		return
@@ -1421,7 +1437,7 @@ func (s *Server) openBuyerDispute(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
+	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, SupplierOrganizationID: v.Request.SupplierOrganizationID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
 	if err != nil {
 		writeProblem(w, 422, "dispute_invalid", err.Error())
 		return

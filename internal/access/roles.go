@@ -27,11 +27,12 @@ const (
 	PlatformPolicyManager       PlatformRole = "policy_manager"
 	PlatformApprover            PlatformRole = "approver"
 	PlatformAccessAdministrator PlatformRole = "access_administrator"
+	PlatformOwner               PlatformRole = "platform_owner"
 )
 
 func (r PlatformRole) Valid() bool {
 	switch r {
-	case PlatformSupportAgent, PlatformComplianceReviewer, PlatformDisputeReviewer, PlatformAdministrator, PlatformFinanceOperator, PlatformPolicyManager, PlatformApprover, PlatformAccessAdministrator:
+	case PlatformSupportAgent, PlatformComplianceReviewer, PlatformDisputeReviewer, PlatformAdministrator, PlatformFinanceOperator, PlatformPolicyManager, PlatformApprover, PlatformAccessAdministrator, PlatformOwner:
 		return true
 	default:
 		return false
@@ -68,6 +69,8 @@ const (
 	PermissionRecoverAccounts    Permission = "accounts:recover"
 	PermissionReviewPrivacy      Permission = "privacy:review"
 	PermissionManageRiskHold     Permission = "risk_hold:manage"
+	PermissionPlatformOwner      Permission = "platform_owner:manage"
+	PermissionPlatformSettings   Permission = "platform_settings:manage"
 )
 
 func ParseRole(value string) (Role, error) {
@@ -82,7 +85,12 @@ func CanPlatform(role PlatformRole, permission Permission) bool {
 	if !role.Valid() {
 		return false
 	}
+	if role == PlatformOwner {
+		return true
+	}
 	switch permission {
+	case PermissionPlatformOwner, PermissionPlatformSettings:
+		return false
 	case PermissionSupportSearch:
 		return role == PlatformAdministrator || role == PlatformAccessAdministrator
 	case PermissionManageCases:
@@ -153,7 +161,7 @@ func Can(role Role, permission Permission) bool {
 
 func RequiresStepUp(permission Permission) bool {
 	switch permission {
-	case PermissionManageOrganization, PermissionInviteMembers, PermissionManageMembers, PermissionInviteBuyers, PermissionCreateCredit, PermissionReleaseGoods, PermissionManageFinancial, PermissionManageDisputes:
+	case PermissionManageOrganization, PermissionInviteMembers, PermissionManageMembers, PermissionInviteBuyers, PermissionCreateCredit, PermissionReleaseGoods, PermissionManageFinancial, PermissionManageDisputes, PermissionPlatformOwner, PermissionPlatformSettings:
 		return true
 	default:
 		return false

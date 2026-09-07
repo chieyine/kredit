@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"kredit/internal/access"
+	"kredit/internal/db"
 	"kredit/internal/operations"
 
 	"github.com/google/uuid"
@@ -27,7 +28,14 @@ func (s *Server) adminCapabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	permissions := map[access.Permission]bool{}
-	for _, p := range []access.Permission{access.PermissionReadFinancial, access.PermissionManagePolicies, access.PermissionApproveChanges, access.PermissionAdminFinancial, access.PermissionManageAccess, access.PermissionSupportSearch, access.PermissionManageCases, access.PermissionReviewCompliance, access.PermissionReviewDisputes, access.PermissionProviderOperations, access.PermissionOperateJobs, access.PermissionOperateCollections, access.PermissionSuspendAccounts, access.PermissionRecoverAccounts, access.PermissionReviewPrivacy, access.PermissionBreakGlass} {
+	for _, p := range []access.Permission{
+		access.PermissionReadFinancial, access.PermissionManagePolicies, access.PermissionApproveChanges,
+		access.PermissionAdminFinancial, access.PermissionManageAccess, access.PermissionSupportSearch,
+		access.PermissionManageCases, access.PermissionReviewCompliance, access.PermissionReviewDisputes,
+		access.PermissionProviderOperations, access.PermissionOperateJobs, access.PermissionOperateCollections,
+		access.PermissionSuspendAccounts, access.PermissionRecoverAccounts, access.PermissionReviewPrivacy,
+		access.PermissionBreakGlass, access.PermissionPlatformOwner, access.PermissionPlatformSettings,
+	} {
 		for _, role := range roles {
 			permissions[p] = permissions[p] || access.CanPlatform(role, p)
 		}
@@ -187,7 +195,13 @@ func (s *Server) proposeAdminChange(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	if err := store.ProposeChange(r.Context(), user.ID, in); err != nil {
+	var supplierOrgID string
+	_ = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT supplier_organization_id::text FROM app.obligations WHERE id=$1::uuid`, in.ObligationID).Scan(&supplierOrgID)
+	reqCtx := r.Context()
+	if supplierOrgID != "" {
+		reqCtx = db.WithTenantContext(reqCtx, user.ID, supplierOrgID)
+	}
+	if err := store.ProposeChange(reqCtx, user.ID, in); err != nil {
 		policyFailure(w, err)
 		return
 	}
@@ -224,7 +238,13 @@ func (s *Server) decideFinancialChange(w http.ResponseWriter, r *http.Request, b
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	if err := store.DecideChange(r.Context(), r.PathValue("changeID"), user.ID, in.Action, in.Reason, buyer); err != nil {
+	var supplierOrgID string
+	_ = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT o.supplier_organization_id::text FROM app.admin_change_requests c JOIN app.obligations o ON o.id=c.obligation_id WHERE c.id=$1::uuid`, r.PathValue("changeID")).Scan(&supplierOrgID)
+	reqCtx := r.Context()
+	if supplierOrgID != "" {
+		reqCtx = db.WithTenantContext(reqCtx, user.ID, supplierOrgID)
+	}
+	if err := store.DecideChange(reqCtx, r.PathValue("changeID"), user.ID, in.Action, in.Reason, buyer); err != nil {
 		policyFailure(w, err)
 		return
 	}
