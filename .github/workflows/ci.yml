@@ -44,11 +44,32 @@ jobs:
           cache: pnpm
       - name: Install pinned OpenAPI linter
         run: npm install --global @redocly/cli@2.51.2
-      - name: Install required Go linter
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.13.2
-          install-only: true
+      - name: Install checksum-pinned Go linter binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          archive=golangci-lint-2.13.2-linux-amd64.tar.gz
+          download_dir="$(mktemp -d)"
+          trap 'rm -rf "$download_dir"' EXIT
+          # Digest from the upstream immutable v2.13.2 GitHub release asset.
+          # Do not compile the linter through the application's module cache.
+          curl --fail --location --retry 3 --connect-timeout 15 --max-time 180 \
+            "https://github.com/golangci/golangci-lint/releases/download/v2.13.2/$archive" \
+            --output "$download_dir/$archive"
+          printf '%s  %s\n' \
+            2277d43b98ec0054280f2ac26b53268bae97682444678a59a657dd565da021d6 \
+            "$download_dir/$archive" | sha256sum --check --strict
+          tar --extract --gzip --no-same-owner --no-same-permissions \
+            --file "$download_dir/$archive" --directory "$download_dir" \
+            golangci-lint-2.13.2-linux-amd64/golangci-lint
+          tools="$RUNNER_TEMP/kredit-analysis-bin"
+          mkdir -p "$tools"
+          install -m 0755 "$download_dir/golangci-lint-2.13.2-linux-amd64/golangci-lint" "$tools/golangci-lint"
+          test "$(od -An -tx1 -N4 "$tools/golangci-lint" | tr -d ' \n')" = 7f454c46
+          GOPROXY=off GOTOOLCHAIN=local "$tools/golangci-lint" version
+          printf '%s\n' "$tools" >> "$GITHUB_PATH"
       - name: Install required Go analysis tools
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
@@ -78,6 +99,7 @@ jobs:
       - name: Run repository checks
         env:
           GOCACHE: ${{ runner.temp }}/go-cache
+          CI_REQUIRE_DATABASE: "1"
           SECURITY_STRICT: "1"
           OPENAPI_LINT_STRICT: "1"
           REDOCLY_TELEMETRY: "off"
@@ -86,9 +108,25 @@ jobs:
           DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
           APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
           RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
-        run: bash scripts/ci.sh
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/kredit-analysis-bin:$PATH"
+          hash -r
+          test "$(command -v golangci-lint)" = "$RUNNER_TEMP/kredit-analysis-bin/golangci-lint"
+          test "$(od -An -tx1 -N4 "$(command -v golangci-lint)" | tr -d ' \n')" = 7f454c46
+          bash scripts/ci.sh
       - name: Build platform-neutral containers
         run: |
           docker build -f infra/containers/Dockerfile.api --target api -t kredit-api:${{ github.sha }} .
           docker build -f infra/containers/Dockerfile.api --target worker -t kredit-worker:${{ github.sha }} .
           docker build -f infra/containers/Dockerfile.web -t kredit-web:${{ github.sha }} .
+      - name: Preserve synthetic regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-evidence-${{ github.sha }}
+          path: |
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

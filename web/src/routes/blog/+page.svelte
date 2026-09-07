@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { articleCategoryDetails, articles, articleCategories } from '$lib/blog/articles';
+	import { onMount } from 'svelte';
+	let interactive = $state(false);
+	onMount(() => { interactive = true; });
 	import { jsonLd } from '$lib/seo';
 	let query=$state(''),category=$state('All guides');
 	const posts = articles.map((article,index)=>({href:`/blog/${article.slug}`,title:article.title,excerpt:article.description,date:new Date(`${article.modified}T12:00:00`).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'}),minutes:article.readingMinutes,issue:String(index+1).padStart(3,'0'),category:article.category}));
@@ -29,7 +32,7 @@
 
 <nav class="topic-nav" aria-label="Browse guide categories"><p class="eyebrow">Browse one topic</p><div>{#each topics as topic}<a href={`/blog/topic/${topic.slug}`}><span>{topic.count} {topic.count === 1 ? 'guide' : 'guides'}</span><strong>{topic.category}</strong><i aria-hidden="true">→</i></a>{/each}</div></nav>
 
-<section class="library" aria-labelledby="library-title"><div><p class="eyebrow">{articles.length} guides</p><h2 id="library-title">What do you need to know?</h2></div><div class="filters"><label>Search guides<input type="search" value={query} oninput={(event)=>query=event.currentTarget.value} placeholder="For example: late payment" /></label><label>Topic<select bind:value={category}><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}>{item}</option>{/each}</select></label></div></section>
+<section class="library" aria-labelledby="library-title"><div><p class="eyebrow">{articles.length} guides</p><h2 id="library-title">What do you need to know?</h2></div><div class="filters"><label>Search guides<input disabled={!interactive} type="search" value={query} oninput={(event)=>query=event.currentTarget.value} placeholder="For example: late payment" /></label><label>Topic<select disabled={!interactive} bind:value={category}><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}>{item}</option>{/each}</select></label></div></section>
 <section class="archive" aria-labelledby="archive-title">
 	<div class="archive-head"><p id="archive-title">{visiblePosts.length} helpful {visiblePosts.length === 1 ? 'guide' : 'guides'}</p><span>Guide / Reading time</span></div>
 	{#each visiblePosts as post}

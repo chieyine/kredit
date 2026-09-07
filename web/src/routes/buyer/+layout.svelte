@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { signOut } from '$lib/api/client';
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import BankReturnNotice from '$lib/components/BankReturnNotice.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ConnectivityBanner from '$lib/components/ConnectivityBanner.svelte';
 	import PortalNav from '$lib/components/PortalNav.svelte';
@@ -38,7 +39,7 @@
 	<div class="buyer-shell">
 		<ConnectivityBanner />
 		<PortalNav label="Customer account" homeHref="/buyer" {links} {mobilePrimary} {mobileMore} onsearch={() => (paletteOpen = true)} onsignout={signOut} {searchReady} />
-		<div class="portal-content"><div class="motion-scope product-route">{@render children()}</div></div>
+		<div class="portal-content"><BankReturnNotice /><div class="motion-scope product-route">{@render children()}</div></div>
 	</div>
 	<CommandPalette {links} bind:open={paletteOpen} />
 </AuthGate>{/key}

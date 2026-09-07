@@ -11,7 +11,7 @@
 	let ready = $state(false);
 	onMount(() => { ready = true; });
 	const links: [string, string][] = [
-		['Dashboard', '/app/overview'], ['Find anything', '/app/search'], ['Finish setting up', '/app/onboarding'], ['Add a sale', '/app/credit/quick'], ['Customers', '/app/customers'],
+		['Home', '/app/overview'], ['Sales', '/app/credit'], ['Find anything', '/app/search'], ['Finish setting up', '/app/onboarding'], ['Add a sale', '/app/credit/quick'], ['Customers', '/app/customers'],
 		['Customer limits', '/app/trade-lines'], ['Payments received', '/app/payments'], ['Bank debits', '/app/collections'],
 		['Problems', '/app/disputes'], ['Money overdue', '/app/overdue'], ['Reports', '/app/reports'],
 		['Your staff', '/app/team'], ['Business activity', '/app/activity'], ['Messages we sent', '/app/notifications'],
@@ -20,12 +20,14 @@
 		['Get help', '/app/help']
 	];
 	const mobilePrimary: [string, string, string][] = [
-		['Dashboard', '/app/overview', 'home'],
-		['Add sale', '/app/credit/quick', 'add'],
+		['Home', '/app/overview', 'home'],
+		['Sales', '/app/credit', 'sales'],
 		['Customers', '/app/customers', 'customers'],
 		['Payments', '/app/payments', 'payments']
 	];
 	const mobileMore: [string, string, string][] = [
+		['Add a sale', '/app/credit/quick', 'Sales and money'],
+		['Business setup', '/app/onboarding', 'Your business'],
 		['Find anything', '/app/search', 'Sales and money'],
 		['Bank debits', '/app/collections', 'Sales and money'],
 		['Problems', '/app/disputes', 'Sales and money'],

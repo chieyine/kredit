@@ -32,6 +32,7 @@ import (
 	"kredit/internal/paymentclaims"
 	"kredit/internal/payments"
 	"kredit/internal/platformops"
+	"kredit/internal/platformsettings"
 	"kredit/internal/providers/mono"
 	"kredit/internal/readiness"
 	"kredit/internal/relationships"
@@ -85,6 +86,7 @@ type Runtime struct {
 	WhatsApp                  *whatsapp.Handler
 	Outbox                    *outbox.Store
 	PlatformOps               *platformops.Store
+	PlatformSettings          platformsettings.Service
 	UserControl               *usercontrol.Store
 	Feedback                  *feedback.Store
 }
@@ -160,6 +162,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	}
 	var outboxStore *outbox.Store
 	var platformOpsStore *platformops.Store
+	var platformSettingsStore platformsettings.Service
 	var policies *businesspolicy.Store
 	var policyError error
 	feedbackStore := feedback.NewStore()
@@ -167,6 +170,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	if database != nil {
 		outboxStore = outbox.NewStore(database.Raw())
 		platformOpsStore = platformops.NewStore(database.Raw())
+		platformSettingsStore = platformsettings.NewPostgresStore(database.Raw(), nil, nil)
 		policies = businesspolicy.NewStore(database.Raw(), cfg)
 		policyError = policies.ValidateStartup(context.Background())
 		feedbackStore = feedback.NewPostgresStore(database.Raw())
@@ -659,6 +663,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		WhatsApp:             whatsAppHandler,
 		Outbox:               outboxStore,
 		PlatformOps:          platformOpsStore,
+		PlatformSettings:     platformSettingsStore,
 		BusinessPolicies:     policies, policyInitializationError: policyError,
 		UserControl: userControlStore,
 		Feedback:    feedbackStore,

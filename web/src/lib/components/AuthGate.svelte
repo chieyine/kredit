@@ -1,56 +1,49 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
-
-	let { children, area = 'account' }: { children: Snippet; area?: string } = $props();
-	let gateStatus = $state<'checking' | 'ready' | 'error'>('checking');
-	let message = $state('');
-
-	function signInURL() {
-		if (typeof window === 'undefined') return '/app';
-		const next = `${window.location.pathname}${window.location.search}`;
-		return `/app?next=${encodeURIComponent(next)}`;
-	}
-
-	async function verify() {
-		gateStatus = 'checking';
-		message = '';
-		try {
-			const response = await fetch('/api/v1/me', { credentials: 'include', cache: 'no-store' });
-			if (response.status === 401) {
-				window.location.replace(signInURL());
-				return;
-			}
-			if (!response.ok) throw new Error('We could not check your account. Please try again.');
-			gateStatus = 'ready';
-		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'We could not check your account. Please try again.';
-			gateStatus = 'error';
-		}
-	}
-
-	onMount(verify);
+  import { onMount, setContext, type Snippet } from 'svelte';
+  import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
+  import { checkedJSON, clearPrivateBrowserData, LatestRequest, record, RequestError, text } from '$lib/api/reliable';
+  let { children, area = 'account' }: { children: Snippet; area?: string } = $props();
+  let gateStatus = $state<'checking' | 'ready' | 'error'>('checking');
+  let userID = $state('');
+  const requests = new LatestRequest();
+  setContext<AccountContext>(ACCOUNT_CONTEXT, { get userID() { return userID; } });
+  async function verify() {
+    const request = requests.begin();
+    gateStatus = 'checking'; userID = '';
+    try {
+      const id = await checkedJSON('/api/v1/me', value => text(record(record(value).user).id), { signal: request.signal });
+      if (!request.current()) return;
+      if (!id) throw new RequestError('Account identity was not returned.');
+      userID = id; gateStatus = 'ready';
+    } catch (error) {
+      if (!request.current()) return;
+      if (error instanceof RequestError && error.status === 401) {
+        clearPrivateBrowserData();
+        location.replace(`/app?next=${encodeURIComponent(location.pathname + location.search)}`);
+        return;
+      }
+      gateStatus = 'error';
+    }
+  }
+  onMount(() => { void verify(); return () => requests.cancel(); });
 </script>
 
 {#if gateStatus === 'ready'}
-	{@render children()}
+  {@render children()}
 {:else}
-	<main class="account-gate" aria-live="polite">
-		<a class="gate-brand" href="/" aria-label="Kredit home"><span aria-hidden="true">K</span>Kredit</a>
-		<section>
-			<p class="eyebrow">Private {area}</p>
-			{#if gateStatus === 'checking'}
-				<div class="gate-mark" aria-hidden="true"></div>
-				<h1>Checking your account…</h1>
-				<p>One moment. We never show private business information until we are sure it is you.</p>
-			{:else}
-				<h1>We cannot open your account.</h1>
-				<p>{message} Check your network and try again.</p>
-				<div class="gate-actions"><button type="button" onclick={verify}>Try again</button><a href="/">Go to the home page</a></div>
-			{/if}
-		</section>
-	</main>
+  <main class="account-gate" aria-live="polite">
+    <a class="gate-brand" href="/" aria-label="Kredit home"><span aria-hidden="true">K</span>Kredit</a>
+    <section>
+      <p class="eyebrow">Private {area}</p>
+      {#if gateStatus === 'checking'}
+        <h1>Checking your account…</h1><p>Your private records will open after this check.</p>
+      {:else}
+        <h1>We cannot open your account.</h1><p>The account check did not finish. Check your connection and try again.</p>
+        <div class="gate-actions"><button type="button" onclick={verify}>Try again</button><a href="/">Go to the home page</a></div>
+      {/if}
+    </section>
+  </main>
 {/if}
-
 <style>
-	.account-gate{box-sizing:border-box;min-height:100vh;padding:clamp(1.25rem,4vw,3rem);color:#fff;background:#17181b}.account-gate .eyebrow{color:#ff9b84}.gate-brand{display:inline-flex;align-items:center;gap:.65rem;color:#fff;font-family:Georgia,'Times New Roman',serif;font-size:1.15rem;font-weight:650;text-decoration:none}.gate-brand span{display:grid;place-items:center;width:2rem;height:2rem;background:#2738d6}.account-gate section{display:grid;align-content:center;max-width:48rem;min-height:calc(100vh - 9rem)}.account-gate h1{max-width:13ch;margin:.6rem 0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3rem,8vw,6.5rem);font-weight:500;line-height:.9;letter-spacing:-.055em}.account-gate p:not(.eyebrow){max-width:36rem;color:#c7c6c1;font-size:1.05rem;line-height:1.65}.gate-mark{width:3.5rem;height:.45rem;margin-bottom:1rem;background:#ff5b3a;transform-origin:left;animation:checking 1.1s ease-in-out infinite}.gate-actions{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.5rem}.gate-actions button,.gate-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:2.8rem;padding:0 1rem;border:1px solid #fff;border-radius:0;background:#fff;color:#17181b;font:inherit;font-weight:750;text-decoration:none}.gate-actions a{background:transparent;color:#fff}@keyframes checking{0%,100%{transform:scaleX(.25)}50%{transform:scaleX(1)}}@media(prefers-reduced-motion:reduce){.gate-mark{animation:none}}
+  .account-gate{min-height:100svh;box-sizing:border-box;padding:clamp(1.25rem,4vw,3rem);background:var(--color-background);color:var(--color-foreground)}.gate-brand{display:inline-flex;align-items:center;gap:.65rem;text-decoration:none;font-weight:750}.gate-brand span{display:grid;place-items:center;width:2rem;height:2rem;background:var(--color-primary);color:#fff}.account-gate section{max-width:34rem;margin:clamp(3rem,15vh,9rem) auto}.account-gate h1{font-family:inherit;font-size:clamp(1.8rem,4vw,2.5rem);line-height:1.2;letter-spacing:-.03em}.account-gate p{line-height:1.6;color:var(--color-muted)}.gate-actions{display:flex;gap:1rem;flex-wrap:wrap}.gate-actions button,.gate-actions a{display:inline-flex;align-items:center;justify-content:center;padding:.75rem 1rem;border:1px solid var(--color-border);border-radius:.4rem;font:inherit;text-decoration:none}.gate-actions button{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
 </style>

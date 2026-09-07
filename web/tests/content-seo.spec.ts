@@ -48,7 +48,7 @@ test('privacy notice gives a complete, readable account of information use and r
 	await expect(page).toHaveTitle('Privacy notice — Kredit');
 	await expect(page.getByRole('heading', { name: 'Your information belongs to you.' })).toBeVisible();
 	await expect(page.getByText('Complete pre-launch draft — legal approval pending')).toBeVisible();
-	await expect(page.getByRole('heading', { name: '2. Information we collect' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: '2. What we keep about you' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: '6. Your rights and choices' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: '7. How we protect information' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Nigeria Data Protection Commission' })).toBeVisible();
@@ -100,5 +100,5 @@ test('FAQ matches activation fees and conditional collections', async ({ page })
  await page.goto('/faq');
  await expect(page.getByText(/seller owes the agreed base fee when the accepted sale becomes active/)).toBeVisible();
  await expect(page.getByText(/A debit can fail; repayment is not guaranteed/)).toBeVisible();
- await expect(page.getByRole('link', { name: 'current pricing' })).toHaveAttribute('href', '/pricing');
+ await expect(page.getByRole('link', { name: 'what it costs', exact: true })).toHaveAttribute('href', '/pricing');
 });

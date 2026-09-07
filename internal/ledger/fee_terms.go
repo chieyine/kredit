@@ -60,7 +60,11 @@ func (f *FeeTerms) Collection(amount Money) (Money, error) {
 }
 func (f *FeeTerms) Disclosure() string {
 	a, b := f.Rates()
-	return fmt.Sprintf("%d.%02d%% supplier base service fee on activated principal; an additional %d.%02d%% only on amounts Kredit successfully collects at or after the permitted collection time", a/100, a%100, b/100, b%100)
+	disclosure := fmt.Sprintf("%d.%02d%% supplier base service fee on activated principal; an additional %d.%02d%% only on amounts Kredit successfully collects at or after the permitted collection time", a/100, a%100, b/100, b%100)
+	if f != nil && f.MinFeeKobo > 0 {
+		disclosure += fmt.Sprintf("; minimum base fee NGN %d.%02d, capped at the principal", f.MinFeeKobo/100, f.MinFeeKobo%100)
+	}
+	return disclosure
 }
 func FeeAtRate(amount Money, bps int64) (Money, error) {
 	if amount < 0 || bps < 0 || bps > 1000 {

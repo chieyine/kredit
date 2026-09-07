@@ -251,7 +251,7 @@ func (s *Store) Decide(ctx context.Context, id, actor, action, reason string) er
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var allowed bool
-	roles := []string{"platform_admin", "approver"}
+	roles := []string{"platform_admin", "approver", "platform_owner"}
 	if action == "cancel" {
 		roles = append(roles, "policy_manager")
 	}
@@ -278,7 +278,11 @@ func (s *Store) Decide(ctx context.Context, id, actor, action, reason string) er
 			return errors.New("the proposing administrator is no longer authorized; cancel and submit a new proposal")
 		}
 		if actor == author {
-			return errors.New("another platform administrator must approve this change")
+			var isSoloOwner bool
+			_ = tx.QueryRow(ctx, `SELECT (app.current_governance_mode() = 'solo_owner' AND app.is_platform_owner($1::uuid))`, actor).Scan(&isSoloOwner)
+			if !isSoloOwner {
+				return errors.New("another platform administrator must approve this change")
+			}
 		}
 		if !at.After(now) {
 			return errors.New("effective date has passed; cancel and submit a new proposal")

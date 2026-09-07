@@ -127,17 +127,17 @@ func (s *Server) listOrganizationCustomers(w http.ResponseWriter, r *http.Reques
 		buyerRows = s.runtime.Buyers.ListCustomers(organizationID)
 	}
 	for _, customer := range buyerRows {
-		customers[customer.BuyerUserID] = map[string]any{"id": customer.BuyerUserID, "buyer_user_id": customer.BuyerUserID, "buyer_business_id": customer.BuyerBusinessID, "legal_name": customer.LegalName, "trading_name": customer.TradingName, "industry": customer.Industry, "state": customer.Status, "request_count": 0, "outstanding_kobo": int64(0)}
+		customers[customer.BuyerUserID+"\x00"+customer.BuyerBusinessID] = map[string]any{"id": customer.BuyerUserID, "buyer_user_id": customer.BuyerUserID, "buyer_business_id": customer.BuyerBusinessID, "legal_name": customer.LegalName, "trading_name": customer.TradingName, "industry": customer.Industry, "state": customer.Status, "request_count": 0, "outstanding_kobo": int64(0)}
 	}
 	financialRows6, readErr6 := s.runtime.readCreditForSupplier(r.Context(), organizationID)
 	if financialReadError(w, readErr6) {
 		return
 	}
 	for _, view := range financialRows6 {
-		customer := customers[view.Request.BuyerUserID]
+		customer := customers[view.Request.BuyerUserID+"\x00"+view.Request.BuyerBusinessID]
 		if customer == nil {
 			customer = map[string]any{"id": view.Request.BuyerUserID, "buyer_user_id": view.Request.BuyerUserID, "buyer_business_id": view.Request.BuyerBusinessID, "legal_name": view.Request.BuyerLegalName, "trading_name": view.Request.BuyerTradingName, "state": "ACTIVE", "request_count": 0, "outstanding_kobo": int64(0)}
-			customers[view.Request.BuyerUserID] = customer
+			customers[view.Request.BuyerUserID+"\x00"+view.Request.BuyerBusinessID] = customer
 		}
 		customer["request_count"] = customer["request_count"].(int) + 1
 		if view.Obligation != nil {

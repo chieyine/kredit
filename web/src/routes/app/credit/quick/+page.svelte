@@ -1,144 +1,138 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
-	import { formatKobo, parseNaira, verbalizeNaira } from '$lib/money';
-	import { productLabel } from '$lib/product-language';
-
-	const DRAFT_KEY='kredit.quick-sale.draft.v1';
-	type QuickSaleDraft={goods:string;principal:string;dueDate:string;updatedAt:string};
-	let organizations:any[]=$state([]), customers:any[]=$state([]), organizationID=$state(''), selectedBuyer=$state('');
-	let buyerUserID=$state(''), buyerBusinessID=$state(''), buyerLegalName=$state('');
-	let principal=$state(''), goods=$state(''), dueDate=$state(''), busy=$state(false), error=$state('');
-	let step=$state(1), createRequestKey=$state(''), draftReady=$state(false), recoveredDraft=$state(false);
-	let amountWords=$derived(verbalizeNaira(parseNaira(principal)));
-	let selectedCustomer=$derived(customers.find((item)=>item.buyer_user_id===selectedBuyer));
-	let customerWarning=$derived(selectedCustomer?.has_overdue_obligations || selectedCustomer?.overdue_count > 0 || selectedCustomer?.has_network_overdue ? `Be careful. This customer has ${selectedCustomer?.overdue_count ?? 'unpaid'} late payment(s) on Kredit right now.` : '');
-
-	function restoreDraft(){
-		try{
-			const raw=sessionStorage.getItem(DRAFT_KEY);
-			if(!raw)return;
-			const draft=JSON.parse(raw) as Partial<QuickSaleDraft>;
-			if(typeof draft.goods==='string')goods=draft.goods;
-			if(typeof draft.principal==='string')principal=draft.principal;
-			if(typeof draft.dueDate==='string')dueDate=draft.dueDate;
-			recoveredDraft=Boolean(goods||principal||dueDate);
-		}catch{sessionStorage.removeItem(DRAFT_KEY)}
-	}
-	function clearDraft(){
-		try{sessionStorage.removeItem(DRAFT_KEY)}catch{/* storage may be unavailable */}
-		recoveredDraft=false;
-	}
-	$effect(()=>{
-		if(!draftReady)return;
-		try{
-			if(!goods&&!principal&&!dueDate){sessionStorage.removeItem(DRAFT_KEY);return;}
-			const draft:QuickSaleDraft={goods,principal,dueDate,updatedAt:new Date().toISOString()};
-			sessionStorage.setItem(DRAFT_KEY,JSON.stringify(draft));
-		}catch{/* the form remains usable when browser storage is unavailable */}
-	});
-
-	async function loadCustomers(){
-		customers=[]; selectedBuyer=''; buyerUserID=''; buyerBusinessID=''; buyerLegalName='';
-		if(!organizationID)return;
-		const response=await fetch(`/api/v1/organizations/${organizationID}/customers`,{credentials:'include'});
-		if(response.ok)customers=(await response.json()).customers??[];
-	}
-	function chooseBuyer(){
-		const customer=customers.find((item)=>item.buyer_user_id===selectedBuyer);
-		buyerUserID=customer?.buyer_user_id??'';
-		buyerBusinessID=customer?.buyer_business_id??'';
-		buyerLegalName=customer?.legal_name??customer?.trading_name??'';
-	}
-	function next(){
-		error='';
-		if(step===1&&!buyerUserID){error='Choose the customer first.';return;}
-		if(step===2&&(!goods.trim()||parseNaira(principal)<=0)){error='Write what the goods are, and how much they must pay.';return;}
-		if(step===3&&!dueDate){error='Choose the day your customer must pay.';return;}
-		step=Math.min(4,step+1);
-	}
-	function back(){error='';step=Math.max(1,step-1)}
-	function collectionDate(){
-		const date=new Date(`${dueDate}T23:59:00`);
-		date.setDate(date.getDate()+1);
-		return date.toISOString();
-	}
-	async function submit(){
-		error=''; busy=true;
-		try{
-			const amount=parseNaira(principal);
-			if(!organizationID||!buyerUserID||!buyerBusinessID||!buyerLegalName||!goods||!dueDate||amount<=0)throw new Error('Something is missing. Go back and check the sale.');
-			if(!createRequestKey)createRequestKey=idempotencyKey();
-			const response=await fetch(`/api/v1/organizations/${organizationID}/credit-requests`,{
-				method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':createRequestKey,...csrfHeaders()},
-				body:JSON.stringify({buyer_user_id:buyerUserID,buyer_business_id:buyerBusinessID,buyer_legal_name:buyerLegalName,principal_kobo:amount,goods_description:goods,invoice_reference:'',invoice_document_hash:'',due_date:dueDate,grace_hours:24,collection_at:collectionDate(),schedule_type:'one_time',schedule_count:2,schedule_cadence:'monthly',month_end_policy:'last_day',custom_schedule_items:[]})
-			});
-			const body=await response.json().catch(()=>({}));
-			if(!response.ok){if(response.status<500&&(body.title??body.code)!=='idempotency_in_progress')createRequestKey='';throw new Error(body.detail??'We could not save this sale. Please try again.');}
-			createRequestKey='';
-			clearDraft();
-			await goto(`/app/credit/${body.request.id}?organization=${organizationID}`);
-		}catch(cause){error=cause instanceof Error?cause.message:'We could not save this sale. Please try again.'}finally{busy=false}
-	}
-	onMount(async()=>{
-		const params=new URLSearchParams(window.location.search);
-		const hasPrefill=params.has('goods')||params.has('amount');
-		if(!hasPrefill)restoreDraft();
-		const response=await fetch('/api/v1/organizations',{credentials:'include'});
-		if(response.status===401){location.assign('/app');return;}
-		if(!response.ok){error='We could not open your business account. Please try again.';draftReady=true;return;}
-		organizations=(await response.json()).organizations??[];
-		organizationID=organizations[0]?.id??'';
-		await loadCustomers();
-		selectedBuyer=params.get('customer')??'';
-		if(params.has('goods'))goods=params.get('goods')??'';
-		if(params.has('amount'))principal=params.get('amount')??'';
-		if(selectedBuyer)chooseBuyer();
-		if(buyerUserID&&goods&&parseNaira(principal)>0)step=dueDate?4:3;
-		else if(buyerUserID)step=2;
-		draftReady=true;
-	});
+  import { getContext, onMount, tick } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
+  import { checkedJSON, csrfHeader, LatestRequest, readResource, record, rows, text, type Resource } from '$lib/api/reliable';
+  import { MutationIntent } from '$lib/api/mutation';
+  import { customer, organization, dateLabel, timeLabel, type Customer, type Organization } from '$lib/records';
+  import { deleteDraft, readDraft, saveDraft } from '$lib/sale-drafts';
+  import { parseNaira, verbalizeNaira } from '$lib/money';
+  import { collectionBoundary } from '$lib/financial-copy';
+  import Money from '$lib/components/Money.svelte';
+  import ResourceNotice from '$lib/components/ResourceNotice.svelte';
+  const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
+  let organizations = $state<Resource<Organization[]>>({ state: 'loading', scope: '' });
+  let customers = $state<Resource<Customer[]>>({ state: 'loading', scope: '' });
+  let organizationID = $state(''), selectedBuyer = $state(''), goods = $state(''), principal = $state(''), dueDate = $state('');
+  let step = $state(1), busy = $state(false), error = $state(''), recoveredDraft = $state(false), draftReady = $state(false), keepDraft = $state(false), draftWarning = $state('');
+  let timing = $state<{ dueDate: string; collectionAt: string; organizationID: string } | null>(null);
+  let heading = $state<HTMLHeadingElement>();
+  let creation: MutationIntent | null = null;
+  const reads = new LatestRequest(), businessReads = new LatestRequest();
+  const amount = $derived(parseNaira(principal));
+  const amountWords = $derived(verbalizeNaira(amount));
+  const customerKey = (item: Customer) => `${item.buyer_user_id}:${item.buyer_business_id}`;
+  const buyer = $derived(customers.state === 'ready' ? customers.data.find(item => customerKey(item) === selectedBuyer) : undefined);
+  function restoreForBusiness() {
+    draftReady = false; keepDraft = false; draftWarning = ''; recoveredDraft = false; goods = ''; principal = ''; dueDate = ''; timing = null; error = ''; creation = null;
+    try {
+      const saved = readDraft(account.userID, organizationID, sessionStorage);
+      if (saved) { keepDraft = true; goods = saved.goods; principal = saved.principal; dueDate = saved.dueDate; recoveredDraft = true; }
+    } catch { draftWarning = 'This browser cannot keep a draft. Keep this page open until you finish.'; }
+    draftReady = true;
+  }
+  $effect(() => {
+    if (!draftReady || !organizationID) return;
+    try {
+      if (!keepDraft || (!goods && !principal && !dueDate)) deleteDraft(account.userID, organizationID, sessionStorage);
+      else if (!saveDraft(account.userID, organizationID, { goods, principal, dueDate }, sessionStorage)) draftWarning = 'Your draft could not be kept on this device. Keep this page open until you finish.';
+    } catch { draftWarning = 'Your draft could not be kept on this device. Keep this page open until you finish.'; }
+  });
+  async function loadCustomers(resetDraft = false) {
+    const scope = organizationID, request = reads.begin();
+    customers = { state: 'loading', scope }; selectedBuyer = ''; step = 1;
+    if (resetDraft) restoreForBusiness();
+    if (!scope) return;
+    const result = await readResource(scope, `/api/v1/organizations/${encodeURIComponent(scope)}/customers`, rows('customers', customer), request.signal, 'your customers');
+    if (request.current() && organizationID === scope) customers = result;
+  }
+  async function focusStep() { await tick(); heading?.focus(); }
+  async function next() {
+    if (busy) return; error = '';
+    if (step === 1 && !buyer) { error = 'Choose the customer for this sale.'; return; }
+    if (step === 2 && (!goods.trim() || goods.trim().length > 5000 || amount <= 0)) { error = 'Enter the goods and a valid amount, with no more than two decimal places.'; return; }
+    if (step === 3) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) { error = 'Choose the agreed payment date.'; return; }
+      busy = true; timing = null;
+      try {
+        const scope = organizationID, date = dueDate;
+        const result = await checkedJSON(`/api/v1/organizations/${encodeURIComponent(scope)}/credit-terms/preview`, value => {
+          const result = record(value), collectionAt = text(result.collection_at);
+          if (result.due_date !== date || result.grace_hours !== 24 || result.timezone !== 'Africa/Lagos' || result.timing_mode !== 'lagos_end_of_day' || !Number.isFinite(Date.parse(collectionAt))) throw new Error('The payment date could not be checked.');
+          return { dueDate: date, collectionAt, organizationID: scope };
+        }, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeader() }, body: JSON.stringify({ due_date: date, grace_hours: 24 }) });
+        if (organizationID !== scope || dueDate !== date) return;
+        timing = result;
+      } catch { error = 'We could not verify the payment date. Try again before saving.'; return; }
+      finally { busy = false; }
+    }
+    step = Math.min(4, step + 1); await focusStep();
+  }
+  async function back() { if (busy) return; error = ''; step = Math.max(1, step - 1); await focusStep(); }
+  async function submit() {
+    if (busy) return; error = ''; busy = true;
+    try {
+      if (!buyer || !organizationID || amount <= 0 || !goods.trim() || timing?.dueDate !== dueDate || timing.organizationID !== organizationID) throw new Error('Go back and check the customer, amount and payment date.');
+      creation ??= new MutationIntent(`${account.userID}:${organizationID}`, `/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests`);
+      const id = await creation.run({ buyer_user_id: buyer.buyer_user_id, buyer_business_id: buyer.buyer_business_id, buyer_legal_name: buyer.legal_name, buyer_trading_name: buyer.trading_name, principal_kobo: amount, goods_description: goods.trim(), invoice_reference: '', invoice_document_hash: '', due_date: dueDate, grace_hours: 24, collection_at: timing.collectionAt, timing_mode: 'lagos_end_of_day', schedule_type: 'one_time', schedule_count: 1, schedule_cadence: 'custom', month_end_policy: 'last_day', custom_schedule_items: [] }, value => text(record(record(value).request).id));
+      draftReady = false;
+      try { deleteDraft(account.userID, organizationID, sessionStorage); } catch { /* Server result is authoritative. */ }
+      await goto(`/app/credit/${encodeURIComponent(id)}?organization=${encodeURIComponent(organizationID)}`);
+    } catch (cause) { error = cause instanceof Error ? cause.message : 'We could not confirm that this sale was saved.'; }
+    finally { busy = false; }
+  }
+  async function load() {
+    const request = businessReads.begin();
+    organizations = { state: 'loading', scope: account.userID };
+    const result = await readResource(account.userID, '/api/v1/organizations', rows('organizations', organization), request.signal, 'your businesses');
+    if (!request.current()) return;
+    organizations = result;
+    if (result.state !== 'ready') return;
+    const params = new URLSearchParams(location.search);
+    organizationID = result.data.find(item => item.id === params.get('organization'))?.id ?? result.data[0]?.id ?? '';
+    if (!organizationID) return;
+    restoreForBusiness();
+    await loadCustomers();
+    if (!request.current()) return;
+    if (params.has('goods')) goods = (params.get('goods') ?? '').slice(0, 5000);
+    if (params.has('amount')) principal = (params.get('amount') ?? '').slice(0, 40);
+    if (customers.state === 'ready') {
+      const matches = customers.data.filter(item => item.buyer_user_id === params.get('customer'));
+      if (matches.length === 1) selectedBuyer = customerKey(matches[0]);
+    }
+  }
+  onMount(() => { void load(); return () => { reads.cancel(); businessReads.cancel(); }; });
 </script>
-
 <svelte:head><title>Add a sale — Kredit</title></svelte:head>
 <main class="shell quick-sale">
-	<header class="page-head">
-		<div><p class="eyebrow">New sale</p><h1>This takes about a minute.</h1><p class="lede">Four things: who is taking it, what they are taking, how much and when they pay. We keep the rest of the record for you.</p></div>
-		<a href="/app/credit/new?advanced=1">Paying in parts, or adding an invoice? Use the full form →</a>
-	</header>
-
-	{#if recoveredDraft}<div class="draft-note" role="status"><span><strong>We kept what you typed last time.</strong> We do not save which customer you picked, so choose them again.</span><button type="button" onclick={()=>{goods='';principal='';dueDate='';clearDraft()}}>Start fresh</button></div>{/if}
-	<nav class="steps" aria-label="Sale steps">
-		{#each ['Customer','Goods & money','Payment day','Check it'] as label,index}
-			<button class:active={step===index+1} class:done={step>index+1} type="button" onclick={()=>{if(index+1<step)step=index+1}}><span>{step>index+1?'✓':index+1}</span>{label}</button>
-		{/each}
-	</nav>
-
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
-	<section class="sale-card">
-		{#if step===1}
-			<div class="stage-copy"><p class="eyebrow">01 — Customer</p><h2>Who is taking the goods?</h2><p>Pick the person taking the goods. They will get this sale and have to agree to it before anything moves.</p></div>
-			<div class="fields">
-				{#if organizations.length>1}<label>Your business<select bind:value={organizationID} onchange={loadCustomers}>{#each organizations as org}<option value={org.id}>{org.trading_name||org.legal_name}</option>{/each}</select></label>{/if}
-				{#if customers.length}<label>Customer<select bind:value={selectedBuyer} onchange={chooseBuyer}><option value="">Choose a customer</option>{#each customers as customer}<option value={customer.buyer_user_id}>{customer.trading_name||customer.legal_name}</option>{/each}</select></label>{:else}<div class="empty-inline"><strong>You have not added a customer yet.</strong><p>Add them first. They get a private link and confirm their own details.</p><a class="primary" href="/app/customers/new">Add a customer</a></div>{/if}
-				{#if selectedCustomer}<div class="customer-card"><span>This customer</span><strong>{selectedCustomer.trading_name||selectedCustomer.legal_name}</strong><small>{productLabel(selectedCustomer.state??selectedCustomer.status,'Customer added')}</small>{#if customerWarning}<p class="warning">⚠ {customerWarning}</p>{/if}</div>{/if}
-			</div>
-		{:else if step===2}
-			<div class="stage-copy"><p class="eyebrow">02 — Goods & money</p><h2>What are they taking?</h2><p>Write it clearly enough that six months from now, nobody can argue about what this sale covered.</p></div>
-			<div class="fields"><label>What goods are they taking?<textarea bind:value={goods} rows="5" placeholder="For example: 40 cartons of 5L cooking oil"></textarea></label><label>How much must they pay? (₦)<input bind:value={principal} inputmode="decimal" placeholder="1,200,000" />{#if amountWords}<small class="amount-words">{amountWords}</small>{/if}</label></div>
-		{:else if step===3}
-			<div class="stage-copy"><p class="eyebrow">03 — Payment day</p><h2>When must they pay?</h2><p>Pick the day the two of you agreed. We give them 24 extra hours after that before any bank debit can even be tried.</p></div>
-			<div class="fields"><label>Day they must pay<input type="date" bind:value={dueDate} /></label><div class="trust-note"><strong>What Kredit will never do</strong><p>Kredit will not touch your customer's bank before that day plus the extra hours. Even then, it only happens if they gave permission and there is no open problem.</p></div></div>
-		{:else}
-			<div class="stage-copy"><p class="eyebrow">04 — Check it</p><h2>Read it once more before you save.</h2><p>Nothing has reached your customer yet. Save it first, then open it and send it to them.</p></div>
-			<div class="review-card"><dl><div><dt>Customer</dt><dd>{buyerLegalName}</dd></div><div><dt>Goods</dt><dd>{goods}</dd></div><div><dt>Money to pay</dt><dd>{formatKobo(parseNaira(principal))}</dd></div><div><dt>Pay by</dt><dd>{new Date(`${dueDate}T12:00:00`).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</dd></div></dl><div class="trust-strip"><span>✓ Your customer reads it before agreeing</span><span>✓ These details stay on record</span><span>✓ Every payment brings the balance down</span></div></div>
-		{/if}
-	</section>
-
-	<footer class="actions"><div>{#if step>1}<button class="secondary" type="button" onclick={back}>← Back</button>{/if}</div>{#if step<4}<button class="primary" type="button" onclick={next}>Next →</button>{:else}<button class="primary" type="button" onclick={submit} disabled={busy}>{busy?'Saving…':'Save this sale →'}</button>{/if}</footer>
+  <header class="task-heading"><div><p class="eyebrow">New credit sale</p><h1>Add a sale</h1><p class="lede">Choose the customer, goods, amount and payment date.</p></div><a href={`/app/credit/new?advanced=1&organization=${encodeURIComponent(organizationID)}`}>Instalments or an invoice? Use the full form</a></header>
+  <ResourceNotice resource={organizations} label="Businesses" retry={load} />
+  {#if organizations.state === 'ready' && !organizations.data.length}<div class="empty-state"><h2>Add your business first</h2><a class="primary" href="/app/overview">Add business details</a></div>
+  {:else if organizationID}
+    {#if recoveredDraft}<div class="inline-notice" role="status"><p>Your draft for this business was restored. Choose the customer again.</p><button type="button" disabled={busy} onclick={() => { keepDraft = false; goods = ''; principal = ''; dueDate = ''; timing = null; recoveredDraft = false; }}>Start fresh</button></div>{/if}
+    <ol class="steps" aria-label="Sale steps">{#each ['Customer', 'Goods & amount', 'Payment date', 'Review'] as label, index}<li aria-current={step === index + 1 ? 'step' : undefined}><span aria-hidden="true">{index + 1}</span>{label}</li>{/each}</ol>
+    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    <section class="sale-card" aria-busy={busy}>
+      <h2 bind:this={heading} tabindex="-1">{['Who is buying?', 'What are you supplying?', 'When will they pay?', 'Check your sale'][step - 1]}</h2>
+      {#if step === 1}
+        {#if organizations.state === 'ready' && organizations.data.length > 1}<label>Your business<select bind:value={organizationID} disabled={busy} onchange={() => loadCustomers(true)}>{#each organizations.data as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}</select></label>{/if}
+        <ResourceNotice resource={customers} label="Customers" retry={() => void loadCustomers()} />
+        {#if customers.state === 'ready'}{#if customers.data.length}<label>Customer<select bind:value={selectedBuyer} disabled={busy}><option value="">Choose a customer</option>{#each customers.data as item}<option value={customerKey(item)}>{item.trading_name || item.legal_name}</option>{/each}</select></label>{#if buyer}<div class="inline-notice"><strong>{buyer.trading_name || buyer.legal_name}</strong>{#if buyer.trading_name && buyer.trading_name !== buyer.legal_name}<p>Contracting party: {buyer.legal_name}</p>{/if}{#if buyer.overdue}<p>This customer has an overdue record. Review it before offering more credit.</p>{/if}</div>{/if}{:else}<div class="empty-state"><h3>No customers yet</h3><p>Invite a customer to confirm their own details.</p></div>{/if}<a href={`/app/customers/new?organization=${encodeURIComponent(organizationID)}`}>Add a customer</a>{/if}
+      {:else if step === 2}
+        <label>Goods and quantity<textarea bind:value={goods} rows="4" maxlength="5000" placeholder="For example: 40 cartons of 5L cooking oil" disabled={busy}></textarea></label>
+        <label>Sale amount (₦)<input bind:value={principal} inputmode="decimal" maxlength="40" placeholder="120,000.00" disabled={busy} />{#if amountWords}<small>{amountWords}</small>{/if}</label>
+      {:else if step === 3}
+        <label>Agreed payment date<input type="date" bind:value={dueDate} disabled={busy} /></label>
+        <div class="inline-notice"><strong>Payment timing</strong><p>The day ends at 11:59 pm Nigerian time. This sale allows 24 extra hours before a bank debit can be considered.</p><p>{collectionBoundary}</p></div>
+      {:else}
+        <dl class="sale-summary"><div><dt>Customer</dt><dd>{buyer?.trading_name || buyer?.legal_name}</dd></div>{#if buyer?.trading_name && buyer.trading_name !== buyer.legal_name}<div><dt>Contracting party</dt><dd>{buyer.legal_name}</dd></div>{/if}<div><dt>Goods</dt><dd>{goods}</dd></div><div><dt>Sale amount</dt><dd class="amount"><Money amountKobo={amount} /></dd></div><div><dt>Pay by</dt><dd>{dateLabel(dueDate)}</dd></div><div><dt>Bank debit may be considered from</dt><dd>{timing ? timeLabel(timing.collectionAt) : 'Not yet verified'}</dd></div></dl>
+        <p class="field-help">This saves a draft. Review the complete terms and fees on the next screen before sending it. Your customer must accept the agreement and complete the required bank permission.</p>
+      {/if}
+    </section>
+    <footer class="form-actions"><div>{#if step > 1}<button class="secondary" type="button" disabled={busy} onclick={back}>Back</button>{/if}</div>{#if step < 4}<button class="primary" type="button" onclick={next} disabled={busy || (step === 1 && !buyer)}>{busy ? 'Checking date…' : 'Continue'}</button>{:else}<button class="primary" type="button" onclick={submit} disabled={busy || !timing}>{busy ? 'Saving…' : 'Save draft sale'}</button>{/if}</footer>
+    <label class="draft-choice"><input type="checkbox" bind:checked={keepDraft} />Keep this draft on this device for up to 12 hours</label><p class="field-help">Draft saving is off until you choose it. Avoid using it on a shared device. The selected customer is never saved in a browser draft.</p>{#if draftWarning}<p role="status">{draftWarning}</p>{/if}
+  {/if}
 </main>
-
 <style>
-	.quick-sale{max-width:72rem;padding-bottom:6rem}.page-head{display:grid;grid-template-columns:1fr auto;gap:3rem;align-items:end;padding:3rem 0 2rem;border-bottom:3px solid #17181b}.page-head h1{max-width:11ch;margin:.5rem 0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3.2rem,7vw,6rem);font-weight:500;line-height:.9;letter-spacing:-.06em}.page-head>a{max-width:18rem;color:#2738d6;font-size:.82rem;font-weight:750;line-height:1.5}.draft-note{display:flex;justify-content:space-between;gap:1rem;align-items:center;margin:1.25rem 0 0;padding:.8rem 1rem;border-left:4px solid #2738d6;background:#eef0ff;font-size:.8rem;line-height:1.5}.draft-note button{border:0;background:transparent;color:#2738d6;font:inherit;font-weight:800;text-decoration:underline;cursor:pointer;white-space:nowrap}.steps{display:grid;grid-template-columns:repeat(4,1fr);margin:1.5rem 0 2rem;border-top:1px solid #cfc9be;border-left:1px solid #cfc9be}.steps button{display:flex;align-items:center;gap:.65rem;min-height:3.3rem;padding:.7rem;border:0;border-right:1px solid #cfc9be;border-bottom:1px solid #cfc9be;background:#fffdf8;color:#6a6c67;text-align:left;font:inherit;font-size:.78rem;font-weight:750}.steps button span{display:grid;place-items:center;width:1.5rem;height:1.5rem;border:1px solid #aaa69e;border-radius:50%;font-size:.68rem}.steps button.active{background:#17181b;color:#fff}.steps button.active span{border-color:#e85f3d;background:#e85f3d;color:#fff}.steps button.done{color:#2738d6}.steps button.done span{border-color:#2738d6;background:#2738d6;color:#fff}.sale-card{display:grid;grid-template-columns:.75fr 1.25fr;gap:clamp(2rem,6vw,6rem);min-height:27rem;padding:clamp(1.5rem,5vw,3.5rem);border:1px solid #cfc9be;background:#fffdf8;box-shadow:12px 12px 0 #2738d6}.stage-copy h2{max-width:11ch;margin:.5rem 0 1rem;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2.2rem,4vw,3.7rem);font-weight:500;line-height:.95;letter-spacing:-.045em}.stage-copy>p:last-child{max-width:30rem;color:#6a6c67;line-height:1.7}.fields{display:grid;align-content:start;gap:1.2rem}.fields label{display:grid;gap:.45rem;font-weight:750}.fields input,.fields select,.fields textarea{box-sizing:border-box;width:100%;min-height:3rem;padding:.8rem;border:1px solid #aaa69e;border-radius:0;background:#fff;font:inherit}.fields textarea{resize:vertical}.amount-words{color:#2738d6;line-height:1.5}.customer-card,.trust-note,.empty-inline{padding:1rem;border-left:4px solid #2738d6;background:#eef0ff}.customer-card{display:grid;gap:.35rem}.customer-card span,.customer-card small{color:#636863;font-size:.72rem}.warning{margin:.5rem 0 0;padding:.65rem;background:#fff5dd;color:#7a4a00;font-size:.8rem;line-height:1.5}.trust-note{border-left-color:#16794e;background:#ecf8f1}.trust-note p,.empty-inline p{margin:.4rem 0;color:#626762;line-height:1.6}.review-card{display:grid;gap:1.5rem}.review-card dl{margin:0;border-top:1px solid #cfc9be}.review-card dl div{display:grid;grid-template-columns:8rem 1fr;gap:1rem;padding:1rem 0;border-bottom:1px solid #cfc9be}.review-card dt{color:#686a66;font-size:.75rem;font-weight:750}.review-card dd{margin:0;font-weight:700;overflow-wrap:anywhere}.trust-strip{display:grid;gap:.45rem;padding:1rem;color:#fff;background:#17181b;font-size:.78rem}.actions{display:flex;justify-content:space-between;gap:1rem;margin-top:2rem}.actions button{min-height:3rem;padding:.75rem 1.1rem;border-radius:0;font:inherit;font-weight:800}.secondary{border:1px solid #aaa69e;background:#fff}.error{margin:1rem 0;padding:1rem;border-left:4px solid #b42318;background:#fff0ed;color:#8a1c14;font-weight:700}@media(max-width:760px){.page-head,.sale-card{grid-template-columns:1fr}.page-head{gap:1rem}.draft-note{align-items:flex-start;flex-direction:column}.steps{grid-template-columns:1fr 1fr}.steps button{min-height:2.9rem}.sale-card{min-height:auto;box-shadow:7px 7px 0 #2738d6}.actions{position:sticky;bottom:0;z-index:5;margin-inline:-1rem;padding:1rem;background:rgb(245 242 234 / .96);border-top:1px solid #cfc9be}.actions button{min-width:8rem}.review-card dl div{grid-template-columns:1fr;gap:.25rem}}
+  .quick-sale{max-width:48rem;padding-bottom:3rem}.task-heading{display:flex;align-items:start;justify-content:space-between;gap:2rem;margin-block:1rem 1.5rem}.task-heading h1{font-family:inherit;font-size:2rem;letter-spacing:-.03em;line-height:1.2;margin:.35rem 0}.task-heading .lede{font-size:1rem}.task-heading>a{max-width:14rem;color:var(--color-primary);font-size:.9rem;line-height:1.5}.steps{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);padding:0;margin:1.5rem 0;border-bottom:1px solid var(--color-border)}.steps li{display:flex;align-items:center;gap:.4rem;padding:.7rem .3rem;color:var(--color-muted);font-size:.85rem;border-bottom:3px solid transparent}.steps li[aria-current]{border-color:var(--color-primary);color:var(--color-primary);font-weight:750}.steps span{display:grid;place-items:center;flex-shrink:0;width:1.6rem;height:1.6rem;border:1px solid currentColor;border-radius:50%}.sale-card{display:grid;gap:1.25rem;padding:clamp(1.25rem,4vw,2rem);border:1px solid var(--color-border);border-radius:.6rem;background:var(--color-surface);min-height:18rem;align-content:start}.sale-card h2{font-size:1.3rem;margin:0;line-height:1.3}.sale-card label{display:grid;gap:.5rem;font-weight:650}.sale-card input,.sale-card textarea,.sale-card select{box-sizing:border-box;width:100%;font:inherit;padding:.8rem;border:1px solid #9b9c96;border-radius:.35rem;background:#fff}.sale-card small,.field-help{font-size:.9rem;color:var(--color-muted);line-height:1.6;font-weight:400}.sale-card a{color:var(--color-primary)}.inline-notice{padding:1rem;border-left:3px solid var(--color-primary);background:#eef0ff;line-height:1.6}.inline-notice p{margin:.35rem 0}.inline-notice button{background:transparent;border:1px solid var(--color-primary);padding:.5rem .8rem;color:var(--color-primary)}.form-actions{display:flex;justify-content:space-between;gap:1rem;padding:1.25rem 0}.secondary{padding:.75rem 1rem;border:1px solid var(--color-border);border-radius:.35rem;background:var(--color-surface)}.sale-summary{display:grid;gap:1rem;margin:0}.sale-summary>div{display:grid;grid-template-columns:1fr 1.5fr;gap:1rem;border-bottom:1px solid var(--color-border);padding-bottom:1rem}.sale-summary dt{color:var(--color-muted)}.sale-summary dd{margin:0;overflow-wrap:anywhere;font-weight:650}.sale-summary .amount{font-size:1.5rem;font-variant-numeric:tabular-nums}.draft-choice{display:flex;gap:.6rem;align-items:center;font-size:.9rem}.draft-choice input{width:1.25rem;height:1.25rem;min-height:0;accent-color:var(--color-primary)}.error{padding:1rem;background:#fff1ed;border:1px solid #cc9c8c;color:#8c2f16;border-radius:.35rem;line-height:1.6}@media(max-width:560px){.task-heading{display:block}.task-heading>a{display:block;max-width:none}.steps li{flex-direction:column;text-align:center;gap:.5rem;font-size:.75rem}.sale-summary>div{grid-template-columns:1fr;gap:.4rem}.form-actions .primary{flex:1;max-width:17rem}}
 </style>

@@ -46,7 +46,7 @@
 		<div class="exception-list">
 			<article><span>01</span><div><h3>Something is wrong with the goods</h3><p>They report it and add a photo or a paper. The money in question goes on hold while the two of you sort it out.</p></div></article>
 			<article><span>02</span><div><h3>Your customer pays you directly</h3><p>They tell us they have paid. You open your bank, see the money and confirm it. The balance drops the moment you do.</p></div></article>
-			<article><span>03</span><div><h3>The payment day passes</h3><p>Kredit sends reminders first. After the extra days you agreed, Kredit can ask the customer's bank for the money, but only if that customer gave permission and there is no open problem. A bank debit can still fail. Nobody can promise you the money.</p></div></article>
+			<article><span>03</span><div><h3>The payment day passes</h3><p>Kredit sends reminders first. After the extra days you agreed, Kredit can ask the customer's bank for the money, only with valid permission and after the agreed payment and dispute checks. A report may hold the disputed amount or all new debits, depending on its recorded effect. A bank debit can still fail. Nobody can promise you the money.</p></div></article>
 		</div>
 		<div class="next"><p>Wondering what it costs?</p><a href="/pricing">See what Kredit charges <span>↗</span></a></div>
 	</section>

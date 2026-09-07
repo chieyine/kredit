@@ -23,6 +23,8 @@ import (
 )
 
 type creditRequestInput struct {
+	TimingMode          string    `json:"timing_mode,omitempty"`
+	CollectionLocal     string    `json:"collection_local,omitempty"`
 	CollectionPolicy    string    `json:"collection_policy,omitempty"`
 	BuyerUserID         string    `json:"buyer_user_id"`
 	BuyerBusinessID     string    `json:"buyer_business_id"`
@@ -128,6 +130,26 @@ func (s *Server) createCreditRequest(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w, r, &in); err != nil {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
+	}
+	if in.TimingMode != "" {
+		if in.TimingMode != "lagos_end_of_day" && in.TimingMode != "lagos_explicit" {
+			writeProblem(w, 422, "credit_terms_invalid", "That payment timing option is not supported.")
+			return
+		}
+		canonical, timingErr := credit.CollectionInstant(in.DueDate, in.GraceHours)
+		if timingErr == nil && in.TimingMode == "lagos_explicit" {
+			earliest := canonical
+			canonical, timingErr = credit.ExplicitCollectionInstant(in.CollectionLocal)
+			if timingErr == nil && canonical.Before(earliest) {
+				writeProblem(w, 422, "credit_terms_invalid", "Bank collection must be after the agreed payment day and extra hours.")
+				return
+			}
+		}
+		if timingErr != nil || (!in.CollectionAt.IsZero() && !in.CollectionAt.Equal(canonical)) {
+			writeProblem(w, 422, "credit_terms_changed", "Review the payment date again before saving.")
+			return
+		}
+		in.CollectionAt = canonical
 	}
 	org, exists := s.runtime.Organizations.Get(orgID)
 	if !exists {
@@ -534,7 +556,7 @@ func (s *Server) recordPayment(w http.ResponseWriter, r *http.Request) {
 		RecordContext(context.Context, payments.RecordInput) (payments.Payment, payments.Allocation, error)
 	})
 	if !ok {
-		writeProblem(w, 503, "payment_unavailable", "Your payment company cannot cancel a request that has already been sent.")
+		writeProblem(w, 503, "payment_unavailable", "Payment recording is temporarily unavailable. No payment has been confirmed.")
 		return
 	}
 	p, a, err := recorder.RecordContext(r.Context(), payments.RecordInput{ObligationID: v.Obligation.ID, SourceType: in.SourceType, AmountKobo: ledger.Money(in.AmountKobo), Currency: in.Currency, Provider: in.Provider, ProviderReference: in.ProviderReference, PaidAt: in.PaidAt, RecordedBy: user.ID, IdempotencyKey: in.IdempotencyKey})
@@ -769,6 +791,10 @@ func (s *Server) getBuyerSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createTradeLine(w http.ResponseWriter, r *http.Request) {
+	if !s.isFeatureEnabled(r.Context(), "features.trade_lines", false) {
+		writeProblem(w, http.StatusForbidden, "feature_disabled", "Trade lines are currently unavailable")
+		return
+	}
 	orgID, _ := pathID(r, "organizationID")
 	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)
 	if !ok {
@@ -857,6 +883,10 @@ func (s *Server) reduceTradeLineLimit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"trade_line": updated})
 }
 func (s *Server) reserveDrawdown(w http.ResponseWriter, r *http.Request) {
+	if !s.isFeatureEnabled(r.Context(), "features.drawdowns", false) {
+		writeProblem(w, http.StatusForbidden, "feature_disabled", "Drawdowns are currently unavailable")
+		return
+	}
 	orgID, _ := pathID(r, "organizationID")
 	lineID, _ := pathID(r, "lineID")
 	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)
@@ -1353,6 +1383,10 @@ func (s *Server) collectionWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) openDispute(w http.ResponseWriter, r *http.Request) {
+	if !s.isFeatureEnabled(r.Context(), "features.disputes", true) {
+		writeProblem(w, http.StatusForbidden, "feature_disabled", "Disputes are currently unavailable")
+		return
+	}
 	orgID, _ := pathID(r, "organizationID")
 	requestID, _ := pathID(r, "requestID")
 	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageDisputes)
@@ -1372,7 +1406,7 @@ func (s *Server) openDispute(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
+	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, SupplierOrganizationID: orgID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
 	if err != nil {
 		writeProblem(w, 422, "dispute_invalid", err.Error())
 		return
@@ -1381,6 +1415,10 @@ func (s *Server) openDispute(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"dispute": dispute})
 }
 func (s *Server) openBuyerDispute(w http.ResponseWriter, r *http.Request) {
+	if !s.isFeatureEnabled(r.Context(), "features.disputes", true) {
+		writeProblem(w, http.StatusForbidden, "feature_disabled", "Disputes are currently unavailable")
+		return
+	}
 	_, user, ok := s.requireAuth(w, r)
 	if !ok {
 		return
@@ -1399,7 +1437,7 @@ func (s *Server) openBuyerDispute(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
+	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, SupplierOrganizationID: v.Request.SupplierOrganizationID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
 	if err != nil {
 		writeProblem(w, 422, "dispute_invalid", err.Error())
 		return

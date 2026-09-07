@@ -1,111 +1,105 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { csrfHeaders } from '$lib/api/client';
-	import Money from '$lib/components/Money.svelte';
-	import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
-	import Skeleton from '$lib/components/Skeleton.svelte';
-	import { productLabel } from '$lib/product-language';
-	let organizations: any[] = $state([]), requests: any[] = $state([]), payments: any[] = $state([]), overdue: any[] = $state([]), claims: any[] = $state([]), disputes: any[] = $state([]), organizationID = $state(''), loading = $state(true), error = $state('');
-	let receivables: { obligation_count:number; outstanding_kobo:number; overdue_kobo:number; voluntary_paid_kobo:number; collected_paid_kobo:number } | null = $state(null);
-	let legalName = $state(''), tradingName = $state(''), businessType = $state('unregistered_business'), address = $state(''), industry = $state('');
-	const money = (value = 0) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value / 100);
-	async function loadRequests() {
-		if (!organizationID) { requests = []; payments = []; overdue = []; claims = []; disputes = []; receivables = null; return; }
-		const endpoints = ['credit-requests', 'payments', 'overdue', 'payment-claims', 'disputes'];
-		const responses = await Promise.all([
-			...endpoints.map((name) => fetch(`/api/v1/organizations/${organizationID}/${name}`, { credentials: 'include' })),
-			fetch(`/api/v1/organizations/${organizationID}/reports/receivables`, { credentials: 'include' })
-		]);
-		if (!responses[0].ok) { error = 'We could not open your sales. Please try again.'; return; }
-		requests = (await responses[0].json()).requests ?? [];
-		payments = responses[1].ok ? ((await responses[1].json()).payments ?? []) : [];
-		overdue = responses[2].ok ? ((await responses[2].json()).overdue ?? []) : [];
-		claims = responses[3].ok ? ((await responses[3].json()).payment_claims ?? []) : [];
-		disputes = responses[4].ok ? ((await responses[4].json()).disputes ?? []) : [];
-		receivables = responses[5].ok ? ((await responses[5].json()).summary ?? null) : null;
-	}
-	async function load() {
-		loading = true; error = '';
-		const response = await fetch('/api/v1/organizations', { credentials: 'include' });
-		if (response.status === 401) { location.assign('/app'); return; }
-		if (!response.ok) { error = 'We could not open your business account. Please try again.'; loading = false; return; }
-		organizations = (await response.json()).organizations ?? [];
-		organizationID = organizations[0]?.id ?? '';
-		await loadRequests(); loading = false;
-	}
-	async function createOrganization() {
-		error = '';
-		const response = await fetch('/api/v1/organizations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ legal_name: legalName, trading_name: tradingName, business_type: businessType, business_address: address, industry, timezone: 'Africa/Lagos', currency: 'NGN' }) });
-		const body = await response.json().catch(() => ({}));
-		if (!response.ok) { error = body.detail ?? 'We could not add your business. Check the details and try again.'; return; }
-		await load();
-	}
-
-	const checklist = $derived.by(() => {
-		const progressed = requests.some((view) => view.request && view.request.state !== 'DRAFT');
-		return [
-			{ done: organizations.length > 0, label: 'Add your business', href: undefined as string | undefined },
-			{ done: requests.length > 0, label: 'Write down your first sale', href: '/app/credit/new' },
-			{ done: progressed, label: 'Send it to your customer', href: requests.length ? `/app/credit/${requests[0]?.request?.id}?organization=${organizationID}` : '/app/credit/new' },
-			{ done: payments.length > 0, label: 'Enter your first payment', href: '/app/payments' }
-		];
-	});
-	const remainingSteps = $derived(checklist.filter((item) => !item.done).length);
-	const nextStep = $derived(checklist.find((item) => !item.done));
-	const dueSoon = $derived.by(() => {
-		const now = new Date(); now.setHours(0,0,0,0);
-		const end = new Date(now); end.setDate(end.getDate() + 7);
-		return requests.filter((view) => {
-			const state = String(view.request?.state ?? '').toUpperCase();
-			if (['COMPLETED','PAID','CANCELLED','REJECTED','EXPIRED','DRAFT'].includes(state)) return false;
-			if (!view.request?.due_date) return false;
-			const due = new Date(`${view.request.due_date}T12:00:00`);
-			return due >= now && due <= end;
-		}).length;
-	});
-	const paymentsThisMonth = $derived.by(() => {
-		const now = new Date();
-		return payments.filter((payment) => {
-			const state = String(payment.state ?? payment.status ?? '').toLowerCase();
-			if (!['recognized','confirmed','paid'].includes(state)) return false;
-			const when = new Date(payment.paid_at ?? payment.created_at ?? 0);
-			return when.getFullYear() === now.getFullYear() && when.getMonth() === now.getMonth();
-		}).reduce((sum, payment) => sum + Number(payment.amount_kobo ?? 0), 0);
-	});
-	const attention = $derived.by(() => {
-		const items: { key:string; tone:string; title:string; detail:string; href:string; action:string }[] = [];
-		for (const claim of claims.filter((item) => item.state === 'pending')) items.push({ key:`claim-${claim.id}`, tone:'money', title:'Somebody says they paid you', detail:`A customer says they have paid you ${new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(Number(claim.amount_kobo||0)/100)}.`, href:'/app/payments', action:'Check it' });
-		for (const item of overdue) items.push({ key:`late-${item.id}`, tone:'late', title:`${item.buyer_legal_name} has passed their payment day`, detail:`${item.description} · ${new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(Number(item.amount_kobo||item.outstanding_kobo||0)/100)} is still unpaid.`, href:`/app/credit/${item.id}?organization=${organizationID}`, action:'Open the sale' });
-		for (const view of requests) {
-			const state=view.request?.state;
-			if(state==='DRAFT')items.push({key:`draft-${view.request.id}`,tone:'normal',title:'You never finished this sale',detail:`${view.request.buyer_legal_name} has not even seen it yet.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'Finish and send'});
-			if(state==='SENT'||state==='BUYER_REVIEWING')items.push({key:`wait-${view.request.id}`,tone:'normal',title:'Waiting on your customer',detail:`${view.request.buyer_legal_name} still has to read this and accept it.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'Open the sale'});
-			if(state==='READY_TO_RELEASE')items.push({key:`goods-${view.request.id}`,tone:'goods',title:'Accepted — you can send the goods',detail:`${view.request.buyer_legal_name} has agreed to this sale.`,href:`/app/credit/${view.request.id}?organization=${organizationID}`,action:'Mark goods sent'});
-		}
-		for(const item of disputes.filter((entry)=>entry.state==='OPEN'||entry.state==='UNDER_REVIEW'))items.push({key:`problem-${item.id}`,tone:'problem',title:'A customer reported a problem',detail:item.reason||'Open it to see what happened and what to do next.',href:`/app/disputes/${item.id}?organization=${organizationID}`,action:'Open the problem'});
-		return items.slice(0,8);
-	});
-	onMount(load);
+  import { getContext, onMount } from 'svelte';
+  import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
+  import { checkedJSON, LatestRequest, readResource, record, rows, type Resource } from '$lib/api/reliable';
+  import { MutationIntent } from '$lib/api/mutation';
+  import { organization, saleView, paymentRow, workRow, receivables, type Organization, type SaleView, type PaymentRow, type WorkRow, type Receivables } from '$lib/records';
+  import { attentionItems } from '$lib/attention';
+  import { exactKobo } from '$lib/money';
+  import { productLabel } from '$lib/product-language';
+  import Money from '$lib/components/Money.svelte';
+  import ResourceNotice from '$lib/components/ResourceNotice.svelte';
+  import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
+  const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
+  const pending = <T,>(scope = ''): Resource<T> => ({ state: 'loading', scope });
+  let businesses = $state<Resource<Organization[]>>(pending());
+  let organizationID = $state('');
+  let sales = $state<Resource<SaleView[]>>(pending());
+  let payments = $state<Resource<PaymentRow[]>>(pending());
+  let overdue = $state<Resource<WorkRow[]>>(pending());
+  let claims = $state<Resource<WorkRow[]>>(pending());
+  let disputes = $state<Resource<WorkRow[]>>(pending());
+  let summary = $state<Resource<Receivables>>(pending());
+  let visibleCount = $state(5), legalName = $state(''), tradingName = $state(''), businessType = $state('unregistered_business'), address = $state(''), industry = $state(''), createBusy = $state(false), createError = $state('');
+  let creation: MutationIntent | null = null;
+  const businessRequest = new LatestRequest(), dashboardRequest = new LatestRequest();
+  const organizations = $derived(businesses.state === 'ready' ? businesses.data : []);
+  const currentBusiness = $derived(organizations.find(item => item.id === organizationID));
+  const allChecked = $derived([sales, payments, overdue, claims, disputes, summary].every(item => item.state === 'ready' && item.scope === organizationID));
+  const attention = $derived(attentionItems(organizationID, sales.state === 'ready' ? sales.data : [], claims.state === 'ready' ? claims.data : [], overdue.state === 'ready' ? overdue.data : [], disputes.state === 'ready' ? disputes.data : []));
+  const scopeQuery = $derived(`?organization=${encodeURIComponent(organizationID)}`);
+  async function loadRequests() {
+    const scope = organizationID;
+    const request = dashboardRequest.begin(); visibleCount = 5;
+    sales = pending(scope); payments = pending(scope); overdue = pending(scope); claims = pending(scope); disputes = pending(scope); summary = pending(scope);
+    if (!scope) return;
+    const root = `/api/v1/organizations/${encodeURIComponent(scope)}`;
+    const results = await Promise.all([
+      readResource(scope, `${root}/credit-requests`, rows('requests', saleView), request.signal, 'your sales'),
+      readResource(scope, `${root}/payments`, rows('payments', paymentRow), request.signal, 'your payments'),
+      readResource(scope, `${root}/overdue`, rows('overdue', workRow), request.signal, 'overdue sales'),
+      readResource(scope, `${root}/payment-claims`, rows('payment_claims', workRow), request.signal, 'reported transfers'),
+      readResource(scope, `${root}/disputes`, rows('disputes', workRow), request.signal, 'reported problems'),
+      readResource(scope, `${root}/reports/receivables`, receivables, request.signal, 'your balance')
+    ]);
+    if (!request.current() || organizationID !== scope) return;
+    [sales, payments, overdue, claims, disputes, summary] = results;
+  }
+  async function load() {
+    const request = businessRequest.begin(); businesses = pending(account.userID);
+    const result = await readResource(account.userID, '/api/v1/organizations', rows('organizations', organization), request.signal, 'your businesses');
+    if (!request.current()) return;
+    businesses = result;
+    if (result.state === 'ready') {
+      const requested = new URLSearchParams(location.search).get('organization');
+      organizationID = result.data.find(item => item.id === (requested || organizationID))?.id ?? result.data[0]?.id ?? '';
+      if (organizationID) await loadRequests();
+    }
+  }
+  async function createOrganization() {
+    if (createBusy) return; createBusy = true; createError = '';
+    try {
+      creation ??= new MutationIntent(account.userID, '/api/v1/organizations');
+      await creation.run({ legal_name: legalName.trim(), trading_name: tradingName.trim(), business_type: businessType, business_address: address.trim(), industry: industry.trim(), timezone: 'Africa/Lagos', currency: 'NGN' }, record);
+      await load();
+    } catch (cause) { createError = cause instanceof Error ? cause.message : 'We could not confirm your business details.'; }
+    finally { createBusy = false; }
+  }
+  onMount(() => { void load(); return () => { businessRequest.cancel(); dashboardRequest.cancel(); }; });
 </script>
-<svelte:head><title>Dashboard — Kredit</title></svelte:head>
-<main class="shell workspace">
-	<header class="heading"><div><p class="eyebrow">Your business</p><h1>Here is where your money is.</h1><p class="lede">What you are owed, which payments are coming, what has landed and anything that needs you today.</p></div>{#if organizations.length}<a class="primary" href="/app/credit/quick">Add a sale</a>{/if}</header>
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
-	{#if loading}<Skeleton rows={4} tall />
-	{:else if !organizations.length}
-		<section class="card onboarding"><p class="eyebrow">Start here</p><h2>Add your business</h2><p>You do not need a CAC registration to start. Later on, before money can move, we may come back and ask you for a few more details.</p><form onsubmit={(event) => { event.preventDefault(); createOrganization(); }}><label>Your name, or your registered business name<input bind:value={legalName} required /></label><label>The name people know you by <small>if different</small><input bind:value={tradingName} /></label><label>Business type<select bind:value={businessType}><option value="unregistered_business">Not registered yet</option><option value="registered_business">Business name registered with CAC</option><option value="sole_proprietor">Sole proprietor</option><option value="limited_company">Limited company</option><option value="partnership">Partnership</option></select></label><label>What do you sell?<input bind:value={industry} placeholder="For example: food, medicine or building materials" required /></label><label class="wide">Where is your business?<textarea bind:value={address} placeholder="Shop number, street, area, town and state" required></textarea></label><button class="primary wide">Add my business</button></form></section>
-	{:else}
-		<div class="toolbar"><label>Business<select bind:value={organizationID} onchange={loadRequests}>{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}</select></label><button onclick={loadRequests}>Refresh</button></div>
-		<section class="money-hero" aria-label="What you are owed">
-			<div class="owed"><span>You are owed</span><strong>{receivables ? money(receivables.outstanding_kobo) : '—'}</strong><small>{receivables ? `Across ${receivables.obligation_count} sale${receivables.obligation_count===1?'':'s'}` : 'Open reports for the full picture'}</small></div>
-			{#if receivables && receivables.overdue_kobo > 0}<a class="late-strip" href="/app/overdue"><span>{overdue.length || 'Some'} customer{overdue.length===1?'':'s'} late</span><em>{money(receivables.overdue_kobo)} →</em></a>{:else}<p class="ok-strip">Nobody is late right now.</p>{/if}
-		</section>
-		{#if remainingSteps > 0}
-			<a class="setup-line" href={nextStep?.href ?? '/app/onboarding'}><strong>Finish setting up</strong><span>{checklist.length - remainingSteps} of {checklist.length} done · next: {nextStep?.label}</span><i aria-hidden="true">→</i></a>
-		{/if}
-		<section class="today" aria-labelledby="today-title"><header><div><p class="eyebrow">Needs your attention</p><h2 id="today-title">{attention.length ? `${attention.length} ${attention.length===1?'thing':'things'} need you` : 'Nothing needs you right now'}</h2></div><a href="/app/credit/quick">Add a sale →</a></header>{#if attention.length}<div class="attention-list">{#each attention.slice(0,3) as item}<article class={item.tone}><div><strong>{item.title}</strong><p>{item.detail}</p></div><a href={item.href}>{item.action} →</a></article>{/each}</div>{#if attention.length > 3}<details class="more-attention"><summary>{attention.length - 3} more thing{attention.length-3===1?'':'s'} need you</summary><div class="attention-list">{#each attention.slice(3) as item}<article class={item.tone}><div><strong>{item.title}</strong><p>{item.detail}</p></div><a href={item.href}>{item.action} →</a></article>{/each}</div></details>{/if}{:else}<p>Nothing needs you right now. Late payments, customer answers and payments to check will land here the moment they come up.</p>{/if}</section>
-		{#if !requests.length}<section class="empty-state"><h2>No sales yet</h2><p>Next time somebody takes goods and promises to pay you later, write it down here before the goods leave your shop.</p><a class="primary" href="/app/credit/quick">Add my first sale</a></section>{/if}
-		<FeedbackPrompt area="seller" {organizationID} />
-	{/if}
+<svelte:head><title>Business overview — Kredit</title></svelte:head>
+<main class="shell workspace account-home">
+  <header class="task-heading"><div><p class="eyebrow">Your business</p><h1>{currentBusiness?.trading_name || currentBusiness?.legal_name || 'Business overview'}</h1><p class="lede">Your sales, payments and next steps.</p></div>{#if organizationID}<a class="primary" href={`/app/credit/quick${scopeQuery}`}>Add a sale</a>{/if}</header>
+  <ResourceNotice resource={businesses} label="Businesses" retry={load} />
+  {#if businesses.state === 'ready' && !organizations.length}
+    <section class="card onboarding"><h2>Add your business</h2><p>Start with the name your customers know. Verification is required before you can send a sale or use payment services.</p>
+      <form class="form-grid" onsubmit={event => { event.preventDefault(); void createOrganization(); }}>
+        <label>Your name, or registered business name<input bind:value={legalName} autocomplete="organization" required disabled={createBusy} /></label><label>Trading name <small>if different</small><input bind:value={tradingName} disabled={createBusy} /></label>
+        <label>Business type<select bind:value={businessType} disabled={createBusy}><option value="unregistered_business">Not registered yet</option><option value="registered_business">Business name registered with CAC</option><option value="sole_proprietor">Sole proprietor</option><option value="limited_company">Limited company</option><option value="partnership">Partnership</option></select></label>
+        <label>What do you sell?<input bind:value={industry} placeholder="Food, medicines, building materials…" required disabled={createBusy} /></label><label class="wide">Business address<textarea bind:value={address} placeholder="Shop number, street, area, town and state" required disabled={createBusy}></textarea></label>
+        {#if createError}<p class="error wide" role="alert">{createError}</p>{/if}<button class="primary wide" disabled={createBusy}>{createBusy ? 'Saving…' : 'Add my business'}</button>
+      </form>
+    </section>
+  {:else if currentBusiness}
+    <div class="toolbar"><label>Business<select bind:value={organizationID} onchange={loadRequests}>{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}</select></label><button type="button" onclick={loadRequests}>Refresh</button><a href="/app/onboarding">Business setup</a></div>
+    <section class="balance-card" aria-label="What you are owed" aria-busy={summary.state === 'loading'}>
+      <p>Outstanding balance</p>
+      {#if summary.state === 'ready'}
+        <strong class="balance"><Money amountKobo={summary.data.outstanding_kobo} /></strong><p class="balance-caption">Across {summary.data.obligation_count} active sale{summary.data.obligation_count === 1 ? '' : 's'}</p>
+        {#if (exactKobo(summary.data.overdue_kobo) ?? 0n) > 0n}<a class="late-strip" href={`/app/overdue${scopeQuery}`}><span>Overdue</span><strong><Money amountKobo={summary.data.overdue_kobo} /></strong><span aria-hidden="true">→</span></a>
+        {:else}<p class="checked-state">No overdue balance in this checked summary.</p>{/if}
+      {:else}<ResourceNotice resource={summary} label="Balance" retry={loadRequests} />{/if}
+    </section>
+    <section class="attention-section" aria-labelledby="attention-heading">
+      <header class="section-heading"><div><h2 id="attention-heading">Needs attention</h2><p>{allChecked ? `${attention.length} item${attention.length === 1 ? '' : 's'} to review` : 'Some records have not been checked yet.'}</p></div><a href={`/app/credit${scopeQuery}`}>View sales</a></header>
+      {#each [{ resource: sales, label: 'Sales' }, { resource: payments, label: 'Payments' }, { resource: overdue, label: 'Overdue sales' }, { resource: claims, label: 'Reported transfers' }, { resource: disputes, label: 'Reported problems' }] as item}<ResourceNotice resource={item.resource} label={item.label} retry={loadRequests} />{/each}
+      {#if attention.length}<div class="action-list">{#each attention.slice(0, visibleCount) as item (item.id)}<article><div><h3>{item.title}</h3><p>{item.detail}</p></div><a href={item.href}>{item.action} <span aria-hidden="true">→</span></a></article>{/each}</div>{#if attention.length > visibleCount}<button class="secondary show-more" type="button" onclick={() => visibleCount += 10}>Show more · {attention.length - visibleCount} remaining</button>{/if}
+      {:else if allChecked}<div class="empty-state"><h3>Nothing needs an action right now.</h3><p>Your sales, reported payments and problems were checked successfully.</p></div>{/if}
+    </section>
+    {#if sales.state === 'ready'}<section class="recent-sales"><header class="section-heading"><h2>Recent sales</h2><a href={`/app/credit${scopeQuery}`}>All sales</a></header>{#if !sales.data.length}<div class="empty-state"><h3>No sales yet</h3><p>Add the goods, amount and payment date for your first customer.</p><a class="primary" href={`/app/credit/quick${scopeQuery}`}>Add my first sale</a></div>{:else}<div class="record-list">{#each sales.data.slice(0, 5) as view (view.request.id)}<a class="record-row" href={`/app/credit/${encodeURIComponent(view.request.id)}${scopeQuery}`}><span><strong>{view.request.buyer_legal_name}</strong><small>{productLabel(view.request.state)}</small></span><strong><Money amountKobo={view.obligation?.outstanding_kobo ?? view.request.principal_kobo} /></strong></a>{/each}</div>{/if}</section>{/if}
+    <FeedbackPrompt area="seller" {organizationID} />
+  {/if}
 </main>
-<style>.money-hero{margin:1.5rem 0}.money-hero .owed{background:#17181b;color:#fff;padding:1.6rem 1.4rem 1.5rem}.money-hero .owed span{display:block;font-size:.7rem;font-weight:750;letter-spacing:.1em;text-transform:uppercase;color:#b9b8b3}.money-hero .owed strong{display:block;font-family:Georgia,serif;font-size:clamp(2.6rem,7vw,4rem);font-weight:500;line-height:1;margin:.5rem 0 .4rem;letter-spacing:-.03em;font-variant-numeric:tabular-nums}.money-hero .owed small{color:#b9b8b3;font-size:.82rem}.late-strip{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.85rem 1.4rem;background:#ec6a47;color:#fff;font-weight:750;font-size:.9rem;text-decoration:none}.late-strip em{font-style:normal;font-variant-numeric:tabular-nums}.ok-strip{margin:0;padding:.85rem 1.4rem;background:#eef0ff;color:#2738d6;font-weight:750;font-size:.9rem}.setup-line{display:flex;align-items:center;gap:.9rem;padding:.9rem 1.1rem;margin-bottom:1.5rem;border:1px solid var(--color-border);background:var(--color-surface,#fffdfa);text-decoration:none;font-size:.9rem}.setup-line span{color:var(--color-muted);font-size:.82rem}.setup-line i{margin-left:auto;font-style:normal;color:#2738d6;font-weight:800}.more-attention{margin-top:.75rem}.more-attention>summary{cursor:pointer;min-height:2.75rem;display:flex;align-items:center;font-weight:750;font-size:.86rem;color:#2738d6}.heading{display:flex;justify-content:space-between;align-items:end;gap:3rem;padding-bottom:2.2rem;border-bottom:3px solid #17181b}.heading h1{max-width:13ch;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3.2rem,7vw,6rem);font-weight:500;line-height:.9;letter-spacing:-.06em;margin:.6rem 0}.onboarding{max-width:52rem;margin:2rem auto;padding:clamp(1.4rem,4vw,2.5rem);box-shadow:10px 10px 0 #2738d6}.onboarding form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.onboarding label{display:grid;gap:.45rem;font-weight:700}.onboarding input,.onboarding select,.onboarding textarea,.toolbar select{box-sizing:border-box;width:100%;padding:.8rem;border:1px solid #aaa69e;border-radius:0;background:#fff;font:inherit}.wide{grid-column:1/-1}.toolbar{display:flex;gap:1rem;align-items:end;margin:2rem 0 1rem;padding:1rem;background:#e8e3d9}.toolbar label{display:grid;gap:.35rem}.setup-copy{max-width:46rem;color:#b6b6b1;line-height:1.6}.today{margin:1.5rem 0;border:1px solid var(--color-border);background:var(--color-surface)}.today>header{display:flex;justify-content:space-between;align-items:end;gap:1rem;padding:1.25rem;border-bottom:3px solid #17181b}.today h2{margin:.2rem 0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(1.8rem,4vw,2.6rem);font-weight:500}.attention-list{display:grid}.attention-list article{display:grid;grid-template-columns:1fr auto;align-items:center;gap:1rem;padding:1rem 1.25rem;border-bottom:1px solid var(--color-border);border-left:5px solid #2738d6}.attention-list article.late,.attention-list article.problem{border-left-color:#b42318}.attention-list article.money{border-left-color:#16794e}.attention-list article.goods{border-left-color:#a15c00}.attention-list p{margin:.25rem 0;color:var(--color-muted)}.today>p{padding:1.25rem}.empty-state{margin-top:2rem;padding:clamp(2rem,5vw,4rem);color:#fff;background:#2738d6}.empty-state p{color:#d4d7ff}.empty-state .primary{color:#17181b;background:#fff}@media(max-width:900px){}@media(max-width:720px){.heading{display:block}.heading .primary{margin-top:1rem}.onboarding form{grid-template-columns:1fr}.wide{grid-column:auto}.onboarding{box-shadow:6px 6px 0 #2738d6}.toolbar{align-items:stretch;flex-direction:column}.today>header{align-items:start;flex-direction:column}.attention-list article{grid-template-columns:1fr}.attention-list article a{width:max-content}}</style>
+<style>
+  .account-home{max-width:66rem}.task-heading{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding-block:1rem 1.5rem}.task-heading h1{margin:.25rem 0;font-family:inherit;font-size:clamp(1.8rem,4vw,2.4rem);line-height:1.2;letter-spacing:-.035em}.task-heading .lede{font-size:1rem;margin:.5rem 0 0}.toolbar{display:flex;align-items:end;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem}.toolbar label{display:grid;gap:.4rem;flex:1;max-width:24rem}.toolbar select{width:100%;font:inherit;padding:.7rem;background:var(--color-surface);border:1px solid var(--color-border);border-radius:.35rem}.toolbar button{padding:.7rem 1rem;border:1px solid var(--color-border);background:var(--color-surface);border-radius:.35rem}.toolbar a{display:flex;align-items:center;color:var(--color-primary)}.balance-card{padding:1.5rem;background:#17181b;color:#fffdf8;border-radius:.65rem}.balance-card>p{margin:0;color:#d7d4cc}.balance{display:block;margin:.5rem 0;font-size:clamp(2.1rem,6vw,3.5rem);line-height:1.2;letter-spacing:-.03em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.balance-caption{font-size:.9rem}.late-strip{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin:1.5rem -.5rem -.5rem;padding:1rem;border-radius:.35rem;background:#fff0e8;color:#702c18;text-decoration:none}.late-strip strong{margin-left:auto}.checked-state{margin-top:1rem!important;font-size:.9rem}.attention-section,.recent-sales{margin-block:2rem}.section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;margin-bottom:1rem}.section-heading h2{font-size:1.25rem;margin:0}.section-heading p{font-size:.9rem;color:var(--color-muted);margin:.4rem 0 0}.section-heading a{color:var(--color-primary)}.action-list{border:1px solid var(--color-border);border-radius:.5rem;background:var(--color-surface);overflow:hidden}.action-list article{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:1rem 1.25rem;border-bottom:1px solid var(--color-border)}.action-list article:last-child{border:0}.action-list h3{font-family:inherit;font-size:1rem;margin:0}.action-list p{font-size:.9rem;line-height:1.5;color:var(--color-muted);margin:.35rem 0 0}.action-list a{display:flex;align-items:center;gap:.5rem;color:var(--color-primary);font-weight:650;white-space:nowrap}.show-more{margin-top:1rem;padding:.75rem 1rem;background:transparent;border:1px solid var(--color-border);border-radius:.35rem}.record-list{border-top:1px solid var(--color-border)}.record-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem .25rem;border-bottom:1px solid var(--color-border);text-decoration:none}.record-row span{display:grid;gap:.4rem}.record-row small{color:var(--color-muted)}.record-row>strong{font-variant-numeric:tabular-nums;text-align:right}.onboarding{padding:1.5rem;max-width:48rem;margin:auto}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.form-grid label{display:grid;gap:.45rem}.form-grid input,.form-grid select,.form-grid textarea{box-sizing:border-box;width:100%;font:inherit;padding:.8rem;border:1px solid var(--color-border);border-radius:.35rem;background:var(--color-surface)}.wide{grid-column:1/-1}.empty-state{padding:1.5rem;border:1px dashed var(--color-border);border-radius:.5rem}.empty-state h3{margin:0;font-size:1rem}.empty-state p{line-height:1.6;color:var(--color-muted)}@media(max-width:560px){.task-heading{align-items:start;flex-wrap:wrap}.action-list article{align-items:start;flex-direction:column;gap:.4rem}.action-list a{min-height:2.75rem}.form-grid{grid-template-columns:1fr}.record-row{align-items:start}.record-row>strong{font-size:.95rem}.section-heading{flex-wrap:wrap}}
+</style>

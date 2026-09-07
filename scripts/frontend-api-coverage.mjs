@@ -47,6 +47,14 @@ const noSeparateScreen = new Map([
 // string matching cannot reconstruct those paths, so each one is tied to the
 // component that exposes it. Removing that component makes this check fail.
 const coveredThroughComponent = new Map([
+	['POST /api/v1/buyer/credit-requests/{id}/mandate', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
+	['POST /api/v1/buyer/credit-requests/{id}/accept', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
+	['POST /api/v1/buyer/credit-requests/{id}/decline', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
+	['POST /api/v1/buyer/credit-requests/{id}/receipt', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
+	['POST /api/v1/buyer/credit-requests/{id}/payment-claims', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
+	['POST /api/v1/buyer/credit-requests/{id}/payment-link', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
+	['POST /api/v1/buyer/credit-requests/{id}/disputes', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
+	['GET /api/v1/organizations/{id}/payment-claims', 'web/src/routes/app/payments/+page.svelte'],
 	['POST /api/v1/ops/privacy-requests/{id}/decide', 'web/src/routes/admin/privacy/+page.svelte'],
 	['POST /api/v1/ops/privacy-requests/{id}/complete', 'web/src/routes/admin/privacy/+page.svelte'],
 	['GET /api/v1/organizations/{id}/audit-events', 'web/src/routes/app/activity/+page.svelte'],
@@ -93,6 +101,12 @@ for (const [route, file] of coveredThroughComponent) {
 	if (!listing.stdout.split('\n').includes(file)) throw new Error(`${route} points to missing frontend component ${file}`);
 }
 
+// Dynamic financial actions must retain their actual controller binding, not
+// merely the page filename. Browser regression tests exercise the transitions.
+const buyerController = readFileSync(resolve(root, 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'), 'utf8');
+for (const action of ['mandate', 'accept', 'decline', 'receipt', 'payment-claims', 'payment-link', 'disputes']) {
+ if (!buyerController.includes(`perform('${action}'`)) throw new Error(`Buyer ${action} controller is missing`);
+}
 const missing = routes.filter(({ method, path }) => {
 	if (directPaths.has(path)) return false;
 	const key = `${method} ${path}`;
