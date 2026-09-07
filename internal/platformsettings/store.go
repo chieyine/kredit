@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,10 +28,6 @@ type Service interface {
 type PostgresStore struct {
 	pool       *pgxpool.Pool
 	enc        *Encryptor
-	cacheMu    sync.RWMutex
-	cache      map[string]Setting
-	cacheTime  time.Time
-	cacheTTL   time.Duration
 	invalidate func(string)
 }
 
@@ -44,8 +38,6 @@ func NewPostgresStore(pool *pgxpool.Pool, enc *Encryptor, invalidate func(string
 	return &PostgresStore{
 		pool:       pool,
 		enc:        enc,
-		cache:      make(map[string]Setting),
-		cacheTTL:   30 * time.Second,
 		invalidate: invalidate,
 	}
 }
