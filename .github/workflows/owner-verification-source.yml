@@ -1,0 +1,25 @@
+name: Owner verification source (temporary)
+on:
+  push:
+    branches: [fix/owner-controls-verification-2026-09-07]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export tracked source only
+        run: |
+          git archive --format=zip --output=/tmp/kredit-owner-verification-source.zip HEAD
+          git rev-parse HEAD > /tmp/source-commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: owner-verification-source
+          path: |
+            /tmp/kredit-owner-verification-source.zip
+            /tmp/source-commit.txt
+          retention-days: 1
