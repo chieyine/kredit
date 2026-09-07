@@ -47,6 +47,18 @@ paths:
         '403': {description: Organization access or CSRF check failed.}
         '422': {description: Invalid date or grace period.}
         '503': {description: Service unavailable.}
+  /platform/capabilities:
+    get:
+      operationId: getPlatformCapabilities
+      summary: Retrieve enabled platform features and launch controls
+      responses:
+        '200':
+          description: Enabled platform capability flags
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid request" }
+        '503': { description: "Service unavailable" }
   /ops/capabilities:
     get:
       operationId: adminCapabilities
@@ -60,6 +72,142 @@ paths:
         '403': { description: "Role, buyer identity, or recent verification required" }
         '409': { description: "Stale, expired, conflicted, or invalid proposal" }
         '503': { description: "Persistence unavailable" }
+  /ops/platform-settings:
+    get:
+      operationId: getPlatformSettings
+      summary: List all database-backed platform settings and categories
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Platform settings registry entries with masked secrets
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+    post:
+      operationId: updatePlatformSetting
+      summary: Propose or apply an updated platform setting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Setting updated or proposal created
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid setting key, type, or value" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/platform-settings/secret:
+    post:
+      operationId: rotatePlatformSecret
+      summary: Securely rotate an encrypted credential setting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Secret rotated with AES-256-GCM encryption
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid secret key or empty secret value" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/platform-settings/history:
+    get:
+      operationId: getPlatformSettingsHistory
+      summary: Retrieve audit history of platform setting changes
+      parameters:
+        - { name: key, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Setting change history
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/governance:
+    get:
+      operationId: getPlatformGovernance
+      summary: Get platform governance mode
+      responses:
+        '200':
+          description: Governance mode and state
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+    post:
+      operationId: setPlatformGovernance
+      summary: Transition platform governance mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Governance mode updated
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid governance transition or reason" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/solo-owner/approve:
+    post:
+      operationId: soloOwnerSelfApprove
+      summary: Self-approve an authored proposal in solo-owner mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Proposal self-approved with audit trail
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid proposal target or decision" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Solo-owner mode and platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/ownership/transfer:
+    post:
+      operationId: transferPlatformOwnership
+      summary: Transfer platform owner role to another active user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Ownership transferred successfully
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid target user, reason, or confirmation" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
   /ops/approval-inbox:
     get:
       operationId: adminApprovalInbox
