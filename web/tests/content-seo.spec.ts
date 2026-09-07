@@ -100,5 +100,5 @@ test('FAQ matches activation fees and conditional collections', async ({ page })
  await page.goto('/faq');
  await expect(page.getByText(/seller owes the agreed base fee when the accepted sale becomes active/)).toBeVisible();
  await expect(page.getByText(/A debit can fail; repayment is not guaranteed/)).toBeVisible();
- await expect(page.getByRole('link', { name: 'what it costs' })).toHaveAttribute('href', '/pricing');
+ await expect(page.getByRole('link', { name: 'what it costs', exact: true })).toHaveAttribute('href', '/pricing');
 });
