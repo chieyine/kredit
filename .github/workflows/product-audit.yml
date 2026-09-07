@@ -29,6 +29,24 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/product-results.json
         run: pnpm --dir web exec playwright test --workers=4 --reporter=list,json,html
+      - name: Verify legal-document activation with fictional CI-only details
+        env:
+          APP_ENV: development
+          TEST_ACTIVE_LEGAL: '1'
+          LEGAL_DOCUMENTS_ACTIVE: 'true'
+          LEGAL_ENTITY_NAME: Kredit Launch Test Limited
+          LEGAL_SERVICE_ADDRESS: 1 Fictional Test Street, Test City, Nigeria
+          LEGAL_CONTACT_EMAIL: legal@example.test
+          PRIVACY_CONTACT_EMAIL: privacy@example.test
+          LEGAL_EFFECTIVE_DATE: '2026-09-01'
+          TERMS_VERSION: supplier-terms-v1
+          PRIVACY_VERSION: privacy-v1
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/active-legal.json
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-active-legal
+        run: >-
+          pnpm --dir web exec playwright test tests/content-seo.spec.ts
+          --grep 'approved production details' --output=test-results/active-legal
+          --reporter=list,json,html
       - name: Bind evidence to the checked-out source
         if: always()
         run: |
@@ -43,5 +61,6 @@ jobs:
           path: |
             web/test-results/
             web/playwright-report/
+            web/playwright-report-active-legal/
           if-no-files-found: error
           retention-days: 7

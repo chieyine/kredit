@@ -13,6 +13,11 @@ for change in changes:
     path = root / change['path']
     assert path.resolve().is_relative_to(root) and not path.is_symlink()
     before = path.read_bytes()
+    if change['path'] == '.github/workflows/product-audit.yml':
+        # This workflow was updated through the user's native GitHub connection.
+        # The runner must not try to update an ordinary verification workflow.
+        assert hashlib.sha256(before).hexdigest() == change['after']
+        continue
     assert hashlib.sha256(before).hexdigest() == change['before'], f'Source changed: {path}'
     original = before.decode('utf-8')
     result = original
@@ -27,4 +32,4 @@ for path, after in prepared:
     subprocess.run(['git', 'add', '--', str(path.relative_to(root))], check=True)
 for path in ['.audit-polish.json', '.audit-polish.py', '.github/workflows/audit-polish.yml']:
     subprocess.run(['git', 'rm', '--', path], check=True)
-print('Validated seven reviewed files and removed the one-use transport.')
+print('Validated reviewed source files and removed the one-use transport.')
