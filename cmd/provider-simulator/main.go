@@ -19,11 +19,12 @@ import (
 )
 
 type simulator struct {
-	mu            sync.RWMutex
-	collections   map[string]map[string]any
-	mandates      map[string]map[string]any
-	verifications map[string]map[string]any
-	messages      map[string]string
+	mu              sync.RWMutex
+	collections     map[string]map[string]any
+	mandates        map[string]map[string]any
+	verifications   map[string]map[string]any
+	messages        map[string]string
+	messagePayloads map[string]string
 }
 
 func main() {
@@ -39,10 +40,11 @@ func main() {
 
 func newSimulator() *simulator {
 	return &simulator{
-		collections:   make(map[string]map[string]any),
-		mandates:      make(map[string]map[string]any),
-		verifications: make(map[string]map[string]any),
-		messages:      make(map[string]string),
+		collections:     make(map[string]map[string]any),
+		mandates:        make(map[string]map[string]any),
+		verifications:   make(map[string]map[string]any),
+		messages:        make(map[string]string),
+		messagePayloads: make(map[string]string),
 	}
 }
 
@@ -113,7 +115,16 @@ func (s *simulator) createMandate(w http.ResponseWriter, r *http.Request) {
 	state := scenario(r, "active")
 	mandate := map[string]any{"id": id, "provider_id": id, "user_id": input.UserID, "business_id": input.BusinessID, "status": state, "amount_ceiling_kobo": input.AmountCeiling, "amount_ceiling": input.AmountCeiling, "created_at": time.Now().UTC()}
 	s.mu.Lock()
-	s.mandates[id] = clone(mandate)
+	if existing, ok := s.mandates[id]; ok {
+		if existing["amount_ceiling_kobo"] != input.AmountCeiling {
+			s.mu.Unlock()
+			writeJSON(w, 409, map[string]string{"error": "mandate replay changed the amount ceiling"})
+			return
+		}
+		mandate = clone(existing)
+	} else {
+		s.mandates[id] = clone(mandate)
+	}
 	s.mu.Unlock()
 	writeJSON(w, 201, mandate)
 }
@@ -191,18 +202,39 @@ func (s *simulator) createCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	id := stableID("collection", input.ExternalReference)
 	state := scenario(r, "succeeded")
-	succeeded := input.AmountKobo
-	if state == "partial" {
-		succeeded = input.AmountKobo / 2
+	succeeded, valid := collectionAmount(state, input.AmountKobo)
+	if !valid {
+		writeJSON(w, 422, map[string]string{"error": "unsupported collection scenario"})
+		return
 	}
-	if state == "pending" || state == "failed" || state == "cancelled" {
-		succeeded = 0
-	}
-	result := map[string]any{"provider_collection_id": id, "external_reference": input.ExternalReference, "state": state, "succeeded_amount_kobo": succeeded, "retryable": state == "pending" || state == "failed"}
+	result := map[string]any{"provider_collection_id": id, "amount_kobo": input.AmountKobo, "external_reference": input.ExternalReference, "state": state, "succeeded_amount_kobo": succeeded, "retryable": state == "pending" || state == "failed"}
 	s.mu.Lock()
-	s.collections[id] = clone(result)
+	if existing, ok := s.collections[id]; ok {
+		if existing["amount_kobo"] != input.AmountKobo {
+			s.mu.Unlock()
+			writeJSON(w, 409, map[string]string{"error": "collection replay changed the amount"})
+			return
+		}
+		result = clone(existing)
+	} else {
+		s.collections[id] = clone(result)
+	}
 	s.mu.Unlock()
 	writeJSON(w, 202, result)
+}
+
+// State overrides model polling responses without changing the stored attempt.
+func collectionAmount(state string, requested int64) (int64, bool) {
+	switch state {
+	case "succeeded":
+		return requested, true
+	case "partial":
+		return requested / 2, requested > 1
+	case "pending", "failed", "cancelled":
+		return 0, true
+	default:
+		return 0, false
+	}
 }
 
 func (s *simulator) getCollection(w http.ResponseWriter, r *http.Request) {
@@ -217,7 +249,12 @@ func (s *simulator) getCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if next := strings.TrimSpace(r.URL.Query().Get("state")); next != "" {
-		result["state"] = next
+		amount, valid := collectionAmount(next, result["amount_kobo"].(int64))
+		if !valid {
+			writeJSON(w, 422, map[string]string{"error": "unsupported collection state"})
+			return
+		}
+		result["state"], result["succeeded_amount_kobo"], result["retryable"] = next, amount, next == "pending" || next == "failed"
 	}
 	writeJSON(w, 200, result)
 }
@@ -232,11 +269,23 @@ func (s *simulator) sendNotification(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 422, map[string]string{"error": "Idempotency-Key is required"})
 		return
 	}
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid notification"})
+		return
+	}
+	payloadHash := stableID(string(encoded))
 	s.mu.Lock()
+	if previous, ok := s.messagePayloads[key]; ok && previous != payloadHash {
+		s.mu.Unlock()
+		writeJSON(w, 409, map[string]string{"error": "notification replay changed the payload"})
+		return
+	}
 	id, ok := s.messages[key]
 	if !ok {
 		id = stableID("message", key)
 		s.messages[key] = id
+		s.messagePayloads[key] = payloadHash
 	}
 	s.mu.Unlock()
 	writeJSON(w, 202, map[string]string{"message_id": id})
@@ -252,7 +301,8 @@ func (s *simulator) scanDocument(w http.ResponseWriter, r *http.Request) {
 		state = "QUARANTINED"
 	}
 	if state != "CLEAN" && state != "REJECTED" && state != "QUARANTINED" {
-		state = "CLEAN"
+		writeJSON(w, 422, map[string]string{"error": "unsupported scan scenario"})
+		return
 	}
 	writeJSON(w, 200, map[string]string{"state": state})
 }
@@ -304,7 +354,8 @@ func scenario(r *http.Request, fallback string) string {
 	return value
 }
 func stableID(parts ...string) string {
-	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	encoded, _ := json.Marshal(parts)
+	sum := sha256.Sum256(encoded)
 	return "sim_" + hex.EncodeToString(sum[:12])
 }
 func firstString(input map[string]any, keys ...string) string {
@@ -335,7 +386,7 @@ func runSelfHealthcheck() int {
 	if strings.HasPrefix(host, ":") {
 		host = "127.0.0.1" + host
 	}
-	response, err := (&http.Client{Timeout: time.Second}).Get("http://" + host + "/healthz")
+	response, err := (&http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Get("http://" + host + "/healthz")
 	if err != nil {
 		return 1
 	}

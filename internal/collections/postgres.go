@@ -15,8 +15,13 @@ import (
 
 type PostgresEngine struct {
 	noticeMinimum time.Duration
-	pool          *pgxpool.Pool
+	pool          collectionDatabase
 	base          *Engine
+}
+
+type collectionDatabase interface {
+	Begin(context.Context) (pgx.Tx, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
 var _ Service = (*PostgresEngine)(nil)
@@ -36,9 +41,6 @@ func (e *PostgresEngine) Eligibility(id string, now time.Time) (Eligibility, err
 }
 func (e *PostgresEngine) EligibilityContext(ctx context.Context, id string, now time.Time) (Eligibility, error) {
 	local, err := e.load(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return e.base.Eligibility(id, now)
-	}
 	if err != nil {
 		return Eligibility{}, err
 	}
@@ -334,10 +336,21 @@ func (e *PostgresEngine) load(ctx context.Context, id string) (*Engine, error) {
 		return nil, err
 	}
 	var payload []byte
-	if err := tx.QueryRow(ctx, `SELECT aggregate FROM app.collection_aggregate_snapshots WHERE obligation_id=$1::uuid`, id).Scan(&payload); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT aggregate FROM app.collection_aggregate_snapshots WHERE obligation_id=$1::uuid`, id).Scan(&payload); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
 	local := e.fresh()
+	policy, err := businesspolicy.ReadTx(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	if policy.Initialized {
+		local.featureEnabled = local.featureEnabled && policy.Values.CollectionsEnabled
+		local.maxRetries = int(policy.Values.MaxRetries)
+	}
+	if len(payload) == 0 {
+		return local, nil
+	}
 	var state persistedCollection
 	if err := json.Unmarshal(payload, &state); err != nil {
 		return nil, err

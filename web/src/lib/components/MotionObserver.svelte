@@ -44,7 +44,7 @@
 	afterNavigate(schedulePrepare);
 
 	onMount(() => {
-		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 		document.documentElement.classList.add('motion-ready');
 		observer = new IntersectionObserver(
 			(entries) => {
@@ -54,7 +54,7 @@
 					observer?.unobserve(entry.target);
 				}
 			},
-			{ threshold: 0.12, rootMargin: '0px 0px -7% 0px' }
+			{ threshold: 0, rootMargin: '0px 0px -7% 0px' }
 		);
 		schedulePrepare();
 		return () => {

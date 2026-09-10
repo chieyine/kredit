@@ -18,7 +18,7 @@ func policyFailure(w http.ResponseWriter, err error) {
 		writeProblem(w, 409, "policy_conflict", "We could not save that change. Refresh the page and try again.")
 		return
 	}
-	writeProblem(w, 409, "policy_conflict", err.Error())
+	writeProblem(w, 409, "policy_conflict", "This change could not be confirmed. Reload the current record and check your permissions and requested values before retrying.")
 }
 
 // monoAdminStatus exposes only non-secret deployment state. Credential values
@@ -91,7 +91,7 @@ func (s *Server) businessPolicies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var canPropose, canApprove bool
-	if err = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT app.has_admin_role($1::uuid,ARRAY['platform_admin','policy_manager']),app.has_admin_role($1::uuid,ARRAY['platform_admin','approver'])`, user.ID).Scan(&canPropose, &canApprove); err != nil {
+	if err = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT app.has_admin_role($1::uuid,ARRAY['platform_owner','platform_admin','policy_manager']),app.has_admin_role($1::uuid,ARRAY['platform_owner','platform_admin','approver'])`, user.ID).Scan(&canPropose, &canApprove); err != nil {
 		writeProblem(w, 503, "policy_unavailable", "We could not check who is allowed to change this. Please try again.")
 		return
 	}

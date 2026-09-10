@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"kredit/internal/db"
 	"kredit/internal/disputes"
 	"kredit/internal/operations"
 	"kredit/internal/outbox"
@@ -135,7 +136,7 @@ func TestClaimConfirmationCommitsPaymentAndDecisionTogether(t *testing.T) {
 	for _, scenario := range []string{"empty_reason", "rejected", "valid_retry"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := financialFixture(t)
-			ctx := context.Background()
+			ctx := db.WithTenantContext(context.Background(), f.user, f.organization)
 			store := paymentclaims.NewPostgresStore(f.pool)
 			in := paymentclaims.CreateInput{ObligationID: f.id, BuyerUserID: f.user, AmountKobo: 2500, TransferReference: "transfer", IdempotencyKey: "claim:" + f.id}
 			claim, err := store.Create(ctx, in)

@@ -25,13 +25,13 @@ type WebhookProvider struct {
 
 func NewWebhookProvider(name, endpoint, token, secret string) (*WebhookProvider, error) {
 	parsed, err := url.Parse(endpoint)
-	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, errors.New("valid collection connector endpoint is required")
 	}
 	if name == "" || strings.Contains(strings.ToLower(name), "mock") || token == "" || secret == "" {
 		return nil, errors.New("certified collection provider, token, and webhook secret are required")
 	}
-	return &WebhookProvider{name: name, endpoint: strings.TrimRight(endpoint, "/"), token: token, secret: secret, client: &http.Client{Timeout: 20 * time.Second}}, nil
+	return &WebhookProvider{name: name, endpoint: strings.TrimRight(endpoint, "/"), token: token, secret: secret, client: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func (p *WebhookProvider) Name() string { return p.name }
 func (p *WebhookProvider) Capabilities() Capabilities {
@@ -51,6 +51,9 @@ func (p *WebhookProvider) Get(ctx context.Context, id string) (Response, error) 
 	}
 	var result Response
 	err := p.request(ctx, http.MethodGet, "/collections/"+url.PathEscape(id), nil, &result)
+	if err == nil && result.ProviderCollectionID != id {
+		err = errors.New("collection connector returned a mismatched collection")
+	}
 	return result, err
 }
 func (p *WebhookProvider) Cancel(ctx context.Context, id string) (Response, error) {
@@ -59,6 +62,9 @@ func (p *WebhookProvider) Cancel(ctx context.Context, id string) (Response, erro
 	}
 	var result Response
 	err := p.request(ctx, http.MethodPost, "/collections/"+url.PathEscape(id)+"/cancel", map[string]string{"reason": "operator_requested"}, &result)
+	if err == nil && result.ProviderCollectionID != id {
+		err = errors.New("collection connector returned a mismatched collection")
+	}
 	return result, err
 }
 func (p *WebhookProvider) Sign(event Webhook) string {

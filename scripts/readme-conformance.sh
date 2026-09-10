@@ -27,7 +27,9 @@ require_file docs/adr/0005-hand-written-http-and-sql.md
 
 for command in api worker migrate seed reconcile provider-simulator; do require_file "cmd/${command}/main.go"; done
 
-components=(Money MoneyInput Percentage DateTime DueDate StatusPill RiskFact ReferenceCode Timeline AuditTimeline AgreementSummary MandateStatus PaymentBreakdown OutstandingBalance FeeBreakdown TradeLineMeter ScheduleTable CollectionAttemptCard DisputePanel CustomerIdentityCard BusinessVerificationCard DocumentUploader DocumentViewer ConfirmFinancialAction StepUpAuthDialog EmptyState InlineError SystemBanner)
+# Check the composed components that actually implement the current screens.
+# The former wrappers were retired; their behavior is covered by browser tests.
+components=(Money StatusPill DocumentUploader DocumentLayout PaymentReview DisputeDetail ProtectedActionDialog OwnerDialog VerifyIdentity AuthGate WorkspacePage ResourceNotice Skeleton ConnectivityBanner SystemBanner)
 for component in "${components[@]}"; do require_file "web/src/lib/components/${component}.svelte"; done
 
 routes=(
@@ -48,7 +50,12 @@ for table in users sessions otp_challenges mfa_methods organizations memberships
 done
 for table in accounts transactions postings; do require_text db/migrations/004_milestone3_credit_ledger.sql "CREATE TABLE ledger.${table}"; done
 
-for fixture in 'ABC Pharmaceuticals Ltd' 'Royal Pharmacy Ltd' 'Scenario A' 'Scenario B' 'Scenario C' 'Scenario D' 'Scenario E' 'Scenario F'; do require_text db/seeds/001_demo.sql "$fixture"; done
+for fixture in 'ABC Pharmaceuticals Ltd' 'Royal Pharmacy Ltd' 'Scenario C' 'Scenario F'; do require_text db/seeds/001_demo.sql "$fixture"; done
+# Portal fixtures must project actual normalized financial records. Domain
+# tests verify lifecycle scenarios; scenario labels alone are not evidence.
+require_text db/seeds/001_demo.sql 'JOIN app.obligations o ON o.id=r.obligation_id'
+for test_file in internal/credit/store_test.go internal/collections/engine_test.go internal/payments/store_test.go internal/disputes/store_test.go internal/tradelines/store_test.go; do require_file "$test_file"; done
+
 require_text docker-compose.yml 'provider-simulator:'
 require_text scripts/dev.sh 'provider-simulator'
 require_text web/src/service-worker.ts 'Financial'

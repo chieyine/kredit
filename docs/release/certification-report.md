@@ -2,8 +2,12 @@
 
 ## Current disposition
 
-**Repository-owned README and product-quality implementation is complete;
-production is not certified.** Waves 0–6, the interface closure, automated
+**The September 9 file-by-file audit and fixes are in progress; production is
+not certified.** The implementation and verification claims below describe
+earlier checkpoints, not the current changed tree. Current coverage and pending
+verification are recorded in `docs/launch-audit-2026-09-08/FILE-BY-FILE.md`.
+
+Earlier checkpoint: Waves 0–6, the interface closure, automated
 accessibility gate and world-class product-quality gate are implemented. Human
 assistive-technology review and the applicable legal, provider, security,
 environment and launch approvals remain outstanding.

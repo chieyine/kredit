@@ -3,10 +3,27 @@ package buyers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"kredit/internal/identity"
 )
+
+func TestPortalReadDistinguishesAbsentProfileFromFailure(t *testing.T) {
+	memory := NewStore("test-key", identity.NewMockProvider())
+	if _, err := memory.ReadPortal(context.Background(), "unknown"); !errors.Is(err, ErrPortalNotFound) {
+		t.Fatalf("missing profile: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := memory.ReadPortal(ctx, "unknown"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled read: %v", err)
+	}
+	store := NewPostgresStore(nil, "test-key", identity.NewMockProvider())
+	if _, err := store.ReadPortal(context.Background(), "unknown"); err == nil || errors.Is(err, ErrPortalNotFound) {
+		t.Fatalf("database failure must remain distinct from missing profile: %v", err)
+	}
+}
 
 func TestPostgresBuyerStoreImplementsServiceAndFailsClosedWithoutDatabase(t *testing.T) {
 	store := NewPostgresStore(nil, "test-key", identity.NewMockProvider())

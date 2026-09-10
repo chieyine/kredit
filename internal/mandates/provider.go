@@ -156,12 +156,15 @@ func (p *PostgresProvider) CreateAuthorizationSession(ctx context.Context, input
 	err = tx.QueryRow(ctx, `
 		INSERT INTO app.payment_mandates
 			(buyer_subject_type, buyer_subject_id, provider, provider_mandate_id,
-			 mandate_type, amount_ceiling_kobo, state, accepted_disclosure_version)
-		VALUES ('business', $1::uuid, $2, $3, $4, $5, $6, $7)
+			 mandate_type, amount_ceiling_kobo, state, accepted_disclosure_version, supplier_organization_id)
+		VALUES ('business', $1::uuid, $2, $3, $4, $5, $6, $7, NULLIF($8,'')::uuid)
 		ON CONFLICT (provider,provider_mandate_id) DO UPDATE SET provider_updated_at=now()
+		WHERE app.payment_mandates.buyer_subject_type='business'
+		  AND app.payment_mandates.buyer_subject_id=EXCLUDED.buyer_subject_id
+		  AND app.payment_mandates.supplier_organization_id IS NOT DISTINCT FROM EXCLUDED.supplier_organization_id
 		RETURNING id::text, provider, provider_mandate_id, buyer_subject_id::text,
 			amount_ceiling_kobo, state, created_at`,
-		input.BusinessID, p.name, providerID, input.Purpose, input.AmountCeiling, strings.ToLower(string(providerState)), "v1",
+		input.BusinessID, p.name, providerID, input.Purpose, input.AmountCeiling, strings.ToLower(string(providerState)), "v1", input.SupplierOrganizationID,
 	).Scan(&mandate.ID, &mandate.Provider, &mandate.ProviderID, &mandate.BusinessID, &mandate.AmountCeiling, &mandate.Status, &mandate.CreatedAt)
 	if err != nil {
 		return Mandate{}, err
@@ -193,6 +196,9 @@ func (p *PostgresProvider) GetMandate(ctx context.Context, providerID string) (M
 		FROM app.payment_mandate_by_provider($1, $2)`, p.name, providerID,
 	).Scan(&mandate.ID, &mandate.Provider, &mandate.ProviderID, &mandate.BusinessID, &mandate.UserID, &mandate.AmountCeiling, &mandate.Status, &mandate.CreatedAt); err != nil {
 		return Mandate{}, errors.New("mandate not found")
+	}
+	if err := p.loadMandateDetails(ctx, &mandate); err != nil {
+		return Mandate{}, err
 	}
 	if strings.EqualFold(string(mandate.Status), string(Cancelled)) || strings.EqualFold(string(mandate.Status), string(Expired)) {
 		mandate.Status = Status(strings.ToUpper(string(mandate.Status)))
@@ -266,6 +272,31 @@ func (p *PostgresProvider) GetMandate(ctx context.Context, providerID string) (M
 	return mandate, nil
 }
 
+// The lookup function supplies ownership before tenant-scoped details can be
+// read. Terminal mandates still need these details for a later restoration.
+func (p *PostgresProvider) loadMandateDetails(ctx context.Context, mandate *Mandate) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, mandate.UserID); err != nil {
+		return err
+	}
+	var metadata []byte
+	if err := tx.QueryRow(ctx, `SELECT metadata,COALESCE(supplier_organization_id::text,''),COALESCE(starts_at,'0001-01-01'::timestamptz),COALESCE(ends_at,'0001-01-01'::timestamptz),state,amount_ceiling_kobo FROM app.payment_mandates WHERE id=$1::uuid`, mandate.ID).Scan(&metadata, &mandate.SupplierOrganizationID, &mandate.StartsAt, &mandate.EndsAt, &mandate.Status, &mandate.AmountCeiling); err != nil {
+		return err
+	}
+	var stored Mandate
+	if err := json.Unmarshal(metadata, &stored); err != nil {
+		return fmt.Errorf("decode mandate details: %w", err)
+	}
+	mandate.AuthorizationURL, mandate.Variable = stored.AuthorizationURL, stored.Variable
+	mandate.MultiAccount, mandate.PartialRecovery = stored.MultiAccount, stored.PartialRecovery
+	mandate.ActivatedAt = stored.ActivatedAt
+	return tx.Commit(ctx)
+}
+
 func (p *PostgresProvider) ResolveTradeLineMandate(ctx context.Context, mandateID, buyerUserID, buyerBusinessID, supplierOrganizationID string) (Mandate, error) {
 	if p == nil || p.pool == nil || mandateID == "" || buyerUserID == "" || buyerBusinessID == "" || supplierOrganizationID == "" {
 		return Mandate{}, errors.New("mandate, buyer identity, and supplier organization are required")
@@ -321,12 +352,27 @@ func (p *PostgresProvider) RestoreAuthorization(ctx context.Context, providerID 
 			restored.AmountCeiling = previous.AmountCeiling
 		}
 		restored.UserID, restored.BusinessID, restored.SupplierOrganizationID, restored.Provider = previous.UserID, previous.BusinessID, previous.SupplierOrganizationID, p.name
-		err = p.pool.QueryRow(ctx, `INSERT INTO app.payment_mandates(buyer_subject_type,buyer_subject_id,supplier_organization_id,provider,provider_mandate_id,mandate_type,amount_ceiling_kobo,state,accepted_disclosure_version,provider_updated_at) VALUES ('business',$1::uuid,$2::uuid,$3,$4,'restored',$5,'active','v1',now()) RETURNING id::text,created_at`, restored.BusinessID, restored.SupplierOrganizationID, p.name, restored.ProviderID, restored.AmountCeiling).Scan(&restored.ID, &restored.CreatedAt)
+		tx, err := p.pool.Begin(ctx)
+		if err != nil {
+			return Mandate{}, err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, restored.UserID); err != nil {
+			return Mandate{}, err
+		}
+		err = tx.QueryRow(ctx, `INSERT INTO app.payment_mandates(buyer_subject_type,buyer_subject_id,supplier_organization_id,provider,provider_mandate_id,mandate_type,amount_ceiling_kobo,state,accepted_disclosure_version,provider_updated_at) VALUES ('business',$1::uuid,NULLIF($2,'')::uuid,$3,$4,'restored',$5,'active','v1',now()) RETURNING id::text,created_at`, restored.BusinessID, restored.SupplierOrganizationID, p.name, restored.ProviderID, restored.AmountCeiling).Scan(&restored.ID, &restored.CreatedAt)
 		if err != nil {
 			return Mandate{}, err
 		}
 		restored.ActivatedAt = restored.CreatedAt
-		return restored, nil
+		metadata, err := json.Marshal(restored)
+		if err != nil {
+			return Mandate{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE app.payment_mandates SET metadata=$2::jsonb,starts_at=$3,ends_at=$4 WHERE id=$1::uuid`, restored.ID, metadata, nullableTime(restored.StartsAt), nullableTime(restored.EndsAt)); err != nil {
+			return Mandate{}, err
+		}
+		return restored, tx.Commit(ctx)
 	}
 	return p.CreateAuthorizationSession(ctx, AuthorizationInput{SupplierOrganizationID: previous.SupplierOrganizationID, UserID: previous.UserID, BusinessID: previous.BusinessID, AmountCeiling: previous.AmountCeiling, Purpose: "restored"})
 }

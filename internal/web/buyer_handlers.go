@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -90,7 +91,7 @@ func (s *Server) requestBuyerInvitationOTP(w http.ResponseWriter, r *http.Reques
 		writeProblem(w, http.StatusTooManyRequests, "otp_unavailable", err.Error())
 		return
 	}
-	if err := s.runtime.Notifications.SendOTP(r.Context(), target, targetType, code); err != nil {
+	if err := s.runtime.Notifications.SendOTP(r.Context(), challenge.TargetValue, challenge.TargetType, code); err != nil {
 		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "We cannot send codes right now. Please try again shortly.")
 		return
 	}
@@ -121,10 +122,12 @@ func (s *Server) acceptBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	portal, err := s.runtime.Buyers.Accept(r.Context(), token, user.ID, buyers.AcceptInput{FullName: input.FullName, LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
 	if err != nil {
+		_ = s.runtime.Auth.RevokeSession(rawSessionToken)
 		writeProblem(w, http.StatusUnprocessableEntity, "buyer_onboarding_failed", err.Error())
 		return
 	}
 	if !setSessionCookies(w, s.config.Environment != "development", rawSessionToken) {
+		_ = s.runtime.Auth.RevokeSession(rawSessionToken)
 		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "We could not sign you in safely. Please try again.")
 		return
 	}
@@ -137,9 +140,13 @@ func (s *Server) buyerPortal(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	portal, err := s.runtime.Buyers.Portal(user.ID)
+	portal, err := s.runtime.Buyers.ReadPortal(r.Context(), user.ID)
 	if err != nil {
-		writeProblem(w, http.StatusNotFound, "buyer_profile_not_found", "We could not find your customer account.")
+		if errors.Is(err, buyers.ErrPortalNotFound) {
+			writeProblem(w, http.StatusNotFound, "buyer_profile_not_found", "We could not find your customer account.")
+		} else {
+			writeProblem(w, http.StatusServiceUnavailable, "buyer_profile_unavailable", "We could not load your customer account. Please try again.")
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"portal": portal})

@@ -8,7 +8,7 @@ import (
 
 func TestConfigCheckFailsClosedWithoutLaunchEvidence(t *testing.T) {
 	command := exec.Command("go", "run", ".")
-	command.Env = append(command.Environ(), "APP_ENV=production", "LEGAL_APPROVAL_REFERENCE=")
+	command.Env = append(command.Environ(), "APP_ENV=production", "LEGAL_APPROVAL_REFERENCE=", "SESSION_SIGNING_KEY=")
 	output, err := command.CombinedOutput()
 	if err == nil {
 		t.Fatal("expected incomplete production configuration to fail")

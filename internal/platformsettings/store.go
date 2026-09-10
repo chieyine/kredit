@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+var ErrVersionConflict = errors.New("setting changed; reload and review the current version")
+
 type Service interface {
 	GetAll(ctx context.Context, includeSecrets bool) ([]Setting, error)
 	Get(ctx context.Context, key string, includeSecret bool) (Setting, error)
@@ -18,8 +20,8 @@ type Service interface {
 	GetString(ctx context.Context, key string, defaultVal string) string
 	GetInt(ctx context.Context, key string, defaultVal int) int
 	GetInt64(ctx context.Context, key string, defaultVal int64) int64
-	Update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string) (Setting, error)
-	RotateSecret(ctx context.Context, actorID string, key string, plaintextSecret string, reason string) (Setting, error)
+	Update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string, expectedVersion int) (Setting, error)
+	RotateSecret(ctx context.Context, actorID string, key string, plaintextSecret string, reason string, expectedVersion int) (Setting, error)
 	GetGovernance(ctx context.Context) (Governance, error)
 	SetGovernance(ctx context.Context, actorID string, mode string, reason string) (Governance, error)
 	GetHistory(ctx context.Context, key string, limit, offset int) ([]SettingHistory, error)
@@ -64,12 +66,24 @@ func (s *PostgresStore) GetAll(ctx context.Context, includeSecrets bool) ([]Sett
 		); err != nil {
 			return nil, fmt.Errorf("scan setting: %w", err)
 		}
+		// The registry decides what the console shows, not what the table holds.
+		// Retiring a setting used to mean the row stayed, so the owner kept
+		// seeing switches for a launch banner and for three payment providers
+		// that were never contracted. Rows for retired keys are removed by
+		// migration; this makes an un-migrated database behave the same way.
+		if _, known := KnownSettings[item.Key]; !known {
+			continue
+		}
 		item.Value = json.RawMessage(rawVal)
 		if item.IsSecret {
 			if includeSecrets {
 				var ciphertext string
 				_ = json.Unmarshal(item.Value, &ciphertext)
-				plain, err := s.enc.Decrypt(ciphertext)
+				plain, err := s.enc.Decrypt(item.Key, ciphertext)
+				setConnectionState(&item, plain)
+				if err != nil {
+					return nil, fmt.Errorf("decrypt configured secret: %w", err)
+				}
 				if err == nil {
 					b, _ := json.Marshal(plain)
 					item.Value = b
@@ -77,7 +91,8 @@ func (s *PostgresStore) GetAll(ctx context.Context, includeSecrets bool) ([]Sett
 			} else {
 				var ciphertext string
 				_ = json.Unmarshal(item.Value, &ciphertext)
-				plain, err := s.enc.Decrypt(ciphertext)
+				plain, err := s.enc.Decrypt(item.Key, ciphertext)
+				setConnectionState(&item, plain)
 				masked := MaskSecret(plain)
 				if err != nil || plain == "" {
 					masked = ""
@@ -94,10 +109,17 @@ func (s *PostgresStore) GetAll(ctx context.Context, includeSecrets bool) ([]Sett
 	return settings, nil
 }
 
+type settingQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
 func (s *PostgresStore) Get(ctx context.Context, key string, includeSecret bool) (Setting, error) {
+	return s.get(ctx, s.pool, key, includeSecret)
+}
+func (s *PostgresStore) get(ctx context.Context, reader settingQuerier, key string, includeSecret bool) (Setting, error) {
 	var item Setting
 	var rawVal []byte
-	err := s.pool.QueryRow(ctx, `
+	err := reader.QueryRow(ctx, `
 		SELECT key, category, value, is_secret, COALESCE(secret_fingerprint, ''), description, version, updated_at, COALESCE(updated_by::text, ''), COALESCE(reason, '')
 		FROM app.platform_settings
 		WHERE key = $1
@@ -108,7 +130,7 @@ func (s *PostgresStore) Get(ctx context.Context, key string, includeSecret bool)
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Setting{}, fmt.Errorf("setting %q not found", key)
+			return Setting{}, fmt.Errorf("setting %q not found: %w", key, pgx.ErrNoRows)
 		}
 		return Setting{}, err
 	}
@@ -116,8 +138,12 @@ func (s *PostgresStore) Get(ctx context.Context, key string, includeSecret bool)
 	if item.IsSecret {
 		var ciphertext string
 		_ = json.Unmarshal(item.Value, &ciphertext)
-		plain, err := s.enc.Decrypt(ciphertext)
+		plain, err := s.enc.Decrypt(item.Key, ciphertext)
+		setConnectionState(&item, plain)
 		if includeSecret {
+			if err != nil {
+				return Setting{}, fmt.Errorf("decrypt configured secret: %w", err)
+			}
 			if err == nil {
 				b, _ := json.Marshal(plain)
 				item.Value = b
@@ -182,7 +208,27 @@ func (s *PostgresStore) GetInt64(ctx context.Context, key string, defaultVal int
 	return n
 }
 
-func (s *PostgresStore) Update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string) (Setting, error) {
+// UpdateValidated validates dependent runtime settings under the same shared
+// transaction lock as the write, preventing conflicting cross-connection saves.
+type ValidatedUpdater interface {
+	UpdateValidated(context.Context, string, string, json.RawMessage, string, int, func(Service, json.RawMessage) (json.RawMessage, error)) (Setting, error)
+}
+type transactionSettings struct {
+	Service
+	store *PostgresStore
+	tx    pgx.Tx
+}
+
+func (s transactionSettings) Get(ctx context.Context, key string, secret bool) (Setting, error) {
+	return s.store.get(ctx, s.tx, key, secret)
+}
+func (s *PostgresStore) UpdateValidated(ctx context.Context, actorID, key string, raw json.RawMessage, reason string, version int, validate func(Service, json.RawMessage) (json.RawMessage, error)) (Setting, error) {
+	return s.update(ctx, actorID, key, raw, reason, version, validate)
+}
+func (s *PostgresStore) Update(ctx context.Context, actorID, key string, raw json.RawMessage, reason string, version int) (Setting, error) {
+	return s.update(ctx, actorID, key, raw, reason, version, nil)
+}
+func (s *PostgresStore) update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string, expectedVersion int, validate func(Service, json.RawMessage) (json.RawMessage, error)) (Setting, error) {
 	reason = strings.TrimSpace(reason)
 	if len(reason) < 4 {
 		return Setting{}, errors.New("a reason of at least 4 characters is required")
@@ -199,6 +245,24 @@ func (s *PostgresStore) Update(ctx context.Context, actorID string, key string, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if _, runtimeConnection := RuntimeConnections[key]; runtimeConnection {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('kredit-runtime-connections',0))`); err != nil {
+			return Setting{}, err
+		}
+	}
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key); err != nil {
+		return Setting{}, err
+	}
+
+	if validate != nil {
+		rawValue, err = validate(transactionSettings{Service: s, store: s, tx: tx}, rawValue)
+		if err != nil {
+			return Setting{}, err
+		}
+		if _, err = ValidateKeyAndValue(key, rawValue); err != nil {
+			return Setting{}, err
+		}
+	}
 	var current Setting
 	var currentRaw []byte
 	var isSecret bool
@@ -216,6 +280,10 @@ func (s *PostgresStore) Update(ctx context.Context, actorID string, key string, 
 	exists := (err == nil)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Setting{}, err
+	}
+
+	if expectedVersion < 0 || expectedVersion != currentVersion {
+		return Setting{}, ErrVersionConflict
 	}
 
 	if exists {
@@ -238,13 +306,13 @@ func (s *PostgresStore) Update(ctx context.Context, actorID string, key string, 
 		if err := json.Unmarshal(rawValue, &plaintext); err != nil {
 			return Setting{}, errors.New("secret value must be a string")
 		}
-		cipherText, err := s.enc.Encrypt(plaintext)
+		cipherText, err := s.enc.Encrypt(key, plaintext)
 		if err != nil {
 			return Setting{}, fmt.Errorf("encrypt secret: %w", err)
 		}
 		b, _ := json.Marshal(cipherText)
 		storedValue = b
-		fingerprint = SecretFingerprint(plaintext)
+		fingerprint = s.enc.SecretFingerprint(plaintext)
 		action = "secret_rotated"
 	}
 
@@ -297,7 +365,8 @@ func (s *PostgresStore) Update(ctx context.Context, actorID string, key string, 
 	if updated.IsSecret {
 		var ciphertext string
 		_ = json.Unmarshal(updated.Value, &ciphertext)
-		plain, _ := s.enc.Decrypt(ciphertext)
+		plain, _ := s.enc.Decrypt(updated.Key, ciphertext)
+		setConnectionState(&updated, plain)
 		b, _ := json.Marshal(MaskSecret(plain))
 		updated.Value = b
 	}
@@ -305,12 +374,12 @@ func (s *PostgresStore) Update(ctx context.Context, actorID string, key string, 
 	return updated, nil
 }
 
-func (s *PostgresStore) RotateSecret(ctx context.Context, actorID string, key string, plaintextSecret string, reason string) (Setting, error) {
+func (s *PostgresStore) RotateSecret(ctx context.Context, actorID string, key string, plaintextSecret string, reason string, expectedVersion int) (Setting, error) {
 	b, err := json.Marshal(plaintextSecret)
 	if err != nil {
 		return Setting{}, err
 	}
-	return s.Update(ctx, actorID, key, b, reason)
+	return s.Update(ctx, actorID, key, b, reason, expectedVersion)
 }
 
 func (s *PostgresStore) GetGovernance(ctx context.Context) (Governance, error) {
@@ -322,7 +391,7 @@ func (s *PostgresStore) GetGovernance(ctx context.Context) (Governance, error) {
 	`).Scan(&g.Mode, &g.UpdatedAt, &g.UpdatedBy, &g.Reason)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Governance{Mode: GovernanceSoloOwner, Reason: "Default configuration"}, nil
+			return Governance{}, errors.New("governance configuration is unavailable")
 		}
 		return Governance{}, err
 	}
@@ -343,6 +412,10 @@ func (s *PostgresStore) SetGovernance(ctx context.Context, actorID string, mode 
 		return Governance{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var previousMode string
+	if err := tx.QueryRow(ctx, `SELECT mode FROM app.platform_governance WHERE id='singleton' FOR UPDATE`).Scan(&previousMode); err != nil {
+		return Governance{}, fmt.Errorf("read current governance before changing it: %w", err)
+	}
 
 	var g Governance
 	err = tx.QueryRow(ctx, `
@@ -361,10 +434,13 @@ func (s *PostgresStore) SetGovernance(ctx context.Context, actorID string, mode 
 
 	// Also record in settings history
 	newVal, _ := json.Marshal(mode)
+	oldVal, _ := json.Marshal(previousMode)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO app.platform_settings_history (key, old_value, new_value, version, action, actor_id, reason)
-		VALUES ('governance.mode', NULL, $1::jsonb, 1, 'update', NULLIF($2, '')::uuid, $3)
-	`, newVal, actorID, reason)
+		VALUES ('governance.mode', $4::jsonb, $1::jsonb,
+		 (SELECT COALESCE(max(version),0)+1 FROM app.platform_settings_history WHERE key='governance.mode'),
+		 'update', NULLIF($2, '')::uuid, $3)
+	`, newVal, actorID, reason, oldVal)
 	if err != nil {
 		return Governance{}, err
 	}
@@ -414,6 +490,12 @@ func (s *PostgresStore) GetHistory(ctx context.Context, key string, limit, offse
 			h.OldValue = json.RawMessage(oldRaw)
 		}
 		h.NewValue = json.RawMessage(newRaw)
+		// History never discloses encrypted payloads, including retired keys.
+		meta, known := KnownSettings[h.Key]
+		if (!known && h.Key != "governance.mode") || meta.IsSecret {
+			h.OldValue = nil
+			h.NewValue = json.RawMessage(`null`)
+		}
 		list = append(list, h)
 	}
 	return list, rows.Err()

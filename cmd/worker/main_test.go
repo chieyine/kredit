@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestHealthHandlerExposesLivenessAndReadiness(t *testing.T) {
@@ -48,5 +49,18 @@ func TestHealthHandlerRejectsMutationMethods(t *testing.T) {
 
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestHealthServerReportsListenFailure(t *testing.T) {
+	server, failures := startHealthServer("127.0.0.1:invalid", func() error { return nil })
+	defer func() { _ = server.Close() }()
+	select {
+	case err := <-failures:
+		if err == nil {
+			t.Fatal("expected invalid listener address to fail")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("health server silently discarded listener failure")
 	}
 }

@@ -3,6 +3,7 @@ package paymentclaims
 import (
 	"context"
 	"errors"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -12,6 +13,8 @@ import (
 	"kredit/internal/ledger"
 	"kredit/internal/payments"
 )
+
+var ErrNotFound = errors.New("payment claim not found")
 
 const (
 	Pending   = "pending"
@@ -95,7 +98,7 @@ func (s *Store) Create(_ context.Context, input CreateInput) (Claim, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if id := s.byKey[input.IdempotencyKey]; id != "" {
-		existing := *s.items[id]
+		existing := cloneClaim(*s.items[id])
 		if !sameClaimIntent(existing, input) {
 			return Claim{}, errors.New("idempotency key belongs to a different payment claim")
 		}
@@ -122,7 +125,7 @@ func (s *Store) Create(_ context.Context, input CreateInput) (Claim, error) {
 	claim := &Claim{ID: identifier.New(), ObligationID: snapshot.ID, BuyerUserID: input.BuyerUserID, SupplierOrganizationID: snapshot.SupplierOrganizationID, AmountKobo: input.AmountKobo, Currency: snapshot.Currency, PaidAt: paidAt, SourceAccountMasked: strings.TrimSpace(input.SourceAccountMasked), TransferReference: strings.TrimSpace(input.TransferReference), EvidenceDocumentID: strings.TrimSpace(input.EvidenceDocumentID), State: Pending, HoldExpiresAt: now.Add(s.holdFor), CreatedAt: now}
 	s.items[claim.ID] = claim
 	s.byKey[input.IdempotencyKey] = claim.ID
-	return *claim, nil
+	return cloneClaim(*claim), nil
 }
 
 func (s *Store) Get(_ context.Context, id string) (Claim, error) {
@@ -130,9 +133,9 @@ func (s *Store) Get(_ context.Context, id string) (Claim, error) {
 	defer s.mu.RUnlock()
 	claim := s.items[id]
 	if claim == nil {
-		return Claim{}, errors.New("payment claim not found")
+		return Claim{}, ErrNotFound
 	}
-	return *claim, nil
+	return cloneClaim(*claim), nil
 }
 
 func (s *Store) ListForObligation(_ context.Context, obligationID string) []Claim {
@@ -152,7 +155,7 @@ func (s *Store) list(include func(*Claim) bool) []Claim {
 	result := []Claim{}
 	for _, claim := range s.items {
 		if include(claim) {
-			result = append(result, *claim)
+			result = append(result, cloneClaim(*claim))
 		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].CreatedAt.After(result[j].CreatedAt) })
@@ -173,32 +176,35 @@ func (s *Store) Decide(_ context.Context, id, actor, decision, reason, paymentID
 	defer s.mu.Unlock()
 	claim := s.items[id]
 	if claim == nil {
-		return Claim{}, errors.New("payment claim not found")
+		return Claim{}, ErrNotFound
 	}
 	if claim.State != Pending {
 		if claim.State == decision {
-			return *claim, nil
+			return cloneClaim(*claim), nil
 		}
 		return Claim{}, errors.New("payment claim has already been decided")
 	}
 	reviewedAt := s.now()
 	claim.State, claim.ReviewedBy, claim.ReviewReason, claim.PaymentID, claim.ReviewedAt = decision, actor, strings.TrimSpace(reason), strings.TrimSpace(paymentID), &reviewedAt
-	return *claim, nil
+	return cloneClaim(*claim), nil
 }
 
 func (s *Store) ActiveHold(_ context.Context, obligationID string, at time.Time) ledger.Money {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	var total ledger.Money
 	for _, claim := range s.items {
 		if claim.ObligationID != obligationID || claim.State != Pending {
 			continue
 		}
 		if !at.Before(claim.HoldExpiresAt) {
-			claim.State = Expired
 			continue
 		}
-		total += claim.AmountKobo
+		var err error
+		total, err = ledger.CheckedAdd(total, claim.AmountKobo)
+		if err != nil {
+			return ledger.Money(math.MaxInt64)
+		}
 	}
 	return total
 }
@@ -220,10 +226,10 @@ func (s *Store) Confirm(ctx context.Context, id, actor, reason string, recorder 
 	defer s.mu.Unlock()
 	claim := s.items[id]
 	if claim == nil {
-		return Claim{}, errors.New("payment claim not found")
+		return Claim{}, ErrNotFound
 	}
 	if claim.State == Confirmed {
-		return *claim, nil
+		return cloneClaim(*claim), nil
 	}
 	if claim.State != Pending {
 		return Claim{}, errors.New("payment claim is not pending")
@@ -238,5 +244,13 @@ func (s *Store) Confirm(ctx context.Context, id, actor, reason string, recorder 
 	claim.ReviewReason = strings.TrimSpace(reason)
 	claim.PaymentID = payment.ID
 	claim.ReviewedAt = &now
-	return *claim, nil
+	return cloneClaim(*claim), nil
+}
+
+func cloneClaim(claim Claim) Claim {
+	if claim.ReviewedAt != nil {
+		reviewed := *claim.ReviewedAt
+		claim.ReviewedAt = &reviewed
+	}
+	return claim
 }

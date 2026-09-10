@@ -213,6 +213,11 @@ func (r *Runtime) HandleCollectionJob(ctx context.Context, cfg config.Config, ar
 	if err = tx.QueryRow(ctx, `SELECT i.id::text FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id WHERE s.obligation_id=$1::uuid AND i.state NOT IN ('PAID','CANCELLED') AND i.collection_at<=now() AND i.principal_due_kobo>i.allocated_kobo ORDER BY i.sequence LIMIT 1`, id).Scan(&itemID); err != nil {
 		return err
 	}
+	// Release the discovery connection before collection acquires its own
+	// transaction; a one-connection pool must not deadlock here.
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
 	_, err = r.Collections.Start(ctx, id, "due-schedule:"+itemID, time.Now().UTC())
 	return err
 }

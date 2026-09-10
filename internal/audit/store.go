@@ -5,10 +5,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"kredit/internal/platform/logging"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -35,6 +39,7 @@ type Store struct {
 type Service interface {
 	Append(Event) Event
 	ListForOrganization(string) []Event
+	ReadForOrganization(context.Context, string) ([]Event, error)
 }
 
 func NewStore() *Store { return &Store{} }
@@ -56,7 +61,7 @@ func (s *Store) Append(event Event) Event {
 	}
 	event.Metadata = cloneMetadata(event.Metadata)
 	s.events = append(s.events, event)
-	return event
+	return cloneEvent(event)
 }
 
 func (s *Store) ListForOrganization(organizationID string) []Event {
@@ -87,12 +92,7 @@ func cloneMetadata(metadata map[string]string) map[string]string {
 		if key == "" || len(key) > 64 || sensitiveMetadataKey(key) {
 			continue
 		}
-		value = strings.Map(func(r rune) rune {
-			if r == '\n' || r == '\r' || r == '\t' {
-				return ' '
-			}
-			return r
-		}, value)
+		value = logging.Redact(value)
 		if len(value) > 512 {
 			value = value[:512]
 		}
@@ -103,7 +103,7 @@ func cloneMetadata(metadata map[string]string) map[string]string {
 
 func sensitiveMetadataKey(key string) bool {
 	key = strings.ToLower(key)
-	for _, fragment := range []string{"token", "secret", "password", "otp", "pin", "bvn", "nin", "phone", "email", "account", "document", "address"} {
+	for _, fragment := range []string{"token", "secret", "password", "otp", "pin", "bvn", "nin", "phone", "email", "account", "document", "address", "authorization", "cookie"} {
 		if strings.Contains(key, fragment) {
 			return true
 		}
@@ -127,53 +127,100 @@ type PostgresStore struct{ pool *pgxpool.Pool }
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore { return &PostgresStore{pool: pool} }
 
 func (s *PostgresStore) Append(event Event) Event {
-	if s == nil || s.pool == nil {
-		return event
-	}
-	metadata, err := json.Marshal(cloneMetadata(event.Metadata))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	saved, err := s.Record(ctx, event)
 	if err != nil {
-		return event
+		slog.Error("audit event persistence failed", "action", event.Action, "resource_type", event.ResourceType, "error", logging.Redact(err.Error()))
+	}
+	return saved
+}
+
+// Record returns persistence failures and installs the event's authorized scope.
+// Domain transactions still own their atomic decision/event records.
+func (s *PostgresStore) Record(ctx context.Context, event Event) (Event, error) {
+	event.Metadata = cloneMetadata(event.Metadata)
+	event.Outcome = defaultString(event.Outcome, "success")
+	event.Severity = defaultString(event.Severity, "info")
+	if s == nil || s.pool == nil {
+		return event, errors.New("audit database is not configured")
+	}
+	metadata, err := json.Marshal(event.Metadata)
+	if err != nil {
+		return event, err
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return event, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true),set_config('app.current_user_id',$2,true)`, event.OrganizationID, event.ActorUserID); err != nil {
+		return event, err
 	}
 	var id string
 	var occurredAt time.Time
-	err = s.pool.QueryRow(context.Background(), `
-		INSERT INTO app.audit_events (actor_user_id, organization_id, action, resource_type, resource_id, outcome, severity, request_id, metadata)
-		VALUES (NULLIF($1,'')::uuid, NULLIF($2,'')::uuid, $3, $4, NULLIF($5,''), $6, $7, NULLIF($8,''), $9::jsonb)
-		RETURNING id::text, occurred_at`, event.ActorUserID, event.OrganizationID, event.Action, event.ResourceType, event.ResourceID, defaultString(event.Outcome, "success"), defaultString(event.Severity, "info"), event.RequestID, metadata).Scan(&id, &occurredAt)
+	err = tx.QueryRow(ctx, `INSERT INTO app.audit_events (actor_user_id,organization_id,action,resource_type,resource_id,outcome,severity,request_id,metadata) VALUES(NULLIF($1,'')::uuid,NULLIF($2,'')::uuid,$3,$4,NULLIF($5,''),$6,$7,NULLIF($8,''),$9::jsonb) RETURNING id::text,occurred_at`, event.ActorUserID, event.OrganizationID, event.Action, event.ResourceType, event.ResourceID, event.Outcome, event.Severity, event.RequestID, metadata).Scan(&id, &occurredAt)
 	if err != nil {
-		return event
+		return event, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return event, err
 	}
 	event.ID, event.At = id, occurredAt
-	return event
+	return event, nil
 }
 
-func (s *PostgresStore) ListForOrganization(organizationID string) []Event {
-	if s == nil || s.pool == nil || organizationID == "" {
-		return nil
+func (s *Store) ReadForOrganization(ctx context.Context, org string) ([]Event, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	rows, err := s.pool.Query(context.Background(), `
-		SELECT id::text, occurred_at, COALESCE(actor_user_id::text,''), COALESCE(organization_id::text,''), action, COALESCE(resource_type,''), COALESCE(resource_id,''), outcome, COALESCE(request_id,''), severity, metadata
-		FROM app.audit_events WHERE organization_id = $1::uuid ORDER BY occurred_at DESC`, organizationID)
+	return s.ListForOrganization(org), nil
+}
+func (s *PostgresStore) ListForOrganization(org string) []Event {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	items, _ := s.ReadForOrganization(ctx, org)
+	return items
+}
+func (s *PostgresStore) ReadForOrganization(ctx context.Context, org string) ([]Event, error) {
+	if s == nil || s.pool == nil || org == "" {
+		return nil, errors.New("audit scope or database is unavailable")
+	}
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	defer rows.Close()
-	result := make([]Event, 0)
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, org); err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text,occurred_at,COALESCE(actor_user_id::text,''),COALESCE(organization_id::text,''),action,COALESCE(resource_type,''),COALESCE(resource_id,''),outcome,COALESCE(request_id,''),severity,metadata FROM app.audit_events WHERE organization_id=$1::uuid ORDER BY occurred_at DESC,id DESC`, org)
+	if err != nil {
+		return nil, err
+	}
+	result := []Event{}
 	for rows.Next() {
 		var event Event
 		var metadata []byte
-		if err := rows.Scan(&event.ID, &event.At, &event.ActorUserID, &event.OrganizationID, &event.Action, &event.ResourceType, &event.ResourceID, &event.Outcome, &event.RequestID, &event.Severity, &metadata); err != nil {
-			return nil
+		if err = rows.Scan(&event.ID, &event.At, &event.ActorUserID, &event.OrganizationID, &event.Action, &event.ResourceType, &event.ResourceID, &event.Outcome, &event.RequestID, &event.Severity, &metadata); err != nil {
+			rows.Close()
+			return nil, err
 		}
-		if err := json.Unmarshal(metadata, &event.Metadata); err != nil {
-			return nil
+		if event.Metadata, err = DecodeMetadata(metadata); err != nil {
+			rows.Close()
+			return nil, err
 		}
 		result = append(result, event)
 	}
-	if rows.Err() != nil {
-		return nil
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
 	}
-	return result
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func defaultString(value, fallback string) string {
@@ -181,4 +228,22 @@ func defaultString(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// DecodeMetadata tolerates native JSON scalars written by database auditing.
+// Historical immutable events need not be rewritten to make their history readable.
+func DecodeMetadata(raw []byte) (map[string]string, error) {
+	values := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, err
+	}
+	result := map[string]string{}
+	for key, value := range values {
+		var text string
+		if json.Unmarshal(value, &text) != nil {
+			text = string(value)
+		}
+		result[key] = text
+	}
+	return cloneMetadata(result), nil
 }

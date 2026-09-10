@@ -1,0 +1,387 @@
+$ pnpm run generate:api
+$ pnpm -w exec openapi-typescript api/openapi.yaml -o web/src/lib/api/generated/schema.ts
+✨ openapi-typescript 7.9.1
+ ⚠  Info object should contain `license` field. at #/info
+ ⚠  Paths should resolve unambiguously. Found two ambiguous paths: `/ops/team/{userID}/roles` and `/ops/team/roles/{assignmentID}`. at #/paths/~1ops~1team~1roles~1{assignmentID}
+ ⚠  Operation object should contain `description` field. at #/paths/~1platform~1capabilities/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1capabilities/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1platform-settings/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1platform-settings/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1platform-settings~1secret/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1platform-settings~1history/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1governance/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1governance/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1solo-owner~1approve/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1ownership~1transfer/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1approval-inbox/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1admin-changes/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1change-context/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1change-history/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1attention/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1attention~1details/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1amendments/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1healthz/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1healthz/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1readyz/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1readyz/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1meta/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1meta/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1auth~1otp~1challenges/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1auth~1otp~1verify/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1auth~1logout/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1auth~1logout/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1secure-link/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1mfa~1totp~1enroll/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1mfa~1totp~1enroll/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1mfa~1totp~1verify/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1mfa~1totp~1verify/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1members/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1members/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1members/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1members/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1members~1{userID}/patch/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1members~1{userID}/patch/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1audit-events/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1audit-events/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1contacts~1challenges/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1contacts~1challenges/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1contacts~1verify/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1contacts~1verify/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1representative/patch/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1representative/patch/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1kyb/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1kyb/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1kyb~1reconcile/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1settlement/put/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1settlement/put/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1billing/put/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1billing/put/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1credit-policy/put/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1credit-policy/put/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1consents/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1consents/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1documents/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1documents/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1documents~1upload-slot/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1documents~1upload-slot/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1documents~1{documentID}~1complete/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1documents~1{documentID}~1complete/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1documents~1{documentID}~1download/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1documents~1{documentID}~1download/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1support-cases/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1support-cases/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1support-cases/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1support-cases/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1support-cases~1{caseID}/patch/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1support-cases~1{caseID}/patch/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1relationships~1consents/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1relationships~1consents/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1relationships~1consents/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1relationships~1consents/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1buyer-invitations/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1buyer-invitations/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer-invitations~1{token}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer-invitations~1{token}~1otp/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer-invitations~1{token}~1otp/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer-invitations~1{token}~1accept/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer-invitations~1{token}~1accept/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1me/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1me/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/patch/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/patch/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1send/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1send/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1send/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1cancel/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1release/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1release/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1release/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1agreement/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1agreement/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1agreement/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1agreement-document/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1mandate/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1mandate/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1mandate/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1accept/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1accept/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1accept/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1decline/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1decline/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1receipt/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1receipt/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1receipt/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments~1{paymentID}~1reverse/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments~1{paymentID}~1reverse/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments~1{paymentID}~1reverse/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1reconciliation/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1reconciliation/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1reconciliation/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1agreement-document/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1payments/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1payments/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1payments/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1obligations~1{obligationID}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1payment-claims/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1mandates~1{mandateID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1mandates~1{mandateID}~1cancel/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1mandates~1{mandateID}~1restore/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1mandates~1{mandateID}~1restore/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1payment-claims/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1payment-claims/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payment-claims/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payment-claims/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payment-claims/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1payment-claims/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1payment-claims/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1payment-claims/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1payment-claims~1{claimID}~1decide/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1payment-claims~1{claimID}~1decide/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1payment-claims~1{claimID}~1decide/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1public~1receipts~1{token}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1payment-link/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1payment-link/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1public~1payment-intents~1{token}/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/post/summary
+ ⚠  Operation must have at least one `2XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1schedule/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1schedule/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1schedule/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}/patch/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1confirm/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1confirm/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1confirm/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1release/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1release/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1release/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1receipt/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1receipt/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1receipt/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1statement/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1statement/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines~1{lineID}~1statement/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1agreement-document/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1agreement-document/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1suspend/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1suspend/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1suspend/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1resume/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1resume/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1resume/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1statement/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1statement/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1statement/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection~1eligibility/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection~1eligibility/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection~1eligibility/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collections/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collections/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collections/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1retry/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1retry/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1retry/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1reconcile/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1reconcile/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1reconcile/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1webhooks~1mono/post/summary
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1businesses~1{businessID}~1repayment-customer/post/summary
+ ⚠  Operation object should contain `summary` field. at #/paths/~1webhooks~1collection~1{provider}/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1webhooks~1collection~1{provider}/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1webhooks~1collection~1{provider}/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1schedule-items~1{itemID}~1collection-notice~1acknowledge/post/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1disputes/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1disputes/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1disputes/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1disputes/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1disputes/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1disputes/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1disputes/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1disputes/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1disputes/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1evidence/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1evidence/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1evidence/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1decide/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1decide/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1decide/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1write-off/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1write-off/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1write-off/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1fee-waiver/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1fee-waiver/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1fee-waiver/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1operations/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1operations/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1operations/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1pricing/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1pricing/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1business-policies/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1business-policies/post/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1ops~1business-policies~1{changeID}~1decision/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1business-policies~1{changeID}~1decision/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1financial-reconciliation/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1ops~1financial-reconciliation~1{caseID}~1decision/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1financial-reconciliation~1{caseID}~1decision/post/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1webhooks~1messaging~1whatsapp/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1webhooks~1messaging~1whatsapp/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1webhooks~1messaging~1whatsapp/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1me~1notifications/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1notifications/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1notifications/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1reports~1receivables/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1reports~1receivables/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1provider-status/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1provider-status/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1readiness/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1readiness/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1metrics/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1metrics/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1metrics~1prometheus/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1metrics~1prometheus/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1overview/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1analytics~1scorecard/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1product-feedback/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1jobs/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1provider-events/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1commands~1preview/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1commands/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1diagnostics/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1search/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1users/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1organizations/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1money/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1cases/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1audit/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1cases~1{caseID}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1cases~1{caseID}/patch/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1disputes/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1disputes~1{disputeID}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1disputes~1{disputeID}~1decide/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1team/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1team~1{userID}~1roles/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1team~1roles~1{assignmentID}/delete/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1reports~1ageing/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1reports~1ageing/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1reports~1fees/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1reports~1fees/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1reports~1exports/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1reports~1exports/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1history/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1history/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1customers~1{buyerUserID}~1history/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1customers~1{buyerUserID}~1history/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1customers~1{buyerUserID}~1statement/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1customers~1{buyerUserID}~1statement/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1history~1corrections/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1history~1corrections/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1corrections/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1corrections/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1corrections~1{correctionID}~1decide/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1corrections~1{correctionID}~1decide/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1payments/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1payments/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1collections/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1collections/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1overdue/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1overdue/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1customers/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1customers/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1mandates/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1mandates/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1disputes/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1disputes/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1disputes~1{disputeID}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1disputes~1{disputeID}~1evidence/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1notification-preferences/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1notification-preferences/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1notification-preferences/put/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1recovery-codes~1regenerate/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1recovery-codes~1regenerate/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1account-recovery~1requests/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1account-recovery~1requests/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1account-recovery~1requests~1{requestID}~1evidence/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1account-recovery~1requests~1{requestID}~1evidence/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1account-recovery~1requests~1{requestID}~1complete/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1account-recovery~1requests~1{requestID}~1complete/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1privacy-requests/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1privacy-requests/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1privacy-requests/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1privacy-requests/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1privacy-requests~1{requestID}~1export/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1account-recovery~1{requestID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1account-recovery~1{requestID}~1cancel/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1account-recovery/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1account-recovery/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1account-recovery~1{requestID}~1review/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1account-recovery~1{requestID}~1review/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1privacy-requests/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1privacy-requests/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1privacy-requests~1{requestID}~1decide/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1privacy-requests~1{requestID}~1decide/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1privacy-requests~1{requestID}~1complete/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1privacy-requests~1{requestID}~1complete/post/responses
+ ⚠  Component: "ProviderStatus" is never used. at #/components/schemas/ProviderStatus
+ ⚠  Component: "Membership" is never used. at #/components/schemas/Membership
+🚀 api/openapi.yaml → web/src/lib/api/generated/schema.ts [7.9s]
+$ svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+Loading svelte-check in workspace: /Users/macbookpro/Documents/Kredit.com/web
+Getting Svelte diagnostics...
+
+svelte-check found 0 errors and 0 warnings

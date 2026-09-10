@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -9,6 +11,8 @@ import (
 	"kredit/internal/audit"
 	"kredit/internal/auth"
 	"kredit/internal/organizations"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type organizationRequest struct {
@@ -38,7 +42,12 @@ func (s *Server) listOrganizations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"organizations": s.runtime.Organizations.ListForUser(user.ID)})
+	items, err := s.runtime.Organizations.ReadForUser(r.Context(), user.ID)
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "organizations_unavailable", "Your businesses could not be loaded. Please try again.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"organizations": items})
 }
 
 func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
@@ -59,10 +68,14 @@ func (s *Server) createOrganization(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusUnprocessableEntity, "organization_invalid", err.Error())
 		return
 	}
-	emailVerified, phoneVerified := ownerContactEvidence(user)
-	if _, err := s.runtime.Onboarding.Ensure(organization.ID, user.ID, emailVerified, phoneVerified); err != nil {
-		writeProblem(w, http.StatusServiceUnavailable, "onboarding_unavailable", "organization was created but its onboarding profile could not be initialized")
-		return
+	// PostgreSQL commits the business, owner membership and initial onboarding
+	// profile together. Only the development adapter needs separate initialization.
+	if _, durable := s.runtime.Organizations.(*organizations.PostgresStore); !durable {
+		emailVerified, phoneVerified := ownerContactEvidence(user)
+		if _, err := s.runtime.Onboarding.Ensure(organization.ID, user.ID, emailVerified, phoneVerified); err != nil {
+			writeProblem(w, http.StatusServiceUnavailable, "onboarding_unavailable", "The business setup could not be completed. Please try again.")
+			return
+		}
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organization.ID, Action: "organization.created", ResourceType: "organization", ResourceID: organization.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context())})
 	writeJSON(w, http.StatusCreated, map[string]any{"organization": organization, "membership": membership})
@@ -95,7 +108,19 @@ func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadOrganization); !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"members": s.runtime.Organizations.ListMembers(organizationID)})
+	var members []organizations.Membership
+	if source, ok := s.runtime.Organizations.(interface {
+		ReadMembers(string) ([]organizations.Membership, error)
+	}); ok {
+		members, err = source.ReadMembers(organizationID)
+	} else {
+		members = s.runtime.Organizations.ListMembers(organizationID)
+	}
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "members_unavailable", "We could not load your staff list")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"members": members})
 }
 
 func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +191,10 @@ func (s *Server) changeMemberRole(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	if input.Status != "" && input.Role != "" {
+		writeProblem(w, http.StatusBadRequest, "member_change_ambiguous", "Change either the role or access status in one request")
+		return
+	}
 	var membership organizations.Membership
 	var action string
 	var metadata map[string]string
@@ -199,7 +228,14 @@ func (s *Server) listAuditEvents(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadAudit); !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": s.runtime.Audit.ListForOrganization(organizationID)})
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	events, err := s.runtime.Audit.ReadForOrganization(ctx, organizationID)
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "audit_unavailable", "The activity history could not be loaded. Try again.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events})
 }
 
 func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Request, organizationID string, permission access.Permission) (auth.Session, auth.User, organizations.Membership, bool) {
@@ -213,7 +249,16 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 		writeProblem(w, http.StatusForbidden, "organization_forbidden", "you do not have access to this organization")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
 	}
-	if organization, found := s.runtime.Organizations.Get(organizationID); found && organization.Status == "suspended" && access.RequiresStepUp(permission) {
+	organization, readErr := s.readOrganization(r.Context(), organizationID)
+	if readErr != nil {
+		if errors.Is(readErr, pgx.ErrNoRows) {
+			writeProblem(w, http.StatusForbidden, "organization_forbidden", "you do not have access to this organization")
+		} else {
+			writeProblem(w, http.StatusServiceUnavailable, "organization_unavailable", "Business access could not be checked")
+		}
+		return auth.Session{}, auth.User{}, organizations.Membership{}, false
+	}
+	if organization.Status == "suspended" && access.RequiresStepUp(permission) {
 		writeProblem(w, http.StatusLocked, "organization_suspended", "sensitive changes are blocked while this organization is suspended")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
 	}
@@ -246,4 +291,17 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
 	}
 	return session, user, membership, true
+}
+
+func (s *Server) readOrganization(ctx context.Context, id string) (organizations.Organization, error) {
+	if source, ok := s.runtime.Organizations.(interface {
+		Read(context.Context, string) (organizations.Organization, error)
+	}); ok {
+		return source.Read(ctx, id)
+	}
+	item, ok := s.runtime.Organizations.Get(id)
+	if !ok {
+		return organizations.Organization{}, pgx.ErrNoRows
+	}
+	return item, nil
 }

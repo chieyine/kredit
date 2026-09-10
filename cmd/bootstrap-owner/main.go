@@ -5,9 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
+	"time"
 
-	"github.com/google/uuid"
+	"kredit/internal/auth"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -39,45 +40,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to connect to database: %v\n", err)
 		os.Exit(1)
 	}
 	defer pool.Close()
-
-	normID := strings.TrimSpace(strings.ToLower(identifier))
-	var userID string
-	err = pool.QueryRow(ctx, `SELECT id::text FROM app.users WHERE normalized_email=$1 OR normalized_phone=$1`, normID).Scan(&userID)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			// Create user if not exists
-			newID := uuid.New().String()
-			isEmail := strings.Contains(normID, "@")
-			var emailCol, phoneCol any
-			if isEmail {
-				emailCol = normID
-				phoneCol = nil
-			} else {
-				emailCol = nil
-				phoneCol = normID
-			}
-			err = pool.QueryRow(ctx, `
-				INSERT INTO app.users(id, normalized_email, normalized_phone, display_name, status)
-				VALUES($1::uuid, $2, $3, 'Platform Owner', 'active')
-				RETURNING id::text
-			`, newID, emailCol, phoneCol).Scan(&userID)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to create user for owner: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("Created active user %s for identifier %s\n", userID, normID)
-		} else {
-			fmt.Fprintf(os.Stderr, "Failed to query user: %v\n", err)
-			os.Exit(1)
-		}
-	}
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -86,6 +56,23 @@ func main() {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// One deployment bootstrap, including concurrent invocations. Recovery uses
+	// the existing authenticated account recovery flow, never a second bootstrap.
+	if _, err = tx.Exec(ctx, `LOCK TABLE app.platform_role_assignments IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	var used bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.platform_role_assignments WHERE role='platform_owner')`).Scan(&used); err != nil || used {
+		fmt.Fprintln(os.Stderr, "Owner bootstrap has already been used or could not be checked.")
+		os.Exit(1)
+	}
+	normID := auth.NormalizeIdentifier(identifier)
+	userID, err := eligibleOwner(ctx, tx, normID)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Owner must first sign in and complete MFA within the last 10 minutes.")
+		os.Exit(1)
+	}
 	// Assign platform_owner role
 	_, err = tx.Exec(ctx, `
 		INSERT INTO app.platform_role_assignments(user_id, role, granted_by, reason)
@@ -127,8 +114,8 @@ func main() {
 		VALUES($1::uuid, 'platform_owner.bootstrapped', 'user', $1::uuid, 'success', 'high', jsonb_build_object('identifier', $2::text, 'reason', $3::text))
 	`, userID, normID, reason)
 	if err != nil {
-		// Log but continue if audit_events schema details vary
-		fmt.Fprintf(os.Stderr, "Notice: could not record audit event directly: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Owner audit could not be recorded: %v\n", err)
+		os.Exit(1)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -137,4 +124,18 @@ func main() {
 	}
 
 	fmt.Printf("Successfully bootstrapped platform owner %s (%s) in solo_owner mode.\n", userID, normID)
+}
+
+func eligibleOwner(ctx context.Context, tx pgx.Tx, identifier string) (string, error) {
+	var userID string
+	// Lock the eligible account and session until the grant commits, so a
+	// concurrent suspension or session revocation cannot invalidate this check.
+	err := tx.QueryRow(ctx, `SELECT u.id::text FROM app.users u
+      JOIN app.sessions s ON s.user_id=u.id
+      WHERE (u.normalized_email=$1 OR u.normalized_phone=$1) AND u.status='active'
+        AND s.authentication_level='AAL2' AND s.revoked_at IS NULL
+        AND s.expires_at>clock_timestamp()
+        AND s.mfa_verified_at>clock_timestamp()-interval '10 minutes'
+      ORDER BY s.mfa_verified_at DESC LIMIT 1 FOR UPDATE OF u,s`, auth.NormalizeIdentifier(identifier)).Scan(&userID)
+	return userID, err
 }

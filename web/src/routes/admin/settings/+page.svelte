@@ -1,7 +1,25 @@
 <script lang="ts">
  import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
  import {onMount} from 'svelte';
- import {csrfHeaders,idempotencyKey} from '$lib/api/client';
+ import {adminGet,adminPost,localTime,lagosISO} from '$lib/admin-client';
+ import {LatestRequest,record,rows,text} from '$lib/api/reliable';
+ import {MutationIntent} from '$lib/api/mutation';
+ const reads=new LatestRequest();
+ const intents=new Map<string,MutationIntent>();
+ function write(url:string,payload:unknown,decode:(value:unknown)=>unknown){let intent=intents.get(url);if(!intent){intent=new MutationIntent('admin-business-policy',url);intents.set(url,intent);}return intent.run(payload,decode);}
+ function integer(value:unknown){if(typeof value!=='number'||!Number.isSafeInteger(value))throw new Error('Policy number was incomplete');return value;}
+ function policyData(value:unknown):Data {
+  const body=record(value),current=record(body.current);integer(current.revision);text(body.actor_id);
+  const fields=rows('fields',value=>{const field=record(value);for(const key of ['key','label','group','kind','help'])text(field[key]);if(!['boolean','text','number','money'].includes(field.kind as string))throw new Error('Unknown setting type');integer(field.min);integer(field.max);return field as Field;})(body);
+  if(new Set(fields.map(f=>f.key)).size!==fields.length)throw new Error('Duplicate settings');
+  const validateValues=(value:unknown)=>{const values=record(value);for(const field of fields){const entry=values[field.key];if(field.kind==='boolean'){if(typeof entry!=='boolean')throw new Error('Policy switch was incomplete');}else if(field.kind==='text'){text(entry);}else{integer(entry);}}return values;};
+  validateValues(current.values);record(body.deployment_limits);Object.values(record(body.actors)).forEach(text);
+  for(const key of ['can_propose','can_approve'])if(body[key]!==undefined&&typeof body[key]!=='boolean')throw new Error('Policy permissions were incomplete');
+  rows('changes',value=>{const change=record(value);for(const key of ['id','proposed_by','reason','effective_at','created_at','state'])text(change[key]);integer(change.revision);integer(change.base_revision);validateValues(change.values);validateValues(change.before_values);if(change.decided_by!==null)text(change.decided_by);return change;})(body);
+  rows('events',value=>{const event=record(value);for(const key of ['change_id','actor_id','action','reason','occurred_at'])text(event[key]);return event;})(body);
+  return body as Data;
+ }
+ function impactData(value:unknown){const body=record(value);integer(body.base_revision);text(body.note);if(!Array.isArray(body.effects))throw new Error('Policy effects were incomplete');body.effects.forEach(text);for(const count of Object.values(record(body.counts)))integer(count);return body;}
  import {formatKobo,parseNaira} from '$lib/money';
  type Values=Record<string,number|boolean|string>;
  type Field={key:string;label:string;group:string;kind:string;min:number;max:number;help:string};
@@ -11,29 +29,28 @@
  let preview:any=$state(null);let units:Record<string,string>=$state({});
  let data:Data|null=$state(null),draft:Values=$state({}),reason=$state(''),effective=$state(''),notes:Record<string,string>=$state({});
  let loading=$state(true),busy=$state(false),error=$state(''),message=$state(''),proposalID=$state(crypto.randomUUID());
- let isPlatformOwner=$state(false),governanceMode=$state('solo_owner');
+ let isPlatformOwner=$state(false),governanceMode=$state('unavailable');
  let changed=$derived.by(()=>data?data.fields.filter(f=>draft[f.key]!==data?.current.values[f.key]):[]);
  let blocked=$derived.by(()=>data?.changes.some(c=>c.state==='pending'||(c.state==='approved'&&new Date(c.effective_at).getTime()>Date.now()))??false);
  function decimal(value:Values[string]){const n=BigInt(Number(value));return `${n/100n}.${(n%100n).toString().padStart(2,'0')}`}
  function scaled(f:Field){return f.kind==='money'||f.key.endsWith('_bps')}
  function label(f:Field){return f.label.replace('(kobo)','(₦)').replace('(basis points)','(%)')}
  function actor(id:string){return id===data?.actor_id?'you':data?.actors?.[id]||'Administrator'}
- async function impact(values:Values=draft,base=data?.current.revision){busy=true;error='';try{const r=await fetch('/api/v1/ops/business-policies/preview',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify({values,base_revision:base})});const b=await r.json();if(!r.ok)throw new Error(b.detail||'Preview unavailable');preview=b}catch(e){error=e instanceof Error?e.message:'Preview unavailable'}finally{busy=false}}
+ async function impact(values:Values=draft,base=data?.current.revision){if(busy)return;busy=true;error='';preview=null;try{preview=impactData(await adminPost('/api/v1/ops/business-policies/preview',{values,base_revision:base}))}catch(e){error=e instanceof Error?e.message:'Preview unavailable'}finally{busy=false}}
  function display(f:Field,value:Values[string]|undefined){if(value===undefined)return 'Unavailable';if(f.kind==='boolean')return value?'Enabled':'Disabled';if(f.kind==='money')return Number(value)===0?'No additional cap':formatKobo(Number(value));if(f.key.endsWith('_bps'))return `${Number(value)/100}%`;return String(value)||'No additional restriction'}
- function when(value:string){return new Intl.DateTimeFormat('en-NG',{dateStyle:'medium',timeStyle:'short',timeZone:'Africa/Lagos'}).format(new Date(value))}
+ function when(value:string){return localTime(value)}
  function status(c:Change){if(c.state!=='approved')return c.state;return c.revision===data?.current.revision?'active':new Date(c.effective_at).getTime()>Date.now()?'scheduled':'superseded'}
  function reset(){if(!data)return;draft={...data.current.values};units=Object.fromEntries(data.fields.filter(scaled).map(f=>[f.key,decimal(draft[f.key])]));preview=null;reason='';effective='';proposalID=crypto.randomUUID()}
- async function load(){loading=true;error='';try{const [r,caps,gov]=await Promise.all([fetch('/api/v1/ops/business-policies',{credentials:'include'}),fetch('/api/v1/ops/capabilities',{credentials:'include'}).then(x=>x.ok?x.json():{} as any),fetch('/api/v1/platform/capabilities',{credentials:'include'}).then(x=>x.ok?x.json():{} as any)]);const b=await r.json();if(!r.ok)throw new Error(b.detail||'Settings could not be loaded');data=b;isPlatformOwner=(caps as any).roles?.includes('platform_owner')||false;if((gov as any).governance_mode)governanceMode=(gov as any).governance_mode;reset()}catch(e){error=e instanceof Error?e.message:'Settings could not be loaded'}finally{loading=false}}
- async function post(path:string,body:unknown){const r=await fetch(path,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify(body)});const b=await r.json();if(!r.ok)throw new Error(b.detail||'That change could not be saved. Please try again.')}
- async function soloApprove(c:Change){if(!confirm('Confirm solo-owner self-approval for this policy proposal? This will be permanently recorded in the audit trail.'))return;busy=true;error='';message='';try{await post('/api/v1/ops/solo-owner/approve',{target_type:'policy',target_id:c.id,reason:notes[c.id]||'Solo-owner self-approval execution',confirm:true});await load();message='Solo-owner self-approval applied successfully.'}catch(e){error=e instanceof Error?e.message:'Solo-owner self-approval failed'}finally{busy=false}}
- async function propose(){if(!data)return;busy=true;error='';message='';try{for(const f of data.fields){if(f.kind==='number'||f.kind==='money'){const n=draft[f.key];if(typeof n!=='number'||!Number.isSafeInteger(n)||n<f.min||n>f.max)throw new Error(`Enter a whole number between ${f.min} and ${f.max} for ${label(f)}`)}}if(!effective)throw new Error('Choose an effective date');await post('/api/v1/ops/business-policies',{id:proposalID,base_revision:data.current.revision,values:draft,reason,effective_at:new Date(`${effective}:00+01:00`).toISOString()});await load();message='Proposal saved.'+(governanceMode==='solo_owner'&&isPlatformOwner?' You can self-approve as platform owner or wait for review.':' Another platform administrator must approve it before its effective date.')}catch(e){error=e instanceof Error?e.message:'Proposal could not be saved'}finally{busy=false}}
- async function decide(c:Change,action:string){busy=true;error='';message='';try{await post(`/api/v1/ops/business-policies/${c.id}/decision`,{action,reason:notes[c.id]||''});await load();message='Decision recorded.'}catch(e){error=e instanceof Error?e.message:'Decision could not be saved'}finally{busy=false}}
- onMount(load);
+ async function load(){const read=reads.begin();loading=true;error='';data=null;governanceMode='unavailable';isPlatformOwner=false;try{const [b,caps,gov]=await Promise.all([adminGet('/api/v1/ops/business-policies',read.signal),adminGet('/api/v1/ops/capabilities',read.signal),adminGet('/api/v1/ops/governance',read.signal)]);if(!read.current())return;if(!b.current?.values||!Array.isArray(b.fields)||!Array.isArray(b.changes)||!Array.isArray(b.events)||!['solo_owner','delegated_team'].includes(gov.governance?.mode))throw new Error('Settings and approval rules could not be verified.');if(!Array.isArray(caps.roles))throw new Error('Admin roles were incomplete');caps.roles.forEach(text);data=policyData(b);isPlatformOwner=caps.roles.includes('platform_owner');governanceMode=gov.governance.mode;reset()}catch(e){if(read.current())error=e instanceof Error?e.message:'Settings could not be loaded'}finally{if(read.current())loading=false}}
+ async function soloApprove(c:Change){if(busy)return;busy=true;error='';message='';try{await write('/api/v1/ops/solo-owner/approve',{target_type:'policy',target_id:c.id,reason:notes[c.id]||'',confirm:true},value=>{if(record(value).approved!==true)throw new Error('Approval was not confirmed');return true;});await load();message='Approved. The change is recorded.'}catch(e){error=e instanceof Error?e.message:'That approval was not saved.'}finally{busy=false}}
+ async function propose(){if(!data||busy)return;busy=true;error='';message='';try{for(const f of data.fields){if(f.kind==='number'||f.kind==='money'){const n=draft[f.key];if(typeof n!=='number'||!Number.isSafeInteger(n)||n<f.min||n>f.max)throw new Error(`Enter a whole number between ${f.min} and ${f.max} for ${label(f)}`)}}if(!effective)throw new Error('Choose an effective date');const expectedID=proposalID;await write('/api/v1/ops/business-policies',{id:expectedID,base_revision:data.current.revision,values:draft,reason,effective_at:lagosISO(effective)},value=>{if(record(value).id!==expectedID)throw new Error('Proposal was not confirmed');return true;});await load();message='Proposal saved.'+(governanceMode==='solo_owner'&&isPlatformOwner?' You can approve it yourself below.':' A second administrator must approve it before its effective date.')}catch(e){error=e instanceof Error?e.message:'Proposal could not be saved'}finally{busy=false}}
+ async function decide(c:Change,action:string){if(busy)return;busy=true;error='';message='';try{await write(`/api/v1/ops/business-policies/${encodeURIComponent(c.id)}/decision`,{action,reason:notes[c.id]||''},value=>{if(record(value).status!=='recorded')throw new Error('Decision was not confirmed');return true;});await load();message='Decision recorded.'}catch(e){error=e instanceof Error?e.message:'Decision could not be saved'}finally{busy=false}}
+ onMount(()=>{void load();return()=>reads.cancel();});
 </script>
 <svelte:head><title>Business settings — Kredit admin</title></svelte:head>
 <main class="shell workspace">
  <p class="eyebrow">Administration / Business settings</p><h1>Business settings</h1><VerifyIdentity/>
- <p>Review the current policy, propose a change and set when it takes effect. Every change needs approval from a second platform administrator.</p>
+ <p>Review the current policy, propose a change and set when it takes effect. {governanceMode === 'solo_owner' ? 'You approve your own proposals, with a fresh authenticator code and a written reason.' : governanceMode === 'delegated_team' ? 'A second administrator approves it before its effective date.' : 'Approval rules are not available yet.'}</p>
  <p class="notice">Existing offers keep the fee terms recorded with them. Provider approvals and deployment limits still apply. Reconciliation keeps running even when new collections are paused.</p>
  {#if error}<p role="alert" class="error">{error}</p>{/if}{#if message}<p role="status">{message}</p>{/if}
  <button onclick={load} disabled={loading||busy}>Refresh settings</button>
@@ -67,18 +84,18 @@
  <button disabled={busy} onclick={()=>impact(c.values,c.base_revision)}>Preview this proposal’s impact</button><details open={c.state==='pending'}><summary>Review proposed values</summary><div class="table-wrap"><table><thead><tr><th>Setting</th><th>Previous</th><th>Proposed</th></tr></thead><tbody>{#each data.fields as f}<tr class:changed={c.values[f.key]!==(c.before_values??data.current.values)[f.key]}><th>{label(f)}</th><td>{display(f,(c.before_values??data.current.values)[f.key])}</td><td>{display(f,c.values[f.key])}</td></tr>{/each}</tbody></table></div></details>
  {#each data.events.filter(e=>e.change_id===c.id) as event}<p class="history">{when(event.occurred_at)} · {actor(event.actor_id)} · {event.action}: {event.reason}</p>{/each}
  {#if c.state==='pending'||status(c)==='scheduled'}
- <label for={`decision-${c.id}`}>Decision notes</label><textarea id={`decision-${c.id}`} bind:value={notes[c.id]} minlength="8" maxlength="2000"></textarea>
+ <label for={`decision-${c.id}`}>Decision notes</label><textarea disabled={busy} id={`decision-${c.id}`} bind:value={notes[c.id]} minlength="8" maxlength="2000"></textarea>
  {#if c.state==='pending'&&c.proposed_by!==data.actor_id&&data.can_approve!==false}<button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'approve')}>Approve exactly this</button><button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'reject')}>Reject proposal</button>{/if}
  {#if c.state==='pending'&&c.proposed_by===data.actor_id}
   {#if isPlatformOwner&&governanceMode==='solo_owner'}
-   <button class="solo-approve-btn" disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>soloApprove(c)}>Self-Approve (Solo Owner)</button>
+   <button class="primary" disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>soloApprove(c)}>Approve my own change</button>
   {:else}
    <p>Another platform administrator must approve your proposal.</p>
   {/if}
  {/if}
  <button disabled={busy||(notes[c.id]||'').trim().length<8} onclick={()=>decide(c,'cancel')}>Cancel change</button>
  {/if}</article>{/each}
- <details><summary>Protected deployment controls</summary><p>These are not managed here: provider connections, credentials, certification evidence, live-money enablement, identity integrations, retention approval, currency and accounting safeguards. They go through deployment and approval instead. Large corrections and accepted-schedule amendments each have their own workflow.</p></details>
+ <details><summary>Protected deployment controls</summary><p>The platform owner manages provider connections, credentials and launch approval references in Platform settings. Runtime connection changes apply after the API and worker restart. Infrastructure, retention, currency and accounting safeguards require their separate deployment or review process. Large corrections and accepted-schedule amendments each have their own workflow.</p><a href="/admin/platform-settings">Open platform settings →</a></details>
  {/if}
 </main>
 <style>

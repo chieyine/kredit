@@ -42,6 +42,11 @@ func SafePath(rawPath string) string {
 		"documents":         true,
 		"webhooks":          true,
 		"uploads":           true,
+		"receipts":          true,
+		"payment-intents":   true,
+		"receipt":           true,
+		"pay":               true,
+		"c":                 true,
 	}
 	for index := range segments {
 		if index > 0 && sensitiveParent[segments[index-1]] && segments[index] != "" {
@@ -56,8 +61,7 @@ func SafePath(rawPath string) string {
 func SafeAttributes(attributes map[string]string) map[string]string {
 	result := make(map[string]string, len(attributes))
 	for key, value := range attributes {
-		lower := strings.ToLower(key)
-		if strings.Contains(lower, "token") || strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "otp") || strings.Contains(lower, "pin") || strings.Contains(lower, "bvn") || strings.Contains(lower, "nin") || strings.Contains(lower, "phone") || strings.Contains(lower, "email") || strings.Contains(lower, "account") {
+		if sensitiveMetadataKey(strings.ToLower(key)) {
 			result[key] = "[redacted]"
 			continue
 		}

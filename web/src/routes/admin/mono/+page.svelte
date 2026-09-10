@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { readJSON } from '$lib/api/client';
+	import { checkedJSON, publicError, record, text } from '$lib/api/reliable';
 
 	type MonoStatus = {
 		provider: string;
@@ -18,8 +18,6 @@
 		ready_for_configured_environment: boolean;
 		blockers: string[];
 	};
-	type SettingsResponse = { mono?: MonoStatus };
-
 	let mono = $state<MonoStatus | null>(null);
 	let loading = $state(true);
 	let error = $state('');
@@ -28,11 +26,18 @@
 		loading = true;
 		error = '';
 		try {
-			const body = await readJSON<SettingsResponse>('/api/v1/ops/business-policies');
-			mono = body.mono ?? null;
-			if (!mono) error = 'Mono configuration is not available in this deployment.';
+			mono = await checkedJSON('/api/v1/ops/business-policies', body => {
+				const value = record(record(body).mono);
+				for (const key of ['provider', 'environment', 'mode', 'redirect_url']) text(value[key]);
+				for (const key of ['sweep_enabled', 'partial_sweep_enabled', 'automatic_collection_enabled', 'automatic_retry_enabled', 'secret_key_configured', 'webhook_secret_configured', 'redirect_url_configured', 'provider_certification_recorded', 'ready_for_configured_environment']) {
+					if (typeof value[key] !== 'boolean') throw new Error('Incomplete Mono status');
+				}
+				if (!Array.isArray(value.blockers)) throw new Error('Incomplete Mono blockers');
+				value.blockers.forEach(text);
+				return value as MonoStatus;
+			});
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Mono configuration could not be loaded.';
+			error = publicError(cause, 'the Mono configuration');
 		} finally {
 			loading = false;
 		}
@@ -68,11 +73,11 @@
 		</section>
 		{#if mono.redirect_url}<section class="card"><h2>Redirect</h2><code>{mono.redirect_url}</code></section>{/if}
 		<section class="card"><h2>What still needs attention</h2>{#if mono.blockers.length}<ul>{#each mono.blockers as blocker}<li>{blocker}</li>{/each}</ul>{:else}<p>No technical configuration blocker is currently reported for this environment.</p>{/if}</section>
-		<section class="actions"><div><h2>Operational controls</h2><p>Collections, automatic collection, retry policy, notice periods, fees and pilot limits are managed through the audited settings workflow.</p></div><a class="primary" href="/admin/settings">Open business settings →</a></section>
-		<section class="security"><strong>Why keys are not displayed here</strong><p>Provider credentials and webhook secrets are write-only deployment secrets. Showing them in a browser would turn an admin account compromise into a provider-credential compromise. Admin therefore reports configured/missing state while the secret itself stays outside page data, logs and API responses.</p></section>
+		<section class="actions"><div><h2>Operational controls</h2><p><a href="/admin/customer-registrations">Review interrupted customer registrations</a></p><p>Collections, automatic collection, retry policy, notice periods, fees and pilot limits are managed through the audited settings workflow.</p></div><a class="primary" href="/admin/settings">Open business settings →</a></section>
+		<section class="security"><strong>Manage the connection</strong><p>The platform owner can replace Mono credentials in Platform settings → Connections. Provider certification is recorded under Launch approvals and provider limits. Values are encrypted and remain hidden. Saved changes apply after the API and worker restart; this screen shows the configuration currently running.</p><a href="/admin/platform-settings">Open connection settings →</a></section>
 	{/if}
 </main>
 
 <style>
-	.mono-page>header{display:flex;justify-content:space-between;align-items:end;gap:2rem;padding:2.5rem 0 2rem;border-bottom:3px solid #17181b}.mono-page h1{margin:.5rem 0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3rem,7vw,5.5rem);font-weight:500;line-height:.92;letter-spacing:-.055em}.mono-page header button{padding:.75rem 1rem;border:1px solid #17181b;background:#fff;font-weight:800}.status-card{display:grid;grid-template-columns:1fr 1fr;margin:2rem 0;background:#17181b;color:#fff}.status-card>div{display:grid;gap:.45rem;padding:1.5rem;border-right:1px solid #555}.status-card.ready{background:#153f2f}.status-card span,.grid span{font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.status-card strong{font-family:Georgia,serif;font-size:2rem;font-weight:500;text-transform:capitalize}.status-card small{color:#d6d3cc}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-left:1px solid var(--color-border);border-top:1px solid var(--color-border)}.grid article{display:grid;gap:.75rem;min-height:6.5rem;padding:1rem;border-right:1px solid var(--color-border);border-bottom:1px solid var(--color-border);background:#fffdf8}.grid strong{align-self:end}.card,.actions,.security{margin-top:1.5rem;padding:1.25rem;border:1px solid var(--color-border);background:#fffdf8}.card code{overflow-wrap:anywhere}.actions{display:flex;justify-content:space-between;align-items:center;gap:2rem}.actions p{max-width:40rem;color:var(--color-muted)}.security{border-left:4px solid #2738d6;background:#eef1ff}.security p{max-width:55rem;margin-bottom:0;line-height:1.65}.error{color:#b42318}@media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.actions,.mono-page>header{align-items:flex-start;flex-direction:column}}@media(max-width:480px){.status-card,.grid{grid-template-columns:1fr}.status-card>div{border-right:0;border-bottom:1px solid #555}}
+	.mono-page>header{display:flex;justify-content:space-between;align-items:end;gap:2rem;padding:2.5rem 0 2rem;border-bottom:3px solid #17181b}.mono-page h1{margin:.5rem 0;font-family:var(--font-serif);font-size:clamp(3rem,7vw,5.5rem);font-weight:500;line-height:.92;letter-spacing:-.055em}.mono-page header button{padding:.75rem 1rem;border:1px solid #17181b;background:#fff;font-weight:800}.status-card{display:grid;grid-template-columns:1fr 1fr;margin:2rem 0;background:#17181b;color:#fff}.status-card>div{display:grid;gap:.45rem;padding:1.5rem;border-right:1px solid #555}.status-card.ready{background:#153f2f}.status-card span,.grid span{font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.status-card strong{font-family:var(--font-serif);font-size:2rem;font-weight:500;text-transform:capitalize}.status-card small{color:#d6d3cc}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-left:1px solid var(--color-border);border-top:1px solid var(--color-border)}.grid article{display:grid;gap:.75rem;min-height:6.5rem;padding:1rem;border-right:1px solid var(--color-border);border-bottom:1px solid var(--color-border);background:#fffdf8}.grid strong{align-self:end}.card,.actions,.security{margin-top:1.5rem;padding:1.25rem;border:1px solid var(--color-border);background:#fffdf8}.card code{overflow-wrap:anywhere}.actions{display:flex;justify-content:space-between;align-items:center;gap:2rem}.actions p{max-width:40rem;color:var(--color-muted)}.security{border-left:4px solid #2738d6;background:#eef1ff}.security p{max-width:55rem;margin-bottom:0;line-height:1.65}.error{color:#b42318}@media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.actions,.mono-page>header{align-items:flex-start;flex-direction:column}}@media(max-width:480px){.status-card,.grid{grid-template-columns:1fr}.status-card>div{border-right:0;border-bottom:1px solid #555}}
 </style>

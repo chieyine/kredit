@@ -39,18 +39,20 @@ type Service interface {
 }
 
 func (s *PostgresStore) VerifyAndAttachIdentifier(userID, challengeID, code, channel, identifier string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	identifier = NormalizeIdentifier(identifier)
 	channel = strings.ToLower(strings.TrimSpace(channel))
 	if userID == "" || identifier == "" || (channel != "email" && channel != "phone") {
 		return errors.New("valid user and contact are required")
 	}
 	now := s.now()
-	tx, err := s.pool.Begin(context.Background())
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if _, err = tx.Exec(context.Background(), `SELECT set_config('app.current_user_id',$1,true)`, userID); err != nil {
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, userID); err != nil {
 		return fmt.Errorf("set contact verification context: %w", err)
 	}
 	var targetType string
@@ -58,17 +60,17 @@ func (s *PostgresStore) VerifyAndAttachIdentifier(userID, challengeID, code, cha
 	var attempts int
 	var expires time.Time
 	var consumed *time.Time
-	if err = tx.QueryRow(context.Background(), `SELECT target_type,target_hash,code_hmac,attempt_count,expires_at,consumed_at FROM app.otp_challenges WHERE id=$1 FOR UPDATE`, challengeID).Scan(&targetType, &targetHash, &codeHash, &attempts, &expires, &consumed); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT target_type,target_hash,code_hmac,attempt_count,expires_at,consumed_at FROM app.otp_challenges WHERE id=$1 FOR UPDATE`, challengeID).Scan(&targetType, &targetHash, &codeHash, &attempts, &expires, &consumed); err != nil {
 		return errors.New("otp challenge is invalid or expired")
 	}
 	if consumed != nil || !now.Before(expires) || attempts >= 5 || targetType != channel || !equalBytes(targetHash, s.hashTargetBytes(channel, identifier)) {
 		return errors.New("otp challenge is invalid or expired")
 	}
-	if _, err = tx.Exec(context.Background(), `UPDATE app.otp_challenges SET attempt_count=attempt_count+1 WHERE id=$1`, challengeID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE app.otp_challenges SET attempt_count=attempt_count+1 WHERE id=$1`, challengeID); err != nil {
 		return err
 	}
 	if !hmacEqual(codeHash, s.hashCodeBytes(strings.TrimSpace(code))) {
-		_ = tx.Commit(context.Background())
+		_ = tx.Commit(ctx)
 		return errors.New("otp code is invalid")
 	}
 	column := "normalized_email"
@@ -76,19 +78,19 @@ func (s *PostgresStore) VerifyAndAttachIdentifier(userID, challengeID, code, cha
 		column = "normalized_phone"
 	}
 	var conflict bool
-	if err = tx.QueryRow(context.Background(), `SELECT EXISTS(SELECT 1 FROM app.users WHERE `+column+`=$1 AND id<>$2)`, identifier, userID).Scan(&conflict); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.users WHERE `+column+`=$1 AND id<>$2)`, identifier, userID).Scan(&conflict); err != nil {
 		return err
 	}
 	if conflict {
 		return errors.New("contact is already attached to another account")
 	}
-	if _, err = tx.Exec(context.Background(), `UPDATE app.users SET `+column+`=$2 WHERE id=$1`, userID, identifier); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE app.users SET `+column+`=$2 WHERE id=$1`, userID, identifier); err != nil {
 		return fmt.Errorf("attach verified contact: %w", err)
 	}
-	if _, err = tx.Exec(context.Background(), `UPDATE app.otp_challenges SET consumed_at=$2 WHERE id=$1`, challengeID, now); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE app.otp_challenges SET consumed_at=$2 WHERE id=$1`, challengeID, now); err != nil {
 		return err
 	}
-	return tx.Commit(context.Background())
+	return tx.Commit(ctx)
 }
 
 var _ Service = (*Store)(nil)
@@ -107,7 +109,8 @@ type PostgresStore struct {
 var _ Service = (*PostgresStore)(nil)
 
 func (s *PostgresStore) UserByID(userID string) (User, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return User{}, errors.New("user not found")
@@ -153,6 +156,8 @@ func NewPostgresStoreWithKeys(pool *pgxpool.Pool, tokenHashKey, otpHMACKey, fiel
 }
 
 func (s *PostgresStore) RequestOTP(identifier, channel, purpose string) (OTPChallenge, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	identifier = NormalizeIdentifier(identifier)
 	channel = strings.ToLower(strings.TrimSpace(channel))
 	purpose = strings.ToLower(strings.TrimSpace(purpose))
@@ -172,18 +177,18 @@ func (s *PostgresStore) RequestOTP(identifier, channel, purpose string) (OTPChal
 	if err != nil {
 		return OTPChallenge{}, "", err
 	}
-	tx, err := s.pool.Begin(context.Background())
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return OTPChallenge{}, "", err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 	// Serialize sends for the same target across API replicas so the cooldown
 	// cannot be bypassed by concurrent requests.
-	if _, err := tx.Exec(context.Background(), `SELECT pg_advisory_xact_lock(hashtextextended(encode($1, 'hex'), 0))`, targetHash); err != nil {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(encode($1, 'hex'), 0))`, targetHash); err != nil {
 		return OTPChallenge{}, "", fmt.Errorf("lock otp target: %w", err)
 	}
 	var cooldown bool
-	if err := tx.QueryRow(context.Background(), `
+	if err := tx.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM app.otp_challenges
 			WHERE target_hash = $1 AND expires_at > $2 AND last_sent_at > $3
@@ -194,14 +199,14 @@ func (s *PostgresStore) RequestOTP(identifier, channel, purpose string) (OTPChal
 		return OTPChallenge{}, "", errors.New("otp resend cooldown active")
 	}
 	var challengeID string
-	if err := tx.QueryRow(context.Background(), `
+	if err := tx.QueryRow(ctx, `
 		INSERT INTO app.otp_challenges
 			(target_type, target_hash, target_ciphertext, purpose, code_hmac, expires_at, last_sent_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id::text`, channel, targetHash, targetCiphertext, purpose, s.hashCodeBytes(code), now.Add(10*time.Minute), now).Scan(&challengeID); err != nil {
 		return OTPChallenge{}, "", fmt.Errorf("create otp challenge: %w", err)
 	}
-	if err := tx.Commit(context.Background()); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return OTPChallenge{}, "", fmt.Errorf("commit otp challenge: %w", err)
 	}
 	return OTPChallenge{ID: challengeID, TargetType: channel, TargetHash: hex.EncodeToString(targetHash), TargetValue: identifier, Purpose: purpose, CodeHash: s.hashCodeBytes(code), ExpiresAt: now.Add(10 * time.Minute), LastSentAt: now}, code, nil
@@ -219,18 +224,20 @@ func (s *PostgresStore) VerifyOTPForTarget(challengeID, code, deviceLabel, chann
 }
 
 func (s *PostgresStore) verifyOTP(challengeID, code, deviceLabel, expectedChannel, expectedIdentifier string) (User, Session, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	now := s.now()
-	tx, err := s.pool.Begin(context.Background())
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return User{}, Session{}, "", err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 	var targetType string
 	var targetHash, targetCiphertext, codeHash []byte
 	var attempts int
 	var expiresAt time.Time
 	var consumedAt *time.Time
-	if err := tx.QueryRow(context.Background(), `
+	if err := tx.QueryRow(ctx, `
 		SELECT target_type, target_hash, target_ciphertext, code_hmac, attempt_count, expires_at, consumed_at
 		FROM app.otp_challenges WHERE id = $1 FOR UPDATE`, challengeID).Scan(&targetType, &targetHash, &targetCiphertext, &codeHash, &attempts, &expiresAt, &consumedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -247,11 +254,11 @@ func (s *PostgresStore) verifyOTP(challengeID, code, deviceLabel, expectedChanne
 	if attempts >= 5 {
 		return User{}, Session{}, "", errors.New("otp challenge is locked")
 	}
-	if _, err := tx.Exec(context.Background(), `UPDATE app.otp_challenges SET attempt_count = attempt_count + 1 WHERE id = $1`, challengeID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE app.otp_challenges SET attempt_count = attempt_count + 1 WHERE id = $1`, challengeID); err != nil {
 		return User{}, Session{}, "", fmt.Errorf("record otp attempt: %w", err)
 	}
 	if !hmacEqual(codeHash, s.hashCodeBytes(strings.TrimSpace(code))) {
-		if err := tx.Commit(context.Background()); err != nil {
+		if err := tx.Commit(ctx); err != nil {
 			return User{}, Session{}, "", fmt.Errorf("commit otp attempt: %w", err)
 		}
 		return User{}, Session{}, "", errors.New("otp code is invalid")
@@ -261,20 +268,20 @@ func (s *PostgresStore) verifyOTP(challengeID, code, deviceLabel, expectedChanne
 		return User{}, Session{}, "", errors.New("otp challenge target is unavailable")
 	}
 	identifier := string(identifierBytes)
-	user, err := s.findOrCreateUserTx(context.Background(), tx, identifier, targetType, now)
+	user, err := s.findOrCreateUserTx(ctx, tx, identifier, targetType, now)
 	if err != nil {
 		return User{}, Session{}, "", err
 	}
 	if user.Status != "active" {
 		return User{}, Session{}, "", errors.New("user is inactive")
 	}
-	if _, err := tx.Exec(context.Background(), `UPDATE app.otp_challenges SET consumed_at = $2 WHERE id = $1`, challengeID, now); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE app.otp_challenges SET consumed_at = $2 WHERE id = $1`, challengeID, now); err != nil {
 		return User{}, Session{}, "", fmt.Errorf("consume otp challenge: %w", err)
 	}
-	if _, err := tx.Exec(context.Background(), `SELECT set_config('app.current_user_id', $1, true)`, user.ID); err != nil {
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id', $1, true)`, user.ID); err != nil {
 		return User{}, Session{}, "", fmt.Errorf("set auth context: %w", err)
 	}
-	if _, err := tx.Exec(context.Background(), `UPDATE app.users SET last_authenticated_at = $2 WHERE id = $1`, user.ID, now); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE app.users SET last_authenticated_at = $2 WHERE id = $1`, user.ID, now); err != nil {
 		return User{}, Session{}, "", fmt.Errorf("update authenticated user: %w", err)
 	}
 	token, err := randomToken()
@@ -282,35 +289,37 @@ func (s *PostgresStore) verifyOTP(challengeID, code, deviceLabel, expectedChanne
 		return User{}, Session{}, "", err
 	}
 	var session Session
-	if err := tx.QueryRow(context.Background(), `
+	if err := tx.QueryRow(ctx, `
 		INSERT INTO app.sessions (user_id, token_hash, device_label, authentication_level, created_at, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id::text, created_at, expires_at`, user.ID, s.hashTokenBytes(token), strings.TrimSpace(deviceLabel), AAL1, now, now.Add(30*24*time.Hour)).Scan(&session.ID, &session.CreatedAt, &session.ExpiresAt); err != nil {
 		return User{}, Session{}, "", fmt.Errorf("create session: %w", err)
 	}
 	session.UserID, session.AuthenticationLevel, session.DeviceLabel = user.ID, AAL1, strings.TrimSpace(deviceLabel)
-	if err := tx.Commit(context.Background()); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return User{}, Session{}, "", fmt.Errorf("commit otp verification: %w", err)
 	}
 	return user, session, token, nil
 }
 
 func (s *PostgresStore) FindOrCreateUser(identifier, channel string) (User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	identifier = NormalizeIdentifier(identifier)
 	channel = strings.ToLower(strings.TrimSpace(channel))
 	if identifier == "" || (channel != "phone" && channel != "email") {
 		return User{}, errors.New("valid identifier and channel are required")
 	}
-	tx, err := s.pool.Begin(context.Background())
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return User{}, err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	user, err := s.findOrCreateUserTx(context.Background(), tx, identifier, channel, s.now())
+	defer func() { _ = tx.Rollback(ctx) }()
+	user, err := s.findOrCreateUserTx(ctx, tx, identifier, channel, s.now())
 	if err != nil {
 		return User{}, err
 	}
-	if err := tx.Commit(context.Background()); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return User{}, fmt.Errorf("commit user: %w", err)
 	}
 	return user, nil
@@ -330,11 +339,13 @@ func (s *PostgresStore) findOrCreateUserTx(ctx context.Context, tx pgx.Tx, ident
 }
 
 func (s *PostgresStore) SessionFromToken(token string) (Session, User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	var session Session
 	var user User
 	var email, phone, displayName, status string
 	var revokedAt *time.Time
-	if err := s.pool.QueryRow(context.Background(), `
+	if err := s.pool.QueryRow(ctx, `
 		SELECT session_id::text, user_id::text, authentication_level, COALESCE(device_label,''), session_created_at, session_expires_at, session_last_seen_at, session_revoked_at,
 		       COALESCE(email,''), COALESCE(phone,''), COALESCE(display_name,''), user_status, user_created_at, COALESCE(last_authenticated_at, 'epoch')
 		FROM app.session_by_token_hash($1)`, s.hashTokenBytes(token)).Scan(&session.ID, &session.UserID, &session.AuthenticationLevel, &session.DeviceLabel, &session.CreatedAt, &session.ExpiresAt, &session.LastSeenAt, &revokedAt, &email, &phone, &displayName, &status, &user.CreatedAt, &user.LastAuthenticatedAt); err != nil {
@@ -354,20 +365,20 @@ func (s *PostgresStore) SessionFromToken(token string) (Session, User, error) {
 		return Session{}, User{}, errors.New("session is invalid or expired")
 	}
 	user.ID, user.Email, user.Phone, user.DisplayName, user.Status = session.UserID, email, phone, displayName, status
-	tx, txErr := s.beginUserTx(user.ID)
+	tx, txErr := s.beginUserTx(ctx, user.ID)
 	if txErr == nil {
 		var verifiedAt *time.Time
-		if queryErr := tx.QueryRow(context.Background(), `SELECT mfa_verified_at FROM app.sessions WHERE id = $1`, session.ID).Scan(&verifiedAt); queryErr == nil && verifiedAt != nil {
+		if queryErr := tx.QueryRow(ctx, `SELECT mfa_verified_at FROM app.sessions WHERE id = $1`, session.ID).Scan(&verifiedAt); queryErr == nil && verifiedAt != nil {
 			session.MFAVerifiedAt = verifiedAt.UTC()
 		}
 		// Refresh last-seen at most once per interval so the idle deadline does
 		// not add a write to every authenticated request.
 		if now.Sub(lastSeen) >= sessionIdleRefresh {
-			if _, execErr := tx.Exec(context.Background(), `SELECT app.touch_session($1, $2)`, session.ID, now); execErr == nil {
+			if _, execErr := tx.Exec(ctx, `SELECT app.touch_session($1, $2)`, session.ID, now); execErr == nil {
 				session.LastSeenAt = now
 			}
 		}
-		_ = tx.Commit(context.Background())
+		_ = tx.Commit(ctx)
 	}
 	if user.LastAuthenticatedAt.Equal(time.Unix(0, 0).UTC()) {
 		user.LastAuthenticatedAt = time.Time{}
@@ -376,37 +387,43 @@ func (s *PostgresStore) SessionFromToken(token string) (Session, User, error) {
 }
 
 func (s *PostgresStore) RevokeSession(token string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	session, user, err := s.SessionFromToken(token)
 	if err != nil {
 		return errors.New("session not found")
 	}
-	tx, err := s.beginUserTx(user.ID)
+	tx, err := s.beginUserTx(ctx, user.ID)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if _, err := tx.Exec(context.Background(), `UPDATE app.sessions SET revoked_at = $2 WHERE id = $1`, session.ID, s.now()); err != nil {
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `UPDATE app.sessions SET revoked_at = $2 WHERE id = $1`, session.ID, s.now()); err != nil {
 		return fmt.Errorf("revoke session: %w", err)
 	}
-	if err := tx.Commit(context.Background()); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit session revocation: %w", err)
 	}
 	return nil
 }
 
 func (s *PostgresStore) RevokeAllSessions(userID string) error {
-	tx, err := s.beginUserTx(userID)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	tx, err := s.beginUserTx(ctx, userID)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if _, err = tx.Exec(context.Background(), `UPDATE app.sessions SET revoked_at=$2 WHERE user_id=$1 AND revoked_at IS NULL`, userID, s.now()); err != nil {
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `UPDATE app.sessions SET revoked_at=$2 WHERE user_id=$1 AND revoked_at IS NULL`, userID, s.now()); err != nil {
 		return fmt.Errorf("revoke sessions: %w", err)
 	}
-	return tx.Commit(context.Background())
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) BeginTOTPEnrollment(userID string) (MFAMethod, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	if strings.TrimSpace(userID) == "" {
 		return MFAMethod{}, errors.New("verified MFA already exists or enrollment is unavailable")
 	}
@@ -419,13 +436,17 @@ func (s *PostgresStore) BeginTOTPEnrollment(userID string) (MFAMethod, error) {
 	if err != nil {
 		return MFAMethod{}, err
 	}
-	tx, err := s.beginUserTx(userID)
+	tx, err := s.beginUserTx(ctx, userID)
 	if err != nil {
 		return MFAMethod{}, err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	defer func() { _ = tx.Rollback(ctx) }()
+	var activeUser string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM app.users WHERE id=$1::uuid AND status='active' FOR SHARE`, userID).Scan(&activeUser); err != nil {
+		return MFAMethod{}, errors.New("active account is required for MFA enrollment")
+	}
 	var method MFAMethod
-	if err := tx.QueryRow(context.Background(), `
+	if err := tx.QueryRow(ctx, `
 		INSERT INTO app.mfa_methods (user_id, method_type, secret_ciphertext)
 		VALUES ($1, 'totp', $2)
         ON CONFLICT (user_id,method_type) WHERE revoked_at IS NULL
@@ -434,7 +455,7 @@ func (s *PostgresStore) BeginTOTPEnrollment(userID string) (MFAMethod, error) {
 		RETURNING id::text, user_id::text, method_type`, userID, ciphertext).Scan(&method.ID, &method.UserID, &method.Type); err != nil {
 		return MFAMethod{}, errors.New("verified MFA already exists or enrollment is unavailable")
 	}
-	if err := tx.Commit(context.Background()); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return MFAMethod{}, fmt.Errorf("commit mfa enrollment: %w", err)
 	}
 	method.Secret = secret
@@ -445,17 +466,23 @@ func (s *PostgresStore) BeginTOTPEnrollment(userID string) (MFAMethod, error) {
 // concurrent guesses cannot each read the same attempt count and slip past the
 // limit together.
 func (s *PostgresStore) VerifyTOTP(userID, code string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	var methodID string
 	var ciphertext []byte
 	var revokedAt, lockedUntil *time.Time
 	var failedAttempts int
 	var lastUsedCounter *int64
-	tx, err := s.beginUserTx(userID)
+	tx, err := s.beginUserTx(ctx, userID)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if err := tx.QueryRow(context.Background(), `SELECT id::text, secret_ciphertext, revoked_at, failed_attempts, locked_until, last_used_counter FROM app.mfa_methods WHERE user_id = $1 AND method_type = 'totp' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, userID).Scan(&methodID, &ciphertext, &revokedAt, &failedAttempts, &lockedUntil, &lastUsedCounter); err != nil || revokedAt != nil {
+	defer func() { _ = tx.Rollback(ctx) }()
+	var activeUser string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM app.users WHERE id=$1::uuid AND status='active' FOR SHARE`, userID).Scan(&activeUser); err != nil {
+		return errors.New("active account is required for MFA enrollment")
+	}
+	if err := tx.QueryRow(ctx, `SELECT id::text, secret_ciphertext, revoked_at, failed_attempts, locked_until, last_used_counter FROM app.mfa_methods WHERE user_id = $1 AND method_type = 'totp' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, userID).Scan(&methodID, &ciphertext, &revokedAt, &failedAttempts, &lockedUntil, &lastUsedCounter); err != nil || revokedAt != nil {
 		return errors.New("mfa method is not enrolled")
 	}
 	now := s.now()
@@ -472,10 +499,10 @@ func (s *PostgresStore) VerifyTOTP(userID, code string) error {
 			nextAttempts = 0
 			nextLock = now.Add(mfaLockDuration)
 		}
-		if _, execErr := tx.Exec(context.Background(), `UPDATE app.mfa_methods SET failed_attempts = $2, locked_until = $3 WHERE id = $1::uuid`, methodID, nextAttempts, nextLock); execErr != nil {
+		if _, execErr := tx.Exec(ctx, `UPDATE app.mfa_methods SET failed_attempts = $2, locked_until = $3 WHERE id = $1::uuid`, methodID, nextAttempts, nextLock); execErr != nil {
 			return fmt.Errorf("record mfa attempt: %w", execErr)
 		}
-		if commitErr := tx.Commit(context.Background()); commitErr != nil {
+		if commitErr := tx.Commit(ctx); commitErr != nil {
 			return fmt.Errorf("commit mfa attempt: %w", commitErr)
 		}
 		if locked {
@@ -483,17 +510,18 @@ func (s *PostgresStore) VerifyTOTP(userID, code string) error {
 		}
 		return errors.New("mfa code is invalid")
 	}
-	if _, err := tx.Exec(context.Background(), `UPDATE app.mfa_methods SET verified_at = $2, last_used_at = $2, last_used_counter = $3, failed_attempts = 0, locked_until = NULL WHERE user_id = $1 AND method_type = 'totp' AND revoked_at IS NULL`, userID, now, counter); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE app.mfa_methods SET verified_at = $2, last_used_at = $2, last_used_counter = $3, failed_attempts = 0, locked_until = NULL WHERE user_id = $1 AND method_type = 'totp' AND revoked_at IS NULL`, userID, now, counter); err != nil {
 		return fmt.Errorf("verify mfa method: %w", err)
 	}
-	if err := tx.Commit(context.Background()); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit mfa verification: %w", err)
 	}
 	return nil
 }
 
 func (s *PostgresStore) StepUpSession(token, code string) (Session, string, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Session{}, "", err
@@ -501,11 +529,15 @@ func (s *PostgresStore) StepUpSession(token, code string) (Session, string, erro
 	defer func() { _ = tx.Rollback(ctx) }()
 	var session Session
 	var userID string
-	if err = tx.QueryRow(ctx, `SELECT session_id::text,user_id::text,authentication_level,COALESCE(device_label,''),session_created_at,session_expires_at,session_last_seen_at FROM app.session_by_token_hash($1)`, s.hashTokenBytes(token)).Scan(&session.ID, &userID, &session.AuthenticationLevel, &session.DeviceLabel, &session.CreatedAt, &session.ExpiresAt, &session.LastSeenAt); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT session_id::text,user_id::text,authentication_level,COALESCE(device_label,''),session_created_at,session_expires_at,session_last_seen_at FROM app.session_by_token_hash($1) WHERE user_status='active'`, s.hashTokenBytes(token)).Scan(&session.ID, &userID, &session.AuthenticationLevel, &session.DeviceLabel, &session.CreatedAt, &session.ExpiresAt, &session.LastSeenAt); err != nil {
 		return Session{}, "", errors.New("session not found")
 	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, userID); err != nil {
 		return Session{}, "", err
+	}
+	var activeUser string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM app.users WHERE id=$1::uuid AND status='active' FOR SHARE`, userID).Scan(&activeUser); err != nil {
+		return Session{}, "", errors.New("session not found")
 	}
 	now := s.now()
 	var revokedAt *time.Time
@@ -563,49 +595,29 @@ func (s *PostgresStore) StepUpSession(token, code string) (Session, string, erro
 	return newSession, newToken, nil
 }
 
-func (s *PostgresStore) ElevateSession(token string) error {
-	session, user, err := s.SessionFromToken(token)
-	if err != nil {
-		return errors.New("session not found")
-	}
-	if !s.IsMFAEnrolled(user.ID) {
-		return errors.New("verified mfa is required")
-	}
-	tx, err := s.beginUserTx(user.ID)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if _, err := tx.Exec(context.Background(), `UPDATE app.sessions SET authentication_level = $2, mfa_verified_at = $3 WHERE id = $1`, session.ID, AAL2, s.now()); err != nil {
-		return fmt.Errorf("elevate session: %w", err)
-	}
-	if err := tx.Commit(context.Background()); err != nil {
-		return fmt.Errorf("commit session elevation: %w", err)
-	}
-	return nil
-}
-
 func (s *PostgresStore) IsMFAEnrolled(userID string) bool {
-	tx, err := s.beginUserTx(userID)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	tx, err := s.beginUserTx(ctx, userID)
 	if err != nil {
 		return false
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 	var enrolled bool
-	if err := tx.QueryRow(context.Background(), `SELECT EXISTS (SELECT 1 FROM app.mfa_methods WHERE user_id = $1 AND method_type = 'totp' AND verified_at IS NOT NULL AND revoked_at IS NULL)`, userID).Scan(&enrolled); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM app.mfa_methods WHERE user_id = $1 AND method_type = 'totp' AND verified_at IS NOT NULL AND revoked_at IS NULL)`, userID).Scan(&enrolled); err != nil {
 		return false
 	}
-	_ = tx.Commit(context.Background())
+	_ = tx.Commit(ctx)
 	return enrolled
 }
 
-func (s *PostgresStore) beginUserTx(userID string) (pgx.Tx, error) {
-	tx, err := s.pool.Begin(context.Background())
+func (s *PostgresStore) beginUserTx(ctx context.Context, userID string) (pgx.Tx, error) {
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(context.Background(), `SELECT set_config('app.current_user_id', $1, true)`, userID); err != nil {
-		_ = tx.Rollback(context.Background())
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id', $1, true)`, userID); err != nil {
+		_ = tx.Rollback(ctx)
 		return nil, fmt.Errorf("set auth context: %w", err)
 	}
 	return tx, nil

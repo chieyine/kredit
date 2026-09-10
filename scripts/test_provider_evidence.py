@@ -30,6 +30,11 @@ class EvidenceTests(unittest.TestCase):
     def test_complete_manifest(self):
         self.assertEqual(validate(self.pack, self.root), [])
 
+    def test_candidate_commit_must_match(self):
+        self.assertEqual(validate(self.pack, self.root, "a" * 40), [])
+        self.assertTrue(validate(self.pack, self.root, "b" * 40))
+        self.assertTrue(validate(self.pack, self.root, "invalid"))
+
     def test_incomplete_and_synthetic_evidence_rejected(self):
         for mutate in (
             lambda p: p.update(human_review_complete=False),

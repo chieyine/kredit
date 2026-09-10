@@ -21,7 +21,7 @@ func TestReceivablesAndExportAreDerivedFromPayments(t *testing.T) {
 	s := NewStore(Source{SupplierViews: func(string) []credit.View { return views }, Payments: func(string) ([]payments.Payment, error) {
 		return []payments.Payment{{ObligationID: "obligation-1", AmountKobo: 400, SourceType: payments.SourceVoluntary, State: payments.StateRecognized}}, nil
 	}, Schedule: func(string) (schedules.Schedule, []schedules.Item, error) {
-		return schedules.Schedule{}, nil, errors.New("missing")
+		return schedules.Schedule{}, nil, nil
 	}, Disputes: func(string) []disputes.Dispute { return nil }, Now: func() time.Time { return now }})
 	report, readErr := s.ReceivablesForSupplier(context.Background(), "org-1")
 	if readErr != nil {
@@ -88,7 +88,9 @@ func TestCSVNeutralizesSpreadsheetFormulas(t *testing.T) {
 func TestFeeReportSubtractsApprovedWaivers(t *testing.T) {
 	store := NewStore(Source{SupplierViews: func(string) []credit.View {
 		return []credit.View{{Obligation: &credit.Obligation{ID: "debt", BaseFeeKobo: 500}}}
-	}, FeeWaivers: func(string) map[string]ledger.Money { return map[string]ledger.Money{"debt": 200} }})
+	}, FeeWaivers: func(context.Context, string) (map[string]ledger.Money, error) {
+		return map[string]ledger.Money{"debt": 200}, nil
+	}})
 	fees, err := store.FeesForSupplier(context.Background(), "supplier")
 	if err != nil || fees.TotalFeesKobo != 300 || fees.WaivedFeesKobo != 200 || fees.ByObligation[0].TotalFeesKobo != 300 {
 		t.Fatalf("fees=%+v %v", fees, err)
@@ -169,5 +171,52 @@ func TestCancelledReportDoesNotReadFinancialSource(t *testing.T) {
 		if err := read(); !errors.Is(err, context.Canceled) {
 			t.Fatalf("got %v; want cancellation", err)
 		}
+	}
+}
+
+func TestFeeWaiverReadFailureDoesNotInflateFees(t *testing.T) {
+	unavailable := errors.New("waiver history unavailable")
+	store := NewStore(Source{FeeWaivers: func(context.Context, string) (map[string]ledger.Money, error) { return nil, unavailable }})
+	if _, err := store.FeesForSupplier(context.Background(), "org"); !errors.Is(err, unavailable) {
+		t.Fatalf("waiver failure was hidden: %v", err)
+	}
+}
+
+func TestAnalyticsReplayAndReadsCannotMutateStoredMetadata(t *testing.T) {
+	now := time.Now().UTC()
+	s := NewStore(Source{Now: func() time.Time { return now }})
+	event, err := s.Track("credit.viewed", "subject", "reporting", map[string]string{"surface": "buyer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event.Metadata["surface"] = "mutated"
+	replay, err := s.Track("credit.viewed", "subject", "changed", map[string]string{"surface": "supplier"})
+	if err != nil || replay.ID != event.ID || replay.Purpose != "reporting" || replay.Metadata["surface"] != "buyer" {
+		t.Fatalf("replay changed stored evidence: %+v, %v", replay, err)
+	}
+	replay.Metadata["surface"] = "also mutated"
+	rows, err := s.ListAnalytics()
+	if err != nil || len(rows) != 1 || rows[0].Metadata["surface"] != "buyer" {
+		t.Fatalf("unexpected stored events: %+v, %v", rows, err)
+	}
+	rows[0].Metadata["surface"] = "changed by reader"
+	rows, err = s.ListAnalytics()
+	if err != nil || rows[0].Metadata["surface"] != "buyer" {
+		t.Fatalf("read exposed stored metadata: %+v, %v", rows, err)
+	}
+}
+
+func TestHistoryDoesNotReplaceScheduleOutageWithOriginalDueDate(t *testing.T) {
+	unavailable := errors.New("synthetic schedule outage")
+	store := NewStore(Source{
+		BuyerViews: func(string) []credit.View {
+			return []credit.View{{Request: credit.CreditRequest{DueDate: "2026-09-30"}, Obligation: &credit.Obligation{ID: "obligation", PrincipalKobo: 1000, OutstandingKobo: 1000}}}
+		},
+		Schedule: func(string) (schedules.Schedule, []schedules.Item, error) {
+			return schedules.Schedule{}, nil, unavailable
+		},
+	})
+	if _, err := store.HistoryForBuyer(t.Context(), "buyer"); !errors.Is(err, unavailable) {
+		t.Fatalf("schedule outage became a usable report: %v", err)
 	}
 }

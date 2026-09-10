@@ -14,6 +14,7 @@ import (
 
 	"kredit/internal/identifier"
 	"kredit/internal/ledger"
+	"kredit/internal/legalpublication"
 	"kredit/internal/mandates"
 	"kredit/internal/payments"
 )
@@ -52,6 +53,7 @@ const (
 )
 
 type CreditRequest struct {
+	SystemAcceptanceID     string           `json:"system_acceptance_id,omitempty"`
 	FeeTerms               *ledger.FeeTerms `json:"fee_terms,omitempty"`
 	CollectionPolicy       string           `json:"collection_policy,omitempty"`
 	ID                     string           `json:"id"`
@@ -144,6 +146,7 @@ type AgreementVersion struct {
 	CreditRequestID  string          `json:"credit_request_id"`
 	Version          int             `json:"version"`
 	CanonicalJSON    json.RawMessage `json:"canonical_json"`
+	CanonicalBytes   []byte          `json:"canonical_bytes,omitempty"`
 	DocumentHash     string          `json:"document_hash"`
 	PrincipalKobo    ledger.Money    `json:"principal_kobo"`
 	DueDate          string          `json:"due_date"`
@@ -239,8 +242,9 @@ type CollectionState struct {
 }
 
 type TradeLineActivationInput struct {
-	FeeTerms               *ledger.FeeTerms `json:"-"`
-	CollectionPolicy       string           `json:"collection_policy,omitempty"`
+	LegalVersions          *legalpublication.Versions `json:"-"`
+	FeeTerms               *ledger.FeeTerms           `json:"-"`
+	CollectionPolicy       string                     `json:"collection_policy,omitempty"`
 	DrawdownID             string
 	TradeLineID            string
 	SupplierOrganizationID string
@@ -266,37 +270,39 @@ type TradeLineActivationInput struct {
 }
 
 type agreementCanonical struct {
-	FeeTerms            *ledger.FeeTerms `json:"fee_terms,omitempty"`
-	CollectionPolicy    string           `json:"collection_policy,omitempty"`
-	SourceType          string           `json:"source_type,omitempty"`
-	SourceID            string           `json:"source_id,omitempty"`
-	TradeLineID         string           `json:"trade_line_id,omitempty"`
-	AcceptedSourceHash  string           `json:"accepted_source_hash,omitempty"`
-	SupplierLegalName   string           `json:"supplier_legal_name"`
-	SupplierTradingName string           `json:"supplier_trading_name,omitempty"`
-	BuyerLegalName      string           `json:"buyer_legal_name"`
-	BuyerTradingName    string           `json:"buyer_trading_name,omitempty"`
-	BuyerBusinessID     string           `json:"buyer_business_id"`
-	GoodsDescription    string           `json:"goods_description"`
-	InvoiceReference    string           `json:"invoice_reference,omitempty"`
-	InvoiceDocumentHash string           `json:"invoice_document_hash,omitempty"`
-	PrincipalKobo       ledger.Money     `json:"principal_kobo"`
-	Currency            string           `json:"currency"`
-	DueDate             string           `json:"due_date"`
-	GraceHours          int              `json:"grace_hours"`
-	CollectionAt        time.Time        `json:"collection_at"`
-	ScheduleType        string           `json:"schedule_type"`
-	ScheduleCount       int              `json:"schedule_count,omitempty"`
-	ScheduleCadence     string           `json:"schedule_cadence"`
-	MonthEndPolicy      string           `json:"month_end_policy,omitempty"`
-	CustomScheduleItems []ScheduleTerm   `json:"custom_schedule_items,omitempty"`
-	MandateDisclosure   string           `json:"mandate_disclosure"`
-	BaseFeeDisclosure   string           `json:"base_fee_disclosure"`
-	TermsVersion        string           `json:"terms_version"`
-	PrivacyVersion      string           `json:"privacy_version"`
+	TradeLineTermsVersion string           `json:"trade_line_terms_version,omitempty"`
+	FeeTerms              *ledger.FeeTerms `json:"fee_terms,omitempty"`
+	CollectionPolicy      string           `json:"collection_policy,omitempty"`
+	SourceType            string           `json:"source_type,omitempty"`
+	SourceID              string           `json:"source_id,omitempty"`
+	TradeLineID           string           `json:"trade_line_id,omitempty"`
+	AcceptedSourceHash    string           `json:"accepted_source_hash,omitempty"`
+	SupplierLegalName     string           `json:"supplier_legal_name"`
+	SupplierTradingName   string           `json:"supplier_trading_name,omitempty"`
+	BuyerLegalName        string           `json:"buyer_legal_name"`
+	BuyerTradingName      string           `json:"buyer_trading_name,omitempty"`
+	BuyerBusinessID       string           `json:"buyer_business_id"`
+	GoodsDescription      string           `json:"goods_description"`
+	InvoiceReference      string           `json:"invoice_reference,omitempty"`
+	InvoiceDocumentHash   string           `json:"invoice_document_hash,omitempty"`
+	PrincipalKobo         ledger.Money     `json:"principal_kobo"`
+	Currency              string           `json:"currency"`
+	DueDate               string           `json:"due_date"`
+	GraceHours            int              `json:"grace_hours"`
+	CollectionAt          time.Time        `json:"collection_at"`
+	ScheduleType          string           `json:"schedule_type"`
+	ScheduleCount         int              `json:"schedule_count,omitempty"`
+	ScheduleCadence       string           `json:"schedule_cadence"`
+	MonthEndPolicy        string           `json:"month_end_policy,omitempty"`
+	CustomScheduleItems   []ScheduleTerm   `json:"custom_schedule_items,omitempty"`
+	MandateDisclosure     string           `json:"mandate_disclosure"`
+	BaseFeeDisclosure     string           `json:"base_fee_disclosure"`
+	TermsVersion          string           `json:"terms_version"`
+	PrivacyVersion        string           `json:"privacy_version"`
 }
 
 type Store struct {
+	legalReader             legalpublication.Reader
 	mu                      sync.RWMutex
 	mandates                mandates.Provider
 	ledger                  ledger.Service
@@ -379,7 +385,7 @@ func (s *Store) deemedAcceptancePermitted(ctx context.Context, requestID string)
 	gate := s.deemedAcceptanceGate
 	s.mu.RUnlock()
 	if gate == nil {
-		return nil
+		return errors.New("deemed acceptance evidence gate is not configured")
 	}
 	return gate(ctx, requestID)
 }
@@ -456,14 +462,29 @@ func (s *Store) ActivateTradeLineDrawdown(input TradeLineActivationInput) (View,
 	}
 	now := s.now()
 	request := &CreditRequest{FeeTerms: input.FeeTerms.Clone(), ID: input.DrawdownID, SupplierOrganizationID: input.SupplierOrganizationID, SupplierLegalName: input.SupplierOrganizationID, BuyerUserID: input.BuyerUserID, BuyerBusinessID: input.BuyerBusinessID, BuyerLegalName: input.BuyerBusinessID, PrincipalKobo: input.PrincipalKobo, Currency: "NGN", GoodsDescription: strings.TrimSpace(input.GoodsDescription), InvoiceReference: strings.TrimSpace(input.InvoiceReference), InvoiceDocumentHash: strings.TrimSpace(input.InvoiceDocumentHash), DueDate: input.DueDate, CollectionPolicy: input.CollectionPolicy, GraceHours: input.GraceHours, CollectionAt: input.CollectionAt, ScheduleType: "one_time", ScheduleCount: 1, ScheduleCadence: "custom", State: Active, MandateID: input.MandateID, CreatedBy: input.ReleaseActorID, CreatedAt: now, UpdatedAt: now, Version: 1}
-	canonical := agreementCanonical{FeeTerms: request.FeeTerms.Clone(), SourceType: "trade_line_drawdown", SourceID: input.DrawdownID, TradeLineID: input.TradeLineID, AcceptedSourceHash: input.DrawdownAgreementHash, SupplierLegalName: request.SupplierLegalName, BuyerLegalName: request.BuyerLegalName, BuyerBusinessID: request.BuyerBusinessID, GoodsDescription: request.GoodsDescription, InvoiceReference: request.InvoiceReference, InvoiceDocumentHash: request.InvoiceDocumentHash, PrincipalKobo: request.PrincipalKobo, Currency: request.Currency, DueDate: request.DueDate, GraceHours: request.GraceHours, CollectionAt: request.CollectionAt, ScheduleType: request.ScheduleType, ScheduleCount: 1, ScheduleCadence: request.ScheduleCadence, MandateDisclosure: "Buyer confirmed this drawdown under the active trade-line mandate.", BaseFeeDisclosure: request.FeeTerms.Disclosure(), TermsVersion: scheduleDefault(input.TermsVersion, "terms-v1"), PrivacyVersion: "privacy-v1"}
-	data, _ := json.Marshal(canonical)
+	canonical := agreementCanonical{FeeTerms: request.FeeTerms.Clone(), SourceType: "trade_line_drawdown", SourceID: input.DrawdownID, TradeLineID: input.TradeLineID, AcceptedSourceHash: input.DrawdownAgreementHash, SupplierLegalName: request.SupplierLegalName, BuyerLegalName: request.BuyerLegalName, BuyerBusinessID: request.BuyerBusinessID, GoodsDescription: request.GoodsDescription, InvoiceReference: request.InvoiceReference, InvoiceDocumentHash: request.InvoiceDocumentHash, PrincipalKobo: request.PrincipalKobo, Currency: request.Currency, DueDate: request.DueDate, GraceHours: request.GraceHours, CollectionAt: request.CollectionAt, ScheduleType: request.ScheduleType, ScheduleCount: 1, ScheduleCadence: request.ScheduleCadence, MandateDisclosure: "Buyer confirmed this drawdown under the active trade-line mandate.", BaseFeeDisclosure: request.FeeTerms.Disclosure(), TermsVersion: scheduleDefault(input.TermsVersion, legalpublication.TermsVersion), PrivacyVersion: legalpublication.PrivacyVersion}
+	if input.LegalVersions != nil {
+		if input.LegalVersions.Terms == "" || input.LegalVersions.Privacy == "" {
+			return View{}, nil, errors.New("accepted legal versions are incomplete")
+		}
+		canonical.TradeLineTermsVersion = input.TermsVersion
+		canonical.TermsVersion = input.LegalVersions.Terms
+		canonical.PrivacyVersion = input.LegalVersions.Privacy
+	}
+	canonical.CollectionPolicy = request.CollectionPolicy
+	data, err := json.Marshal(canonical)
+	if err != nil {
+		return View{}, nil, fmt.Errorf("encode accepted drawdown terms: %w", err)
+	}
 	hash := sha256.Sum256(data)
-	agreement := &AgreementVersion{ID: s.newID(), CreditRequestID: request.ID, Version: 1, CanonicalJSON: data, DocumentHash: hex.EncodeToString(hash[:]), PrincipalKobo: request.PrincipalKobo, DueDate: request.DueDate, GraceHours: request.GraceHours, CollectionAt: request.CollectionAt, TermsVersion: canonical.TermsVersion, PrivacyVersion: canonical.PrivacyVersion, CreatedBy: input.ReleaseActorID, CreatedAt: now}
+	agreement := &AgreementVersion{ID: s.newID(), CreditRequestID: request.ID, Version: 1, CanonicalJSON: data, CanonicalBytes: append([]byte(nil), data...), DocumentHash: hex.EncodeToString(hash[:]), PrincipalKobo: request.PrincipalKobo, DueDate: request.DueDate, GraceHours: request.GraceHours, CollectionAt: request.CollectionAt, TermsVersion: canonical.TermsVersion, PrivacyVersion: canonical.PrivacyVersion, CreatedBy: input.ReleaseActorID, CreatedAt: now}
 	acceptance := &Acceptance{ID: s.newID(), AgreementVersionID: agreement.ID, CreditRequestID: request.ID, AcceptingUserID: input.BuyerUserID, PersonID: input.BuyerUserID, BusinessID: input.BuyerBusinessID, AcceptanceMethod: "trade_line_drawdown_confirmation", AuthenticationLevel: "aal1", AgreementHash: input.DrawdownAgreementHash, MandateProviderID: input.MandateID, AcceptedAt: input.BuyerConfirmedAt}
 	release := &GoodsRelease{ID: s.newID(), CreditRequestID: request.ID, SupplierActorID: input.ReleaseActorID, DeliveryMethod: input.DeliveryMethod, Notes: input.ReleaseNotes, ReleasedAt: input.ReleasedAt}
 	receipt := &ReceiptConfirmation{ID: s.newID(), CreditRequestID: request.ID, BuyerUserID: input.ReceiptActorID, State: "confirmed", ReceivedAt: input.ReceiptAt}
-	fee, _ := request.FeeTerms.Base(request.PrincipalKobo)
+	fee, err := request.FeeTerms.Base(request.PrincipalKobo)
+	if err != nil {
+		return View{}, nil, err
+	}
 	obligation := &Obligation{ID: s.newID(), CreditRequestID: request.ID, AgreementVersionID: agreement.ID, SupplierOrganizationID: request.SupplierOrganizationID, BuyerBusinessID: request.BuyerBusinessID, PrincipalKobo: request.PrincipalKobo, Currency: request.Currency, LifecycleStatus: "ACTIVE", PaymentStatus: "UNPAID", OutstandingKobo: request.PrincipalKobo, BaseFeeKobo: fee, ActivatedAt: now}
 	tx, err := ledger.ActivateWithFee(s.ledger, obligation.ID, obligation.PrincipalKobo, fee, now, "trade-line-drawdown:"+input.DrawdownID+":activation")
 	if err != nil {
@@ -564,6 +585,7 @@ func (s *Store) UpdateDraft(requestID, actorID string, input UpdateDraftInput) (
 		}
 	}
 	r.PrincipalKobo = input.PrincipalKobo
+	r.RequiresEnhancedReview = s.enhancedReviewThreshold > 0 && input.PrincipalKobo >= s.enhancedReviewThreshold
 	r.GoodsDescription = strings.TrimSpace(input.GoodsDescription)
 	r.InvoiceReference = strings.TrimSpace(input.InvoiceReference)
 	r.InvoiceDocumentHash = strings.TrimSpace(input.InvoiceDocumentHash)
@@ -582,6 +604,13 @@ func (s *Store) UpdateDraft(requestID, actorID string, input UpdateDraftInput) (
 }
 
 func (s *Store) Send(requestID, actorID string) (View, error) {
+	versions, err := legalpublication.Resolve(s.legalReader)
+	if err != nil {
+		return View{}, err
+	}
+	return s.sendWithLegalVersions(requestID, actorID, versions)
+}
+func (s *Store) sendWithLegalVersions(requestID, actorID string, versions legalpublication.Versions) (View, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
@@ -594,10 +623,10 @@ func (s *Store) Send(requestID, actorID string) (View, error) {
 	if r.State != Draft {
 		return View{}, fmt.Errorf("credit request cannot be sent from %s", r.State)
 	}
-	canonical := agreementCanonical{FeeTerms: r.FeeTerms.Clone(), SupplierLegalName: r.SupplierLegalName, SupplierTradingName: r.SupplierTradingName, BuyerLegalName: r.BuyerLegalName, BuyerTradingName: r.BuyerTradingName, BuyerBusinessID: r.BuyerBusinessID, GoodsDescription: r.GoodsDescription, InvoiceReference: r.InvoiceReference, InvoiceDocumentHash: r.InvoiceDocumentHash, PrincipalKobo: r.PrincipalKobo, Currency: r.Currency, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, ScheduleType: r.ScheduleType, ScheduleCount: r.ScheduleCount, ScheduleCadence: r.ScheduleCadence, MonthEndPolicy: r.MonthEndPolicy, CustomScheduleItems: append([]ScheduleTerm(nil), r.CustomScheduleItems...), MandateDisclosure: "Automated repayment requires separate bank mandate authorization; each collection is limited to the outstanding accepted amount.", BaseFeeDisclosure: r.FeeTerms.Disclosure(), TermsVersion: "terms-v1", PrivacyVersion: "privacy-v1"}
+	canonical := agreementCanonical{FeeTerms: r.FeeTerms.Clone(), SupplierLegalName: r.SupplierLegalName, SupplierTradingName: r.SupplierTradingName, BuyerLegalName: r.BuyerLegalName, BuyerTradingName: r.BuyerTradingName, BuyerBusinessID: r.BuyerBusinessID, GoodsDescription: r.GoodsDescription, InvoiceReference: r.InvoiceReference, InvoiceDocumentHash: r.InvoiceDocumentHash, PrincipalKobo: r.PrincipalKobo, Currency: r.Currency, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, ScheduleType: r.ScheduleType, ScheduleCount: r.ScheduleCount, ScheduleCadence: r.ScheduleCadence, MonthEndPolicy: r.MonthEndPolicy, CustomScheduleItems: append([]ScheduleTerm(nil), r.CustomScheduleItems...), MandateDisclosure: "Automated repayment requires separate bank mandate authorization; each collection is limited to the outstanding accepted amount.", BaseFeeDisclosure: r.FeeTerms.Disclosure(), TermsVersion: versions.Terms, PrivacyVersion: versions.Privacy}
 	data, _ := json.Marshal(canonical)
 	hash := sha256.Sum256(data)
-	agreement := &AgreementVersion{ID: newIdentifier(), CreditRequestID: r.ID, Version: 1, CanonicalJSON: data, DocumentHash: hex.EncodeToString(hash[:]), PrincipalKobo: r.PrincipalKobo, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, TermsVersion: "terms-v1", PrivacyVersion: "privacy-v1", CreatedBy: actorID, CreatedAt: s.now()}
+	agreement := &AgreementVersion{ID: newIdentifier(), CreditRequestID: r.ID, Version: 1, CanonicalJSON: data, CanonicalBytes: append([]byte(nil), data...), DocumentHash: hex.EncodeToString(hash[:]), PrincipalKobo: r.PrincipalKobo, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, TermsVersion: versions.Terms, PrivacyVersion: versions.Privacy, CreatedBy: actorID, CreatedAt: s.now()}
 	s.agreements[agreement.ID] = agreement
 	r.AgreementVersionID = agreement.ID
 	r.State = Sent
@@ -724,7 +753,7 @@ func (s *Store) SetMandate(requestID, buyerUserID string, mandate mandates.Manda
 	if r == nil || r.BuyerUserID != buyerUserID {
 		return View{}, errors.New("credit request not found")
 	}
-	if mandate.UserID != buyerUserID || mandate.BusinessID != r.BuyerBusinessID || mandate.ID == "" || mandate.ProviderID == "" {
+	if mandate.UserID != buyerUserID || mandate.BusinessID != r.BuyerBusinessID || mandate.SupplierOrganizationID != r.SupplierOrganizationID || mandate.ID == "" || mandate.ProviderID == "" {
 		return View{}, errors.New("mandate ownership does not match credit request")
 	}
 	cp := mandate
@@ -754,7 +783,7 @@ func (s *Store) Accept(requestID, buyerUserID, agreementID, agreementHash, manda
 		return View{}, errors.New("agreement hash mismatch")
 	}
 	m := s.mandateMap[mandateID]
-	if mandateID != "" && (m == nil || m.AmountCeiling < int64(r.PrincipalKobo) || m.UserID != buyerUserID || m.BusinessID != r.BuyerBusinessID) {
+	if mandateID != "" && (m == nil || m.AmountCeiling < int64(r.PrincipalKobo) || m.UserID != buyerUserID || m.BusinessID != r.BuyerBusinessID || m.SupplierOrganizationID != r.SupplierOrganizationID) {
 		return View{}, errors.New("mandate ownership or ceiling mismatch")
 	}
 	if !identityVerified || !authorityVerified {
@@ -764,7 +793,10 @@ func (s *Store) Accept(requestID, buyerUserID, agreementID, agreementHash, manda
 	s.acceptances[accept.ID] = accept
 	r.AcceptanceID = accept.ID
 	r.State = BuyerAccepted
-	if m != nil && m.Status == mandates.Active {
+	if m != nil {
+		r.MandateID = m.ID
+	}
+	if m != nil && m.Status == mandates.Active && (m.StartsAt.IsZero() || !s.now().Before(m.StartsAt)) && (m.EndsAt.IsZero() || s.now().Before(m.EndsAt)) {
 		r.State = ReadyToRelease
 	}
 	r.UpdatedAt = s.now()
@@ -786,7 +818,7 @@ func (s *Store) Release(requestID, supplierOrgID, actorID, deliveryMethod, notes
 		return View{}, fmt.Errorf("credit request cannot be released from %s", r.State)
 	}
 	mandate := s.mandateMap[r.MandateID]
-	if mandate == nil || mandate.Status != mandates.Active || (!mandate.EndsAt.IsZero() && !s.now().Before(mandate.EndsAt)) {
+	if mandate == nil || mandate.Status != mandates.Active || mandate.SupplierOrganizationID != r.SupplierOrganizationID || mandate.UserID != r.BuyerUserID || mandate.BusinessID != r.BuyerBusinessID || mandate.AmountCeiling < int64(r.PrincipalKobo) || (!mandate.StartsAt.IsZero() && s.now().Before(mandate.StartsAt)) || (!mandate.EndsAt.IsZero() && !s.now().Before(mandate.EndsAt)) {
 		return View{}, errors.New("active mandate required before releasing goods")
 	}
 	deemedAt := s.now().Add(deemedAcceptanceWindow)
@@ -858,6 +890,10 @@ func (s *Store) AutoActivateMatured(ctx context.Context, asOf time.Time) ([]stri
 func (s *Store) RecordReceipt(requestID, buyerUserID, state, issueReason string) (View, *ledger.Transaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.recordReceiptLocked(requestID, buyerUserID, state, issueReason, "")
+}
+
+func (s *Store) recordReceiptLocked(requestID, buyerUserID, state, issueReason, systemAcceptanceID string) (View, *ledger.Transaction, error) {
 	r := s.requests[requestID]
 	if r == nil {
 		return View{}, nil, errors.New("credit request not found")
@@ -870,6 +906,13 @@ func (s *Store) RecordReceipt(requestID, buyerUserID, state, issueReason string)
 	}
 	if state != "confirmed" && state != "issue_raised" {
 		return View{}, nil, errors.New("invalid receipt state")
+	}
+	if issueReason == deemedAcceptanceReason {
+		for _, previous := range s.receipts[r.ID] {
+			if previous != nil && previous.State == "issue_raised" {
+				return View{}, nil, errors.New("delivery issue requires explicit buyer confirmation")
+			}
+		}
 	}
 	receipt := &ReceiptConfirmation{ID: newIdentifier(), CreditRequestID: r.ID, BuyerUserID: buyerUserID, State: state, IssueReason: strings.TrimSpace(issueReason), ReceivedAt: s.now()}
 	if state == "issue_raised" {
@@ -907,8 +950,12 @@ func (s *Store) RecordReceipt(requestID, buyerUserID, state, issueReason string)
 	if err != nil {
 		return View{}, nil, err
 	}
-	s.receipts[r.ID] = append(s.receipts[r.ID], receipt)
-	r.ReceiptID = receipt.ID
+	if systemAcceptanceID == "" {
+		s.receipts[r.ID] = append(s.receipts[r.ID], receipt)
+		r.ReceiptID = receipt.ID
+	} else {
+		r.SystemAcceptanceID = systemAcceptanceID
+	}
 	prospective.LedgerTransactionID = tx.ID
 	obligation := prospective
 	s.obligations[obligation.ID] = obligation
@@ -1047,6 +1094,12 @@ func validateCreateInput(in CreateInput) error {
 	if in.CollectionAt.IsZero() {
 		return errors.New("collection time is required")
 	}
+	if in.CollectionPolicy != "STANDARD" && in.CollectionPolicy != "IMMEDIATE" && in.CollectionPolicy != "GRACE" {
+		return errors.New("invalid collection policy")
+	}
+	if in.CollectionPolicy == "IMMEDIATE" && in.GraceHours > 0 {
+		return errors.New("immediate policy cannot include a grace period")
+	}
 	if err := validateScheduleTerms(in.PrincipalKobo, in.ScheduleType, in.ScheduleCount, in.ScheduleCadence, in.MonthEndPolicy, in.CustomScheduleItems); err != nil {
 		return err
 	}
@@ -1102,10 +1155,15 @@ func validateScheduleTerms(principal ledger.Money, scheduleType string, count in
 func cloneRequest(r CreditRequest) CreditRequest {
 	r.FeeTerms = r.FeeTerms.Clone()
 	r.CustomScheduleItems = append([]ScheduleTerm(nil), r.CustomScheduleItems...)
+	if r.DeemedAcceptedAt != nil {
+		deadline := *r.DeemedAcceptedAt
+		r.DeemedAcceptedAt = &deadline
+	}
 	return r
 }
 func cloneAgreement(a AgreementVersion) AgreementVersion {
 	a.CanonicalJSON = append(json.RawMessage(nil), a.CanonicalJSON...)
+	a.CanonicalBytes = append([]byte(nil), a.CanonicalBytes...)
 	return a
 }
 func newIdentifier() string { return identifier.New() }
@@ -1117,9 +1175,16 @@ func scheduleDefault(value, fallback string) string {
 	return strings.TrimSpace(value)
 }
 
-func PrintableAgreement(v View) string {
-	r := v.Request
-	return fmt.Sprintf("KREDIT CREDIT AGREEMENT\nRequest: %s\nSupplier: %s\nBuyer: %s\nPrincipal: %d %s\nDue date: %s\nGrace hours: %d\nCollection: %s\nGoods: %s\nFees: %s\nAgreement hash: %s\nTerms version: %s\n", r.ID, r.SupplierLegalName, r.BuyerLegalName, r.PrincipalKobo, r.Currency, r.DueDate, r.GraceHours, r.CollectionAt.UTC().Format(time.RFC3339), r.GoodsDescription, r.FeeTerms.Disclosure(), v.Agreement.DocumentHash, v.Agreement.TermsVersion)
+func PrintableAgreement(v View) (string, error) {
+	hash := sha256.Sum256(v.Agreement.CanonicalJSON)
+	if v.Agreement.ID == "" || hex.EncodeToString(hash[:]) != v.Agreement.DocumentHash {
+		return "", errors.New("agreement terms could not be verified")
+	}
+	var terms agreementCanonical
+	if err := json.Unmarshal(v.Agreement.CanonicalJSON, &terms); err != nil {
+		return "", errors.New("agreement terms could not be decoded")
+	}
+	return fmt.Sprintf("KREDIT CREDIT AGREEMENT\nRequest: %s\nSupplier: %s\nBuyer: %s\nPrincipal: %d %s\nDue date: %s\nGrace hours: %d\nCollection: %s\nGoods: %s\nFees: %s\nAgreement hash: %s\nTerms version: %s\nPrivacy version: %s\n", v.Agreement.CreditRequestID, terms.SupplierLegalName, terms.BuyerLegalName, terms.PrincipalKobo, terms.Currency, terms.DueDate, terms.GraceHours, terms.CollectionAt.UTC().Format(time.RFC3339), terms.GoodsDescription, terms.BaseFeeDisclosure, v.Agreement.DocumentHash, terms.TermsVersion, terms.PrivacyVersion), nil
 }
 
 func (s *Store) PaymentSnapshot(obligationID string) (payments.ObligationSnapshot, error) {
@@ -1187,7 +1252,7 @@ func (s *Store) CollectionState(obligationID string) (CollectionState, error) {
 	remaining := ledger.Money(0)
 	active := false
 	if mandate != nil {
-		active = mandate.Status == mandates.Active
+		active = mandate.Status == mandates.Active && (mandate.StartsAt.IsZero() || !s.now().Before(mandate.StartsAt)) && (mandate.EndsAt.IsZero() || s.now().Before(mandate.EndsAt))
 		remaining = ledger.Money(mandate.AmountCeiling)
 	}
 	return CollectionState{ID: o.ID, SupplierOrganizationID: o.SupplierOrganizationID, BuyerUserID: r.BuyerUserID, BuyerBusinessID: r.BuyerBusinessID, Currency: o.Currency, Active: o.LifecycleStatus == "ACTIVE", CollectionPolicy: r.CollectionPolicy, OutstandingKobo: o.OutstandingKobo, MandateActive: active, MandateReference: mandateRef(mandate), MandateRemainingKobo: remaining, CollectionEnabled: true, ProviderSupported: true, Version: r.Version}, nil
@@ -1217,3 +1282,6 @@ func mandateRef(m *mandates.Mandate) string {
 	}
 	return m.ProviderID
 }
+
+// SetLegalReader is configured before serving requests.
+func (s *Store) SetLegalReader(reader legalpublication.Reader) { s.legalReader = reader }

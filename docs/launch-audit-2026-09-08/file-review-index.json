@@ -1,0 +1,2666 @@
+{
+  "scope": "Source, schema, infrastructure, scripts and tests; excludes images and binary evidence. Generated files remain listed.",
+  "meaning": "Historical focused-review index, superseded by file-by-file-audit.json and FILE-BY-FILE.md. Pending statuses below describe the earlier checkpoint, not remaining unread original files.",
+  "files": [
+    {
+      "path": "cmd/api/main.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "cmd/api/main_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "cmd/bootstrap-owner/main.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "cmd/configcheck/main.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "cmd/configcheck/main_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "cmd/migrate/main.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "cmd/migrate/main_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "cmd/provider-simulator/main.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "cmd/provider-simulator/main_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "cmd/reconcile/main.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "cmd/reconcile/main_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "cmd/seed/main.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "cmd/seed/main_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "cmd/worker/main.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "cmd/worker/main_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/audit.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/auth.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/buyers.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/collections.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/credit.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/db.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/disputes.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/models.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/notifications.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/organizations.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/payments.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/provider_adapter.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/release_readiness.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/reports.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/schedules.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/generated/trade_lines.sql.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/001_initial.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/002_milestone1_auth_org.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/003_milestone2_buyers_identity.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/004_milestone3_credit_ledger.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/005_milestone4_payments.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/006_milestone5_schedules.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/007_milestone6_trade_lines.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/008_milestone7_collections.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/009_milestone8_disputes_operations.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/010_milestone9_notifications_whatsapp.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/011_milestone10_reporting_history.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/012_milestone11_provider_adapter.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/013_milestone12_release_readiness.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/014_river_jobs_schema.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/015_missing_domain_tables.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/016_financial_core_hardening.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/017_worker_operations.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/018_security_hardening.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/019_runtime_role_policies.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/020_auth_persistence_primitives.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/021_organization_persistence_primitives.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/022_network_and_mandates.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/023_buyer_persistence_primitives.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/024_credit_aggregate_snapshots.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/025_mandate_lookup_function.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/026_mandate_lookup_owner.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/027_credit_snapshot_tenant_functions.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/028_outbox_processing_lease.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/029_runtime_domain_repository_policies.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/030_schedule_repository_runtime_policy.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/031_atomic_payment_repository.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/032_supplier_customer_directory.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/033_fix_ledger_balance_trigger.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/034_trade_line_runtime_policy.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/035_collection_aggregate_repository.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/036_corrections_runtime_policy.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/037_dispute_operation_runtime_policy.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/038_notification_delivery_repository.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/039_analytics_runtime_policy.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/040_messaging_runtime_policy.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/041_notification_delivery_recovery.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/042_platform_operations_roles.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/043_fix_auth_user_upsert_ambiguity.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/044_payment_sources_and_claims.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/045_trade_line_mandate_integrity.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/046_trade_line_drawdown_lifecycle.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/047_supplier_onboarding_readiness.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/048_user_control_and_privacy.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/049_operations_controls.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/050_product_analytics.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/051_analytics_contract_completion.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/052_sweep_collection_safety.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/053_payment_reversal_integrity.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/054_collection_eligibility_lock.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/055_durable_financial_notices.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/056_financial_reconciliation.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/057_collection_notice_delivery.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/058_operations_intent_integrity.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/059_adjustment_notification_evidence.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/060_provider_reversal_review.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/061_business_policies.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/062_policy_enforcement_and_fee_terms.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/063_preserve_existing_commitments.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/064_admin_workflows.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/065_admin_attention_details.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/066_admin_support_review_queue.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/067_canonical_phone_identifiers.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/068_session_idle_and_mfa_throttle.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/069_shared_authentication_rate_limits.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/070_deemed_acceptance_evidence.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/071_audit_financial_integrity.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/072_repair_audit_legacy_state.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/073_audit_security_invariants.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/074_mfa_replay_and_rotation.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/075_document_upload_lifecycle.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/076_buyer_notice_acknowledgement.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/077_document_tenant_rls.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/078_runtime_role_idempotency.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/079_notice_acknowledgement_permissions.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/080_collected_payment_reversal_provenance.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/081_phase2_tenant_isolation.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/082_phase2_collection_tenant_isolation.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/083_phase2_buyer_evidence_guard.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/084_phase2_collection_worker_boundaries.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/085_phase2_provider_collection_identity.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/086_phase5_financial_monitoring.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/087_owner_super_admin_controls.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/088_settings_history_immutable.sql",
+      "status": "focused_review"
+    },
+    {
+      "path": "db/migrations/089_owner_lifecycle_guard.sql",
+      "status": "focused_review"
+    },
+    {
+      "path": "db/migrations/090_governance_fail_closed.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/091_retire_unread_platform_settings.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/migrations/092_public_payment_receipt.sql",
+      "status": "focused_review"
+    },
+    {
+      "path": "db/migrations/093_admin_notification_connectors.sql",
+      "status": "focused_review"
+    },
+    {
+      "path": "db/migrations/094_admin_runtime_connections.sql",
+      "status": "focused_review"
+    },
+    {
+      "path": "db/queries/README.md",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/audit.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/auth.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/buyers.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/collections.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/credit.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/disputes.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/notifications.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/organizations.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/payments.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/provider_adapter.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/release_readiness.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/reports.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/schedules.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/queries/trade_lines.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "db/seeds/001_demo.sql",
+      "status": "focused_review"
+    },
+    {
+      "path": "docker-compose.yml",
+      "status": "focused_review"
+    },
+    {
+      "path": "infra/containers/Dockerfile.api",
+      "status": "focused_review"
+    },
+    {
+      "path": "infra/containers/Dockerfile.web",
+      "status": "focused_review"
+    },
+    {
+      "path": "infra/containers/README.md",
+      "status": "focused_review"
+    },
+    {
+      "path": "infra/environments/README.md",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/environments/main.tf",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/environments/outputs.tf",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/environments/variables.tf",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/environments/versions.tf",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/monitoring/README.md",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/monitoring/otel-collector.yaml",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/monitoring/phase5-rules.test.yaml",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/monitoring/prometheus-rules.yaml",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/postgres/development-logins.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "infra/postgres/roles.sql",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/access/admin_roles_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/access/roles.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/access/roles_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/agreementdocs/document.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/agreementdocs/document_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/audit/audit_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/audit/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/audit/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/auth/audit_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/auth/fuzz_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/auth/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/auth/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/auth/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/auth/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/auth/target_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/businesspolicy/policy.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/businesspolicy/policy_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/businesspolicy/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/businesspolicy/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/buyers/audit_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/buyers/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/buyers/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/buyers/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/buyers/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/adapter.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/adapter_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/admin_workflows_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/audit_regression_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/completion_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/engine.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/engine_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/fee_policy_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/financial_audit_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/policy.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/postgres.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/collections/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/provider.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/provider_contract_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/resilient.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/collections/resilient_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/collections/sweep_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/collections/webhook_provider.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/config/admin_connections.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/config/admin_connections_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/config/config.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/config/config_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/config/mono_production_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/corrections/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/corrections/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/corrections/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/corrections/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/credit/calendar.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/credit/calendar_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/credit/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/credit/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/credit/reads.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/credit/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/credit/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/db/financial_context.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/db/notice_permissions_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/db/owner_permissions_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/db/persistence_contract.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/db/persistence_contract_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/db/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/db/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/db/schedule_adjustment.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/db/tenant_context.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/disputes/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/disputes/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/disputes/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/disputes/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/documents/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/documents/s3.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/documents/s3_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/documents/scanner.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/documents/scanner_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/documents/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/documents/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/feedback/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/feedback/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/idempotency/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/idempotency/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/idempotency/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/identifier/id.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/identifier/id_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/identity/provider.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/identity/provider_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/identity/safe_result.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/identity/safe_result_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/identity/webhook.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/jobs/client.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/jobs/client_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/jobs/collection_requeue_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/jobs/dead_letter.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/jobs/telemetry_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/ledger/fee_terms.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/ledger/fee_terms_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/ledger/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/ledger/reconcile.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/ledger/reconcile_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/ledger/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/ledger/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/legalpublication/versions.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/mandates/provider.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/mandates/provider_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/mandates/sweep_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/mandates/unavailable.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/mandates/webhook.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/notifications/configured.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/notifications/configured_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/notifications/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/notifications/receipts.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/notifications/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/notifications/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/notifications/webhook.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/notifications/webhook_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/observability/financial.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/observability/phase5_financial_integration_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/observability/phase5_financial_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/observability/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/observability/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/observability/tracer.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/observability/tracer_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/onboarding/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/onboarding/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/onboarding/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/onboarding/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/operations/approvals.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/operations/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/operations/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/operations/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/operations/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/organizations/audit_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/organizations/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/organizations/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/organizations/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/organizations/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/outbox/dispatcher.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/outbox/dispatcher_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/outbox/dispatcher_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/outbox/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/paymentclaims/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/paymentclaims/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/paymentclaims/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/paymentclaims/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/payments/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/payments/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/payments/receipt.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/payments/receipt_postgres_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/payments/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/payments/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/platform/logging/logging.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/platform/logging/sanitize.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/platform/logging/sanitize_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/platformops/controls.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/platformops/controls_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/platformops/financial_review.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/platformops/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/platformsettings/connector_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/platformsettings/crypto.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/platformsettings/crypto_root_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/platformsettings/owner_lifecycle_integration_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/platformsettings/registry.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/platformsettings/runtime_connections.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/platformsettings/store.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/platformsettings/store_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/providers/mono/customer.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/export_phase4_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/fuzz_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/hosted_url.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/hosted_url_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/mono.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/mono_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/phase4_contract_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/phase4_persistence_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/providers/mono/webhook.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/publictoken/fuzz_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/publictoken/token.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/publictoken/token_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/readiness/readiness.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/readiness/readiness_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/relationships/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/relationships/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/reports/analytics.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/reports/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/reports/snapshot.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/reports/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/reports/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/schedules/adjustment.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/schedules/adjustment_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/schedules/fuzz_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/schedules/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/schedules/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/schedules/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/support/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/support/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/support/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/tradelines/postgres.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/tradelines/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/tradelines/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/tradelines/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/usercontrol/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/usercontrol/store.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/usercontrol/store_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/admin_insight_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/admin_surfaces_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/admin_workflow_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/audit_financial_regression_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/auth_handlers.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/business_policy_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/business_policy_handlers_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/buyer_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/collection_jobs.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/collection_notice_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/completion_handlers_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/credit_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/credit_terms_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/customer_access_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/dashboard_handlers.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/document_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/document_upload_slot_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/feedback_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/financial_reads.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/financial_review_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/fuzz_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/http_helpers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/idempotency_middleware_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/mandate_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/milestone1_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/mono_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/mono_runtime_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/notification_receipt_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/notification_recipients.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/onboarding_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/organization_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/outbox_notifications.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/outbox_notifications_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/payment_claim_handlers.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/platform_operations_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/platform_operations_handlers_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/platform_settings_handlers.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/platform_settings_handlers_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/provider_readiness_test.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/relationship_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/reports_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/runtime.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/runtime_schedule_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/runtime_tradeline_postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/secure_link_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/secure_link_handlers_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/server.go",
+      "status": "focused_review"
+    },
+    {
+      "path": "internal/web/server_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/supplier_onboarding_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/support_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/user_control_handlers.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/web/user_control_handlers_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/whatsapp/fuzz_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/whatsapp/handler.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/whatsapp/handler_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "internal/whatsapp/postgres_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/api-lint.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/backup.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/bootstrap.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/check-tools.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/ci.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/configure-development-database.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/content-audit.mjs",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/data-inventory-check.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/data-inventory-generate.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/database-safety-test.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/db-check.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/db-reset.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/db-rollback.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/dev.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/frontend-api-coverage.mjs",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/fuzz.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/generate.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/implementation-plan-conformance-test.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/implementation-plan-conformance.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/launch-browser-check.mjs",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/launch-outage-check.mjs",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/lint.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/load-env-test.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/load-env.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/load-smoke.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/phase5-evidence-gate.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/phase5_load.py",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/phase6-context-audit.py",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/phase6-governance-test.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/post-deploy-check.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/product-contract-sync.mjs",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/readme-conformance.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/recovery_fingerprint.py",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/release-certify.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/repository-audit.mjs",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/restore-drill.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/security.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/sqlc-check.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/sqlc-generate.sh",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/test-e2e.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/test-integration.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/test_phase5_backup.py",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/test_phase5_fingerprint.py",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/test_phase5_load.py",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/test_phase5_release_evidence.py",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/test_provider_evidence.py",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "scripts/verify_backup.py",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/verify_provider_evidence.py",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/verify_release_evidence.py",
+      "status": "focused_review"
+    },
+    {
+      "path": "scripts/web-test.sh",
+      "status": "focused_review"
+    },
+    {
+      "path": "tests/contract/provider_contract_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "tests/e2e/README.md",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "tests/integration/persistence_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "tests/integration/tenant_isolation_test.go",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "tests/load/smoke.js",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "tests/performance/acceptance.js",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "tests/performance/portfolio_queries.sql",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "tests/provider-simulators/README.md",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/app.css",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/app.d.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/app.html",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/hooks.server.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/account-context.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/admin-client.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/api/client.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/api/mutation.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/api/reliable.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/attention.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/blog/articles.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/blog/first-wave-drafts.js",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/blog/guides.js",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/AdminAttention.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/components/AuthGate.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/components/BankReturnNotice.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/CommandPalette.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/ConnectivityBanner.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/DisputeDetail.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/DocumentLayout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/DocumentUploader.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/FeedbackPrompt.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/HomeProof.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/Money.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/MotionObserver.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/NotificationHistory.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/OwnerDialog.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/components/PaymentReview.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/PortalNav.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/ProtectedActionDialog.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/components/ResourceNotice.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/ShareActions.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/SiteFooter.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/SiteHeader.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/Skeleton.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/StatusPill.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/SystemBanner.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/components/VerifyIdentity.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/components/WorkspacePage.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/lib/datetime.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/demo-sale.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/fee-terms.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/financial-copy.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/money.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/product-language.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/product-tools.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/records.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/sale-drafts.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/seo.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/server/legal-config.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/lib/server/legal-publication.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/+error.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/+layout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/admin/+layout.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/analytics/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/approvals/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/attention/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/audit/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/cases/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/cases/[id]/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/controls/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/diagnostics/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/disputes/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/disputes/[id]/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/history/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/inbox/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/jobs/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/money/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/mono/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/organizations/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/platform-settings/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/privacy/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/provider-events/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/reconciliation/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/recovery/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/search/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/settings/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/team/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/admin/users/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/+layout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/+page.server.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/activity/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/collections/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/credit/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/credit/[id]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/credit/new/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/credit/new/+page.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/credit/quick/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/customers/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/customers/[id]/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/customers/new/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/disputes/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/disputes/[id]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/help/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/notifications/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/onboarding/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/overdue/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/overview/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/payments/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/reports/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/search/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/settings/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/settings/billing/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/settings/credit-policy/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/settings/data/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/settings/notifications/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/settings/privacy/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/settings/security/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/app/settings/settlement/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/team/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/trade-lines/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/app/trade-lines/[id]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/blog/+layout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/blog/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/blog/[slug]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/blog/[slug]/+page.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/blog/rss.xml/+server.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/blog/topic/[topic]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/blog/topic/[topic]/+page.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer-invitations/+layout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer-invitations/[token]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/+layout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/amendments/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/credit-requests/[requestID]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/disputes/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/buyer/disputes/[id]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/history/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/buyer/mandates/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/notifications/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/obligations/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/buyer/obligations/[id]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/payments/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/buyer/permissions/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/buyer/requests/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/buyer/settings/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/buyer/trade-lines/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/c/+layout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/c/[token]/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/c/[token]/+page.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/demo/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/faq/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/for-buyers/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/for-suppliers/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/glossary/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/how-it-works/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/legal/complaints/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/legal/privacy/+page.server.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/legal/privacy/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/legal/terms/+page.server.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/legal/terms/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/pay/+layout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/pay/[token]/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/pricing/+page.server.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/pricing/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/receipt/+layout.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/receipt/[public_token]/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/recover/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/robots.txt/+server.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/secure/+page.svelte",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/src/routes/security/+page.svelte",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/routes/sitemap.xml/+server.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/src/service-worker.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/access-control.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/accessibility.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/account-safety-outage.spec.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/tests/admin-outage.spec.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/tests/admin-section.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/admin-workflows.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/article-drafts.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/audit-completion.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/audit-fixes.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/audit-full-form.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/audit-product-journeys.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/audit-reliability-unit.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/business-settings.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/content-seo.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/demo-readiness.spec.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/tests/financial-completion.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/health.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/money.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/product-flows.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/product-quality.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/public-money-links.spec.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/tests/public-security-content.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/real-stack-financial.spec.ts",
+      "status": "focused_review"
+    },
+    {
+      "path": "web/tests/sign-in.spec.ts",
+      "status": "pending_manual_review"
+    },
+    {
+      "path": "web/tests/workspace-audit.spec.ts",
+      "status": "pending_manual_review"
+    }
+  ]
+}

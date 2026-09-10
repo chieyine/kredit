@@ -151,3 +151,39 @@ GRANT EXECUTE ON FUNCTION app.collection_identity_by_external(TEXT) TO kredit_wo
 GRANT EXECUTE ON FUNCTION app.collection_attempt_identity_by_external(TEXT) TO kredit_worker;
 GRANT EXECUTE ON FUNCTION app.enqueue_pre_debit_notices() TO kredit_worker;
 GRANT EXECUTE ON FUNCTION app.enqueue_due_payment_notices(INTEGER) TO kredit_worker;
+
+-- Preserve the owner and settings boundaries after the broad baseline grants.
+-- This also supports installing roles after migrations 087-091 on a fresh DB.
+REVOKE ALL ON app.platform_owner_guard FROM kredit_app, kredit_worker;
+REVOKE UPDATE, DELETE, TRUNCATE ON app.platform_settings_history FROM kredit_app;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON app.platform_settings_history FROM kredit_worker;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON app.platform_governance, app.platform_settings FROM kredit_worker;
+REVOKE TRUNCATE ON app.platform_role_assignments, app.users FROM kredit_app, kredit_worker;
+GRANT EXECUTE ON FUNCTION app.is_platform_owner(uuid), app.current_governance_mode() TO kredit_app;
+GRANT EXECUTE ON FUNCTION app.current_governance_mode() TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.public_payment_receipt(uuid) TO kredit_app;
+
+-- Supplier messaging consent is buyer-originated, append-only evidence.
+REVOKE UPDATE, DELETE, TRUNCATE ON app.relationship_consents FROM kredit_app;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON app.relationship_consents FROM kredit_worker;
+
+-- Buyer-owned supplier names for reminder and consent controls.
+GRANT EXECUTE ON FUNCTION app.buyer_suppliers() TO kredit_app;
+GRANT EXECUTE ON FUNCTION app.has_own_relationship_consent(uuid,text) TO kredit_app;
+
+-- Committed notification discovery returns identifiers only; subsequent reads use RLS.
+GRANT EXECUTE ON FUNCTION app.notification_event_identity(UUID,TEXT,TEXT,JSONB) TO kredit_worker;
+
+-- System recognition is separate from buyer-originated evidence.
+GRANT SELECT ON app.system_acceptances TO kredit_app;
+GRANT SELECT,INSERT ON app.system_acceptances TO kredit_worker;
+REVOKE INSERT,UPDATE,DELETE ON app.system_acceptances FROM kredit_app;
+REVOKE UPDATE,DELETE ON app.system_acceptances FROM kredit_worker;
+GRANT EXECUTE ON FUNCTION app.deemed_acceptance_evidence(uuid,bigint),app.deemed_acceptance_candidates(bigint) TO kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.document_object_is_orphan(text) TO kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.system_acceptance_settings() TO kredit_worker;
+
+GRANT SELECT,INSERT,UPDATE ON app.customer_registration_attempts TO kredit_app;
+REVOKE INSERT,UPDATE,DELETE ON app.customer_registration_attempts FROM kredit_worker;

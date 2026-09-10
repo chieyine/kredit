@@ -282,3 +282,39 @@ func TestAbandonedEnrollmentCanRestartAndRecoveryRevokesOldFactor(t *testing.T) 
 		t.Fatal(err)
 	}
 }
+
+func TestTOTPRejectsEmptySecret(t *testing.T) {
+	now := time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
+	if code := TOTPCode("", now); code != "" {
+		t.Fatal("empty secret generated an authenticator code")
+	}
+	if validTOTP("", "123456", now) {
+		t.Fatal("empty secret accepted")
+	}
+}
+
+func TestReplacingContactRemovesOldLoginAlias(t *testing.T) {
+	s := NewStore("test-key")
+	user, err := s.FindOrCreateUser("old@example.test", "email")
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge, code, err := s.RequestOTP("new@example.test", "email", "contact")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.VerifyAndAttachIdentifier(user.ID, challenge.ID, code, "email", "new@example.test"); err != nil {
+		t.Fatal(err)
+	}
+	oldContact, err := s.FindOrCreateUser("old@example.test", "email")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldContact.ID == user.ID {
+		t.Fatal("removed email still grants access to original account")
+	}
+	current, err := s.FindOrCreateUser("new@example.test", "email")
+	if err != nil || current.ID != user.ID {
+		t.Fatalf("replacement contact lost account: %v", err)
+	}
+}

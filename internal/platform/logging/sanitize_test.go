@@ -33,3 +33,32 @@ func TestSanitizingHandlerRedactsErrorAndSensitiveAttributes(t *testing.T) {
 		t.Fatalf("sensitive log data leaked: %s", text)
 	}
 }
+
+func TestSafePathRedactsPublicFinancialLinks(t *testing.T) {
+	for _, prefix := range []string{"/api/v1/public/receipts/", "/api/v1/public/payment-intents/", "/receipt/", "/pay/", "/c/"} {
+		if got := SafePath(prefix + "signed-bearer-link?source=message"); got != prefix+"[redacted]" {
+			t.Errorf("public financial token leaked: %q", got)
+		}
+	}
+}
+
+type secretLogValue struct{}
+
+func (secretLogValue) LogValue() slog.Value {
+	return slog.GroupValue(slog.String("token", "nested-private-value"))
+}
+
+func TestSanitizingHandlerRedactsGroupsAndDeferredValues(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(NewSanitizingHandler(slog.NewJSONHandler(&output, nil)))
+	logger.With(slog.Group("context", slog.String("password", "private-password"))).Info("event", slog.Any("details", secretLogValue{}))
+	for _, secret := range []string{"private-password", "nested-private-value"} {
+		if strings.Contains(output.String(), secret) {
+			t.Fatal("structured log leaked sensitive value")
+		}
+	}
+	attributes := SafeAttributes(map[string]string{"authorization": "private-auth", "cookie": "private-cookie"})
+	if attributes["authorization"] != "[redacted]" || attributes["cookie"] != "[redacted]" {
+		t.Fatal("credential headers were not redacted")
+	}
+}

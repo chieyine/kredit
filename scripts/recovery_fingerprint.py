@@ -32,7 +32,7 @@ def connection_environment(raw: str) -> dict[str, str]:
                        PGUSER=urllib.parse.unquote(parsed.username),
                        PGPASSWORD=urllib.parse.unquote(parsed.password or ''),
                        PGDATABASE=urllib.parse.unquote(parsed.path[1:]),
-                       PGCONNECT_TIMEOUT='10', PGCLIENTENCODING='UTF8')
+                       PGCONNECT_TIMEOUT='10', PGCLIENTENCODING='UTF8', PGOPTIONS='-c statement_timeout=300000 -c lock_timeout=10000')
     settings = {'sslmode': 'PGSSLMODE', 'connect_timeout': 'PGCONNECT_TIMEOUT',
                 'sslrootcert': 'PGSSLROOTCERT', 'sslcert': 'PGSSLCERT', 'sslkey': 'PGSSLKEY',
                 'channel_binding': 'PGCHANNELBINDING', 'target_session_attrs': 'PGTARGETSESSIONATTRS',
@@ -114,7 +114,7 @@ def capture() -> dict:
                 process.stdout.close()
     if set(digests) != names | {'@policies', '@rls', '@definer_public_execute'}:
         raise FingerprintError('fingerprint capture was incomplete')
-    unbalanced = psql('SELECT count(*) FROM (SELECT transaction_id FROM ledger.postings GROUP BY transaction_id HAVING sum(debit_kobo)<>sum(credit_kobo)) bad;', environment).strip()
+    unbalanced = psql('SELECT count(*) FROM (SELECT t.id FROM ledger.transactions t LEFT JOIN ledger.postings p ON p.transaction_id=t.id GROUP BY t.id HAVING count(p.transaction_id)=0 OR sum(p.debit_kobo)<>sum(p.credit_kobo)) bad;', environment).strip()
     if unbalanced != '0':
         raise FingerprintError('restored/source ledger has unbalanced transactions')
     return {'schema_version': 1, 'scope': 'quiesced-data-rls-public-definer-acl',

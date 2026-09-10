@@ -6,7 +6,7 @@
 > **Product category:** Supplier-funded B2B trade-credit infrastructure  
 > **Initial market:** Nigeria  
 > **Primary users:** Suppliers, wholesalers, distributors, and their business buyers  
-> **Primary interfaces:** Mobile-first web application and WhatsApp  
+> **Primary interfaces:** Mobile-first web application; WhatsApp when configured and enabled
 > **Default currency:** NGN  
 > **Money storage unit:** Kobo  
 > **Default business timezone:** Africa/Lagos  
@@ -19,7 +19,9 @@
 
 ---
 
-Mono Sweep sandbox backend: see the [setup and certification runbook](docs/runbooks/mono-sweep.md). Migration 052 and local tests are implemented; real Mono sandbox authorization and provider proof remain pending. Production Sweep remains disabled.
+Mono Sweep sandbox backend: see the [setup and certification runbook](docs/runbooks/mono-sweep.md). Use the full current migration chain; migration 052 is the historical introduction of Sweep. Real Mono sandbox authorization and provider proof remain pending. Production Sweep remains disabled.
+
+Current direct audit: [file ledger and outstanding fixes](docs/launch-audit-2026-09-08/FILE-BY-FILE.md). Historical completion reports do not certify the current working tree. The owner has requested all supported operational and provider controls through admin; infrastructure bootstrap still uses deployment configuration.
 
 ## Table of contents
 
@@ -165,8 +167,8 @@ into a verified, buyer-accepted, evidenced, trackable, and collectable commercia
 4. Kredit generates a secure invitation link.
 5. The buyer opens the link and sees the exact terms before accepting anything.
 6. The buyer verifies identity, business authority, and account ownership as required.
-7. The buyer activates an approved repayment mandate.
-8. The buyer explicitly accepts the specific trade-credit agreement.
+7. The buyer explicitly accepts the specific trade-credit agreement.
+8. The buyer activates the separate approved repayment mandate.
 9. Kredit tells the supplier that the required pre-release conditions are complete.
 10. The supplier releases the goods.
 11. The buyer confirms receipt or raises a structured issue.
@@ -519,7 +521,7 @@ Do not use “borrower” or “lender” in the ordinary supplier-funded workfl
 18. Exact supplier-to-supplier exposure information must not be exposed without a lawful basis and buyer consent.
 19. The product must distinguish “verified identity” from “approved creditworthiness.”
 20. The product must never imply that KYC or a mandate guarantees repayment.
-21. Buyer silence may activate an obligation only where a delivered notice proves the buyer was told, and never on a buyer's first trade credit.
+21. Buyer silence must not activate an obligation under the current policy. Explicit buyer receipt confirmation is required; message delivery alone is not consent.
 
 ---
 
@@ -527,7 +529,9 @@ Do not use “borrower” or “lender” in the ordinary supplier-funded workfl
 
 ### 7.1 Standard pricing
 
-Kredit's initial supplier pricing is:
+Kredit's initial supplier pricing defaults are listed below. Current rates come
+from the effective admin business policy; each accepted offer retains its exact
+fee snapshot. These examples use the initial defaults:
 
 - **0.5% base trade-credit service fee** on activated principal;
 - **additional 0.5% collection fee** on amounts successfully collected by Kredit at or after the collection time.
@@ -660,28 +664,12 @@ Must support:
 
 #### 8.3.1 Receipt confirmation and deemed acceptance
 
-Activation normally follows an explicit buyer answer: confirm receipt, or raise
-an issue. Where a buyer neither confirms nor objects, a sale may be activated by
-silence only under all of the following conditions, which are enforced together
-by `internal/credit` and by the database trigger in
-`db/migrations/070_deemed_acceptance_evidence.sql`:
-
-- goods release is recorded;
-- the buyer business has previously answered a goods-release notice itself, on
-  another sale, so a buyer's first trade credit is never activated by silence;
-- a goods-release notice was delivered to the buyer, evidenced by an
-  authenticated delivery receipt, and has been with them for the full waiting
-  period;
-- the waiting period is `DEEMED_ACCEPTANCE_MIN_HOURS`, at least 24 hours and by
-  default 72, so goods released before a weekend closure cannot be deemed
-  accepted before the buyer reopens.
-
-Elapsed time alone is never sufficient. Where the evidence cannot be read, the
-sale stays in `RECEIPT_CONFIRMATION_PENDING` and waits for an explicit answer:
-delaying a supplier is recoverable, debiting a buyer who was never told is not.
-
-The goods-release notice states the deadline and what silence will be taken to
-mean, and links the buyer to the screen where they can object.
+Activation requires an explicit buyer answer: confirm receipt or raise an issue.
+Migration 076 supersedes the earlier deemed-acceptance implementation in migration
+070 and rejects activation from silence. No waiting period or delivery callback
+can replace the buyer's answer. Released goods remain awaiting confirmation until
+the buyer responds. Receipt reminders may use the configured waiting interval;
+that interval does not authorize activation or a bank debit.
 
 ### 8.4 Instalment credit
 
@@ -826,8 +814,8 @@ Must include:
 | Frontend framework | SvelteKit with Svelte 5 and TypeScript |
 | Frontend runtime | Node.js 24 LTS |
 | Package manager | pnpm workspace |
-| Styling | Tailwind CSS 4 |
-| Component foundation | shadcn-svelte and Bits UI, customised into Kredit's own design system |
+| Styling | Shared CSS tokens and component styles in `web/src/app.css` and Svelte components |
+| Component foundation | Kredit Svelte components and native accessible HTML controls |
 | Backend language | Go 1.26, latest patched point release |
 | HTTP stack | Standard `net/http` ServeMux with hand-written handlers and explicit middleware ([ADR 0005](docs/adr/0005-hand-written-http-and-sql.md)) |
 | API contract | REST, OpenAPI 3.1, problem-details errors; `api/openapi.yaml` is enforced against the routes by `scripts/product-contract-sync.mjs` |
@@ -852,7 +840,7 @@ Go provides explicit concurrency, simple deployment, strong standard-library net
 
 PostgreSQL is the source of truth because Kredit's data is relational and transactional. Agreements, limits, obligations, payments, allocations, ledger postings, disputes, mandates, users, and audit records require strong constraints and ACID transactions.
 
-`pgx` and `sqlc` keep database behaviour visible. The project must not hide core financial queries behind a general-purpose ORM.
+Explicit SQL through `pgx` keeps database behaviour visible. The project must not hide core financial queries behind a general-purpose ORM.
 
 River gives Kredit durable PostgreSQL-backed jobs and transactionally safe job insertion, allowing the initial platform to avoid Redis as a mandatory operational dependency.
 
@@ -1032,7 +1020,7 @@ kredit/
 ├── web/
 │   ├── src/
 │   │   ├── lib/
-│   │   │   ├── api/          # Generated types and client wrappers
+│   │   │   ├── api/          # Typed response decoders and client wrappers
 │   │   │   ├── components/   # Kredit design-system components
 │   │   │   ├── features/     # Feature modules
 │   │   │   ├── forms/        # Shared validation/form helpers
@@ -1079,23 +1067,17 @@ kredit/
 └── IMPLEMENTATION_STATUS.md
 ```
 
-### 11.1 Generated code policy
+### 11.1 API and SQL ownership
 
-Go server code and Go database access are hand-written; see
-[ADR 0005](docs/adr/0005-hand-written-http-and-sql.md).
+Go handlers, SQL repositories and TypeScript response decoders are hand-written;
+see [ADR 0005](docs/adr/0005-hand-written-http-and-sql.md). Unused generated Go,
+SQL and frontend client artifacts have been removed.
 
-The following are generated and must never be edited manually:
-
-- `web/src/lib/api/generated/schema.d.ts`;
-- any generated OpenAPI client file.
-
-`api/openapi.yaml` remains the canonical transport contract. Because no Go
-server code is generated from it, drift is caught by comparing the document to
-the implemented routes instead: `scripts/product-contract-sync.mjs` fails when
-the OpenAPI operations and the backend routes disagree, and
-`scripts/frontend-api-coverage.mjs` fails when a route has no frontend surface
-and no recorded exemption. CI must fail when generation produces an uncommitted
-diff.
+`api/openapi.yaml` remains the canonical transport contract. The contract-sync
+gate compares its operations with implemented routes. Frontend API coverage
+requires a corresponding surface or a recorded exemption. Runtime response
+decoders and behavior tests must also verify payloads: matching route names
+alone does not establish matching request or response shapes.
 
 ### 11.2 Module structure
 
@@ -1128,7 +1110,6 @@ Avoid generic dumping-ground packages called `utils`, `helpers`, `common`, or `s
 - pnpm;
 - Docker and Docker Compose;
 - PostgreSQL client tools;
-- sqlc;
 - Goose;
 - Task;
 - Playwright browser dependencies;
@@ -1150,8 +1131,7 @@ task dev
 - download Go modules;
 - start local dependencies;
 - apply database migrations;
-- generate sqlc code;
-- generate OpenAPI code and TypeScript types;
+- validate the canonical API contract and route coverage;
 - load deterministic development seed data;
 - install Playwright browsers if missing.
 
@@ -1200,8 +1180,6 @@ task db:rollback
 task db:reset
 task db:seed
 task db:check
-task openapi:generate
-task sqlc:generate
 task web:check
 task web:test
 task ci
@@ -1302,18 +1280,10 @@ Use Svelte 5 syntax and runes for new code.
 
 ### 13.2 Data access
 
-The Go OpenAPI schema is the contract.
-
-Generation flow:
-
-```text
-api/openapi.yaml
-      ├── oapi-codegen → Go request/response types and handler interface
-      └── openapi-typescript → TypeScript path/schema types
-                              + openapi-fetch client
-```
-
-The frontend must not hand-write duplicate API response interfaces.
+`api/openapi.yaml` is the transport contract. Shared TypeScript response
+decoders validate required fields, exact money and state values before pages
+render them. Unavailable or malformed responses remain errors. Changes to a
+response require the matching decoder and contract to change together.
 
 Use SvelteKit's provided `fetch` in server `load` functions so cookies and internal routing behave correctly.
 
@@ -1405,7 +1375,9 @@ Recommended route map:
 
 ### 13.6 Component system
 
-Use shadcn-svelte and Bits UI as editable foundations. Do not ship an unmodified generic shadcn dashboard.
+Use the existing Kredit Svelte components and native controls. The initial
+component list below describes required interface responsibilities; unused
+wrappers need not be recreated when shared helpers or native controls cover them.
 
 Required Kredit primitives:
 
@@ -1534,7 +1506,7 @@ Support current and recent versions of:
 - Safari on iOS;
 - Chrome, Edge, Firefox, and Safari desktop.
 
-Tailwind 4's browser baseline must be checked against actual target devices before launch. If field testing shows material use of unsupported old browsers, adopt a documented fallback rather than silently breaking the product.
+The CSS and JavaScript browser baseline must be checked against actual target devices before launch. If field testing shows material use of unsupported old browsers, adopt a documented fallback rather than silently breaking the product.
 
 ---
 
@@ -1617,7 +1589,7 @@ type UnitOfWork interface {
 }
 ```
 
-The transaction object must expose generated sqlc queries and River transactional insertion where required.
+The transaction object must expose explicit repository queries and River transactional insertion where required.
 
 ### 14.6 Domain errors
 
@@ -1690,10 +1662,10 @@ Changes must follow this order:
 
 1. update OpenAPI;
 2. lint it;
-3. regenerate the TypeScript client types;
+3. update shared TypeScript response decoders;
 4. implement the domain/handler;
 5. add contract and end-to-end tests;
-6. commit the generated TypeScript and run `pnpm run audit` so the contract-sync gate confirms the document and the routes still agree.
+6. run `pnpm run audit` and payload behavior tests so the contract and implementation agree.
 
 ### 15.2 API versioning
 
@@ -3823,7 +3795,7 @@ Templates must contain:
 
 ### 30.3 Delivery priority
 
-- Critical financial/security: WhatsApp plus email or SMS fallback.
+- Critical financial/security: a configured, enabled channel with email or SMS fallback where available; do not promise WhatsApp delivery while disabled.
 - Routine reminders: preferred channel, fallback after failure.
 - Marketing: separate consent and preference.
 
@@ -3977,6 +3949,17 @@ Each class has a retention policy and deletion/hold rules.
 ---
 
 ## 33. Admin, support, and compliance console
+
+### 33.0 Owner administration
+
+The platform owner can access all supported admin sections. Administrative
+settings, provider connections and business-policy controls must have real
+runtime consumers, current-version checks, recent MFA and recorded reasons.
+Solo-owner and delegated approval modes follow the persisted governance policy;
+the interface must explain which rule applies. Ordinary tenant roles do not gain
+platform ownership through this surface. Website and legal publication controls
+are required by the owner's launch brief and remain tracked in the current audit
+until implemented and verified.
 
 ### 33.1 Search
 
@@ -4560,8 +4543,7 @@ Every PR must run:
 - `svelte-check`;
 - frontend unit tests;
 - OpenAPI lint;
-- generated-code diff check;
-- sqlc generation and vet;
+- API route and payload contract checks;
 - migration apply on fresh DB;
 - migration compatibility test;
 - integration tests;
@@ -4629,7 +4611,7 @@ Required domains:
 - allocations never exceed payment;
 - schedule principal sums correctly;
 - collection never exceeds outstanding;
-- collection fee equals 0.5% of confirmed collected amount;
+- collection fee uses the accepted rate and only confirmed collected amounts;
 - idempotent duplicate event has no second effect;
 - trade-line available amount never negative;
 - reversal restores expected balance;
@@ -4659,7 +4641,7 @@ Test:
 - locks;
 - RLS;
 - River job insertion;
-- sqlc queries;
+- repository SQL queries;
 - migrations;
 - provider event deduplication;
 - object storage;
@@ -4867,9 +4849,12 @@ Hero visual should demonstrate:
 
 Display plainly:
 
-> **0.5% when your customer pays before collection.**
+> **The base service fee applies when the sale becomes active.**
 >
-> **1% on the amount Kredit has to collect.**
+> **A separate collection fee applies only to money Kredit successfully collects.**
+
+Show the verified current rates from admin policy. At the initial 0.5% / 0.5%
+rates, partial voluntary payment does not change the original base-fee basis.
 
 Include accurate examples and clarify that the supplier provides the goods and carries the underlying trade credit unless a future financed product is explicitly selected.
 
@@ -4923,14 +4908,14 @@ The implementation is complete only when all production-v1 requirements pass, bu
 - CI;
 - toolchain pins;
 - Postgres/MinIO local stack;
-- OpenAPI generation;
-- sqlc generation;
+- canonical OpenAPI and response-contract checks;
+- explicit SQL repositories;
 - migration runner;
 - logging and telemetry skeleton;
 - docs structure;
 - implementation status tracker.
 
-**Exit:** one command starts the system; CI prevents generated-code drift.
+**Exit:** one command starts the system; CI checks API/SQL contracts and behavior.
 
 ### Milestone 1 — Authentication and organisations
 

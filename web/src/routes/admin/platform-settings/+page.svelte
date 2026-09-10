@@ -1,14 +1,21 @@
 <script lang="ts">
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
+	import OwnerDialog from '$lib/components/OwnerDialog.svelte';
+	import { MutationIntent } from '$lib/api/mutation';
+	import { record, text } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
-	import { adminGet, adminPost, localTime } from '$lib/admin-client';
+	import { adminGet, localTime } from '$lib/admin-client';
 
 	type Setting = {
 		key: string;
+        is_secret?: boolean;
+        connection_state?: string;
+        requires_restart?: boolean;
+        applied_version?: number;
+        connection_fields?: {key:string;label:string;kind:string}[];
+        connection_values?: Record<string,string|number|boolean>;
 		category: string;
 		value: any;
-		is_secret: boolean;
-		secret_fingerprint?: string;
 		description: string;
 		version: number;
 		updated_at: string;
@@ -35,20 +42,19 @@
 		recorded_at: string;
 	};
 
-	const categories = [
-		{ id: 'all', label: 'All Settings' },
-		{ id: 'launch', label: 'Launch & Visibility' },
-		{ id: 'features', label: 'Features & Switches' },
-		{ id: 'financial_caps', label: 'Financial & Policy Caps' },
-		{ id: 'risk_limits', label: 'Risk Limits' },
-		{ id: 'integrations', label: 'Integrations & Credentials' },
-		{ id: 'security', label: 'Security & Auth' },
-		{ id: 'legal', label: 'Legal & Compliance' },
-		{ id: 'notifications', label: 'Notifications' }
-	];
+ const categories = [{ id: 'all', label: 'All settings' }, { id: 'features', label: 'Features' }, { id: 'integrations', label: 'Connections' }];
+ let clearRuntimeSecrets = $state(false);
+ let runtimeDraft = $state<Record<string,string|number|boolean>>({});
+ let connectorEnabled = $state(true);
+ let connectorEndpoint = $state('');
+ let connectorToken = $state('');
+ function clearConnector() { connectorEndpoint = ''; connectorToken = ''; runtimeDraft = {}; clearRuntimeSecrets=false; }
 
-	let settings: Setting[] = $state([]);
-	let governance: Governance = $state({ mode: 'solo_owner', updated_at: '', reason: '' });
+	let settingIntent: MutationIntent | null = null;
+ let governanceIntent: MutationIntent | null = null;
+ let transferIntent: MutationIntent | null = null;
+ let settings: Setting[] = $state([]);
+	let governance: Governance | null = $state(null);
 	let selectedCategory = $state('all');
 	let searchQuery = $state('');
 	let loading = $state(true);
@@ -58,18 +64,25 @@
 	let isOwner = $state(false);
 
 	// Modals & Drafts
+	// One place decides how a stored value reads on screen, so the table, the
+	// diff and the history cannot describe the same value three different ways.
+	function readable(value: unknown): string {
+		if (typeof value === 'boolean') return value ? 'On' : 'Off';
+		if (value === null || value === undefined) return 'Not set';
+		if (typeof value === 'object') return 'Structured data';
+		return String(value);
+	}
+
 	let editingSetting: Setting | null = $state(null);
 	let editDraftValue: any = $state(null);
 	let editReason = $state('');
 	let previewDiffModal = $state(false);
 
-	let secretRotateSetting: Setting | null = $state(null);
-	let newSecretValue = $state('');
-	let secretRotateReason = $state('');
-
 	let historySettingKey: string | null = $state(null);
 	let historyEntries: SettingHistory[] = $state([]);
 	let historyLoading = $state(false);
+    let historyGeneration = 0;
+    let historyError = $state('');
 
 	let governanceModal = $state(false);
 	let newGovMode: 'solo_owner' | 'delegated_team' = $state('solo_owner');
@@ -87,19 +100,34 @@
 	async function load() {
 		loading = true;
 		error = '';
+        governance = null; isOwner = false; settings = [];
 		try {
 			const [caps, res] = await Promise.all([
 				adminGet('/api/v1/ops/capabilities'),
 				adminGet('/api/v1/ops/platform-settings')
 			]);
-			isOwner = caps.roles?.includes('platform_owner') || false;
-			settings = res.settings || [];
+			if(!Array.isArray(caps.roles)||caps.roles.some((role:unknown)=>typeof role!=='string'))throw new Error('Admin permissions could not be verified.');
+			isOwner = caps.roles.includes('platform_owner');
+			if (!Array.isArray(res.settings) || !['solo_owner', 'delegated_team'].includes(res.governance?.mode)) throw new Error('Settings and approval rules could not be verified. Try again.');
+            const keys=new Set<string>();
+            settings = res.settings.map((value:unknown)=>{
+             const item=record(value);
+             for(const key of ['key','description','category'])text(item[key]);
+             if(keys.has(item.key as string)||!Number.isSafeInteger(item.version)||Number(item.version)<0||!('value' in item))throw new Error('Settings could not be verified.');
+             keys.add(item.key as string);
+             if(item.requires_restart){
+              if(!Array.isArray(item.connection_fields))throw new Error('Connection fields unavailable.');
+              for(const value of item.connection_fields){const field=record(value);text(field.key);text(field.label);if(!['password','boolean','number','url','text'].includes(text(field.kind)))throw new Error('Unsupported connection field.');}
+             }
+             return item as Setting;
+            });
 			if (res.governance) {
 				governance = res.governance;
-				newGovMode = res.governance.mode;
+				newGovMode = res.governance?.mode;
 			}
 		} catch (e: any) {
-			error = e.message || 'Failed to load platform settings';
+			governance=null;isOwner=false;settings=[];
+			error = e.message || 'We could not open the settings. Try again.';
 		} finally {
 			loading = false;
 		}
@@ -107,91 +135,75 @@
 
 	function openEdit(setting: Setting) {
 		editingSetting = setting;
+        settingIntent = new MutationIntent(`platform-setting:${setting.key}`, '/api/v1/ops/platform-settings');
+        clearConnector(); connectorEnabled = true;
+        if(setting.requires_restart){runtimeDraft=Object.fromEntries((setting.connection_fields||[]).map(field=>[field.key,field.kind==='password'?'':setting.connection_values?.[field.key]??(field.kind==='boolean'?false:field.kind==='number'?0:'')]))}
 		editDraftValue = JSON.parse(JSON.stringify(setting.value));
 		editReason = '';
 		previewDiffModal = true;
 	}
 
 	async function submitSettingUpdate() {
-		if (!editingSetting) return;
+		if (!editingSetting || !settingIntent || busy) return;
+		const expectedSetting=editingSetting;
 		busy = true;
 		error = '';
 		message = '';
 		try {
-			await adminPost('/api/v1/ops/platform-settings', {
+			await settingIntent.run({
 				key: editingSetting.key,
-				value: editDraftValue,
+                clear_credentials: editingSetting.requires_restart && clearRuntimeSecrets,
+ expected_version: editingSetting.version,
+				value: editingSetting.requires_restart ? JSON.stringify(runtimeDraft) : editingSetting.is_secret ? JSON.stringify({ enabled: connectorEnabled, endpoint: connectorEnabled ? connectorEndpoint.trim() : "", token: connectorEnabled ? connectorToken.trim() : "" }) : editDraftValue,
 				reason: editReason
-			});
-			message = `Setting ${editingSetting.key} updated successfully.`;
+			}, value => {const item=record(record(value).setting);if(item.key!==expectedSetting.key||!Number.isSafeInteger(item.version)||Number(item.version)<=expectedSetting.version)throw new Error('Setting save was not confirmed');return item;});
+			message = editingSetting.requires_restart ? 'Connection saved. Restart the API and worker to apply it; live operation still needs verification.' : `${editingSetting.description} — saved.`;
 			previewDiffModal = false;
+            clearConnector();
 			editingSetting = null;
 			await load();
 		} catch (e: any) {
-			error = e.message || 'Failed to update setting';
+			error = e.message || 'That change was not saved.';
 		} finally {
 			busy = false;
 		}
 	}
 
-	function openSecretRotate(setting: Setting) {
-		secretRotateSetting = setting;
-		newSecretValue = '';
-		secretRotateReason = '';
-	}
-
-	async function submitSecretRotate() {
-		if (!secretRotateSetting) return;
-		busy = true;
-		error = '';
-		message = '';
-		try {
-			await adminPost('/api/v1/ops/platform-settings/secret', {
-				key: secretRotateSetting.key,
-				secret: newSecretValue,
-				reason: secretRotateReason
-			});
-			message = `Secret for ${secretRotateSetting.key} rotated securely.`;
-			secretRotateSetting = null;
-			newSecretValue = '';
-			secretRotateReason = '';
-			await load();
-		} catch (e: any) {
-			error = e.message || 'Failed to rotate secret';
-		} finally {
-			busy = false;
-		}
-	}
 
 	async function openHistory(key: string) {
+        const generation = ++historyGeneration;
 		historySettingKey = key;
 		historyLoading = true;
-		historyEntries = [];
+		historyEntries = []; historyError = '';
 		try {
 			const res = await adminGet(`/api/v1/ops/platform-settings/history?key=${encodeURIComponent(key)}`);
-			historyEntries = res.history || [];
+			if (generation !== historyGeneration || historySettingKey !== key) return;
+			if (!Array.isArray(res.history)) throw new Error('History could not be verified.');
+            historyEntries = res.history;
 		} catch (e: any) {
-			error = e.message || 'Failed to load setting history';
+			if (generation === historyGeneration && historySettingKey === key) historyError = e.message || 'We could not open the history for this setting.';
 		} finally {
-			historyLoading = false;
+			if (generation === historyGeneration) historyLoading = false;
 		}
 	}
 
 	async function submitGovernanceChange() {
+        if (busy) return;
 		busy = true;
 		error = '';
 		message = '';
 		try {
-			await adminPost('/api/v1/ops/governance', {
+			governanceIntent ??= new MutationIntent('platform-governance','/api/v1/ops/governance');
+			await governanceIntent.run({
 				mode: newGovMode,
 				reason: govReason
-			});
-			message = `Platform governance mode changed to ${newGovMode === 'solo_owner' ? 'Solo Owner Mode' : 'Delegated Team Mode'}.`;
+			},value=>{const gov=record(record(value).governance);if(gov.mode!==newGovMode)throw new Error('Approval rule change was not confirmed');return gov;});
+			message = newGovMode === 'solo_owner' ? 'You can now approve your own changes.' : 'Changes now need a second administrator.';
 			governanceModal = false;
 			govReason = '';
 			await load();
 		} catch (e: any) {
-			error = e.message || 'Failed to update governance mode';
+			error = e.message || 'That change was not saved.';
 		} finally {
 			busy = false;
 		}
@@ -203,23 +215,26 @@
 	let transferConfirmed = $state(false);
 
 	async function submitTransferOwnership() {
+        if (busy) return;
+		const targetUserId = transferTargetUserId.trim().toLowerCase();
 		busy = true;
 		error = '';
 		message = '';
 		try {
-			await adminPost('/api/v1/ops/ownership/transfer', {
-				target_user_id: transferTargetUserId,
+			transferIntent ??= new MutationIntent('platform-transfer','/api/v1/ops/ownership/transfer');
+			await transferIntent.run({
+				target_user_id: targetUserId,
 				reason: transferReason,
 				confirm: transferConfirmed
-			});
-			message = 'Platform ownership transferred successfully.';
+			},value=>{const result=record(value);if(result.transferred!==true||result.new_owner_user_id!==targetUserId)throw new Error('Ownership transfer was not confirmed');return result;});
+			message = 'Ownership handed over.';
 			transferModal = false;
 			transferTargetUserId = '';
 			transferReason = '';
 			transferConfirmed = false;
 			await load();
 		} catch (e: any) {
-			error = e.message || 'Failed to transfer ownership';
+			error = e.message || 'Ownership was not handed over.';
 		} finally {
 			busy = false;
 		}
@@ -229,23 +244,23 @@
 </script>
 
 <svelte:head>
-	<title>Platform Settings & Launch Controls — Kredit Admin</title>
+	<title>Platform settings — Kredit admin</title>
 </svelte:head>
 
 <main class="shell workspace">
 	<div class="header-row">
 		<div>
-			<p class="eyebrow">Super Admin / Platform Controls</p>
-			<h1>Platform Settings & Launch Registry</h1>
+			<p class="eyebrow">Admin / Platform</p>
+			<h1>Platform settings</h1>
 		</div>
 		<div class="gov-pill-container">
-			<div class="gov-badge {governance.mode}">
+			<div class="gov-badge {governance?.mode}">
 				<span class="dot"></span>
-				<strong>{governance.mode === 'solo_owner' ? 'Solo-Owner Mode' : 'Delegated Team Mode'}</strong>
+				<strong>{!governance ? 'Approval rules unavailable' : governance.mode === 'solo_owner' ? 'Solo owner' : 'Delegated team'}</strong>
 			</div>
 			{#if isOwner}
-				<button class="small-btn" onclick={() => { governanceModal = true; govReason = ''; }}>Change Mode</button>
-				<button class="small-btn danger" onclick={() => { transferModal = true; transferReason = ''; transferConfirmed = false; transferTargetUserId = ''; }}>Transfer Ownership</button>
+				<button class="small-btn" onclick={() => { governanceModal = true; govReason = ''; }}>Change this</button>
+				<button class="small-btn danger" onclick={() => { transferModal = true; transferReason = ''; transferConfirmed = false; transferTargetUserId = ''; }}>Hand over ownership</button>
 			{/if}
 		</div>
 	</div>
@@ -253,30 +268,30 @@
 	<VerifyIdentity />
 
 	<p class="subhead">
-		Comprehensive database-backed configuration for launch stages, feature gates, risk parameters, integration secrets, and operational policies. All mutations require step-up MFA, are strictly typed, and maintain an immutable versioned audit history.
+		Manage product features and provider connections. Every change needs a fresh authenticator code and a reason, and the history cannot be edited afterwards.
 	</p>
 
 	{#if error}<p role="alert" class="alert error">{error}</p>{/if}
 	{#if message}<p role="status" class="alert success">{message}</p>{/if}
 
-	<!-- Governance & Mode Banner -->
-	<div class="banner {governance.mode === 'solo_owner' ? 'banner-warning' : 'banner-info'}">
+	{#if governance}<div class="banner banner-info">
 		<div class="banner-title">
-			<strong>{governance.mode === 'solo_owner' ? 'Single-Owner Autonomous Mode Active' : 'Delegated Team Mode Active'}</strong>
+			<strong>{governance?.mode === 'solo_owner' ? 'You run Kredit alone' : 'Changes need a second person'}</strong>
 		</div>
 		<p>
-			{#if governance.mode === 'solo_owner'}
-				Platform Owner is permitted to execute self-approvals on administrative and policy changes with explicit confirmation and mandatory audit justifications. Maker-checker is maintained for all non-owner roles.
+			{#if governance?.mode === 'solo_owner'}
+				You can approve your own financial and business-policy proposals. Each approval needs a fresh authenticator code and a written reason. Platform settings and provider connections are managed directly by the owner.
 			{:else}
-				Strict four-eyes separation enforced across all administrative and policy mutations. No administrator or owner may approve their own proposed changes.
+				Financial and business-policy proposals need a different administrator to approve them. Platform settings and provider connections are managed directly by the owner.
 			{/if}
 		</p>
 	</div>
 
+    {/if}
 	<!-- Controls & Category Filter -->
 	<div class="toolbar">
 		<div class="search-box">
-			<input type="search" placeholder="Search settings or description..." bind:value={searchQuery} />
+			<input type="search" placeholder="Search settings" bind:value={searchQuery} aria-label="Search settings" />
 		</div>
 		<div class="category-tabs">
 			{#each categories as cat}
@@ -292,65 +307,52 @@
 
 	<!-- Settings Table -->
 	{#if loading}
-		<div class="loading-state">Loading platform registry settings...</div>
+		<div class="loading-state">Opening settings…</div>
+	{:else if !governance}<button type="button" onclick={load}>Try again</button>
 	{:else if filteredSettings.length === 0}
-		<div class="empty-state">No settings match the current filter or search criteria.</div>
+		<div class="empty-state">No setting matches that search.</div>
 	{:else}
 		<div class="table-wrap">
 			<table class="settings-table">
 				<thead>
 					<tr>
-						<th>Key & Description</th>
+						<th>Setting</th>
 						<th>Category</th>
-						<th>Current Value / Status</th>
+						<th>Now</th>
 						<th>Version</th>
-						<th>Last Updated</th>
-						<th>Actions</th>
+						<th>Last changed</th>
+						<th></th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each filteredSettings as s (s.key)}
 						<tr class="setting-row">
 							<td class="key-col">
-								<span class="setting-key">{s.key}</span>
-								<p class="setting-desc">{s.description}</p>
+								<span class="setting-key">{s.description}</span>
+								<details class="setting-desc"><summary>Technical details</summary><code>{s.key}</code></details>
 							</td>
 							<td>
 								<span class="category-tag">{s.category}</span>
 							</td>
 							<td class="val-col">
-								{#if s.is_secret}
-									<div class="secret-val">
-										<code>{typeof s.value === 'string' ? s.value : '••••••••'}</code>
-										{#if s.secret_fingerprint}
-											<span class="fingerprint" title="SHA-256 Fingerprint">SHA: {s.secret_fingerprint.slice(0, 10)}…</span>
-										{/if}
-									</div>
-								{:else if typeof s.value === 'boolean'}
+								{#if s.is_secret}<span>{!s.version ? 'No admin override' : s.connection_state === 'restart_required' ? 'Saved · restart API and worker' : s.connection_state === 'applied_unverified' ? 'Applied to API · verify worker and provider' : s.connection_state === 'disabled' ? 'Disabled' : s.connection_state === 'enabled_unverified' ? 'Enabled · delivery not verified' : 'Configuration needs checking'}</span>
+                                {:else if typeof s.value === 'boolean'}
 									<span class="bool-tag {s.value ? 'enabled' : 'disabled'}">
 										{s.value ? 'Enabled' : 'Disabled'}
 									</span>
-								{:else if typeof s.value === 'object'}
-									<code class="json-snippet">{JSON.stringify(s.value)}</code>
 								{:else}
-									<code>{String(s.value)}</code>
+									<span>{readable(s.value)}</span>
 								{/if}
 							</td>
 							<td class="center">v{s.version}</td>
 							<td>
-								<span class="date">{localTime(s.updated_at)}</span>
+								<span class="date">{s.version ? localTime(s.updated_at) : '—'}</span>
 								{#if s.reason}<p class="reason-hint">"{s.reason}"</p>{/if}
 							</td>
 							<td class="actions-col">
-								{#if s.is_secret}
-									<button class="action-btn" onclick={() => openSecretRotate(s)} disabled={!isOwner}>
-										Rotate Secret
-									</button>
-								{:else}
-									<button class="action-btn" onclick={() => openEdit(s)} disabled={!isOwner}>
-										Edit Value
-									</button>
-								{/if}
+								<button class="action-btn" onclick={() => openEdit(s)} disabled={!isOwner}>
+									Change
+								</button>
 								<button class="action-btn text-btn" onclick={() => openHistory(s.key)}>
 									History
 								</button>
@@ -364,150 +366,137 @@
 
 	<!-- Edit Modal with Diff Preview -->
 	{#if previewDiffModal && editingSetting}
-		<div class="modal-overlay" role="dialog" aria-modal="true">
-			<div class="modal-card">
-				<h2>Edit Platform Setting</h2>
-				<p class="mono">{editingSetting.key}</p>
-				<p class="desc">{editingSetting.description}</p>
+		<OwnerDialog {busy} bind:open={previewDiffModal} title="Change this setting" description={editingSetting.description} onclose={() => { editingSetting = null; clearConnector(); }}>
+				<details class="setting-desc"><summary>Technical name</summary><code>{editingSetting.key}</code></details>
 
-				<form onsubmit={(e) => { e.preventDefault(); submitSettingUpdate(); }}>
+				<form onsubmit={(e) => { e.preventDefault(); submitSettingUpdate(); }}><fieldset disabled={busy}>
 					<div class="form-group">
-						<label for="edit-val">New Value</label>
-						{#if typeof editingSetting.value === 'boolean'}
+						{#if !editingSetting.requires_restart}<label for="edit-val">New value</label>{/if}
+						{#if editingSetting.requires_restart}
+                            <p>Changes apply after restarting the API and worker. Saved access tokens and signing secrets stay hidden; leave them blank to keep the current value. A changed connection must be verified with the provider before launch.</p>
+                            {#if editingSetting.connection_fields?.some(field=>field.kind==='password')}
+                                <label class="credential-clear"><input type="checkbox" bind:checked={clearRuntimeSecrets} disabled={busy} onchange={()=>{if(clearRuntimeSecrets)for(const field of editingSetting?.connection_fields||[])if(field.kind==='password')runtimeDraft[field.key]=''}} />Remove current credentials instead of keeping blank fields</label>
+                                {#if clearRuntimeSecrets}<p>Removing credentials disconnects the provider after restart. Finish pending verification and bank operations before doing this.</p>{/if}
+                            {/if}
+                            {#each editingSetting.connection_fields || [] as field (field.key)}
+                                <label for={`connection-${field.key}`}>{field.label}</label>
+                                {#if field.kind === 'boolean'}
+                                    <select id={`connection-${field.key}`} bind:value={runtimeDraft[field.key]} disabled={busy}><option value={true}>Enabled</option><option value={false}>Disabled</option></select>
+                                {:else if field.kind === 'number'}
+                                    <input id={`connection-${field.key}`} type="number" min="0" max="9007199254740991" step="1" bind:value={runtimeDraft[field.key]} disabled={busy} required />
+                                {:else if field.kind === 'password'}
+                                    <input id={`connection-${field.key}`} type="password" bind:value={runtimeDraft[field.key]} autocomplete="new-password" disabled={busy} placeholder="Leave blank to keep current" />
+                                {:else if field.kind === 'url'}
+                                    <input id={`connection-${field.key}`} type="url" bind:value={runtimeDraft[field.key]} disabled={busy} />
+                                {:else}<input id={`connection-${field.key}`} type="text" bind:value={runtimeDraft[field.key]} disabled={busy} />{/if}
+                            {/each}
+                        {:else if editingSetting.is_secret}
+                            <select id="edit-val" bind:value={connectorEnabled} disabled={busy}>
+                                <option value={true}>Connect or replace credentials</option>
+                                <option value={false}>Disable this channel</option>
+                            </select>
+                            <p>Use a service that supports Kredit’s notification connector format. A vendor API key alone may not work. Changes apply to the next delivery in staging and production; development keeps using test delivery.</p>
+                            {#if connectorEnabled}
+                                <label for="connector-endpoint">Connector HTTPS address</label>
+                                <input id="connector-endpoint" type="url" bind:value={connectorEndpoint} placeholder="https://your-connector.example/send" required disabled={busy} />
+                                <label for="connector-token">Connector access token</label>
+                                <input id="connector-token" type="password" bind:value={connectorToken} autocomplete="new-password" required disabled={busy} />
+                                <p>Enter both fields to replace the connection. Saved credentials are encrypted and cannot be revealed here.</p>
+                            {:else}<p>This stops delivery through this channel, including sign-in codes. Make sure you have another working sign-in channel before saving.</p>{/if}
+                        {:else if typeof editingSetting.value === 'boolean'}
 							<select id="edit-val" bind:value={editDraftValue}>
-								<option value={true}>true (Enabled)</option>
-								<option value={false}>false (Disabled)</option>
+								<option value={true}>On</option>
+								<option value={false}>Off</option>
 							</select>
 						{:else if typeof editingSetting.value === 'number'}
 							<input id="edit-val" type="number" step="any" bind:value={editDraftValue} required />
 						{:else if typeof editingSetting.value === 'string'}
 							<input id="edit-val" type="text" bind:value={editDraftValue} required />
 						{:else}
-							<textarea id="edit-val" rows="4" bind:value={editDraftValue}></textarea>
+							<p class="not-editable">This setting holds structured data. It is changed in a release, not on this screen.</p>
 						{/if}
 					</div>
 
-					<div class="diff-preview">
-						<h3>Change Diff Preview</h3>
-						<div class="diff-row before">
-							<span class="diff-label">Current:</span>
-							<code>{JSON.stringify(editingSetting.value)}</code>
-						</div>
-						<div class="diff-row after">
-							<span class="diff-label">Proposed:</span>
-							<code>{JSON.stringify(editDraftValue)}</code>
-						</div>
+					{#if editingSetting.requires_restart}
+                        <div class="diff-preview"><h3>Fields being changed</h3>
+                            {#each editingSetting.connection_fields || [] as field}
+                                {#if field.kind === 'password' ? clearRuntimeSecrets || runtimeDraft[field.key] !== '' : runtimeDraft[field.key] !== editingSetting.connection_values?.[field.key]}
+                                    <p><strong>{field.label}:</strong> {field.kind === 'password' ? (runtimeDraft[field.key] ? 'Replace hidden value' : 'Remove current value') : `${readable(editingSetting.connection_values?.[field.key])} → ${readable(runtimeDraft[field.key])}`}</p>
+                                {/if}
+                            {/each}
+                        </div>
+                    {/if}
+                    <div class="diff-preview">
+						<h3>What changes</h3>
+						<div class="diff-row before"><span class="diff-label">Now</span><strong>{editingSetting.is_secret ? (editingSetting.version ? 'Saved configuration' : 'Deployment configuration, if available') : readable(editingSetting.value)}</strong></div>
+						<div class="diff-row after"><span class="diff-label">After</span><strong>{editingSetting.requires_restart ? 'Saved configuration; applies after API and worker restart' : editingSetting.is_secret ? (connectorEnabled ? 'Replace connection; delivery still needs verification' : 'Channel disabled') : readable(editDraftValue)}</strong></div>
 					</div>
 
 					<div class="form-group">
-						<label for="edit-reason">Audit Reason (Mandatory, min 4 characters)</label>
-						<input id="edit-reason" type="text" bind:value={editReason} placeholder="State the reason for this operational change" required minlength="4" />
+						<label for="edit-reason">Why are you making this change?</label>
+						<textarea id="edit-reason" rows="3" bind:value={editReason} placeholder="This is recorded permanently and cannot be edited later." required minlength="8" maxlength="2000"></textarea>
 					</div>
 
-					<div class="modal-actions">
-						<button type="button" class="cancel-btn" onclick={() => previewDiffModal = false} disabled={busy}>Cancel</button>
-						<button type="submit" class="save-btn" disabled={busy || editReason.trim().length < 4 || JSON.stringify(editingSetting.value) === JSON.stringify(editDraftValue)}>
-							{busy ? 'Saving...' : 'Apply Setting Change'}
+					{#if error}<p role="alert" class="error">{error}</p>{/if}
+                    <div class="modal-actions">
+						<button type="button" class="cancel-btn" onclick={() => { previewDiffModal = false; editingSetting = null; clearConnector(); }} disabled={busy}>Cancel</button>
+						<button type="submit" class="save-btn" disabled={busy || editReason.trim().length < 8 || (editingSetting.requires_restart ? false : editingSetting.is_secret ? (connectorEnabled && (!connectorEndpoint.trim() || !connectorToken.trim())) : JSON.stringify(editingSetting.value) === JSON.stringify(editDraftValue))}>
+							{busy ? 'Saving…' : 'Save this change'}
 						</button>
 					</div>
-				</form>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Secret Rotation Modal -->
-	{#if secretRotateSetting}
-		<div class="modal-overlay" role="dialog" aria-modal="true">
-			<div class="modal-card">
-				<h2>Rotate Integration Credential</h2>
-				<p class="mono">{secretRotateSetting.key}</p>
-				<p class="desc">{secretRotateSetting.description}</p>
-				<div class="security-note">
-					Secret will be encrypted with AES-256-GCM prior to storage in PostgreSQL. The plain value will never be viewable again; only masked suffixes and SHA-256 fingerprints are preserved for verification.
-				</div>
-
-				<form onsubmit={(e) => { e.preventDefault(); submitSecretRotate(); }}>
-					<div class="form-group">
-						<label for="new-sec">New Plaintext Secret Value</label>
-						<input id="new-sec" type="password" autocomplete="new-password" bind:value={newSecretValue} placeholder="Enter raw API key or token..." required />
-					</div>
-
-					<div class="form-group">
-						<label for="sec-reason">Rotation Justification (Mandatory)</label>
-						<input id="sec-reason" type="text" bind:value={secretRotateReason} placeholder="e.g., Scheduled quarterly credential rotation" required minlength="4" />
-					</div>
-
-					<div class="modal-actions">
-						<button type="button" class="cancel-btn" onclick={() => secretRotateSetting = null} disabled={busy}>Cancel</button>
-						<button type="submit" class="save-btn warn" disabled={busy || !newSecretValue || secretRotateReason.trim().length < 4}>
-							{busy ? 'Rotating...' : 'Encrypt & Rotate Secret'}
-						</button>
-					</div>
-				</form>
-			</div>
-		</div>
+				</fieldset></form>
+		</OwnerDialog>
 	{/if}
 
 	<!-- Governance Switcher Modal -->
 	{#if governanceModal}
-		<div class="modal-overlay" role="dialog" aria-modal="true">
-			<div class="modal-card">
-				<h2>Platform Governance Mode</h2>
-				<p class="desc">Configure maker-checker constraints for solo owner operations vs delegated team operations.</p>
+		<OwnerDialog {busy} open={governanceModal} title="Who approves changes" description="This decides whether you can approve your own changes, or whether a second administrator has to." onclose={() => (governanceModal = false)}>
 
-				<form onsubmit={(e) => { e.preventDefault(); submitGovernanceChange(); }}>
+				<form onsubmit={(e) => { e.preventDefault(); submitGovernanceChange(); }}><fieldset disabled={busy}>
 					<div class="form-group">
-						<span class="group-label">Select Operational Mode</span>
+						<span class="group-label">Choose one</span>
 						<div class="mode-options">
 							<label class="mode-radio">
 								<input type="radio" name="gov-mode" value="solo_owner" bind:group={newGovMode} />
 								<div>
-									<strong>Solo-Owner Mode</strong>
-									<p>Allows platform owner self-approval with explicit confirmation and audit justifications.</p>
+									<strong>I run Kredit alone</strong>
+									<p>You approve your own changes. Each one still needs a fresh authenticator code and a written reason.</p>
 								</div>
 							</label>
 							<label class="mode-radio">
 								<input type="radio" name="gov-mode" value="delegated_team" bind:group={newGovMode} />
 								<div>
-									<strong>Delegated Team Mode</strong>
-									<p>Enforces strict four-eyes separation. Every change requires an independent second administrator.</p>
+									<strong>A second person approves</strong>
+									<p>Nobody approves their own change, including you. Choose this once you have a second administrator.</p>
 								</div>
 							</label>
 						</div>
 					</div>
 
 					<div class="form-group">
-						<label for="gov-reason">Audit Reason for Mode Change (Mandatory)</label>
-						<input id="gov-reason" type="text" bind:value={govReason} placeholder="e.g., Transitioning to multi-operator production governance" required minlength="4" />
+						<label for="gov-reason">Why are you changing this?</label>
+						<textarea id="gov-reason" rows="3" bind:value={govReason} placeholder="This is recorded permanently and cannot be edited later." required minlength="8" maxlength="2000"></textarea>
 					</div>
 
-					<div class="modal-actions">
+					{#if error}<p role="alert" class="error">{error}</p>{/if}
+                    <div class="modal-actions">
 						<button type="button" class="cancel-btn" onclick={() => governanceModal = false} disabled={busy}>Cancel</button>
-						<button type="submit" class="save-btn" disabled={busy || govReason.trim().length < 4}>
-							{busy ? 'Saving...' : 'Confirm Governance Change'}
+						<button type="submit" class="save-btn" disabled={busy || govReason.trim().length < 8}>
+							{busy ? 'Saving…' : 'Save this'}
 						</button>
 					</div>
-				</form>
-			</div>
-		</div>
+				</fieldset></form>
+		</OwnerDialog>
 	{/if}
 
 	<!-- History Drawer / Modal -->
 	{#if historySettingKey}
-		<div class="modal-overlay" role="dialog" aria-modal="true">
-			<div class="modal-card wide">
-				<div class="modal-header">
-					<div>
-						<h2>Audit History</h2>
-						<p class="mono">{historySettingKey}</p>
-					</div>
-					<button class="close-btn" onclick={() => historySettingKey = null}>✕</button>
-				</div>
-
+		<OwnerDialog open={true} title="History" description="Every change to this setting, oldest last. This record cannot be edited." onclose={() => (historySettingKey = null)}>
 				{#if historyLoading}
-					<div class="loading-state">Loading version history...</div>
+					<div class="loading-state">Opening history…</div>
+				{:else if historyError}<p role="alert" class="error">{historyError}</p><button type="button" onclick={() => openHistory(historySettingKey!)}>Try again</button>
 				{:else if historyEntries.length === 0}
-					<div class="empty-state">No recorded history entries for this key.</div>
+					<div class="empty-state">This setting has not been changed yet.</div>
 				{:else}
 					<div class="table-wrap">
 						<table class="history-table">
@@ -515,9 +504,9 @@
 								<tr>
 									<th>Version</th>
 									<th>Action</th>
-									<th>New Value</th>
-									<th>Recorded At</th>
-									<th>Reason & Actor</th>
+									<th>Changed to</th>
+									<th>When</th>
+									<th>Reason and who</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -525,13 +514,11 @@
 									<tr>
 										<td>v{h.version}</td>
 										<td><span class="action-tag">{h.action}</span></td>
-										<td>
-											<code class="json-snippet">{JSON.stringify(h.new_value)}</code>
-										</td>
+										<td>{readable(h.new_value)}</td>
 										<td>{localTime(h.recorded_at)}</td>
 										<td>
 											<strong>{h.reason}</strong>
-											{#if h.actor_id}<p class="actor-sub">Actor: {h.actor_id}</p>{/if}
+											{#if h.actor_id}<p class="actor-sub">Changed by {h.actor_id}</p>{/if}
 										</td>
 									</tr>
 								{/each}
@@ -539,53 +526,47 @@
 						</table>
 					</div>
 				{/if}
-			</div>
-		</div>
+		</OwnerDialog>
 	{/if}
 
 	<!-- Ownership Transfer Modal -->
 	{#if transferModal}
-		<div class="modal-overlay" role="dialog" aria-modal="true">
-			<div class="modal-card">
-				<div class="modal-header">
-					<h2>Audited Ownership Transfer</h2>
-					<button class="close-btn" onclick={() => transferModal = false}>✕</button>
-				</div>
-				<p class="modal-desc">
-					Transfer platform owner credentials to another active registered operator. This grants them primary ownership authority and revokes your platform owner role, recording an immutable audit trail.
-				</p>
+		<OwnerDialog {busy} open={transferModal} title="Hand over ownership" description="The person you choose becomes the owner of Kredit and you stop being the owner. It happens straight away and it is recorded permanently." onclose={() => (transferModal = false)}>
 
-				<form onsubmit={(e) => { e.preventDefault(); submitTransferOwnership(); }}>
+				<form onsubmit={(e) => { e.preventDefault(); submitTransferOwnership(); }}><fieldset disabled={busy}>
 					<div class="form-group">
-						<label for="transfer-target">Target User ID (UUID)</label>
-						<input id="transfer-target" type="text" bind:value={transferTargetUserId} placeholder="e.g. 00000000-0000-0000-0000-000000000000" required />
+						<label for="transfer-target">Who takes over</label>
+						<input id="transfer-target" type="text" bind:value={transferTargetUserId} placeholder="Their Kredit user reference" aria-describedby="transfer-target-help" required />
+						<small id="transfer-target-help">Find it on the Users page, under the person's name.</small>
 					</div>
 
 					<div class="form-group">
-						<label for="transfer-reason">Audit Justification</label>
-						<input id="transfer-reason" type="text" bind:value={transferReason} placeholder="e.g. Planned operator succession" required minlength="8" />
+						<label for="transfer-reason">Why are you handing it over?</label>
+						<textarea id="transfer-reason" rows="3" bind:value={transferReason} placeholder="This is recorded permanently and cannot be edited later." required minlength="8" maxlength="2000"></textarea>
 					</div>
 
 					<div class="form-group checkbox-group">
 						<label class="checkbox-label">
 							<input type="checkbox" bind:checked={transferConfirmed} required />
-							<span>I confirm I wish to transfer platform ownership. This action is audited and takes effect immediately.</span>
+							<span>I understand that I will no longer be the owner of Kredit.</span>
 						</label>
 					</div>
 
-					<div class="modal-actions">
+					{#if error}<p role="alert" class="error">{error}</p>{/if}
+                    <div class="modal-actions">
 						<button type="button" class="cancel-btn" onclick={() => transferModal = false} disabled={busy}>Cancel</button>
 						<button type="submit" class="danger-btn" disabled={busy || !transferConfirmed || transferReason.trim().length < 8 || !transferTargetUserId.trim()}>
-							{busy ? 'Transferring...' : 'Confirm Ownership Transfer'}
+							{busy ? 'Handing over…' : 'Hand over ownership'}
 						</button>
 					</div>
-				</form>
-			</div>
-		</div>
+				</fieldset></form>
+		</OwnerDialog>
 	{/if}
 </main>
 
 <style>
+ fieldset{border:0;margin:0;padding:0;min-width:0;}
+ .gov-pill-container{flex-wrap:wrap;}
 	main {
 		max-width: 1200px;
 		margin: 0 auto;
@@ -763,25 +744,6 @@
 		text-transform: capitalize;
 	}
 
-	.val-col code {
-		background: #f3f4f6;
-		padding: 0.2rem 0.4rem;
-		border-radius: 0.25rem;
-		font-size: 0.85rem;
-	}
-
-	.secret-val {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-	}
-
-	.fingerprint {
-		font-size: 0.75rem;
-		color: #6b7280;
-		font-family: monospace;
-	}
-
 	.bool-tag {
 		display: inline-block;
 		padding: 0.2rem 0.5rem;
@@ -887,6 +849,8 @@
 		padding: 0.2rem 0.5rem;
 	}
 
+	.credential-clear { display:flex !important; gap:.5rem; align-items:start; }
+ .credential-clear input { width:auto !important; flex-shrink:0; }
 	.form-group {
 		margin: 1.25rem 0;
 	}
@@ -898,7 +862,9 @@
 		font-size: 0.85rem;
 	}
 
+	.form-group input + label, .form-group select + label { margin-top: 1rem; }
 	.form-group input, .form-group select, .form-group textarea {
+        box-sizing: border-box;
 		width: 100%;
 		padding: 0.65rem;
 		border: 1px solid #d1d5db;
@@ -933,7 +899,7 @@
 	}
 
 	.diff-row.after {
-		color: #16a34a;
+		color: #166534;
 	}
 
 	.security-note {

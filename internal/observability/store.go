@@ -22,14 +22,15 @@ type Duration struct {
 }
 
 type Store struct {
-	mu        sync.RWMutex
-	counters  map[string]uint64
-	durations map[string][]float64
-	now       func() time.Time
+	mu             sync.RWMutex
+	counters       map[string]uint64
+	durations      map[string][]float64
+	durationTotals map[string]Duration
+	now            func() time.Time
 }
 
 func NewStore() *Store {
-	return &Store{counters: map[string]uint64{}, durations: map[string][]float64{}, now: func() time.Time { return time.Now().UTC() }}
+	return &Store{counters: map[string]uint64{}, durations: map[string][]float64{}, durationTotals: map[string]Duration{}, now: func() time.Time { return time.Now().UTC() }}
 }
 func (s *Store) Inc(name string) {
 	name = metricName(name)
@@ -54,6 +55,13 @@ func (s *Store) ObserveDuration(name string, duration time.Duration) {
 		milliseconds = 0
 	}
 	s.mu.Lock()
+	total := s.durationTotals[name]
+	total.Count++
+	total.SumMilliseconds += milliseconds
+	if milliseconds > total.MaxMilliseconds {
+		total.MaxMilliseconds = milliseconds
+	}
+	s.durationTotals[name] = total
 	samples := s.durations[name]
 	if len(samples) >= 2048 {
 		copy(samples[:1024], samples[len(samples)-1024:])
@@ -93,12 +101,10 @@ func (s *Store) Snapshot() Snapshot {
 		}
 		ordered := append([]float64(nil), samples...)
 		sort.Float64s(ordered)
-		var sum float64
-		for _, sample := range ordered {
-			sum += sample
-		}
 		index := int(float64(len(ordered)-1) * 0.95)
-		durations[key] = Duration{Count: uint64(len(ordered)), SumMilliseconds: sum, MaxMilliseconds: ordered[len(ordered)-1], P95Milliseconds: ordered[index]}
+		total := s.durationTotals[key]
+		total.P95Milliseconds = ordered[index]
+		durations[key] = total
 	}
 	return Snapshot{GeneratedAt: s.now(), Counters: values, Durations: durations}
 }

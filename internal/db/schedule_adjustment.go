@@ -9,6 +9,9 @@ import (
 )
 
 func ReduceSchedulePrincipalTx(ctx context.Context, tx pgx.Tx, obligation string, outstanding, amount ledger.Money, resolvingDispute bool) error {
+	if tx == nil || obligation == "" || outstanding < 0 || amount <= 0 || amount > outstanding {
+		return errors.New("valid transaction, obligation, and positive reduction within outstanding principal are required")
+	}
 	rows, err := tx.Query(ctx, `SELECT i.id::text,i.principal_due_kobo,i.allocated_kobo,i.disputed_kobo FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id WHERE s.obligation_id=$1::uuid AND i.state<>'CANCELLED' ORDER BY i.sequence DESC FOR UPDATE OF i`, obligation)
 	if err != nil {
 		return err

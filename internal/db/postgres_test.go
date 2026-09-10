@@ -65,3 +65,12 @@ func TestOpenAsRoleConfinesRuntimeCredential(t *testing.T) {
 		t.Fatal("runtime login retained application privileges after SET ROLE NONE")
 	}
 }
+
+func TestDatabasePoolRejectsInconsistentLimitsBeforeConnecting(t *testing.T) {
+	t.Setenv("DATABASE_MIN_CONNS", "3")
+	t.Setenv("DATABASE_MAX_CONNS", "2")
+	_, err := Open(t.Context(), "postgres://localhost/kredit")
+	if err == nil || err.Error() != "DATABASE_MIN_CONNS cannot exceed DATABASE_MAX_CONNS" {
+		t.Fatalf("inconsistent pool limits were not diagnosed: %v", err)
+	}
+}

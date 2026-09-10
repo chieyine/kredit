@@ -189,8 +189,12 @@ func postOperationLedgerTx(ctx context.Context, tx pgx.Tx, kind, referenceID, ke
 		account       string
 		debit, credit int64
 	}{{debit, int64(amount), 0}, {credit, 0, int64(amount)}} {
-		if _, err := tx.Exec(ctx, `INSERT INTO ledger.postings(transaction_id,account_id,debit_kobo,credit_kobo) SELECT $1::uuid,id,$3,$4 FROM ledger.accounts WHERE code=$2`, id, p.account, p.debit, p.credit); err != nil {
+		command, err := tx.Exec(ctx, `INSERT INTO ledger.postings(transaction_id,account_id,debit_kobo,credit_kobo) SELECT $1::uuid,id,$3,$4 FROM ledger.accounts WHERE code=$2`, id, p.account, p.debit, p.credit)
+		if err != nil {
 			return "", err
+		}
+		if command.RowsAffected() != 1 {
+			return "", errors.New("required ledger account is unavailable")
 		}
 	}
 	return id, nil
@@ -243,43 +247,25 @@ func loadOperationTx(ctx context.Context, tx pgx.Tx, id string) (Action, bool, e
 	a.LedgerTransactionID = m.Ledger
 	return a, true, nil
 }
-func (s *PostgresStore) ListForOrganization(org string) []Action {
-	rows, err := s.pool.Query(context.Background(), `SELECT id::text FROM app.operation_actions WHERE organization_id=$1::uuid ORDER BY created_at DESC`, org)
+func (s *PostgresStore) ListForOrganization(ctx context.Context, org string) ([]Action, error) {
+	if s == nil || s.pool == nil {
+		return nil, errors.New("operations database is not configured")
+	}
+	rows, err := s.pool.Query(ctx, `SELECT id::text,actor_user_id::text,organization_id::text,action,resource_id::text,reason,COALESCE((metadata->>'amount_kobo')::bigint,0),COALESCE(metadata->>'approved_by',''),COALESCE(metadata->>'ledger_transaction_id',''),created_at FROM app.operation_actions WHERE organization_id=$1::uuid ORDER BY created_at DESC,id DESC`, org)
 	if err != nil {
-		return []Action{}
+		return nil, err
 	}
 	defer rows.Close()
-	ids := []string{}
-	for rows.Next() {
-		var id string
-		if rows.Scan(&id) != nil {
-			return []Action{}
-		}
-		ids = append(ids, id)
-	}
-	if rows.Err() != nil {
-		return []Action{}
-	}
-	rows.Close()
 	out := []Action{}
-	for _, id := range ids {
-		tx, e := s.pool.Begin(context.Background())
-		if e != nil {
-			return []Action{}
-		}
-		a, ok, e := loadOperationTx(context.Background(), tx, id)
-		_ = tx.Rollback(context.Background())
-		if e != nil || !ok {
-			return []Action{}
+	for rows.Next() {
+		var a Action
+		if err := rows.Scan(&a.ID, &a.ActorUserID, &a.OrganizationID, &a.ActionType, &a.ObligationID, &a.Reason, &a.AmountKobo, &a.ApprovedBy, &a.LedgerTransactionID, &a.CreatedAt); err != nil {
+			return nil, err
 		}
 		out = append(out, a)
 	}
-	if rows.Err() != nil {
-		return []Action{}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-	return out
+	return out, nil
 }
-
-// Reduce the latest unpaid instalments first while retaining payment allocations
-// and paid-item references needed for reversals. The accepted agreement and the
-// operation audit retain the original commitment.

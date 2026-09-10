@@ -6,6 +6,11 @@ cd "$root_dir"
 source "$root_dir/scripts/load-env.sh"
 load_env_defaults "$root_dir/.env"
 
+case "${APP_ENV:-}" in
+  development|test) ;;
+  *) printf '%s\n' 'Development login configuration requires APP_ENV=development or APP_ENV=test.' >&2; exit 1 ;;
+esac
+
 database_admin_url="${DATABASE_DIRECT_URL:-${DATABASE_URL:-}}"
 : "${database_admin_url:?DATABASE_DIRECT_URL or DATABASE_URL is required}"
 role_admin_url="${DATABASE_ROLE_ADMIN_URL:-$database_admin_url}"

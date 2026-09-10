@@ -9,6 +9,7 @@ import (
 	"kredit/internal/buyers"
 	"kredit/internal/db"
 	"kredit/internal/ledger"
+	"kredit/internal/mandates"
 )
 
 func (s *Server) listOrganizationPayments(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +97,15 @@ func (s *Server) listOrganizationOverdue(w http.ResponseWriter, r *http.Request)
 		var overdue int64
 		for _, item := range scheduleItems {
 			if item.State != "PAID" && item.State != "CANCELLED" && !now.Before(item.CollectionAt) {
-				overdue += int64(item.PrincipalDueKobo - item.AllocatedKobo)
+				remaining := item.PrincipalDueKobo - item.AllocatedKobo
+				if remaining <= 0 {
+					continue
+				}
+				total, err := ledger.CheckedAdd(ledger.Money(overdue), remaining)
+				if financialReadError(w, err) {
+					return
+				}
+				overdue = int64(total)
 			}
 		}
 		if overdue > 0 {
@@ -122,8 +131,7 @@ func (s *Server) listOrganizationCustomers(w http.ResponseWriter, r *http.Reques
 		if financialReadError(w, err) {
 			return
 		}
-	}
-	if buyerRows == nil {
+	} else {
 		buyerRows = s.runtime.Buyers.ListCustomers(organizationID)
 	}
 	for _, customer := range buyerRows {
@@ -163,6 +171,14 @@ func (s *Server) listOrganizationCustomers(w http.ResponseWriter, r *http.Reques
 func (s *Server) listBuyerMandates(w http.ResponseWriter, r *http.Request) {
 	_, user, ok := s.requireAuth(w, r)
 	if !ok {
+		return
+	}
+	if reader, ok := s.runtime.Mandates.(mandates.BuyerReader); ok {
+		items, err := reader.ReadForBuyer(r.Context(), user.ID)
+		if financialReadError(w, err) {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"mandates": items})
 		return
 	}
 	items := []any{}

@@ -3,7 +3,11 @@ import { expect, test } from '@playwright/test';
 test('public homepage renders the product promise', async ({ page }) => {
 	await page.goto('/');
 	await expect(page.getByRole('heading', { name: /Keep track of every credit sale/i })).toBeVisible();
-	await expect(page.getByRole('link', { name: /Add your first sale/i }).first()).toBeVisible();
+	// The homepage is read by someone who has no account yet, so its actions say
+	// what they do — open an account, or try the sample — rather than promising a
+	// sale they cannot record until they have signed in.
+	await expect(page.getByRole('link', { name: /Open your account/i }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: /sample sale/i }).first()).toBeVisible();
 });
 
 test('public product routes expose clear conversion and trust content', async ({ page }) => {

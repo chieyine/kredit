@@ -5,6 +5,8 @@ This is NOT an authenticity verifier, legal opinion or permission to deploy.
 Run only against reviewed documents in protected storage. Never commit actual
 customer/provider evidence. Human deployment approval remains mandatory.
 """
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json

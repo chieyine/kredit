@@ -1,0 +1,155 @@
+{
+  "terms": {
+    "title": "Terms of service",
+    "accent": "",
+    "introduction": "The agreement governing your account, credit-sale records and use of Kredit.",
+    "sections": [
+      {
+        "heading": "Before you use Kredit",
+        "body": "Read these terms together with the Privacy Notice, the exact sale shown to you before you accepted it, the bank-debit permission and any fee shown to the seller. If you are acting for a business, “you” means that business too.\n\nBy accepting these terms you confirm that you understand them and are allowed to use the account. Accepting these general terms does not force a customer to accept any particular sale. Each sale requires separate acceptance."
+      },
+      {
+        "heading": "What Kredit does",
+        "body": "Kredit provides tools that allow an existing seller and customer to:\n\n• record the goods, price, payment day, extra time and any payment plan;\n• show the same terms to the customer before the customer says yes;\n• keep evidence of acceptance, goods release and customer receipt;\n• record payments made to the seller or through an approved provider;\n• show the amount still unpaid;\n• send account and payment reminders;\n• report and review a problem; and\n• request an authorised bank debit for an eligible unpaid amount after the agreed time.\n\nKredit is not the seller and does not supply the goods. Kredit does not choose the customer, decide the quality of goods or promise that a customer will pay. The supplier funds the credit sale. The seller supplies its own goods and allows payment later.\n\nKredit is not a bank, wallet, credit bureau, insurance company, marketplace or debt buyer. Any regulated identity, banking or payment function must be performed through an appropriately approved provider. A provider's own terms may also apply to that function."
+      },
+      {
+        "heading": "Accounts, age and business authority",
+        "body": "• You must be at least 18 years old and able to enter a binding agreement.\n• You must give correct, current information and update it when it changes.\n• You must control the phone number or email used for your account.\n• If you represent a business, you must have permission to bind or act for it.\n• A business does not need a CAC registration number merely to begin setup, but Kredit or a provider may require other proof before money can move.\n• You must complete identity, business, bank-account or extra sign-in checks when a sensitive action requires them.\n\nA business owner may invite staff and choose their roles. The owner is responsible for removing access when a staff member should no longer act. Kredit records important access and account actions.\n\nKeep your device, sign-in method, OTP, authenticator and recovery codes secure. Do not share them. Tell Kredit quickly if an account or device may have been taken over. Kredit will never ask for your bank PIN or a full card number in a support message."
+      },
+      {
+        "heading": "Making a credit sale",
+        "body": "The seller creates the offer\n\nThe seller chooses the customer and enters the goods, price, payment date, extra time, payment plan and bank-debit timing. The seller must check these details before sending them. A draft may be changed or deleted before it is sent.\n\nThe customer checks and accepts\n\nThe customer receives a private link, confirms the required details and sees the exact sale before accepting. The customer may say no. A sale does not become active merely because the seller created it, sent a link or obtained a general account registration.\n\nAccepted terms cannot be secretly changed\n\nKredit keeps a version and protected document hash for accepted terms. A seller cannot replace the accepted amount, goods or dates without a new, lawful agreement. Where the product allows payment dates to be changed, both sides must first agree and the change cannot rewrite a payment already made.\n\nKeep your own commercial records\n\nKredit records the transaction in the service but does not replace every invoice, tax record, stock record, warranty or document a business may be required to keep."
+      },
+      {
+        "heading": "Goods, delivery and problems",
+        "body": "The seller is responsible for the goods, description, price, quality, safety, delivery and any promise made about them. Kredit does not inspect or approve goods.\n\nAfter customer acceptance, the seller records when and how the goods leave. The customer confirms receipt or reports a problem. Both sides must act honestly and keep useful evidence such as a delivery number, receipt, photo or document.\n\nIf the customer reports a genuine problem, Kredit may pause bank debit for the amount affected while the matter is reviewed. The remaining undisputed amount may still be due where the accepted sale and applicable law allow it. Reporting a problem does not automatically cancel the full sale, and it must not be used only to delay payment.\n\nThe seller and customer should first try to settle the matter with clear evidence. Kredit may help record the decision or apply a permitted adjustment, but is not a court and may require a formal complaint or external legal process where the issue cannot be resolved in the product."
+      },
+      {
+        "heading": "Payments, balances and Kredit fees",
+        "body": "Payments\n\nA customer may pay the seller directly or through an available approved payment method. When a customer reports a direct transfer, the seller must check the seller's bank before confirming it. Kredit reduces the amount left only when the payment is recognised. A reversed or failed payment may make money due again.\n\nA customer must not pay more than the amount lawfully due. Kredit recalculates the true unpaid amount before any bank-debit request and uses controls intended to prevent duplicate collection. A pending payment, provider delay or reconciliation issue may temporarily stop another money action.\n\nFees paid by the seller\n\nAdding a customer or draft sale has no fee. The rates recorded in each offer govern that sale:\n\n• the supplier base service fee applies to activated principal after the required acceptance and goods steps; and\n• the recorded additional collection fee applies only to money successfully collected through Kredit at or after the permitted collection time.\n\nChanging the published rates does not change existing offers. Current pricing (https://kredit.com.ng/pricing) applies to new offers. A failed debit does not earn the additional collection fee. A sale cancelled before activation does not earn the base fee. The seller must review the applicable rates before agreeing to the sale.\n\nThe customer pays the accepted price of the goods and any customer charge clearly included in the individual sale and permitted by law. Kredit does not silently add the seller's platform fee to the customer's debt.\n\nTaxes may apply to Kredit fees. The final invoice and tax treatment will follow applicable law. If a fee or payment record is wrong, use the correction or complaint process; do not edit a completed financial record outside the provided reversal or correction flow."
+      },
+      {
+        "heading": "Bank-debit permission and late payment",
+        "body": "A customer may be asked to create a separate mandate with a bank or approved payment provider. The mandate is authority for payments within its stated amount, duration and scope. It is not itself proof that the underlying sale is valid, and it does not give Kredit unrestricted access to every account.\n\nBefore a sale is accepted, the customer sees the payment day, extra time and the earliest time an automatic debit may be requested. Kredit may request only an eligible unpaid amount within the accepted terms and active mandate. Reminders, provider availability, a payment claim, a dispute, a risk hold or a legal requirement may change whether or when a request is sent.\n\nThe customer may stop or cancel a mandate through an available provider or Kredit control. Cancelling a mandate stops future use of that permission when the cancellation takes effect; it does not erase money already owed under a valid sale. The customer should arrange another payment method with the seller.\n\nA bank or provider may reject, delay, partially complete or reverse a request. Kredit does not promise successful collection. Both sides must wait for a final confirmed result before treating an uncertain provider response as payment."
+      },
+      {
+        "heading": "Messages and electronic records",
+        "body": "You agree that Kredit may send required service, security, sale, payment, recovery and complaint messages by the contact method connected to your account. You may control optional messages and quiet hours, but you cannot turn off a message needed to protect the account or complete a transaction.\n\nElectronic acceptance, timestamps, audit records, provider confirmations and protected document hashes may be used as evidence of what happened. Download or print any record you need for your business. Delivery of a message can fail, so you should also check the account for an important update."
+      },
+      {
+        "heading": "What every user must and must not do",
+        "body": "You must use Kredit honestly, follow applicable law and cooperate with a reasonable check or correction. You must not:\n\n• create a false person, business, sale, delivery, payment, receipt or dispute;\n• use another person's contact, bank or identity information without authority;\n• sell illegal, unsafe, stolen or prohibited goods through a Kredit record;\n• split, repeat or manipulate a sale to avoid a limit or review;\n• attempt to collect money already paid, reversed, adjusted or genuinely disputed;\n• harass, threaten, shame or mislead a seller or customer;\n• probe, copy, damage or interfere with Kredit or another user's account;\n• upload malware or a document you have no right to use; or\n• use Kredit to hide fraud, money laundering or another unlawful activity.\n\nKredit may limit a document type, transaction size, customer group, business industry, provider, retry or other service feature. A displayed limit does not mean Kredit has approved a customer's creditworthiness or guaranteed a transaction."
+      },
+      {
+        "heading": "When the service is slow or down",
+        "body": "Kredit aims to keep the service available and records accurate, but maintenance, poor networks, banks, providers or events outside reasonable control may delay a page, message or payment result. Financial actions that require the server are not completed or queued merely because a device is offline.\n\nWe may improve, replace or stop a non-essential feature after reasonable notice. We will not intentionally rewrite an accepted agreement or completed financial history because a feature changes. If a provider becomes unavailable or a result is unknown, Kredit may pause the affected action and reconcile it before trying again."
+      },
+      {
+        "heading": "Suspension, closure and records after closure",
+        "body": "You may stop using Kredit and ask to close the account, subject to any open sale, payment, dispute, investigation or legal record. Closing an account does not cancel a valid agreement or amount already due.\n\nKredit may restrict or suspend an account, business or money action to protect users, obey the law, investigate suspected abuse, respond to a provider issue or enforce these terms. Where safe and lawful, we will explain the reason and how to ask for review. Urgent security action may happen before notice.\n\nAfter closure, some information may be kept for the approved legal, financial, fraud-prevention and dispute period. Other information is removed or anonymised under the Privacy Notice."
+      },
+      {
+        "heading": "Who is responsible for what",
+        "body": "Each seller remains responsible for its goods and each customer remains responsible for a valid accepted payment duty. Kredit remains responsible for providing its service with reasonable care and for rights that cannot lawfully be excluded.\n\nTo the extent allowed by law, Kredit is not responsible for a seller's goods, a customer's business decision, loss caused by false information from a user, or a bank/provider failure outside Kredit's reasonable control. Nothing in these terms removes a right, remedy or responsibility that Nigerian law says cannot be removed. Any limitation remains subject to mandatory rights under applicable law.\n\nThese terms and the Kredit service are governed by the laws of the Federal Republic of Nigeria. The parties should first use the complaint process. If the matter is not resolved, a person may use a competent court or regulator. Legal notices may be sent to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria."
+      },
+      {
+        "heading": "If we change these terms",
+        "body": "A new version will show its date and important changes. A material change that affects existing users will be communicated before it applies, and a new acceptance will be requested where required. The version accepted for an individual sale remains part of that sale's record. We will not use a later general update to secretly change accepted goods, price or payment dates.\n\nIf one part of these terms cannot be enforced, the remaining parts continue where the law allows. Delay in enforcing a term is not a permanent waiver. You may not transfer an account or agreement without the permissions required by the product and law. Kredit may transfer the service to a lawful successor with appropriate notice and protection of user rights."
+      },
+      {
+        "heading": "Help, complaints and regulators",
+        "body": "Use Help and complaints (https://kredit.com.ng/legal/complaints) and include the Kredit reference, date, amount, what happened and the result you expect. Never send your password, OTP, bank PIN or full card number.\n\nYou may also email hello@kredit.com.ng or write to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nIf the concern is not resolved, you may use a competent Nigerian regulator or court. Consumer concerns may fall within the remit of the Federal Competition and Consumer Protection Commission (https://fccpc.gov.ng/). Privacy complaints may be made to the Nigeria Data Protection Commission (https://www.ndpc.gov.ng/). A bank or payment-provider complaint may also need the provider's process or the appropriate financial regulator."
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Privacy notice",
+    "accent": "",
+    "introduction": "How we collect, use and protect personal information, and how to exercise your rights.",
+    "sections": [
+      {
+        "heading": "Who is responsible for your information?",
+        "body": "Kredit is the service described in this notice. KREDIT TECHNOLOGIES LIMITED is the data controller for account, product, support and platform records. A seller remains responsible for the customer information the seller puts into Kredit for their own business purposes.\n\nThis notice covers the Kredit website, seller account, customer account, private links, support service and messages sent by Kredit. It does not cover a seller's own records outside Kredit or the separate privacy practices of a bank, identity-check company, payment company or mobile network.\n\nService address: House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria"
+      },
+      {
+        "heading": "What we keep about you",
+        "body": "We collect only information needed to run the account, record a sale, protect people and meet legal duties.\n\nAccount details\n• Your name, phone number or email.\n• Sign-in, device, verification and account-recovery records.\n• Your message choices and security settings.\nBusiness details\n• Business or shop name, address, industry and business type.\n• Registration information when the business is registered.\n• The authorised person and documents used to check the business.\nSale and payment records\n• The seller and customer, goods, amount, dates and agreed payment plan.\n• Acceptance, delivery, receipt, payment, bank-debit and reversal records.\n• Disputes, corrections, receipts and supporting documents.\nService information\n• Pages and product steps used, errors and service-performance records.\n• Privacy-safe product events with hashed user or business references.\n• Support cases, complaints and messages Kredit sends.\n\nA private note saved by a seller about a customer stays on that seller's phone when the page says so. Kredit does not receive that note. We do not ask you to put a password, OTP, bank PIN or full card number in a support message."
+      },
+      {
+        "heading": "Where it comes from",
+        "body": "• From you: when you sign in, add a business, accept a sale, report a payment, change a setting or ask for help.\n• From the other side of a sale: a seller may add a customer's proposed business details, while a customer may report delivery, payment or a problem.\n• From approved service companies: identity-check results, bank-debit status, payment confirmations and message-delivery results.\n• From the service: security logs, audit history, device information and records created when a product step is completed.\n\nWe do not buy lists of people for Kredit accounts. We do not secretly collect another seller's private customer notes."
+      },
+      {
+        "heading": "Why we use your information",
+        "body": "To provide Kredit\n\nCreate and protect accounts, show the same sale to both sides, save acceptance and delivery, calculate money left, record payments and provide receipts.\n\nTo protect people and money\n\nCheck identity or business details, prevent duplicate collection, investigate suspicious activity, block unsafe actions and keep an audit record.\n\nTo communicate\n\nSend required account, sale, payment, recovery and security messages. Optional product messages are sent only when your choice allows them.\n\nTo provide support and settle problems\n\nFind the correct record, review evidence, answer complaints, correct mistakes and explain a decision.\n\nTo improve the product\n\nMeasure whether people complete important steps and whether pages are easy to understand. This measurement is limited and does not include raw phone numbers, names, bank details or the description of goods.\n\nTo meet legal duties\n\nKeep records, respond to lawful requests, protect consumer and privacy rights, and support accounting, tax, dispute or regulatory work.\n\nDepending on the activity, we rely on the need to perform a contract, take a step you asked for, meet a legal duty, protect a legitimate interest, establish or defend a legal claim, or use consent. Where consent is the reason, you may withdraw it. Withdrawing consent does not make earlier lawful use invalid."
+      },
+      {
+        "heading": "There is no secret score",
+        "body": "Kredit does not use a hidden score to decide whether a seller should trust a customer. The seller chooses the customer and decides whether to give goods on credit. Kredit may apply clear safety limits or hold an action when an account, payment or provider result needs review. A person can ask for an explanation and use the complaint process."
+      },
+      {
+        "heading": "Who may receive your information",
+        "body": "We share only what is needed for a clear purpose.\n\n• The seller and customer: each side sees the sale, agreed dates, delivery, payments and problems they are allowed to see.\n• Authorised business staff: a business owner may give staff limited roles. Staff see only the pages needed for that role.\n• Identity and business-check companies: to confirm a person or business when required.\n• Banks and licensed payment companies: to set up an authorised mandate, process a payment or bank debit, reconcile a result and handle a reversal.\n• Messaging, hosting, document and security companies: to deliver messages, store protected files, run the service and detect abuse.\n• Professional advisers, auditors and insurers: when they need the information for a lawful professional duty and are required to protect it.\n• Courts, regulators and public authorities: when the law requires it or when needed to protect a right, investigate fraud or answer a lawful request.\n• A new owner of the business: if Kredit is involved in a genuine investment, sale or reorganisation, subject to confidentiality and applicable law.\n\nKredit does not sell personal information. We do not give one seller another seller's customer list. We do not publish private sale or payment records."
+      },
+      {
+        "heading": "If information leaves Nigeria",
+        "body": "Some approved service companies may store or process information outside Nigeria. Before that happens, Kredit must check the destination and provider, limit the information sent, use an approved transfer safeguard and record the assessment required by Nigerian data-protection law. Contact hello@kredit.com.ng for information about relevant processors and transfer safeguards."
+      },
+      {
+        "heading": "How long we keep information",
+        "body": "We do not keep every record forever. The period depends on why the information exists and whether a law, dispute, investigation or financial record requires it to be kept.\n\n• Account and business details: while the account is open and for the approved period needed for support, fraud prevention and legal claims after it closes.\n• Agreements, delivery, payments, fees and ledger records: for the statutory and legal-claim period that applies to financial and commercial records.\n• Identity-check documents: only for the approved compliance period. Kredit should keep a check result or reference instead of a full document where possible.\n• OTP and security records: for a short security period, except an audit event needed to investigate abuse.\n• Support, complaint and dispute evidence: until the matter and any review or legal period have ended.\n• Optional marketing choices: until you withdraw the choice or the approved inactivity period ends.\n• Product measurement: in pseudonymous form for the approved product-measurement period.\n\nWhen deletion is due, information is securely deleted, anonymised or made inaccessible. A legal hold may pause deletion. Backup copies are removed through the normal protected backup cycle."
+      },
+      {
+        "heading": "Your rights and choices",
+        "body": "Subject to the Nigeria Data Protection Act 2023 and any lawful exception, you may:\n\n• ask whether Kredit uses your personal information;\n• ask to see it and receive a copy;\n• ask us to correct information that is wrong or incomplete;\n• ask us to remove information when there is no lawful reason to keep it;\n• ask us to limit a use while a concern is checked;\n• object to a use based on legitimate interests or direct marketing;\n• withdraw consent where consent is the reason for the use;\n• ask for portable information in a usable format where applicable;\n• ask for an explanation of a significant automated decision and request human review; and\n• complain to Kredit or the Nigeria Data Protection Commission.\n\nOpen Your information (https://kredit.com.ng/app/settings/privacy) after signing in to send a request and follow its progress. We will verify the requester before releasing or changing private information. We may keep a limited record that a request was completed. If we cannot do everything requested, we will explain the lawful reason."
+      },
+      {
+        "heading": "What we keep on your phone",
+        "body": "Kredit uses strictly necessary cookies to keep you signed in, protect forms and maintain security. The service may keep display choices, unfinished sale details and a private customer note on your own phone. You can remove local information through your browser or device settings, but doing so may sign you out or remove an unfinished draft. Kredit does not need advertising cookies to operate the first release."
+      },
+      {
+        "heading": "How we protect information",
+        "body": "Protection includes encrypted connections, restricted staff roles, extra sign-in checks for sensitive work, expiring private links, audit history, protected storage, provider-signature checks, backups and monitoring. Bank and regulated payment work is performed through appropriately approved providers. No system can promise that a breach will never happen. Kredit must investigate suspected incidents, reduce harm and notify affected people or regulators where the law requires it.\n\nYou also help by keeping your phone, email, password, OTP and recovery codes safe. Tell Kredit quickly if you see an action you do not recognise."
+      },
+      {
+        "heading": "Children",
+        "body": "Kredit is for adults and authorised business representatives. It is not designed for a child to open an account or agree to a commercial credit sale. If we learn that a child's information was added without a lawful reason and proper authority, we will restrict it and take the steps required by law."
+      },
+      {
+        "heading": "If we change this notice",
+        "body": "We may update this notice when the service, providers or law changes. A material change will have a new version and date. When the change affects an existing use or choice, Kredit will give clear notice and ask for a new acceptance or consent where required. Old versions and acceptance records are kept so there is evidence of what a person saw."
+      },
+      {
+        "heading": "Questions and complaints",
+        "body": "Use Help and complaints (https://kredit.com.ng/legal/complaints) for a privacy concern, or use Your information after signing in. Include the Kredit reference and a short explanation, but never send your password, OTP, bank PIN or full card number.\n\nFor privacy enquiries, contact hello@kredit.com.ng or write to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nIf Kredit does not resolve the concern, you may complain to the Nigeria Data Protection Commission (https://www.ndpc.gov.ng/)."
+      }
+    ]
+  },
+  "complaints": {
+    "title": "Complaints",
+    "accent": "",
+    "introduction": "Tell Kredit about a problem with your account, a sale or a payment, what to include, and how to request a review.",
+    "sections": [
+      {
+        "heading": "Contact us",
+        "body": "Email hello@kredit.com.ng. You can raise a complaint without signing in, including if you have lost account access.\n\nWrite to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nFor an existing transaction, use the dispute controls in your buyer account (https://kredit.com.ng/buyer/disputes) or supplier account (https://kredit.com.ng/app/disputes) to attach the concern to its record."
+      },
+      {
+        "heading": "What to include",
+        "body": "Include your contact details, the sale or payment reference, relevant dates and amounts, a description of the problem and the outcome you are seeking. Relevant receipts or delivery evidence can help us investigate.\n\nDo not send sign-in codes, recovery codes, bank PINs or full card details. We may verify your identity before discussing private account information."
+      },
+      {
+        "heading": "How we handle complaints",
+        "body": "We review the concern, request any missing information and explain the outcome and available next steps. Keep the case or transaction reference for follow-up. If more investigation is needed, we will explain what remains outstanding.\n\nWe handle complaint information according to our privacy notice (https://kredit.com.ng/legal/privacy). Relevant records may be retained for dispute resolution, fraud prevention and applicable legal obligations."
+      },
+      {
+        "heading": "Payment disputes",
+        "body": "Reporting a transfer does not confirm that the supplier received it. A supplier must verify receipt before confirming payment. If a payment result is uncertain, retain the original reference and check its status before attempting another payment.\n\nA recorded dispute may pause collection of the affected amount according to the agreement and the dispute's recorded effect. A debit already submitted may still complete. A complaint does not automatically cancel the sale or an undisputed balance."
+      },
+      {
+        "heading": "Review and escalation",
+        "body": "If you disagree with the outcome, reply with the reference, explain the point that remains unresolved and provide any further evidence. You may request a further review.\n\nFor privacy concerns, you may also complain to the Nigeria Data Protection Commission (https://www.ndpc.gov.ng/). This process does not restrict your right to seek a remedy from a competent court or relevant regulator."
+      }
+    ]
+  }
+}

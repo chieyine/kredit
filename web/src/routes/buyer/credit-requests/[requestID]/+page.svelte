@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { getContext, onMount } from 'svelte';
+  import { getContext, untrack } from 'svelte';
   import { page } from '$app/state';
   import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
   import { LatestRequest, readResource, record, rows, text, type Decoder, type Resource } from '$lib/api/reliable';
   import { MutationError, MutationIntent } from '$lib/api/mutation';
-  import { saleView, paymentRow, dateLabel, timeLabel, type PaymentRow, type SaleView } from '$lib/records';
+  import { saleView, paymentRow, kobo, dateLabel, timeLabel, type PaymentRow, type SaleView } from '$lib/records';
   import { feeDisclosure, validFeeTerms } from '$lib/fee-terms';
   import { acceptanceMessage, collectionBoundary, disputeEffectCopy, hostedAuthorizationURL } from '$lib/financial-copy';
   import { exactKobo, parseNaira } from '$lib/money';
@@ -33,8 +33,8 @@
     return result;
   }
   const blocked = (action: string) => Boolean(busy || (uncertain && uncertain !== action));
-  async function load() {
-    const id = requestID, request = reads.begin();
+  async function load(id = requestID) {
+    const request = reads.begin();
     resource = { state: 'loading', scope: id }; paymentResource = { state: 'loading', scope: id };
     const [sale, payments] = await Promise.all([
       readResource(id, `/api/v1/buyer/credit-requests/${encodeURIComponent(id)}`, saleView, request.signal, 'this sale'),
@@ -50,11 +50,12 @@
   }
   async function perform<T>(action: string, payload: unknown, decode: Decoder<T>, success: (result: T) => void) {
     if (blocked(action)) return;
-    busy = action; actionError = ''; message = '';
+    const scope=requestID;busy = action; actionError = ''; message = '';
     try {
       const result = await intent(action).run(payload, decode);
-      uncertain = ''; success(result); await load();
+      if(requestID!==scope)return;uncertain = ''; success(result); await load();
     } catch (cause) {
+      if(requestID!==scope)return;
       actionError = cause instanceof Error ? cause.message : 'We could not confirm this request.';
       if (cause instanceof MutationError && cause.outcome === 'unknown') uncertain = action;
     } finally { busy = ''; }
@@ -79,7 +80,7 @@
   async function claimPayment() {
     const amount = parseNaira(claimAmount);
     if (amount <= 0 || !claimReference.trim()) { actionError = 'Enter the amount and transfer reference. Contact support if you cannot find the reference.'; return; }
-    await perform('payment-claims', { amount_kobo: amount, paid_at: intent('payment-claims').createdAt, transfer_reference: claimReference.trim() }, value => record(record(value).payment_claim), () => { message = 'Transfer reported. The seller must confirm receipt before your balance changes.'; claimAmount = ''; claimReference = ''; });
+    await perform('payment-claims', { amount_kobo: amount, paid_at: intent('payment-claims').createdAt, transfer_reference: claimReference.trim() }, value => {const claim=record(record(value).payment_claim);if(!text(claim.id))throw new Error('Missing transfer reference');kobo(claim.amount_kobo);text(claim.state);return claim;}, () => { message = 'Transfer reported. The seller must confirm receipt before your balance changes.'; claimAmount = ''; claimReference = ''; });
   }
   async function createPaymentLink() {
     await perform('payment-link', undefined, value => {
@@ -91,22 +92,24 @@
   async function openDispute(event: SubmitEvent) {
     event.preventDefault(); const amount = parseNaira(disputeAmount);
     if (amount <= 0 || !disputeReason.trim()) { actionError = 'Enter the amount in question and the reason for your report.'; return; }
-    await perform('disputes', { disputed_amount_kobo: amount, reason: disputeReason.trim(), explanation: disputeExplanation.trim(), collection_effect: disputeEffect }, record, () => { message = `Problem reported. ${disputeEffectCopy(disputeEffect, amount)}`; });
+    await perform('disputes', { disputed_amount_kobo: amount, reason: disputeReason.trim(), explanation: disputeExplanation.trim(), collection_effect: 'CONTESTED_ONLY' }, value=>{const result=record(value);const dispute=record(result.dispute);if(!text(dispute.id))throw new Error('Missing problem reference');text(dispute.state);return result;}, () => { message = `Problem reported. ${disputeEffectCopy(disputeEffect, amount)}`; });
   }
-  onMount(() => { void load(); return () => reads.cancel(); });
+  $effect(()=>{const scope=requestID;untrack(()=>{message='';actionError='';uncertain='';paymentURL='';receiptIssue='';claimAmount='';claimReference='';disputeAmount='';disputeReason='';disputeExplanation='';void load(scope);});return()=>reads.cancel();});
 </script>
 <svelte:head><title>Review your sale — Kredit</title></svelte:head>
 <main class="shell buyer-sale">
   <header class="task-heading"><div><p class="eyebrow">Your credit sale</p><h1>{accepted ? 'Your sale record' : 'Review this sale'}</h1><p>Check the goods, amount and payment date before agreeing.</p></div><a href="/legal/complaints">Get help</a></header>
-  <ResourceNotice resource={resource} label="Sale" retry={load} />
-  {#if actionError}<div class="action-error" role="alert"><p>{actionError}</p><button type="button" onclick={load} disabled={!!busy}>Check current record</button><a href="/legal/complaints">Contact support</a></div>{/if}
+  <ResourceNotice resource={resource} label="Sale" retry={()=>load()} />
+  {#if actionError}<div class="action-error" role="alert"><p>{actionError}</p><button type="button" onclick={()=>load()} disabled={!!busy}>Check current record</button><a href="/legal/complaints">Contact support</a></div>{/if}
   {#if message}<p class="inline-notice" role="status">{message}</p>{/if}
   {#if view}
+    {#if view.request.system_acceptance_id}<p class="inline-notice" role="status">The waiting period after your delivery notice ended without a response. Kredit activated this sale under its agreed terms using a system record. This is not recorded as your receipt confirmation. You can still report a problem below.</p>{/if}
     <p class="state-label">{productLabel(view.request.state)}</p>
     <section class="terms" aria-labelledby="terms-heading"><h2 id="terms-heading">{accepted ? 'Agreed sale details' : 'What you are agreeing to'}</h2>
       <dl class="sale-summary"><div><dt>Seller</dt><dd>{view.request.supplier_legal_name || 'Seller name unavailable'}</dd></div><div><dt>Customer</dt><dd>{view.request.buyer_legal_name}</dd></div><div><dt>Goods</dt><dd>{view.request.goods_description}</dd></div><div><dt>Sale amount</dt><dd class="amount"><Money amountKobo={view.request.principal_kobo} /></dd></div><div><dt>First payment date</dt><dd>{dateLabel(view.request.due_date)}</dd></div><div><dt>Bank debit may be considered from</dt><dd>{timeLabel(view.request.collection_at)}</dd></div><div><dt>Extra time</dt><dd>{view.request.grace_hours} hours</dd></div><div><dt>Payment arrangement</dt><dd>{view.request.schedule_type === 'equal' ? `${view.request.schedule_count} ${view.request.schedule_cadence} payments` : view.request.schedule_type === 'custom' ? 'Amounts and dates below' : 'One payment'}</dd></div></dl>
       {#if view.request.custom_schedule_items.length}<h3>Payment schedule</h3><ol>{#each view.request.custom_schedule_items as item}<li><Money amountKobo={item.amount_kobo} /> by {dateLabel(item.due_date)}</li>{/each}</ol>{/if}
       <p class="fee-note">{feeDisclosure(view.request.fee_terms)}</p><p class="field-help">{collectionBoundary}</p>
+      {#if view.agreement?.terms_version && view.agreement?.privacy_version}<p>Documents for this sale: <a href={`/legal/terms?version=${encodeURIComponent(view.agreement.terms_version)}`}>Terms</a> · <a href={`/legal/privacy?version=${encodeURIComponent(view.agreement.privacy_version)}`}>Privacy notice</a></p>{/if}
       {#if view.agreement?.document_hash}<details><summary>Sale reference and record details</summary><p>Sale: <code>{view.request.id}</code></p><p>Agreement fingerprint:</p><code class="fingerprint">{view.agreement.document_hash}</code><p>This identifies the recorded version of the agreement.</p></details>{/if}
     </section>
     {#if view.request.state === 'BUYER_REVIEWING'}
@@ -122,21 +125,21 @@
           {#if bankURL}<p>You will continue on Mono’s secure authorisation page. Read the accounts, limit and duration shown there before giving permission.</p><a class="primary" href={bankURL} rel="noreferrer noopener" onclick={rememberReturn}>Continue securely with Mono <span aria-hidden="true">↗</span></a><p class="field-help">Returning from the provider is not confirmation. Use “Check permission status” after completing that step.</p>
           {:else if !view.mandate || ['CANCELLED', 'EXPIRED', 'FAILED'].includes(view.mandate.status)}<button class="primary" disabled={blocked('mandate')} onclick={authorizeBank}>{busy === 'mandate' ? 'Preparing secure permission…' : 'Set up bank permission'}</button>
           {:else}<p>The provider link is not available. Check the status or contact support; do not create another permission request blindly.</p>{/if}
-          <button class="secondary" type="button" disabled={!!busy} onclick={load}>Check permission status</button>
+          <button class="secondary" type="button" disabled={!!busy} onclick={()=>load()}>Check permission status</button>
         {/if}<p class="field-help">Do not share your PIN, bank password or sign-in code with the seller or Kredit support.</p>
       </section>
     {/if}
     {#if view.request.state === 'RECEIPT_CONFIRMATION_PENDING'}<section class="delivery-panel"><h2>Did you receive all the goods?</h2><p>Check the quantity and condition against this sale.</p><button class="primary" disabled={blocked('receipt')} onclick={() => recordReceipt('confirmed')}>Yes, I received all the goods</button><label>Report a delivery problem<textarea bind:value={receiptIssue} rows="3" maxlength="2000" placeholder="For example: 5 cartons were missing" disabled={!!busy}></textarea></label><button class="secondary" disabled={blocked('receipt') || !receiptIssue.trim()} onclick={() => recordReceipt('issue_raised')}>Report delivery problem</button></section>{/if}
     {#if view.obligation}
       <section class="payments-panel"><div class="section-heading"><h2>Payments on this sale</h2><a href={`/buyer/obligations/${encodeURIComponent(view.obligation.id)}`}>View schedule</a></div><p class="balance-label">Left to pay</p><p class="outstanding"><Money amountKobo={view.obligation.outstanding_kobo} /></p>
-        <ResourceNotice resource={paymentResource} label="Payments" retry={load} />
+        <ResourceNotice resource={paymentResource} label="Payments" retry={()=>load()} />
         {#if paymentResource.state === 'ready'}{#if !paymentResource.data.length}<p>No confirmed payments are recorded on this sale.</p>{:else}<ul class="payment-list">{#each paymentResource.data as payment (payment.id)}<li><strong><Money amountKobo={payment.amount_kobo} /></strong><span>{productLabel(payment.state)} · {productLabel(payment.source_type)}</span></li>{/each}</ul>{/if}{/if}
         <a href={`/api/v1/buyer/credit-requests/${encodeURIComponent(requestID)}/agreement-document`} target="_blank" rel="noreferrer">Print or save the agreement</a>
       </section>
       {#if mayPay}<section class="payment-options"><h2>Make or report a payment</h2><p>Use a payment page, or tell the seller about a transfer you already made.</p><button class="primary" disabled={blocked('payment-link')} onclick={createPaymentLink}>Get payment page</button>{#if paymentURL}<a href={paymentURL}>Open payment page</a>{/if}
         <details><summary>Already paid by bank transfer?</summary><p>A transfer report is not a payment confirmation. Your balance changes only after the money is verified.</p><label>Amount transferred (₦)<input bind:value={claimAmount} inputmode="decimal" disabled={!!busy} /></label><label>Transfer reference<input bind:value={claimReference} maxlength="256" disabled={!!busy} /></label><p class="field-help">Find this on your bank receipt. Contact support if the reference is unavailable, or a different person sent the payment and you need help matching it.</p><button class="secondary" disabled={blocked('payment-claims')} onclick={claimPayment}>Report my transfer</button></details>
       </section>{/if}
-      <details class="dispute-panel"><summary>Report a problem with this sale</summary><p>Your report and its outcome stay with the sale.</p><form onsubmit={openDispute}><label>Amount in question (₦)<input bind:value={disputeAmount} inputmode="decimal" required disabled={!!busy} /></label><label>What went wrong?<input bind:value={disputeReason} maxlength="200" placeholder="For example: 5 cartons were missing" required disabled={!!busy} /></label><label>Details<textarea bind:value={disputeExplanation} maxlength="5000" rows="4" disabled={!!busy}></textarea></label><label>What should happen to new bank debits?<select bind:value={disputeEffect} disabled={!!busy}><option value="CONTESTED_ONLY">Hold the amount in question</option><option value="FULL_BLOCK">Hold all bank debits on this sale</option><option value="NO_AUTOMATIC_BLOCK">Keep eligible payments running</option></select></label><p class="inline-notice">{disputeEffectCopy(disputeEffect, parseNaira(disputeAmount) > 0 ? parseNaira(disputeAmount) : undefined)}</p><button class="primary" disabled={blocked('disputes')}>Report problem</button></form></details>
+      <details class="dispute-panel"><summary>Report a problem with this sale</summary><p>Your report and its outcome stay with the sale.</p><form onsubmit={openDispute}><label>Amount in question (₦)<input bind:value={disputeAmount} inputmode="decimal" required disabled={!!busy} /></label><label>What went wrong?<input bind:value={disputeReason} maxlength="200" placeholder="For example: 5 cartons were missing" required disabled={!!busy} /></label><label>Details<textarea bind:value={disputeExplanation} maxlength="5000" rows="4" disabled={!!busy}></textarea></label><label>What should happen to new bank debits?<select bind:value={disputeEffect} disabled={!!busy}><option value="CONTESTED_ONLY">Hold the amount in question</option></select></label><p class="inline-notice">{disputeEffectCopy(disputeEffect, parseNaira(disputeAmount) > 0 ? parseNaira(disputeAmount) : undefined)}</p><button class="primary" disabled={blocked('disputes')}>Report problem</button></form></details>
     {/if}
   {/if}
 </main>

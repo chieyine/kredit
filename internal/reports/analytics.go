@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type Metric struct {
@@ -64,6 +66,13 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 	if from.IsZero() || to.IsZero() || !from.Before(to) || to.Sub(from) > 366*24*time.Hour {
 		return PilotScorecard{}, errors.New("scorecard window must be positive and no longer than 366 days")
 	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return PilotScorecard{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	result := PilotScorecard{GeneratedAt: s.source.Now(), From: from.UTC(), To: to.UTC(), OrganizationID: organizationID, SourceOfTruth: "authoritative domain tables; analytics events are reconciliation evidence only", RefreshMode: "live query", FreshnessStatus: "live", Funnel: map[string]int64{}, ReconciliationOK: true}
 	org := organizationID
 	var latest *time.Time
@@ -72,11 +81,11 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 		digest := sha256.Sum256([]byte(org))
 		orgHash = hex.EncodeToString(digest[:])
 	}
-	if err := s.pool.QueryRow(ctx, `SELECT max(recorded_at) FROM app.analytics_events WHERE occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=$3)`, from, to, orgHash).Scan(&latest); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT max(recorded_at) FROM app.analytics_events WHERE occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=$3)`, from, to, orgHash).Scan(&latest); err != nil {
 		return PilotScorecard{}, err
 	}
 	result.LatestEventAt = latest
-	if err := s.pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE metadata->>'answer'='yes'),count(*) FILTER(WHERE metadata->>'answer'='partly'),count(*) FILTER(WHERE metadata->>'answer'='no'),count(*) FILTER(WHERE metadata->>'area'='seller'),count(*) FILTER(WHERE metadata->>'area'='buyer') FROM app.analytics_events WHERE name='feedback.clarity_submitted' AND occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=$3)`, from, to, orgHash).Scan(&result.Feedback.Total, &result.Feedback.Yes, &result.Feedback.Partly, &result.Feedback.No, &result.Feedback.Seller, &result.Feedback.Buyer); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE metadata->>'answer'='yes'),count(*) FILTER(WHERE metadata->>'answer'='partly'),count(*) FILTER(WHERE metadata->>'answer'='no'),count(*) FILTER(WHERE metadata->>'area'='seller'),count(*) FILTER(WHERE metadata->>'area'='buyer') FROM app.analytics_events WHERE name='feedback.clarity_submitted' AND occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=$3)`, from, to, orgHash).Scan(&result.Feedback.Total, &result.Feedback.Yes, &result.Feedback.Partly, &result.Feedback.No, &result.Feedback.Seller, &result.Feedback.Buyer); err != nil {
 		return PilotScorecard{}, fmt.Errorf("scorecard feedback: %w", err)
 	}
 	if result.Feedback.Total > 0 {
@@ -94,12 +103,12 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 		{&result.Drivers, "invitation_to_verification", "Invitation-to-verification conversion", "percent", "Invitations accepted by a user who owns a verified business, divided by invitations created in the window.", "app.buyer_invitations + app.businesses", `SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE EXISTS(SELECT 1 FROM app.businesses b WHERE b.owner_user_id=i.accepted_by_user_id AND b.status='verified'))/count(*) END::float8 FROM app.buyer_invitations i WHERE i.created_at >= $1 AND i.created_at < $2 AND ($3='' OR i.organization_id=NULLIF($3,'')::uuid)`},
 		{&result.Drivers, "acceptance_to_release", "Acceptance to goods release", "hours", "Average elapsed hours from immutable acceptance to goods release for the same request.", "app.agreement_acceptances + app.goods_releases", `SELECT COALESCE(avg(extract(epoch FROM (g.released_at-a.accepted_at))/3600),0)::float8 FROM app.agreement_acceptances a JOIN app.goods_releases g USING(credit_request_id) JOIN app.credit_requests c ON c.id=a.credit_request_id WHERE g.released_at >= $1 AND g.released_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid)`},
 		{&result.Drivers, "release_to_receipt", "Release to receipt confirmation", "hours", "Average elapsed hours from goods release to buyer receipt response.", "app.goods_releases + app.receipt_confirmations", `SELECT COALESCE(avg(extract(epoch FROM (r.received_at-g.released_at))/3600),0)::float8 FROM app.goods_releases g JOIN app.receipt_confirmations r USING(credit_request_id) JOIN app.credit_requests c ON c.id=g.credit_request_id WHERE r.received_at >= $1 AND r.received_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.Drivers, "days_to_payment", "Days to payment", "days", "Average days from obligation activation to the final recognised payment timestamp for paid obligations.", "app.obligations + app.payments", `WITH paid AS (SELECT o.id,o.activated_at,max(p.paid_at) paid_at FROM app.obligations o JOIN app.payments p ON p.obligation_id=o.id AND p.state='recognized' WHERE o.payment_status='PAID' AND p.paid_at >= $1 AND p.paid_at < $2 AND ($3='' OR o.supplier_organization_id=NULLIF($3,'')::uuid) GROUP BY o.id,o.activated_at) SELECT COALESCE(avg(extract(epoch FROM (paid_at-activated_at))/86400),0)::float8 FROM paid`},
+		{&result.Drivers, "days_to_payment", "Days to payment", "days", "Average days from activation to the final recognised payment, for principal fully repaid within the window.", "app.obligations + app.payments", daysToPaymentSQL},
 		{&result.Drivers, "repeat_sale_rate", "Repeat-sale rate", "percent", "Supplier-buyer relationships with at least two activated obligations divided by relationships with any activated obligation.", "app.obligations", `WITH pairs AS (SELECT supplier_organization_id,buyer_business_id,count(*) n FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid) GROUP BY supplier_organization_id,buyer_business_id) SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE n>1)/count(*) END::float8 FROM pairs`},
 		{&result.Drivers, "trade_line_utilization", "Trade-line utilisation", "percent", "Current exposure plus pending reservations divided by approved limit on active trade lines.", "app.trade_lines", `SELECT CASE WHEN COALESCE(sum(approved_limit_kobo),0)=0 THEN 0 ELSE 100.0*sum(current_exposure_kobo+reserved_pending_kobo)/sum(approved_limit_kobo) END::float8 FROM app.trade_lines WHERE state='ACTIVE' AND $1::timestamptz < $2::timestamptz AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)`},
 		{&result.Drivers, "supplier_retention", "Retained active suppliers", "percent", "Suppliers with activated obligations in both the selected window and the immediately preceding equal window, divided by active suppliers in the preceding window.", "app.obligations", `WITH previous AS (SELECT DISTINCT supplier_organization_id FROM app.obligations WHERE activated_at >= $1::timestamptz-($2::timestamptz-$1::timestamptz) AND activated_at < $1 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)), current_window AS (SELECT DISTINCT supplier_organization_id FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)) SELECT CASE WHEN (SELECT count(*) FROM previous)=0 THEN 0 ELSE 100.0*(SELECT count(*) FROM previous p JOIN current_window c USING(supplier_organization_id))/(SELECT count(*) FROM previous) END::float8`},
-		{&result.Guardrails, "on_time_payment_rate", "On-time payment rate", "percent", "Paid obligations whose last recognised payment was no later than contractual due date plus grace, divided by paid obligations.", "app.credit_requests + app.obligations + app.payments", `WITH paid AS (SELECT o.id,c.due_date,c.grace_hours,max(p.paid_at) paid_at FROM app.obligations o JOIN app.credit_requests c ON c.id=o.credit_request_id JOIN app.payments p ON p.obligation_id=o.id AND p.state='recognized' WHERE o.payment_status='PAID' AND p.paid_at >= $1 AND p.paid_at < $2 AND ($3='' OR o.supplier_organization_id=NULLIF($3,'')::uuid) GROUP BY o.id,c.due_date,c.grace_hours) SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE paid_at <= due_date::timestamptz + make_interval(hours=>grace_hours))/count(*) END::float8 FROM paid`},
-		{&result.Guardrails, "failed_collection_recovery", "Failed-collection recovery", "percent", "Obligations with a later successful collection after a failed attempt, divided by obligations with a failed attempt.", "app.collection_attempts + app.obligations", `WITH failed AS (SELECT DISTINCT ca.obligation_id FROM app.collection_attempts ca JOIN app.obligations o ON o.id=ca.obligation_id WHERE ca.state='FAILED' AND ca.requested_at >= $1 AND ca.requested_at < $2 AND ($3='' OR o.supplier_organization_id=NULLIF($3,'')::uuid)), recovered AS (SELECT DISTINCT f.obligation_id FROM failed f WHERE EXISTS(SELECT 1 FROM app.collection_attempts ca WHERE ca.obligation_id=f.obligation_id AND ca.state IN('SUCCEEDED','PARTIAL') AND ca.attempt_number>1)) SELECT CASE WHEN (SELECT count(*) FROM failed)=0 THEN 0 ELSE 100.0*(SELECT count(*) FROM recovered)/(SELECT count(*) FROM failed) END::float8`},
+		{&result.Guardrails, "on_time_payment_rate", "On-time payment rate", "percent", "Fully repaid obligations completed in the window whose allocated payments met every agreed instalment deadline.", "app.obligations + app.payments + app.payment_allocations + app.schedule_items", onTimePaymentSQL},
+		{&result.Guardrails, "failed_collection_recovery", "Failed-collection recovery", "percent", "Obligations with a failed attempt in the window and a later positive collection completed before the window ends, divided by obligations with a failed attempt.", "app.collection_attempts + app.obligations", failedCollectionRecoverySQL},
 		{&result.Guardrails, "dispute_rate", "Dispute rate", "percent", "Obligations with a dispute opened in the window divided by obligations activated in the window.", "app.disputes + app.obligations", `SELECT CASE WHEN count(DISTINCT o.id)=0 THEN 0 ELSE 100.0*count(DISTINCT d.obligation_id)/count(DISTINCT o.id) END::float8 FROM app.obligations o LEFT JOIN app.disputes d ON d.obligation_id=o.id AND d.opened_at >= $1 AND d.opened_at < $2 WHERE o.activated_at >= $1 AND o.activated_at < $2 AND ($3='' OR o.supplier_organization_id=NULLIF($3,'')::uuid)`},
 		{&result.Guardrails, "receipt_issue_rate", "Issue-at-receipt rate", "percent", "Receipt responses marked issue_raised divided by all receipt responses.", "app.receipt_confirmations + app.credit_requests", `SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE r.state='issue_raised')/count(*) END::float8 FROM app.receipt_confirmations r JOIN app.credit_requests c ON c.id=r.credit_request_id WHERE r.received_at >= $1 AND r.received_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid)`},
 		{&result.Guardrails, "provider_reliability", "Collection provider reliability", "percent", "Successful or partial final collection attempts divided by all final attempts.", "app.collection_attempts + app.obligations", `SELECT CASE WHEN count(*)=0 THEN 100 ELSE 100.0*count(*) FILTER(WHERE ca.state IN('SUCCEEDED','PARTIAL'))/count(*) END::float8 FROM app.collection_attempts ca JOIN app.obligations o ON o.id=ca.obligation_id WHERE ca.final_at >= $1 AND ca.final_at < $2 AND ca.state IN('SUCCEEDED','PARTIAL','FAILED','CANCELLED') AND ($3='' OR o.supplier_organization_id=NULLIF($3,'')::uuid)`},
@@ -131,13 +140,13 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 	}
 	for _, q := range queries {
 		var value float64
-		if err := s.pool.QueryRow(ctx, q.sql, from, to, org).Scan(&value); err != nil {
+		if err := tx.QueryRow(ctx, q.sql, from, to, org).Scan(&value); err != nil {
 			return PilotScorecard{}, fmt.Errorf("scorecard metric %s: %w", q.key, err)
 		}
 		*q.set = append(*q.set, Metric{Key: q.key, Label: q.label, Value: value, Unit: q.unit, Definition: q.definition, Source: q.source, TargetStatus: "baseline_required"})
 	}
 
-	rows, err := s.pool.Query(ctx, `SELECT name,count(*) FROM app.analytics_events WHERE occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=$3) GROUP BY name`, from, to, orgHash)
+	rows, err := tx.Query(ctx, `SELECT name,count(*) FROM app.analytics_events WHERE occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=$3) GROUP BY name`, from, to, orgHash)
 	if err != nil {
 		return PilotScorecard{}, err
 	}
@@ -168,7 +177,7 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 		SELECT 'dispute.opened',count(*) FROM app.disputes WHERE opened_at >= $1 AND opened_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)
 	), observed AS (SELECT name,count(*) n FROM app.analytics_events WHERE occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=encode(digest($3,'sha256'),'hex')) GROUP BY name)
 	SELECT e.event,e.n,COALESCE(o.n,0),e.n-COALESCE(o.n,0) FROM expected e LEFT JOIN observed o ON o.name=e.event ORDER BY e.event`
-	rows, err = s.pool.Query(ctx, reconciliationSQL, from, to, org)
+	rows, err = tx.Query(ctx, reconciliationSQL, from, to, org)
 	if err != nil {
 		return PilotScorecard{}, err
 	}
@@ -192,5 +201,8 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 	}
 	rows.Close()
 	sort.Slice(result.KPIs, func(i, j int) bool { return result.KPIs[i].Key < result.KPIs[j].Key })
+	if err := tx.Commit(ctx); err != nil {
+		return PilotScorecard{}, err
+	}
 	return result, nil
 }

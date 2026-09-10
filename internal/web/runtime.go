@@ -22,6 +22,7 @@ import (
 	"kredit/internal/identity"
 	"kredit/internal/jobs"
 	"kredit/internal/ledger"
+	"kredit/internal/legalpublication"
 	"kredit/internal/mandates"
 	"kredit/internal/notifications"
 	"kredit/internal/observability"
@@ -89,6 +90,9 @@ type Runtime struct {
 	PlatformSettings          platformsettings.Service
 	UserControl               *usercontrol.Store
 	Feedback                  *feedback.Store
+	// ProviderFailures records adapters that were configured but failed to
+	// construct. Readiness reports these; they are never silently ignored.
+	ProviderFailures []string
 }
 
 // PersistenceStatus describes which runtime boundaries are actually backed
@@ -122,23 +126,56 @@ func NewRuntime(cfg config.Config) *Runtime {
 }
 
 func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
+	// A provider that fails to construct must be visible. Discarding the error
+	// leaves an adapter silently absent, which is indistinguishable from an
+	// adapter that is deliberately switched off.
+	var providerFailures []string
 	var identityProvider identity.IdentityProvider = identity.NewMockProvider()
 	if cfg.Environment != "development" {
 		identityProvider = identity.NewUnavailableProvider("certified identity provider adapter is not configured")
-		if provider, err := identity.NewWebhookProvider(cfg.IdentityProvider, cfg.IdentityProviderEndpoint, cfg.IdentityProviderToken, cfg.IdentityWebhookSecret); err == nil {
-			identityProvider = provider
+		if cfg.RealIdentity {
+			provider, err := identity.NewWebhookProvider(cfg.IdentityProvider, cfg.IdentityProviderEndpoint, cfg.IdentityProviderToken, cfg.IdentityWebhookSecret)
+			if err != nil {
+				providerFailures = append(providerFailures, fmt.Sprintf("identity provider unavailable: %v", err))
+			} else {
+				identityProvider = provider
+			}
 		}
 	}
 	var monoClient *mono.Client
 	var webhookJobs *jobs.Client
 	if database != nil {
-		webhookJobs, _ = jobs.NewEnqueueClient(database.Raw())
-		if (cfg.MonoSweepEnabled || cfg.CollectionProvider == "mono-sweep") && cfg.Environment != "production" && strings.HasPrefix(cfg.MonoSecretKey, "test_sk_") {
-			monoClient, _ = mono.New(mono.DefaultBaseURL, cfg.MonoSecretKey, cfg.MonoWebhookSecret, cfg.MonoRedirectURL, cfg.PartialSweepEnabled, func(ctx context.Context, userID, businessID string) (string, error) {
+		var jobsErr error
+		if webhookJobs, jobsErr = jobs.NewEnqueueClient(database.Raw()); jobsErr != nil {
+			providerFailures = append(providerFailures, fmt.Sprintf("webhook job client unavailable: %v", jobsErr))
+		}
+		if cfg.MonoSweepEnabled || cfg.CollectionProvider == "mono-sweep" {
+			resolveCustomer := func(ctx context.Context, userID, businessID string) (string, error) {
 				var reference string
 				err := database.Raw().QueryRow(ctx, `SELECT provider_customer_reference FROM app.provider_customer_bindings WHERE provider='mono-sweep' AND buyer_user_id=$1::uuid AND buyer_business_id=$2::uuid`, userID, businessID).Scan(&reference)
 				return reference, err
-			})
+			}
+			// The key decides the environment, and configuration has already
+			// refused a sandbox key in production and a live key outside it. A
+			// construction failure is recorded rather than discarded, so a bad
+			// redirect URL surfaces in readiness instead of silently leaving the
+			// provider absent.
+			sandboxKey := strings.HasPrefix(cfg.MonoSecretKey, "test_sk_")
+			build := mono.NewLive
+			if sandboxKey {
+				build = mono.New
+			}
+			client, monoErr := build(mono.DefaultBaseURL, cfg.MonoSecretKey, cfg.MonoWebhookSecret, cfg.MonoRedirectURL, cfg.PartialSweepEnabled, resolveCustomer)
+			switch {
+			case monoErr != nil:
+				providerFailures = append(providerFailures, fmt.Sprintf("mono client unavailable: %v", monoErr))
+			case sandboxKey && cfg.Environment == "production":
+				providerFailures = append(providerFailures, "mono sandbox key refused in production")
+			case !sandboxKey && cfg.Environment != "production":
+				providerFailures = append(providerFailures, "mono live key refused outside production")
+			default:
+				monoClient = client
+			}
 		}
 	}
 	mandateProvider := mandates.NewMockProvider()
@@ -146,7 +183,10 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	if database != nil {
 		mandateRuntime = mandates.NewPostgresProvider(database.Raw(), cfg.CollectionProvider)
 		if cfg.Environment != "development" && cfg.RealCollections {
-			if remote, err := mandates.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken); err == nil {
+			remote, err := mandates.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken)
+			if err != nil {
+				providerFailures = append(providerFailures, fmt.Sprintf("mandate connector unavailable: %v", err))
+			} else {
 				mandateRuntime = mandates.NewPostgresProviderWithRemote(database.Raw(), remote)
 			}
 		}
@@ -170,7 +210,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	if database != nil {
 		outboxStore = outbox.NewStore(database.Raw())
 		platformOpsStore = platformops.NewStore(database.Raw())
-		platformSettingsStore = platformsettings.NewPostgresStore(database.Raw(), nil, nil)
+		platformSettingsStore = platformsettings.NewPostgresStore(database.Raw(), platformsettings.NewEncryptor(cfg.SettingsEncryptionKey), nil)
 		policies = businesspolicy.NewStore(database.Raw(), cfg)
 		policyError = policies.ValidateStartup(context.Background())
 		feedbackStore = feedback.NewPostgresStore(database.Raw())
@@ -183,6 +223,9 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		scheduleStore = schedules.NewPostgresStore(database.Raw())
 		tradeLinePostgres = tradelines.NewPostgresStoreWithOutbox(database.Raw(), outboxStore)
 		tradeLineStore = tradeLinePostgres
+	}
+	if configurable, ok := tradeLineStore.(interface{ SetLegalReader(legalpublication.Reader) }); ok {
+		configurable.SetLegalReader(legalpublication.SettingsReader(platformSettingsStore))
 	}
 	if cfg.PilotMaxActiveExposureKobo > 0 {
 		tradeLineStore.SetMaxActiveExposure(ledger.Money(cfg.PilotMaxActiveExposureKobo))
@@ -197,6 +240,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		tradeLineStore.SetMaxDrawdownsPerLineDay(int(cfg.PilotMaxDrawdownsPerLineDay))
 	}
 	creditStore := credit.NewStore(mandateRuntime, ledgerStore)
+	creditStore.SetLegalReader(legalpublication.SettingsReader(platformSettingsStore))
 	if cfg.PilotEnhancedReviewKobo > 0 {
 		creditStore.SetEnhancedReviewThreshold(ledger.Money(cfg.PilotEnhancedReviewKobo))
 	}
@@ -259,7 +303,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			GoodsDescription: input.Drawdown.GoodsDescription, InvoiceReference: input.Drawdown.InvoiceReference,
 			InvoiceDocumentHash: input.Drawdown.InvoiceDocumentHash, DueDate: input.Drawdown.DueDate,
 			GraceHours: input.Drawdown.GraceHours, CollectionAt: input.Drawdown.CollectionAt,
-			TermsVersion: input.Drawdown.TermsVersion, DrawdownAgreementHash: input.Drawdown.AgreementHash,
+			LegalVersions: input.Drawdown.LegalVersions, TermsVersion: input.Drawdown.TermsVersion, DrawdownAgreementHash: input.Drawdown.AgreementHash,
 			BuyerConfirmedAt: input.Drawdown.BuyerConfirmedAt, ReleaseActorID: input.Drawdown.ReleaseActorID,
 			DeliveryMethod: input.Drawdown.DeliveryMethod, ReleaseNotes: input.Drawdown.ReleaseNotes,
 			ReleasedAt: input.Drawdown.ReleasedAt, ReceiptActorID: input.Drawdown.ReceiptActorID,
@@ -283,7 +327,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 				GoodsDescription: input.Drawdown.GoodsDescription, InvoiceReference: input.Drawdown.InvoiceReference,
 				InvoiceDocumentHash: input.Drawdown.InvoiceDocumentHash, DueDate: input.Drawdown.DueDate,
 				GraceHours: input.Drawdown.GraceHours, CollectionAt: input.Drawdown.CollectionAt,
-				TermsVersion: input.Drawdown.TermsVersion, DrawdownAgreementHash: input.Drawdown.AgreementHash,
+				LegalVersions: input.Drawdown.LegalVersions, TermsVersion: input.Drawdown.TermsVersion, DrawdownAgreementHash: input.Drawdown.AgreementHash,
 				BuyerConfirmedAt: input.Drawdown.BuyerConfirmedAt, ReleaseActorID: input.Drawdown.ReleaseActorID,
 				DeliveryMethod: input.Drawdown.DeliveryMethod, ReleaseNotes: input.Drawdown.ReleaseNotes,
 				ReleasedAt: input.Drawdown.ReleasedAt, ReceiptActorID: input.Drawdown.ReceiptActorID,
@@ -392,14 +436,21 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		}
 		operationStore = operations.NewPostgresStore(database.Raw(), outboxStore, invalidate)
 	}
-	feeWaivers := func(org string) map[string]ledger.Money {
+	feeWaivers := func(ctx context.Context, org string) (map[string]ledger.Money, error) {
 		result := map[string]ledger.Money{}
-		for _, action := range operationStore.ListForOrganization(org) {
+		actions, err := operationStore.ListForOrganization(ctx, org)
+		if err != nil {
+			return nil, err
+		}
+		for _, action := range actions {
 			if action.ActionType == "fee_waiver" {
-				result[action.ObligationID] += action.AmountKobo
+				result[action.ObligationID], err = ledger.CheckedAdd(result[action.ObligationID], action.AmountKobo)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
-		return result
+		return result, nil
 	}
 	reportStore := reports.NewStore(reports.Source{FeeWaivers: feeWaivers, SupplierViews: creditRuntime.ListForSupplier, BuyerViews: creditRuntime.ListForBuyer, Payments: paymentStore.List, Schedule: scheduleStore.GetForObligation, Disputes: disputeStore.ListForObligation})
 	if database != nil {
@@ -425,6 +476,9 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		buyerStore = buyers.NewPostgresStore(database.Raw(), runtimeDomainKey(fieldKey, "", "buyers"), identityProvider)
 		correctionStore = corrections.NewPostgresStore(database.Raw())
 	}
+	if configurable, ok := onboardingStore.(interface{ SetLegalReader(legalpublication.Reader) }); ok {
+		configurable.SetLegalReader(legalpublication.SettingsReader(platformSettingsStore))
+	}
 	// Apply pilot guards after selecting the runtime adapter so a durable
 	// deployment cannot silently lose its buyer limits during adapter switch.
 	buyerStore.SetInvitationGuard(func(input buyers.CreateInvitationInput) error {
@@ -433,8 +487,13 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		}
 		return nil
 	})
+	durableBuyerLimit := false
+	if limited, ok := buyerStore.(interface{ SetBusinessLimit(int64) }); ok {
+		limited.SetBusinessLimit(cfg.PilotMaxBuyerBusinesses)
+		durableBuyerLimit = true
+	}
 	buyerStore.SetAcceptanceGuard(func(input buyers.AcceptInput) error {
-		if cfg.PilotMaxBuyerBusinesses > 0 && int64(buyerStore.CountBusinesses()) >= cfg.PilotMaxBuyerBusinesses {
+		if !durableBuyerLimit && cfg.PilotMaxBuyerBusinesses > 0 && int64(buyerStore.CountBusinesses()) >= cfg.PilotMaxBuyerBusinesses {
 			return fmt.Errorf("pilot buyer business limit reached")
 		}
 		if len(allowedIndustries) > 0 && strings.TrimSpace(input.Industry) != "" && !allowedIndustries[strings.ToLower(strings.TrimSpace(input.Industry))] {
@@ -446,8 +505,13 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	// adapter is intentionally created after the in-memory development store;
 	// setting the guard only before that switch would silently remove the
 	// supplier-organisation cap in staging and production.
+	durableOrganizationLimit := false
+	if limited, ok := organizationStore.(interface{ SetOrganizationLimit(int64) }); ok {
+		limited.SetOrganizationLimit(cfg.PilotMaxSupplierOrganizations)
+		durableOrganizationLimit = true
+	}
 	organizationStore.SetCreateGuard(func(_ string, input organizations.CreateInput) error {
-		if cfg.PilotMaxSupplierOrganizations > 0 && int64(organizationStore.Count()) >= cfg.PilotMaxSupplierOrganizations {
+		if !durableOrganizationLimit && cfg.PilotMaxSupplierOrganizations > 0 && int64(organizationStore.Count()) >= cfg.PilotMaxSupplierOrganizations {
 			return fmt.Errorf("pilot supplier organization limit reached")
 		}
 		if len(allowedIndustries) > 0 && !allowedIndustries[strings.ToLower(strings.TrimSpace(input.Industry))] {
@@ -498,12 +562,11 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			{notifications.ChannelSMS, cfg.NotificationSMSEndpoint, cfg.NotificationSMSToken},
 			{notifications.ChannelWhatsApp, cfg.NotificationWhatsAppEndpoint, cfg.NotificationWhatsAppToken},
 		} {
-			if connector.endpoint == "" || connector.token == "" {
-				continue
+			var fallback notifications.Provider
+			if connector.endpoint != "" && connector.token != "" {
+				fallback, _ = notifications.NewWebhookProvider(connector.channel, connector.endpoint, connector.token)
 			}
-			if provider, err := notifications.NewWebhookProvider(connector.channel, connector.endpoint, connector.token); err == nil {
-				notificationStore.RegisterProvider(provider)
-			}
+			notificationStore.RegisterProvider(notifications.NewConfiguredProvider(connector.channel, platformSettingsStore, fallback))
 		}
 	}
 	whatsAppKey := runtimeDomainKey(cfg.TokenHashKey, sessionKey, "whatsapp-webhook")
@@ -553,7 +616,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		if disputeErr != nil {
 			return collections.ObligationSnapshot{}, disputeErr
 		}
-		claimHold := paymentClaimStore.ActiveHold(context.Background(), obligationID, time.Now().UTC())
+		claimHold := paymentClaimStore.ActiveHold(db.WithTenantContext(context.Background(), state.BuyerUserID, state.SupplierOrganizationID), obligationID, time.Now().UTC())
 		_, supplierReadiness, readinessErr := onboardingStore.Get(state.SupplierOrganizationID)
 		if readinessErr != nil || !supplierReadiness.Ready {
 			state.CollectionEnabled = false
@@ -599,6 +662,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		relationshipStore = relationships.NewPostgresStore(database.Raw())
 	}
 	notificationStore.SetReminderConsent(relationshipStore.AllowsReminders)
+	notificationStore.SetOptionalProcessing(userControlStore.AllowsOptionalProcessing)
 	userControlStore.SetRecoveryDelivery(func(ctx context.Context, request usercontrol.RecoveryRequest, token string) error {
 		user, err := authStore.UserByID(request.TargetUserID)
 		if err != nil {
@@ -664,6 +728,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		Outbox:               outboxStore,
 		PlatformOps:          platformOpsStore,
 		PlatformSettings:     platformSettingsStore,
+		ProviderFailures:     providerFailures,
 		BusinessPolicies:     policies, policyInitializationError: policyError,
 		UserControl: userControlStore,
 		Feedback:    feedbackStore,

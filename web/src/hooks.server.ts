@@ -40,7 +40,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			response.headers.set(name, value);
 		}
 		const privateRoute = /^\/(app|buyer|admin|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(event.url.pathname);
-		response.headers.set('cache-control', privateRoute
+		if (!response.headers.has('cache-control')) response.headers.set('cache-control', privateRoute
 			? 'private, no-store'
 			: 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
 		return response;

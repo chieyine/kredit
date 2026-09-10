@@ -15,10 +15,15 @@ trap 'rm -rf "$check_dir"' EXIT
 fetch() {
 	local path="$1"
 	local name="$2"
-	curl --fail --silent --show-error --location --max-time 20 \
+	local status
+	status="$(curl --fail --silent --show-error --max-time 20 \
 		--dump-header "$check_dir/$name.headers" \
 		--output "$check_dir/$name.body" \
-		"${BASE_URL%/}$path"
+		--write-out '%{http_code}' "${BASE_URL%/}$path")"
+	if [[ "$status" != "200" ]]; then
+		printf 'Expected HTTP 200 for %s; received %s. Use the canonical production origin.\n' "$path" "$status" >&2
+		exit 1
+	fi
 }
 
 fetch / home

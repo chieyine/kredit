@@ -118,7 +118,7 @@ tasks:
 
   openapi:generate:
     cmds:
-      - bash scripts/openapi-generate.sh
+      - bash scripts/generate.sh
 
   web:check:
     cmds:

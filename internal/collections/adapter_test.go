@@ -32,3 +32,23 @@ func TestProviderStatusExposesSandboxCapabilities(t *testing.T) {
 		t.Fatalf("unexpected provider status: %#v", status)
 	}
 }
+
+func TestApprovalCapabilitiesCannotBeChangedThroughSharedSlices(t *testing.T) {
+	mock := NewMockProvider("secret")
+	approval := ApprovalRecord{ProviderName: mock.Name(), WrittenReference: "approval", ApprovedBy: "reviewer", ApprovedAt: time.Now().Add(-time.Minute), AllowedCapabilities: []Capability{CapabilityOneTime}, PilotLimitKobo: 100}
+	adapter := NewApprovedAdapter(mock, approval, true)
+	approval.AllowedCapabilities[0] = CapabilityReversal
+	returned := adapter.Approval()
+	returned.AllowedCapabilities[0] = CapabilityReversal
+	if _, err := adapter.Cancel(context.Background(), "collection"); err == nil {
+		t.Fatal("external mutation authorized cancellation")
+	}
+	if !adapter.Approval().Allows(CapabilityOneTime) {
+		t.Fatal("approval changed")
+	}
+	for _, amount := range []ledger.Money{0, -1} {
+		if _, err := adapter.Submit(context.Background(), Request{AmountKobo: amount}); err == nil {
+			t.Fatal("nonpositive debit accepted")
+		}
+	}
+}

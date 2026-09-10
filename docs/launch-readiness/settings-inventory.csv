@@ -1,0 +1,4 @@
+key,category,consumer,notes
+features.trade_lines,features,"internal/web/credit_handlers.go listTradeLines","Off by default. Refused with a 403 problem when off."
+features.drawdowns,features,"internal/web/credit_handlers.go requestDrawdown","Off by default. Refused with a 403 problem when off."
+features.disputes,features,"internal/web/credit_handlers.go openDispute, addEvidence","On by default. Turning it off stops new reports; open ones still resolve."

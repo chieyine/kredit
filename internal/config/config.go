@@ -16,6 +16,7 @@ const defaultTimezone = "Africa/Lagos"
 // Config contains deployment configuration shared by the API and worker.
 // Secrets are read from the environment and are never logged or serialized.
 type Config struct {
+	AdminConnectionVersions    map[string]int `json:"-"`
 	MetricsScrapeToken         string
 	MonoSweepEnabled           bool
 	PartialSweepEnabled        bool
@@ -42,6 +43,7 @@ type Config struct {
 	ObjectStorageRegion            string
 	ObjectStorageAccessKey         string
 	ObjectStorageSecretKey         string
+	DocumentScannerEnabled         bool
 	DocumentScannerEndpoint        string
 	DocumentScannerToken           string
 	SessionSigningKey              string
@@ -49,6 +51,7 @@ type Config struct {
 	FieldEncryptionKey             string
 	OTPHMACKey                     string
 	TokenHashKey                   string
+	SettingsEncryptionKey          string
 	OTelEndpoint                   string
 	Timezone                       string
 	Currency                       string
@@ -131,6 +134,7 @@ func Load() (Config, error) {
 		FieldEncryptionKey:             envOr("FIELD_ENCRYPTION_KEY", "development-only-change-me"),
 		OTPHMACKey:                     envOr("OTP_HMAC_KEY", "development-only-change-me"),
 		TokenHashKey:                   envOr("TOKEN_HASH_KEY", "development-only-change-me"),
+		SettingsEncryptionKey:          envOr("SETTINGS_ENCRYPTION_KEY", ""),
 		OTelEndpoint:                   envOr("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		Timezone:                       envOr("BUSINESS_TIMEZONE", defaultTimezone),
 		Currency:                       "NGN",
@@ -243,12 +247,12 @@ func (c Config) Validate() error {
 	if c.Currency != "NGN" || c.MoneyUnit != "kobo" {
 		return errors.New("money configuration must remain NGN/kobo")
 	}
-	if c.MonoSweepEnabled {
+	if c.MonoSweepEnabled || c.CollectionProvider == "mono-sweep" {
 		if c.CollectionProvider != "mono-sweep" || strings.TrimSpace(c.MonoWebhookSecret) == "" || strings.TrimSpace(c.MonoRedirectURL) == "" {
 			return errors.New("mono Sweep requires COLLECTION_PROVIDER=mono-sweep, webhook secret, and redirect URL")
 		}
 		if c.Environment == "production" {
-			if strings.TrimSpace(c.ProviderCertificationReference) == "" {
+			if c.MonoSweepEnabled && strings.TrimSpace(c.ProviderCertificationReference) == "" {
 				return errors.New("mono Sweep production requires PROVIDER_CERTIFICATION_REFERENCE")
 			}
 			if strings.TrimSpace(c.MonoSecretKey) == "" || strings.HasPrefix(c.MonoSecretKey, "test_sk_") {
@@ -276,6 +280,14 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.CollectionProvider) == "" {
 		return errors.New("COLLECTION_PROVIDER is required")
 	}
+	// Zero retains the application's default while collections are disabled.
+	// Bound explicit values before runtime converts hours to time.Duration.
+	if c.CollectionNoticeMinHours < 0 || c.CollectionNoticeMinHours > 720 {
+		return errors.New("COLLECTION_NOTICE_MIN_HOURS must be between 0 and 720")
+	}
+	if c.DeemedAcceptanceMinHours < 0 || c.DeemedAcceptanceMinHours > 720 {
+		return errors.New("DEEMED_ACCEPTANCE_MIN_HOURS must be between 0 and 720")
+	}
 	if (c.RealCollections || c.MonoSweepEnabled) && (c.CollectionNoticeMinHours < 1 || c.CollectionNoticeMinHours > 720) {
 		return errors.New("real collections require COLLECTION_NOTICE_MIN_HOURS between 1 and 720")
 	}
@@ -286,7 +298,7 @@ func (c Config) Validate() error {
 	if (c.RealCollections || c.MonoSweepEnabled) && (c.DeemedAcceptanceMinHours < 24 || c.DeemedAcceptanceMinHours > 720) {
 		return errors.New("real collections require DEEMED_ACCEPTANCE_MIN_HOURS between 24 and 720")
 	}
-	if c.RealCollections {
+	if c.RealCollections || (c.MonoSweepEnabled && c.Environment == "production") {
 		if strings.TrimSpace(c.ProviderApprovalReference) == "" || strings.TrimSpace(c.ProviderApprovedBy) == "" || strings.TrimSpace(c.ProviderApprovedAt) == "" {
 			return errors.New("real collections require a written provider approval reference, approver, and approval time")
 		}
@@ -320,39 +332,34 @@ func (c Config) Validate() error {
 	if c.DirectSupplierSettlement && !c.RealCollections {
 		return errors.New("FEATURE_DIRECT_SUPPLIER_SETTLEMENT requires FEATURE_REAL_COLLECTIONS")
 	}
+	// Production hardening has two halves and they are deliberately separate.
+	//
+	// Infrastructure requirements always apply: without them the deployment is
+	// not safe to run at all. Capability requirements apply only to the
+	// capabilities this deployment has actually switched on. That separation is
+	// what lets the public site and the bookkeeping product go live before an
+	// external bank, identity, messaging or scanning provider is contracted,
+	// without weakening a single security control. Running as "staging" to skip
+	// a provider is not an alternative: it would drop every check below at once.
 	if c.Environment == "production" {
-		if !c.ApprovedRetentionPolicy {
-			return errors.New("FEATURE_APPROVED_RETENTION_POLICY must be enabled in production")
-		}
-		if !c.ProductionPilot {
-			return errors.New("FEATURE_PRODUCTION_PILOT must be enabled in production")
-		}
-		// Every admin surface is a privileged path that has to be
-		// access-reviewed and audited, and a pilot needs far fewer of them
-		// than the product ships. Production enumerates the surfaces it
-		// actually operates rather than inheriting the full set by default.
+		// --- Infrastructure: always required. ---
 		if len(c.AdminSurfaces) == 0 {
 			return errors.New("ADMIN_SURFACES must list the operations surfaces this deployment enables, or 'all'")
 		}
-		if !c.RealIdentity {
-			return errors.New("FEATURE_REAL_IDENTITY must be enabled in production; mock identity is not permitted")
-		}
-		if strings.TrimSpace(c.IdentityProvider) == "" || strings.Contains(strings.ToLower(c.IdentityProvider), "mock") || strings.TrimSpace(c.IdentityProviderEndpoint) == "" || strings.TrimSpace(c.IdentityProviderToken) == "" || strings.TrimSpace(c.IdentityWebhookSecret) == "" {
-			return errors.New("production requires a certified IDENTITY_PROVIDER and configured connector endpoint, token, and webhook secret")
-		}
-		if !c.RealCollections {
-			return errors.New("FEATURE_REAL_COLLECTIONS must be enabled in production; collection money paths are disabled")
-		}
-		if strings.Contains(strings.ToLower(c.CollectionProvider), "mock") {
-			return errors.New("COLLECTION_PROVIDER must name a certified production provider")
-		}
-		if strings.TrimSpace(c.CollectionProviderEndpoint) == "" || strings.TrimSpace(c.CollectionProviderToken) == "" || strings.TrimSpace(c.CollectionWebhookSecret) == "" {
-			return errors.New("production requires collection connector endpoint, token, webhook secret, and PROVIDER_APPROVED_AT")
+		// A deployment holds people's records from its first sale — names, phone
+		// numbers, what they owe — whether or not it ever debits a bank account.
+		// How long those are kept is therefore not a collections decision, and
+		// this gate does not move with the collections capability.
+		if !c.ApprovedRetentionPolicy {
+			return errors.New("production requires FEATURE_APPROVED_RETENTION_POLICY and its written approval reference: the deployment retains personal records from its first sale")
 		}
 		for name, value := range map[string]string{
 			"SESSION_SIGNING_KEY":         c.SessionSigningKey,
 			"OTP_HMAC_KEY":                c.OTPHMACKey,
 			"TOKEN_HASH_KEY":              c.TokenHashKey,
+			"SETTINGS_ENCRYPTION_KEY":     c.SettingsEncryptionKey,
+			"FIELD_ENCRYPTION_KEY":        c.FieldEncryptionKey,
+			"FIELD_ENCRYPTION_KEY_ID":     c.FieldEncryptionKeyID,
 			"DATABASE_URL":                c.DatabaseURL,
 			"DATABASE_DIRECT_URL":         c.DatabaseDirectURL,
 			"RIVER_DATABASE_URL":          c.RiverDatabaseURL,
@@ -361,30 +368,21 @@ func (c Config) Validate() error {
 			"OBJECT_STORAGE_REGION":       c.ObjectStorageRegion,
 			"OBJECT_STORAGE_ACCESS_KEY":   c.ObjectStorageAccessKey,
 			"OBJECT_STORAGE_SECRET_KEY":   c.ObjectStorageSecretKey,
-			"DOCUMENT_SCANNER_ENDPOINT":   c.DocumentScannerEndpoint,
-			"DOCUMENT_SCANNER_TOKEN":      c.DocumentScannerToken,
-			"FIELD_ENCRYPTION_KEY_ID":     c.FieldEncryptionKeyID,
-			"FIELD_ENCRYPTION_KEY":        c.FieldEncryptionKey,
 			"OTEL_EXPORTER_OTLP_ENDPOINT": c.OTelEndpoint,
-			"NOTIFICATION_EMAIL_ENDPOINT": c.NotificationEmailEndpoint,
-			"NOTIFICATION_EMAIL_TOKEN":    c.NotificationEmailToken,
-			"NOTIFICATION_SMS_ENDPOINT":   c.NotificationSMSEndpoint,
-			"NOTIFICATION_SMS_TOKEN":      c.NotificationSMSToken,
 		} {
 			if strings.TrimSpace(value) == "" {
 				return fmt.Errorf("%s must be set to a production value", name)
 			}
 		}
-		if c.WhatsApp && (strings.TrimSpace(c.NotificationWhatsAppEndpoint) == "" || strings.TrimSpace(c.NotificationWhatsAppToken) == "") {
-			return errors.New("FEATURE_WHATSAPP requires NOTIFICATION_WHATSAPP_ENDPOINT and NOTIFICATION_WHATSAPP_TOKEN in production")
-		}
-		for name, value := range map[string]string{"SESSION_SIGNING_KEY": c.SessionSigningKey, "OTP_HMAC_KEY": c.OTPHMACKey, "TOKEN_HASH_KEY": c.TokenHashKey, "FIELD_ENCRYPTION_KEY": c.FieldEncryptionKey, "OBJECT_STORAGE_SECRET_KEY": c.ObjectStorageSecretKey, "DOCUMENT_SCANNER_TOKEN": c.DocumentScannerToken, "NOTIFICATION_EMAIL_TOKEN": c.NotificationEmailToken, "NOTIFICATION_SMS_TOKEN": c.NotificationSMSToken, "IDENTITY_PROVIDER_TOKEN": c.IdentityProviderToken, "IDENTITY_WEBHOOK_SECRET": c.IdentityWebhookSecret, "COLLECTION_PROVIDER_TOKEN": c.CollectionProviderToken, "COLLECTION_WEBHOOK_SECRET": c.CollectionWebhookSecret} {
+		for name, value := range map[string]string{
+			"SESSION_SIGNING_KEY":       c.SessionSigningKey,
+			"OTP_HMAC_KEY":              c.OTPHMACKey,
+			"TOKEN_HASH_KEY":            c.TokenHashKey,
+			"SETTINGS_ENCRYPTION_KEY":   c.SettingsEncryptionKey,
+			"FIELD_ENCRYPTION_KEY":      c.FieldEncryptionKey,
+			"OBJECT_STORAGE_SECRET_KEY": c.ObjectStorageSecretKey,
+		} {
 			if err := validateSecret(name, value); err != nil {
-				return err
-			}
-		}
-		if c.WhatsApp {
-			if err := validateSecret("NOTIFICATION_WHATSAPP_TOKEN", c.NotificationWhatsAppToken); err != nil {
 				return err
 			}
 		}
@@ -393,29 +391,118 @@ func (c Config) Validate() error {
 				return err
 			}
 		}
-		for name, value := range map[string]string{"PUBLIC_BASE_URL": c.PublicBaseURL, "APP_BASE_URL": c.AppBaseURL, "API_INTERNAL_URL": c.APIInternalURL, "OBJECT_STORAGE_ENDPOINT": c.ObjectStorageEndpoint, "DOCUMENT_SCANNER_ENDPOINT": c.DocumentScannerEndpoint, "OTEL_EXPORTER_OTLP_ENDPOINT": c.OTelEndpoint, "NOTIFICATION_EMAIL_ENDPOINT": c.NotificationEmailEndpoint, "NOTIFICATION_SMS_ENDPOINT": c.NotificationSMSEndpoint, "IDENTITY_PROVIDER_ENDPOINT": c.IdentityProviderEndpoint, "COLLECTION_PROVIDER_ENDPOINT": c.CollectionProviderEndpoint} {
+		for name, value := range map[string]string{"PUBLIC_BASE_URL": c.PublicBaseURL, "APP_BASE_URL": c.AppBaseURL, "API_INTERNAL_URL": c.APIInternalURL, "OBJECT_STORAGE_ENDPOINT": c.ObjectStorageEndpoint, "OTEL_EXPORTER_OTLP_ENDPOINT": c.OTelEndpoint} {
 			if err := validateProductionURL(name, value); err != nil {
 				return err
 			}
 		}
-		if c.WhatsApp {
-			if err := validateProductionURL("NOTIFICATION_WHATSAPP_ENDPOINT", c.NotificationWhatsAppEndpoint); err != nil {
-				return err
-			}
-		}
-		for name, value := range map[string]string{"DATABASE_URL": c.DatabaseURL, "RIVER_DATABASE_URL": c.RiverDatabaseURL} {
+		for name, value := range map[string]string{"DATABASE_URL": c.DatabaseURL, "DATABASE_DIRECT_URL": c.DatabaseDirectURL, "RIVER_DATABASE_URL": c.RiverDatabaseURL} {
 			if err := validateProductionDatabaseURL(name, value); err != nil {
 				return err
 			}
 		}
-		for name, value := range map[string]string{"SECURITY_REVIEW_REFERENCE": c.SecurityReviewReference, "DPIA_REFERENCE": c.DPIAReference, "LEGAL_APPROVAL_REFERENCE": c.LegalApprovalReference, "PEN_TEST_REFERENCE": c.PenTestReference, "BACKUP_RESTORE_REFERENCE": c.BackupRestoreReference, "PROVIDER_CERTIFICATION_REFERENCE": c.ProviderCertificationReference, "SUPPORT_TRAINING_REFERENCE": c.SupportTrainingReference, "LAUNCH_APPROVAL_REFERENCE": c.LaunchApprovalReference, "PILOT_ALLOWED_PROVIDER_ACCOUNTS": c.PilotAllowedProviderAccounts, "PILOT_ALLOWED_INDUSTRIES": c.PilotAllowedIndustries} {
-			if strings.TrimSpace(value) == "" {
-				return fmt.Errorf("%s is required for production readiness", name)
+
+		// --- Sign-in delivery: validated when configured, never half-configured. ---
+		// Neither channel is mandatory to boot: a deployment may publish the
+		// public site before a messaging provider is contracted. What is refused
+		// is a channel that is half set up, which would fail at send time with no
+		// warning. Whether anyone can sign in is reported by readiness, not by
+		// refusing to start.
+		for _, channel := range []struct{ name, endpoint, token string }{
+			{"NOTIFICATION_EMAIL", c.NotificationEmailEndpoint, c.NotificationEmailToken},
+			{"NOTIFICATION_SMS", c.NotificationSMSEndpoint, c.NotificationSMSToken},
+		} {
+			endpoint, token := strings.TrimSpace(channel.endpoint), strings.TrimSpace(channel.token)
+			if endpoint == "" && token == "" {
+				continue
+			}
+			if endpoint == "" || token == "" {
+				return fmt.Errorf("%s_ENDPOINT and %s_TOKEN must be set together", channel.name, channel.name)
+			}
+			if err := validateProductionURL(channel.name+"_ENDPOINT", endpoint); err != nil {
+				return err
+			}
+			if err := validateSecret(channel.name+"_TOKEN", token); err != nil {
+				return err
 			}
 		}
-		for name, value := range map[string]int64{"PILOT_MAX_SUPPLIER_ORGANIZATIONS": c.PilotMaxSupplierOrganizations, "PILOT_MAX_BUYER_BUSINESSES": c.PilotMaxBuyerBusinesses, "PILOT_MAX_PRINCIPAL_KOBO": c.PilotMaxPrincipalKobo, "PILOT_MAX_ACTIVE_EXPOSURE_KOBO": c.PilotMaxActiveExposureKobo, "PILOT_MAX_DRAWDOWNS_PER_LINE_DAY": c.PilotMaxDrawdownsPerLineDay, "PILOT_MAX_COLLECTION_RETRIES": c.PilotMaxCollectionRetries, "PILOT_ENHANCED_REVIEW_KOBO": c.PilotEnhancedReviewKobo} {
-			if value <= 0 {
-				return fmt.Errorf("%s must be positive for production readiness", name)
+
+		// --- Capabilities: required only where the capability is switched on. ---
+		if c.WhatsApp {
+			if strings.TrimSpace(c.NotificationWhatsAppEndpoint) == "" || strings.TrimSpace(c.NotificationWhatsAppToken) == "" {
+				return errors.New("FEATURE_WHATSAPP requires NOTIFICATION_WHATSAPP_ENDPOINT and NOTIFICATION_WHATSAPP_TOKEN")
+			}
+			if err := validateProductionURL("NOTIFICATION_WHATSAPP_ENDPOINT", c.NotificationWhatsAppEndpoint); err != nil {
+				return err
+			}
+			if err := validateSecret("NOTIFICATION_WHATSAPP_TOKEN", c.NotificationWhatsAppToken); err != nil {
+				return err
+			}
+		}
+
+		// Document uploads are refused when no scanner is configured, so the
+		// scanner is optional here. A half-configured scanner is not.
+		if strings.TrimSpace(c.DocumentScannerEndpoint) != "" || strings.TrimSpace(c.DocumentScannerToken) != "" {
+			if strings.TrimSpace(c.DocumentScannerEndpoint) == "" || strings.TrimSpace(c.DocumentScannerToken) == "" {
+				return errors.New("DOCUMENT_SCANNER_ENDPOINT and DOCUMENT_SCANNER_TOKEN must be set together")
+			}
+			if err := validateProductionURL("DOCUMENT_SCANNER_ENDPOINT", c.DocumentScannerEndpoint); err != nil {
+				return err
+			}
+			if err := validateSecret("DOCUMENT_SCANNER_TOKEN", c.DocumentScannerToken); err != nil {
+				return err
+			}
+		}
+
+		if c.RealIdentity {
+			if strings.TrimSpace(c.IdentityProvider) == "" || strings.Contains(strings.ToLower(c.IdentityProvider), "mock") || strings.TrimSpace(c.IdentityProviderEndpoint) == "" || strings.TrimSpace(c.IdentityProviderToken) == "" || strings.TrimSpace(c.IdentityWebhookSecret) == "" {
+				return errors.New("FEATURE_REAL_IDENTITY requires a certified IDENTITY_PROVIDER and its endpoint, token, and webhook secret")
+			}
+			if err := validateProductionURL("IDENTITY_PROVIDER_ENDPOINT", c.IdentityProviderEndpoint); err != nil {
+				return err
+			}
+			for name, value := range map[string]string{"IDENTITY_PROVIDER_TOKEN": c.IdentityProviderToken, "IDENTITY_WEBHOOK_SECRET": c.IdentityWebhookSecret} {
+				if err := validateSecret(name, value); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Moving other people's money is the line that requires recorded
+		// approvals and bounded exposure. Everything above can run without them.
+		if c.RealCollections || c.MonoSweepEnabled {
+			if strings.Contains(strings.ToLower(c.CollectionProvider), "mock") {
+				return errors.New("FEATURE_REAL_COLLECTIONS requires a certified COLLECTION_PROVIDER")
+			}
+			if !c.MonoSweepEnabled {
+				if strings.TrimSpace(c.CollectionProviderEndpoint) == "" || strings.TrimSpace(c.CollectionProviderToken) == "" || strings.TrimSpace(c.CollectionWebhookSecret) == "" {
+					return errors.New("FEATURE_REAL_COLLECTIONS requires the collection connector endpoint, token, and webhook secret")
+				}
+				if err := validateProductionURL("COLLECTION_PROVIDER_ENDPOINT", c.CollectionProviderEndpoint); err != nil {
+					return err
+				}
+				for name, value := range map[string]string{"COLLECTION_PROVIDER_TOKEN": c.CollectionProviderToken, "COLLECTION_WEBHOOK_SECRET": c.CollectionWebhookSecret} {
+					if err := validateSecret(name, value); err != nil {
+						return err
+					}
+				}
+			}
+
+			if !c.RealIdentity {
+				return errors.New("FEATURE_REAL_COLLECTIONS requires FEATURE_REAL_IDENTITY; money must not move against an unverified party")
+			}
+			if !c.ProductionPilot {
+				return errors.New("FEATURE_REAL_COLLECTIONS requires FEATURE_PRODUCTION_PILOT and its bounded limits")
+			}
+			for name, value := range map[string]string{"SECURITY_REVIEW_REFERENCE": c.SecurityReviewReference, "DPIA_REFERENCE": c.DPIAReference, "LEGAL_APPROVAL_REFERENCE": c.LegalApprovalReference, "PEN_TEST_REFERENCE": c.PenTestReference, "BACKUP_RESTORE_REFERENCE": c.BackupRestoreReference, "PROVIDER_CERTIFICATION_REFERENCE": c.ProviderCertificationReference, "SUPPORT_TRAINING_REFERENCE": c.SupportTrainingReference, "LAUNCH_APPROVAL_REFERENCE": c.LaunchApprovalReference, "PILOT_ALLOWED_PROVIDER_ACCOUNTS": c.PilotAllowedProviderAccounts, "PILOT_ALLOWED_INDUSTRIES": c.PilotAllowedIndustries} {
+				if strings.TrimSpace(value) == "" {
+					return fmt.Errorf("%s is required before live collections are enabled", name)
+				}
+			}
+			for name, value := range map[string]int64{"PILOT_MAX_SUPPLIER_ORGANIZATIONS": c.PilotMaxSupplierOrganizations, "PILOT_MAX_BUYER_BUSINESSES": c.PilotMaxBuyerBusinesses, "PILOT_MAX_PRINCIPAL_KOBO": c.PilotMaxPrincipalKobo, "PILOT_MAX_ACTIVE_EXPOSURE_KOBO": c.PilotMaxActiveExposureKobo, "PILOT_MAX_DRAWDOWNS_PER_LINE_DAY": c.PilotMaxDrawdownsPerLineDay, "PILOT_MAX_COLLECTION_RETRIES": c.PilotMaxCollectionRetries, "PILOT_ENHANCED_REVIEW_KOBO": c.PilotEnhancedReviewKobo} {
+				if value <= 0 {
+					return fmt.Errorf("%s must be positive before live collections are enabled", name)
+				}
 			}
 		}
 	}

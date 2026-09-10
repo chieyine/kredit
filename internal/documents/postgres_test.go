@@ -3,12 +3,18 @@ package documents
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"kredit/internal/db"
 )
 
 func TestPostgresStoreRoundTrip(t *testing.T) {
@@ -57,4 +63,46 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 	if _, err := store.SignedDownload(ctx, doc.ID, 60); err != nil {
 		t.Fatal(err)
 	}
+	app, err := db.OpenAsRole(ctx, os.Getenv("APP_DATABASE_URL"), "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	objects := NewMemoryObjectStore()
+	restricted := NewPostgresStore(app.Raw(), objects)
+	slot, _, err := restricted.CreateUpload(ctx, organizationID, userID, "invoice", "direct.pdf", "application/pdf", "financial", 3, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = objects.Put(ctx, slot.ObjectKey, bytes.NewBufferString("pdf"), 3, "application/pdf"); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256([]byte("pdf"))
+	expected := hex.EncodeToString(digest[:])
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			completed, err := restricted.CompleteUploadForTenant(ctx, slot.ID, userID, organizationID)
+			if err != nil || completed.SHA256 != expected || completed.ScanState != ScanPending {
+				t.Errorf("direct completion failed: %+v %v", completed, err)
+			}
+		}()
+	}
+	wg.Wait()
+	reloaded, err := NewPostgresStore(app.Raw(), objects).ReadForTenant(ctx, slot.ID, userID, organizationID)
+	if err != nil || reloaded.SHA256 != expected {
+		t.Fatalf("checksum not durable: %+v %v", reloaded, err)
+	}
+	closed, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed.Close()
+	unavailable := NewPostgresStore(closed, NewMemoryObjectStore())
+	if _, err = unavailable.ReadForTenant(ctx, doc.ID, userID, organizationID); err == nil || errors.Is(err, ErrNotFound) {
+		t.Fatalf("database outage reported as missing document: %v", err)
+	}
+
 }

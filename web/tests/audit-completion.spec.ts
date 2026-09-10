@@ -97,6 +97,9 @@ test('feedback recovers from a dropped response and success survives unavailable
   await yes.click();
   await expect(page.getByRole('status').filter({ hasText: 'We could not confirm your answer' })).toBeVisible();
   await expect(yes).toBeEnabled();
+  await page.getByRole('button', { name: 'No', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Retry the same answer' })).toBeVisible();
+  expect(keys).toHaveLength(1);
   await yes.click();
   await expect(page.getByText('Thank you. Your answer helps us improve Kredit.')).toBeVisible();
   await expect(yes).toBeDisabled();
@@ -119,7 +122,7 @@ test('guide filters preserve user input and no-match recovery after hydration', 
 
 async function saleDetail(page: Page) {
   await page.route('**/organizations/org-a/credit-requests/retry-sale', route => route.fulfill({ json: {
-    request: { id: 'retry-sale', state: 'ACTIVE', buyer_legal_name: 'Example buyer', principal_kobo: 100049, goods_description: 'Synthetic stock', due_date: '2026-10-01', collection_at: '2026-10-02T12:00:00Z', grace_hours: 24 },
+    request: { id: 'retry-sale', version: 1, state: 'ACTIVE', buyer_legal_name: 'Example buyer', principal_kobo: 100049, goods_description: 'Synthetic stock', due_date: '2026-10-01', collection_at: '2026-10-02T12:00:00Z', grace_hours: 24 },
     obligation: { id: 'obl-1', outstanding_kobo: 100049 }
   } }));
   await page.route('**/credit-requests/retry-sale/schedule', route => route.fulfill({ json: { schedule: { id: 'schedule-1' }, items: [] } }));

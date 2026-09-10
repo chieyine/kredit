@@ -20,3 +20,5 @@ durability/readiness gate until every domain aggregate is PostgreSQL-backed.
 adapter, precompresses static assets, and runs as the non-root `node` user.
 The root Compose stack starts migrations, API, worker, and web in dependency
 order alongside PostgreSQL, object storage, and the local mail sink.
+
+The local PostgreSQL 18 service mounts its named volume at `/var/lib/postgresql`, matching the official image's versioned data directory. See [the official image documentation](https://hub.docker.com/_/postgres). An existing volume initialized by an older PostgreSQL major version requires a tested upgrade or dump/restore; changing the image tag or mount path does not upgrade database files. No existing volume is reset by the audit.

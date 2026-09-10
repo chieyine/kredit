@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"kredit/internal/access"
+	"kredit/internal/db"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -44,13 +47,40 @@ type Command struct {
 }
 
 var commandTypes = map[string]bool{
-	"retry_job": true, "retry_webhook": true, "suspend_user": true, "restore_user": true,
+	"retry_document_scan": true,
+	"retry_job":           true, "retry_webhook": true, "suspend_user": true, "restore_user": true,
 	"suspend_organization": true, "restore_organization": true, "place_risk_hold": true, "lift_risk_hold": true,
 	"request_reconciliation": true, "resolve_unknown_submission": true, "retry_collection": true, "cancel_collection": true,
 }
 
 type commandQueryer interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+// ReplayCommand checks the saved intent before a caller performs another
+// provider action or rejects a retry because the original action changed state.
+func (s *Store) ReplayCommand(ctx context.Context, actorID string, in CommandInput) (Command, bool, error) {
+	if s == nil || s.pool == nil {
+		return Command{}, false, errors.New("operations database is not configured")
+	}
+	encoded, err := json.Marshal(in)
+	if err != nil {
+		return Command{}, false, err
+	}
+	digest := sha256.Sum256(encoded)
+	var storedHash string
+	var command Command
+	err = s.pool.QueryRow(ctx, `SELECT c.id::text,c.command_type,c.target_type,c.target_id,c.reason,c.expected_version,c.impact_preview,e.state,e.result,c.correlation_id,c.created_at,COALESCE(c.request_hash,'') FROM app.operations_commands c JOIN LATERAL (SELECT state,result FROM app.operations_command_events WHERE command_id=c.id ORDER BY occurred_at DESC,id DESC LIMIT 1)e ON true WHERE c.requested_by=$1::uuid AND c.idempotency_key=$2`, actorID, in.IdempotencyKey).Scan(&command.ID, &command.Type, &command.TargetType, &command.TargetID, &command.Reason, &command.CurrentVersion, &command.Impact, &command.State, &command.Result, &command.CorrelationID, &command.CreatedAt, &storedHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Command{}, false, nil
+	}
+	if err != nil {
+		return Command{}, false, err
+	}
+	if storedHash != hex.EncodeToString(digest[:]) {
+		return Command{}, false, errors.New("idempotency key belongs to a different or unverifiable command")
+	}
+	return command, true, nil
 }
 
 func (s *Store) PreflightCommand(ctx context.Context, in CommandInput) (Command, error) {
@@ -67,7 +97,22 @@ func (s *Store) PreflightCommand(ctx context.Context, in CommandInput) (Command,
 	return preview, nil
 }
 func (s *Store) PreviewCommand(ctx context.Context, in CommandInput) (Command, error) {
-	return s.previewCommand(ctx, in, s.pool)
+	if s == nil || s.pool == nil {
+		return Command{}, errors.New("operations database is not configured")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Command{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if identity, ok := db.TenantFromContext(ctx); ok {
+		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, identity.UserID); err != nil {
+			return Command{}, err
+		}
+	}
+	return s.previewCommand(ctx, in, tx)
 }
 func (s *Store) previewCommand(ctx context.Context, in CommandInput, q commandQueryer) (Command, error) {
 	if s == nil || s.pool == nil {
@@ -82,6 +127,9 @@ func (s *Store) previewCommand(ctx context.Context, in CommandInput, q commandQu
 	}
 	impact := map[string]any{"target_state": state, "will_notify": true, "audit": "immutable", "financial_effect": "none unless explicitly stated"}
 	switch in.Type {
+	case "retry_document_scan":
+		impact["effect"] = "queue a quarantined, completed upload for a fresh malware scan; it remains unavailable until the scanner confirms it is clean"
+		impact["will_notify"] = false
 	case "retry_job":
 		impact["effect"] = "requeue one failed job using its existing idempotency boundary"
 	case "retry_webhook":
@@ -117,6 +165,16 @@ func validateCommand(in CommandInput, execute bool) error {
 	if strings.TrimSpace(in.TargetType) == "" || strings.TrimSpace(in.TargetID) == "" {
 		return errors.New("target type and target id are required")
 	}
+	expectedTarget := map[string]string{"retry_document_scan": "document", "retry_job": "job", "suspend_user": "user", "restore_user": "user", "suspend_organization": "organization", "restore_organization": "organization", "resolve_unknown_submission": "collection", "retry_collection": "collection", "cancel_collection": "collection"}[in.Type]
+	if expectedTarget != "" && in.TargetType != expectedTarget {
+		return errors.New("target type does not match this command")
+	}
+	if in.Type == "lift_risk_hold" && in.TargetType != "buyer" && in.TargetType != "supplier" {
+		return errors.New("risk hold target must be buyer or supplier")
+	}
+	if len(in.TargetID) > 512 || len(in.TargetType) > 100 || len(in.Reason) > 2000 || len(in.IdempotencyKey) > 200 {
+		return errors.New("command fields exceed their limits")
+	}
 	if execute && len(strings.TrimSpace(in.Reason)) < 8 {
 		return errors.New("structured reason must be at least 8 characters")
 	}
@@ -149,6 +207,8 @@ func (s *Store) targetVersion(ctx context.Context, q commandQueryer, in CommandI
 	var state string
 	var row pgx.Row
 	switch in.Type {
+	case "retry_document_scan":
+		row = q.QueryRow(ctx, `SELECT scan_review_version,scan_state FROM app.documents WHERE id=$1::uuid`+suffix, in.TargetID)
 	case "retry_job":
 		row = q.QueryRow(ctx, `SELECT attempt+1,state FROM jobs.river_job WHERE id=$1`+suffix, in.TargetID)
 	case "retry_webhook":
@@ -162,10 +222,13 @@ func (s *Store) targetVersion(ctx context.Context, q commandQueryer, in CommandI
 	case "restore_organization":
 		row = q.QueryRow(ctx, `SELECT version,'suspended' FROM app.platform_suspensions WHERE id=$1::uuid AND target_type='organization' AND lifted_at IS NULL`+suffix, in.TargetID)
 	case "place_risk_hold":
-		version, state = 1, "not_held"
-		return version, state, nil
+		if in.TargetType == "buyer" {
+			row = q.QueryRow(ctx, `SELECT 1,'not_held' FROM app.users WHERE id=$1::uuid`+suffix, in.TargetID)
+		} else {
+			row = q.QueryRow(ctx, `SELECT 1,'not_held' FROM app.organizations WHERE id=$1::uuid`+suffix, in.TargetID)
+		}
 	case "lift_risk_hold":
-		row = q.QueryRow(ctx, `SELECT version,'active' FROM app.risk_holds WHERE id=$1::uuid AND lifted_at IS NULL AND expires_at>now()`+suffix, in.TargetID)
+		row = q.QueryRow(ctx, `SELECT version,'active' FROM app.risk_holds WHERE id=$1::uuid AND target_type=$2 AND lifted_at IS NULL AND expires_at>now()`+suffix, in.TargetID, in.TargetType)
 	case "request_reconciliation":
 		version, state = 1, "unrequested"
 		return version, state, nil
@@ -182,6 +245,12 @@ func (s *Store) targetVersion(ctx context.Context, q commandQueryer, in CommandI
 }
 
 func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandInput) (Command, error) {
+	if ExternalCommand(in.Type) {
+		return s.FinishExternalCommand(ctx, actorID, in)
+	}
+	if s == nil || s.pool == nil {
+		return Command{}, errors.New("operations database is not configured")
+	}
 	if err := validateCommand(in, true); err != nil {
 		return Command{}, err
 	}
@@ -190,6 +259,16 @@ func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandIn
 		return Command{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, actorID); err != nil {
+		return Command{}, err
+	}
+	permission, valid := CommandPermission(in.Type)
+	if !valid {
+		return Command{}, errors.New("unsupported command authority")
+	}
+	if err := access.LockPlatformAuthority(ctx, tx, actorID, permission); err != nil {
+		return Command{}, err
+	}
 	encodedIntent, err := json.Marshal(in)
 	if err != nil {
 		return Command{}, err
@@ -234,6 +313,13 @@ func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandIn
 		return Command{}, err
 	}
 	switch in.Type {
+	case "retry_document_scan":
+		tag, e := tx.Exec(ctx, `UPDATE app.documents SET scan_state='PENDING',scan_attempts=0,scan_lease_until=NULL,scanned_at=NULL,scan_review_version=scan_review_version+1 WHERE id=$1::uuid AND scan_review_version=$2 AND scan_state='QUARANTINED' AND upload_completed_at IS NOT NULL AND (scan_lease_until IS NULL OR scan_lease_until<=now())`, in.TargetID, in.ExpectedVersion)
+		err = e
+		if err == nil && tag.RowsAffected() != 1 {
+			err = errors.New("only completed quarantined uploads without an active scan can be retried")
+		}
+		result["document_id"] = in.TargetID
 	case "retry_job":
 		tag, e := tx.Exec(ctx, `UPDATE jobs.river_job SET state='available',scheduled_at=now(),finalized_at=NULL WHERE id=$1::bigint AND attempt+1=$2 AND state IN ('retryable','discarded','cancelled')`, in.TargetID, in.ExpectedVersion)
 		err = e
@@ -247,7 +333,11 @@ func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandIn
 			err = errors.New("webhook is no longer retryable")
 		}
 		if err == nil {
-			_, _ = tx.Exec(ctx, `UPDATE jobs.river_job SET state='available',scheduled_at=now(),finalized_at=NULL WHERE kind='kredit.provider_webhook' AND encoded_args->>'provider'=$1 AND encoded_args->>'event_id'=$2 AND state IN ('retryable','discarded','cancelled')`, in.TargetType, in.TargetID)
+			jobTag, jobErr := tx.Exec(ctx, `UPDATE jobs.river_job SET state='available',scheduled_at=now(),finalized_at=NULL WHERE kind='kredit.provider_webhook' AND args->>'provider'=$1 AND args->>'event_id'=$2 AND state IN ('retryable','discarded','cancelled')`, in.TargetType, in.TargetID)
+			err = jobErr
+			if err == nil && jobTag.RowsAffected() == 0 {
+				err = errors.New("no failed webhook job is available to retry")
+			}
 		}
 	case "suspend_user":
 		var old string
@@ -308,7 +398,10 @@ func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandIn
 	if err != nil {
 		return Command{}, err
 	}
-	resultJSON, _ := json.Marshal(result)
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return Command{}, err
+	}
 	if _, err = tx.Exec(ctx, `INSERT INTO app.operations_command_events(command_id,state,result) VALUES($1::uuid,'APPLIED',$2)`, commandID, resultJSON); err != nil {
 		return Command{}, err
 	}
@@ -325,10 +418,11 @@ func restoreSuspension(ctx context.Context, tx pgx.Tx, targetType, id, actor, re
 		return "", err
 	}
 	var err error
+	var restoredID string
 	if targetType == "user" {
-		_, err = tx.Exec(ctx, `UPDATE app.users SET status=$1,version=version+1 WHERE id=$2::uuid AND status='suspended'`, previous, targetID)
+		err = tx.QueryRow(ctx, `UPDATE app.users SET status=$1,version=version+1 WHERE id=$2::uuid AND status='suspended' RETURNING id::text`, previous, targetID).Scan(&restoredID)
 	} else {
-		_, err = tx.Exec(ctx, `UPDATE app.organizations SET status=$1,version=version+1,updated_at=now() WHERE id=$2::uuid AND status='suspended'`, previous, targetID)
+		err = tx.QueryRow(ctx, `UPDATE app.organizations SET status=$1,version=version+1,updated_at=now() WHERE id=$2::uuid AND status='suspended' RETURNING id::text`, previous, targetID).Scan(&restoredID)
 	}
 	if err == nil {
 		_, err = tx.Exec(ctx, `UPDATE app.platform_suspensions SET lifted_by=$1::uuid,lifted_reason=$2,lifted_at=now(),version=version+1 WHERE id=$3::uuid`, actor, reason, id)
@@ -345,6 +439,9 @@ type Diagnostics struct {
 }
 
 func (s *Store) Diagnostics(ctx context.Context, windowMinutes int, correlationID string) (Diagnostics, error) {
+	if s == nil || s.pool == nil {
+		return Diagnostics{}, errors.New("operations database is not configured")
+	}
 	if windowMinutes < 5 || windowMinutes > 1440 {
 		windowMinutes = 60
 	}
@@ -368,7 +465,7 @@ func (s *Store) Diagnostics(ctx context.Context, windowMinutes int, correlationI
 		return d, err
 	}
 	rows.Close()
-	rows, err = s.pool.Query(ctx, `SELECT queue,count(*)::bigint,COALESCE(extract(epoch from now()-min(scheduled_at)),0)::bigint FROM jobs.river_job WHERE state IN('available','pending','retryable','running','scheduled') GROUP BY queue ORDER BY queue`)
+	rows, err = s.pool.Query(ctx, `SELECT queue,count(*)::bigint,GREATEST(0,COALESCE(extract(epoch from now()-min(scheduled_at)),0))::bigint FROM jobs.river_job WHERE state IN('available','pending','retryable','running','scheduled') GROUP BY queue ORDER BY queue`)
 	if err != nil {
 		return d, err
 	}
@@ -387,7 +484,7 @@ func (s *Store) Diagnostics(ctx context.Context, windowMinutes int, correlationI
 	}
 	rows.Close()
 	keys := []string{"dead_letters", "unknown_submissions", "reconciliation_overdue", "ledger_drift", "report_drift", "notification_backlog", "scanner_backlog", "mandate_mismatch", "settlement_mismatch"}
-	query := `SELECT (SELECT count(*) FROM app.job_dead_letters),(SELECT count(*) FROM app.collection_attempts WHERE state='UNKNOWN'),(SELECT count(*) FROM app.reconciliation_cases WHERE state IN('REQUESTED','IN_PROGRESS') AND created_at<now()-interval '30 minutes'),(SELECT count(*) FROM (SELECT transaction_id FROM ledger.postings GROUP BY transaction_id HAVING sum(debit_kobo)<>sum(credit_kobo)) drift),(SELECT count(*) FROM app.financial_discrepancies WHERE kind='balance'),(SELECT count(*) FROM app.notifications WHERE state IN('scheduled','failed')),(SELECT count(*) FROM app.documents WHERE scan_state IN('PENDING','QUARANTINED')),(SELECT count(*) FROM app.trade_lines WHERE state='ACTIVE' AND (mandate_id IS NULL OR mandate_active=false)),(SELECT count(*) FROM app.financial_discrepancies WHERE kind IN ('settlement','settlement_missing','provider_reversal','settlement_without_payment'))`
+	query := `SELECT (SELECT count(*) FROM app.job_dead_letters),(SELECT count(*) FROM app.collection_attempts WHERE state='UNKNOWN'),(SELECT count(*) FROM app.reconciliation_cases WHERE state IN('REQUESTED','IN_PROGRESS') AND created_at<now()-interval '30 minutes'),(SELECT count(*) FROM (SELECT t.id FROM ledger.transactions t LEFT JOIN ledger.postings p ON p.transaction_id=t.id GROUP BY t.id HAVING count(p.transaction_id)=0 OR COALESCE(sum(p.debit_kobo),0)<>COALESCE(sum(p.credit_kobo),0)) drift),(SELECT count(*) FROM app.financial_discrepancies WHERE kind='balance'),(SELECT count(*) FROM app.notifications WHERE state IN('scheduled','failed')),(SELECT count(*) FROM app.documents WHERE scan_state IN('PENDING','QUARANTINED')),(SELECT count(*) FROM app.trade_lines WHERE state='ACTIVE' AND (mandate_id IS NULL OR mandate_active=false)),(SELECT count(*) FROM app.financial_discrepancies WHERE kind IN ('settlement','settlement_missing','provider_reversal','settlement_without_payment'))`
 	values := make([]int64, len(keys))
 	args := make([]any, len(keys))
 	for i := range values {

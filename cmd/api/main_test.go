@@ -42,3 +42,22 @@ func TestRunSelfHealthcheck(t *testing.T) {
 		t.Fatalf("expected healthcheck code 1 for nil client, got %d", code)
 	}
 }
+
+func TestHealthcheckRejectsRedirectAndUnhealthyStatus(t *testing.T) {
+	for _, status := range []int{http.StatusFound, http.StatusServiceUnavailable} {
+		calls := 0
+		client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			return &http.Response{StatusCode: status, Header: http.Header{"Location": {"https://example.com/"}}, Body: io.NopCloser(strings.NewReader("")), Request: request}, nil
+		})}
+		if got := runSelfHealthcheckWithClient(client); got != 1 {
+			t.Fatalf("status %d: exit = %d, want 1", status, got)
+		}
+		if calls != 1 {
+			t.Fatalf("status %d: made %d requests, want 1", status, calls)
+		}
+		if client.CheckRedirect != nil {
+			t.Fatal("probe mutated caller's client")
+		}
+	}
+}

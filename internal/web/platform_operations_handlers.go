@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,6 +13,7 @@ import (
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/auth"
+	"kredit/internal/db"
 	"kredit/internal/disputes"
 	"kredit/internal/ledger"
 	"kredit/internal/notifications"
@@ -18,6 +21,7 @@ import (
 	"kredit/internal/support"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Server) requirePlatformAccess(w http.ResponseWriter, r *http.Request, permission access.Permission) (auth.Session, auth.User, access.PlatformRole, bool) {
@@ -43,8 +47,9 @@ func (s *Server) requirePlatformAccess(w http.ResponseWriter, r *http.Request, p
 			return auth.Session{}, auth.User{}, "", false
 		}
 		if role.Valid() && (permission == "" || access.CanPlatform(role, permission)) {
-			selected = role
-			break
+			if selected == "" || role == access.PlatformOwner || (role == access.PlatformAdministrator && selected != access.PlatformOwner) {
+				selected = role
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -163,7 +168,7 @@ func (s *Server) previewOperationsCommand(w http.ResponseWriter, r *http.Request
 	if !allowed {
 		return
 	}
-	preview, err := s.runtime.PlatformOps.PreviewCommand(r.Context(), in)
+	preview, err := s.runtime.PlatformOps.PreviewCommand(db.WithTenantContext(r.Context(), user.ID, ""), in)
 	if err != nil {
 		writeProblem(w, http.StatusUnprocessableEntity, "command_preview_failed", err.Error())
 		return
@@ -188,12 +193,30 @@ func (s *Server) executeOperationsCommand(w http.ResponseWriter, r *http.Request
 	}
 	in.IdempotencyKey = strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	in.CorrelationID = requestIDFromContext(r.Context())
+	if previous, found, err := s.runtime.PlatformOps.ReplayCommand(r.Context(), user.ID, in); err != nil {
+		writeProblem(w, http.StatusConflict, "operations_command_unconfirmed", "We could not verify this command's saved result. Retry with the same request details.")
+		return
+	} else if found {
+		if previous.State != "APPLIED" {
+			writeProblem(w, http.StatusServiceUnavailable, "operations_command_unconfirmed", "This bank operation is already recorded and its outcome needs review. Check collection history and reconcile the provider result; it will not be submitted again.")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"command": previous})
+		return
+	}
 	preflight, preflightErr := s.runtime.PlatformOps.PreflightCommand(r.Context(), in)
 	if preflightErr != nil {
 		writeProblem(w, 409, "operations_command_invalid", preflightErr.Error())
 		return
 	}
 	in.PreflightVersion = preflight.CurrentVersion
+	if platformops.ExternalCommand(in.Type) {
+		_, claimed, err := s.runtime.PlatformOps.BeginExternalCommand(r.Context(), user.ID, in)
+		if err != nil || !claimed {
+			writeProblem(w, http.StatusServiceUnavailable, "operations_command_unconfirmed", "This operation could not be claimed safely. Check collection history and reconcile any pending result before another attempt.")
+			return
+		}
+	}
 	var external any
 	var err error
 	switch in.Type {
@@ -206,15 +229,29 @@ func (s *Server) executeOperationsCommand(w http.ResponseWriter, r *http.Request
 	}
 	if err != nil {
 		s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: in.OrganizationID, Action: "operations.command.failed", ResourceType: in.TargetType, ResourceID: in.TargetID, Outcome: "failure", Severity: "high", RequestID: in.CorrelationID, Metadata: map[string]string{"command_type": in.Type, "reason": in.Reason}})
-		writeProblem(w, http.StatusConflict, "operations_command_failed", err.Error())
+		writeProblem(w, http.StatusServiceUnavailable, "operations_command_unconfirmed", "The bank operation did not return a confirmed result. Its intent is saved; check collection history before taking another action.")
 		return
 	}
 	if external != nil {
-		encoded, _ := json.Marshal(external)
-		_ = json.Unmarshal(encoded, &in.ExternalResult)
+		encoded, encodeErr := json.Marshal(external)
+		if encodeErr != nil || json.Unmarshal(encoded, &in.ExternalResult) != nil {
+			writeProblem(w, http.StatusServiceUnavailable, "operations_command_unconfirmed", "The bank operation may have completed, but its result could not be recorded. Check the collection history before taking another action.")
+			return
+		}
 	}
-	command, err := s.runtime.PlatformOps.ExecuteCommand(r.Context(), user.ID, in)
+	var command platformops.Command
+	if platformops.ExternalCommand(in.Type) {
+		command, err = s.runtime.PlatformOps.FinishExternalCommand(context.WithoutCancel(r.Context()), user.ID, in)
+	} else {
+		command, err = s.runtime.PlatformOps.ExecuteCommand(r.Context(), user.ID, in)
+	}
 	if err != nil {
+		// A provider may already have acted. Never label a later bookkeeping
+		// failure as a definitive rejected request that may use a new identity.
+		if external != nil {
+			writeProblem(w, http.StatusServiceUnavailable, "operations_command_unconfirmed", "The bank operation may have completed, but this review was not confirmed. Check the collection history before taking another action.")
+			return
+		}
 		status := http.StatusUnprocessableEntity
 		if strings.Contains(err.Error(), "version conflict") {
 			status = http.StatusConflict
@@ -231,18 +268,7 @@ func (s *Server) executeOperationsCommand(w http.ResponseWriter, r *http.Request
 // exact command being requested. New command types fail closed until their
 // permission is deliberately selected here.
 func permissionForOperationsCommand(commandType string) (access.Permission, bool) {
-	switch commandType {
-	case "retry_job", "retry_webhook":
-		return access.PermissionOperateJobs, true
-	case "request_reconciliation", "resolve_unknown_submission", "retry_collection", "cancel_collection":
-		return access.PermissionOperateCollections, true
-	case "suspend_user", "restore_user", "suspend_organization", "restore_organization":
-		return access.PermissionSuspendAccounts, true
-	case "place_risk_hold", "lift_risk_hold":
-		return access.PermissionManageRiskHold, true
-	default:
-		return "", false
-	}
+	return platformops.CommandPermission(commandType)
 }
 
 func (s *Server) operationsDiagnostics(w http.ResponseWriter, r *http.Request) {
@@ -315,7 +341,7 @@ func (s *Server) operationsSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	items, err := s.runtime.PlatformOps.Search(r.Context(), query)
+	items, err := s.runtime.PlatformOps.Search(db.WithTenantContext(r.Context(), user.ID, ""), query)
 	if err != nil {
 		writeProblem(w, http.StatusBadRequest, "invalid_search", err.Error())
 		return
@@ -373,7 +399,7 @@ func (s *Server) operationsCases(w http.ResponseWriter, r *http.Request) {
 	}
 	var items []platformops.CaseSummary
 	var err error
-	if role == access.PlatformAdministrator {
+	if role == access.PlatformAdministrator || role == access.PlatformOwner {
 		items, err = s.runtime.PlatformOps.Cases(r.Context(), r.URL.Query().Get("state"), queryLimit(r))
 	} else {
 		items, err = s.runtime.PlatformOps.CasesForActor(r.Context(), r.URL.Query().Get("state"), queryLimit(r), user.ID)
@@ -409,7 +435,7 @@ func (s *Server) transitionOperationsCase(w http.ResponseWriter, r *http.Request
 		writeProblem(w, http.StatusBadRequest, "invalid_case", "case ID must be valid")
 		return
 	}
-	if role != access.PlatformAdministrator {
+	if role != access.PlatformAdministrator && role != access.PlatformOwner {
 		assigned, err := s.runtime.PlatformOps.CaseAssignedTo(r.Context(), r.PathValue("caseID"), user.ID)
 		if err != nil || !assigned {
 			writeProblem(w, http.StatusForbidden, "case_assignment_required", "this support case is not assigned to you")
@@ -479,7 +505,8 @@ func (s *Server) grantOperationsRole(w http.ResponseWriter, r *http.Request) {
 	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
 		return
 	}
-	if _, err := uuid.Parse(r.PathValue("userID")); err != nil {
+	targetUserID, err := uuid.Parse(r.PathValue("userID"))
+	if err != nil {
 		writeProblem(w, http.StatusBadRequest, "invalid_user", "user ID must be valid")
 		return
 	}
@@ -506,7 +533,7 @@ func (s *Server) grantOperationsRole(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if r.PathValue("userID") == user.ID {
+	if targetUserID.String() == user.ID {
 		writeProblem(w, 409, "self_access_change", "Another access administrator must change your own roles")
 		return
 	}
@@ -519,7 +546,7 @@ func (s *Server) grantOperationsRole(w http.ResponseWriter, r *http.Request) {
 		}
 		expires = &parsed
 	}
-	item, err := s.runtime.PlatformOps.GrantRole(r.Context(), user.ID, r.PathValue("userID"), string(role), input.Reason, expires)
+	item, err := s.runtime.PlatformOps.GrantRole(r.Context(), user.ID, targetUserID.String(), string(role), input.Reason, expires)
 	if err != nil {
 		writeProblem(w, http.StatusConflict, "role_grant_failed", err.Error())
 		return
@@ -591,20 +618,24 @@ func (s *Server) operationsCase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("caseID")
-	if role != access.PlatformAdministrator {
+	if role != access.PlatformAdministrator && role != access.PlatformOwner {
 		assigned, err := s.runtime.PlatformOps.CaseAssignedTo(r.Context(), id, user.ID)
 		if err != nil || !assigned {
 			writeProblem(w, http.StatusForbidden, "case_assignment_required", "this support case is not assigned to you")
 			return
 		}
 	}
-	item, found := s.runtime.Support.Get(id)
-	if !found {
-		writeProblem(w, http.StatusNotFound, "case_not_found", "support case was not found")
+	item, timeline, err := s.runtime.Support.Read(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeProblem(w, http.StatusNotFound, "case_not_found", "support case was not found")
+		} else {
+			writeProblem(w, http.StatusServiceUnavailable, "case_unavailable", "Support case details could not be loaded. Try again.")
+		}
 		return
 	}
 	s.auditPlatformRead(r, user.ID, "operations.case.viewed", "support_case", id)
-	writeJSON(w, http.StatusOK, map[string]any{"case": item, "timeline": s.runtime.Support.Timeline(id)})
+	writeJSON(w, http.StatusOK, map[string]any{"case": item, "timeline": timeline})
 }
 
 func (s *Server) operationsDispute(w http.ResponseWriter, r *http.Request) {

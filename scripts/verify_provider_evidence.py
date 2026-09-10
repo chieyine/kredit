@@ -1,4 +1,6 @@
 """Validate a restricted Mono sandbox evidence pack; never enable production."""
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -10,7 +12,7 @@ REQUIRED = set(range(1, 22))
 CONTRACTS = {"retrieve_debit_path", "partial_result_shape", "reference_identity", "mandate_validity", "cancellation_semantics"}
 
 
-def validate(pack: dict, root: Path) -> list[str]:
+def validate(pack: dict, root: Path, adapter_commit: str | None = None) -> list[str]:
     errors = []
     if not isinstance(pack, dict):
         return ["Evidence manifest must be an object."]
@@ -20,6 +22,8 @@ def validate(pack: dict, root: Path) -> list[str]:
         errors.append("Actual isolated Mono sandbox evidence is required.")
     if not re.fullmatch(r"[0-9a-f]{40}", str(pack.get("adapter_commit", ""))):
         errors.append("Pin the adapter commit SHA.")
+    if adapter_commit is not None and (not re.fullmatch(r"[0-9a-f]{40}", adapter_commit) or pack.get("adapter_commit") != adapter_commit):
+        errors.append("Evidence does not match the selected adapter commit.")
     for flag in ("sweep_access_confirmed", "partial_sweep_access_confirmed", "human_review_complete"):
         if pack.get(flag) is not True:
             errors.append(f"Required confirmation missing: {flag}.")
@@ -65,6 +69,8 @@ def validate(pack: dict, root: Path) -> list[str]:
                     raise ValueError
                 if not re.fullmatch(r"[0-9a-f]{64}", str(digest)):
                     raise ValueError
+                if path.stat().st_size > 16 * 1024 * 1024:
+                    raise ValueError
                 if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
                     raise ValueError
             except (OSError, ValueError, TypeError, KeyError):
@@ -78,13 +84,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--evidence-dir", required=True, type=Path)
+    parser.add_argument("--adapter-commit", required=True, help="Exact reviewed 40-character candidate commit")
     args = parser.parse_args()
     try:
+        if args.manifest.stat().st_size > 16 * 1024 * 1024:
+            raise ValueError("manifest is too large")
         pack = json.loads(args.manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         print("BLOCKED: evidence manifest is missing or invalid JSON.")
         return 2
-    errors = validate(pack, args.evidence_dir)
+    errors = validate(pack, args.evidence_dir, args.adapter_commit)
     for error in errors:
         print("BLOCKED: " + error)
     if errors:

@@ -116,19 +116,45 @@ for (const route of globSync('web/src/routes/**/+page.svelte')) {
 	}
 }
 
+// The law names the topics a privacy notice has to cover; it does not name the
+// headings. This site is read by traders whose English is working English, so
+// "What we keep about you" is the heading and "Information we collect" is the
+// legal topic it answers. Each entry below is a topic with the wordings that
+// satisfy it — add a wording here when a heading is rewritten for clarity, never
+// remove a topic.
 const detailedPages = [
 	{
 		path: 'web/src/routes/legal/privacy/+page.svelte',
-		required: ['Information we collect', 'Why we use your information', 'Who may receive your information', 'How long we keep information', 'Your rights and choices', 'How we protect information', 'Questions and complaints']
+		required: [
+			['Information we collect', 'What we keep about you'],
+			['Why we use your information'],
+			['Who may receive your information'],
+			['How long we keep information'],
+			['Your rights and choices'],
+			['How we protect information'],
+			['Questions and complaints']
+		]
 	},
 	{
 		path: 'web/src/routes/legal/terms/+page.svelte',
-		required: ['What Kredit does', 'Making a credit sale', 'Goods, delivery and problems', 'Payments, balances and Kredit fees', 'Bank-debit permission and late payment', 'Suspension, closure and records after closure', 'Help, complaints and regulators']
+		required: [
+			['What Kredit does'],
+			['Making a credit sale'],
+			['Goods, delivery and problems'],
+			['Payments, balances and Kredit fees'],
+			['Bank-debit permission and late payment'],
+			['Suspension, closure and records after closure'],
+			['Help, complaints and regulators']
+		]
 	}
 ];
 for (const page of detailedPages) {
 	const source = readFileSync(page.path, 'utf8');
-	for (const heading of page.required) if (!source.includes(heading)) fail(page.path, `missing required section: ${heading}`);
+	for (const wordings of page.required) {
+		if (!wordings.some((heading) => source.includes(heading))) {
+			fail(page.path, `missing required section: ${wordings[0]}`);
+		}
+	}
 }
 
 if(failures.length){for(const failure of failures)process.stderr.write(`${failure}\n`);process.stderr.write(`Content audit failed with ${failures.length} issue(s).\n`);process.exit(1)}

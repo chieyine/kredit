@@ -92,13 +92,94 @@ func TestProductionRejectsMockProviders(t *testing.T) {
 	}
 }
 
-func TestProductionRequiresApprovedRetentionAndPilotEnablement(t *testing.T) {
-	cfg := Config{Environment: "production", Version: "1", APIListenAddr: ":8080", Currency: "NGN", MoneyUnit: "kobo", CollectionProvider: "provider"}
+// productionBase is a production configuration whose infrastructure is complete
+// and whose capabilities are all switched off. Every gate test starts here and
+// turns on the one thing it is about.
+//
+// This exists because the earlier gate tests asserted on the first error a bare
+// Config produced, which made them tests of the order of the checks rather than
+// of the gates they were named after: moving one unrelated check to the top of
+// the block failed two tests that had nothing to do with it. A test named for a
+// gate should fail for that gate.
+func productionBase() Config {
+	return Config{
+		Environment:        "production",
+		Version:            "1",
+		APIListenAddr:      ":8080",
+		Currency:           "NGN",
+		MoneyUnit:          "kobo",
+		CollectionProvider: "provider",
+		AdminSurfaces:      []string{"all"},
+
+		SessionSigningKey:      "session-signing-key-fixture-0123456789abcdef",
+		OTPHMACKey:             "otp-hmac-key-fixture-0123456789abcdef0123",
+		TokenHashKey:           "token-hash-key-fixture-0123456789abcdef01",
+		SettingsEncryptionKey:  "settings-encryption-fixture-0123456789abcd",
+		FieldEncryptionKey:     "field-encryption-key-fixture-0123456789ab",
+		FieldEncryptionKeyID:   "kms-key-001",
+		ObjectStorageSecretKey: "object-storage-secret-fixture-0123456789ab",
+		ObjectStorageAccessKey: "storage-access-001",
+		ObjectStorageEndpoint:  "https://s3.kredit.test",
+		ObjectStorageBucket:    "kredit",
+		ObjectStorageRegion:    "eu-west-1",
+
+		PublicBaseURL:  "https://kredit.test",
+		AppBaseURL:     "https://app.kredit.test",
+		APIInternalURL: "https://api.kredit.test",
+		OTelEndpoint:   "https://otel.kredit.test",
+
+		DatabaseURL:       "postgres://db.kredit.test/kredit?sslmode=require",
+		DatabaseDirectURL: "postgres://db.kredit.test/kredit?sslmode=require",
+		RiverDatabaseURL:  "postgres://db.kredit.test/kredit?sslmode=require",
+
+		// Holding records is unconditional in production, so the base satisfies it.
+		ApprovedRetentionPolicy:    true,
+		RetentionApprovalReference: "retention-approval-001",
+	}
+}
+
+// The public site and the bookkeeping product must be able to run in production
+// with no bank provider, no identity provider and no messaging provider — that
+// separation is the whole point of splitting infrastructure from capabilities.
+func TestProductionRunsWithoutAnyExternalProvider(t *testing.T) {
+	if err := productionBase().Validate(); err != nil {
+		t.Fatalf("production with no external capability should be valid, got %v", err)
+	}
+}
+
+func TestProductionAlwaysRequiresApprovedRetention(t *testing.T) {
+	cfg := productionBase()
+	cfg.ApprovedRetentionPolicy = false
+	cfg.RetentionApprovalReference = ""
+	// Not conditional on collections: the deployment retains personal records
+	// from its first sale whether or not it ever debits an account.
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "FEATURE_APPROVED_RETENTION_POLICY") {
 		t.Fatalf("expected approved retention gate, got %v", err)
 	}
 	cfg.ApprovedRetentionPolicy = true
-	cfg.RetentionApprovalReference = "retention-approval"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "written approval reference") {
+		t.Fatalf("retention enabled without its reference should fail closed, got %v", err)
+	}
+}
+
+func TestLiveCollectionsRequireBoundedPilotEnablement(t *testing.T) {
+	cfg := productionBase()
+	cfg.RealCollections = true
+	cfg.RealIdentity = true
+	cfg.IdentityApprovalReference = "identity-approval-001"
+	cfg.IdentityProvider = "certified-identity"
+	cfg.IdentityProviderEndpoint = "https://identity.kredit.test"
+	cfg.IdentityProviderToken = "identity-provider-token-0123456789abcdef01"
+	cfg.IdentityWebhookSecret = "identity-webhook-secret-0123456789abcdef01"
+	cfg.CollectionProviderEndpoint = "https://collections.kredit.test"
+	cfg.CollectionProviderToken = "collection-provider-token-0123456789abcdef"
+	cfg.CollectionWebhookSecret = "collection-webhook-secret-0123456789abcdef"
+	cfg.CollectionNoticeMinHours = 24
+	cfg.DeemedAcceptanceMinHours = 72
+	cfg.ProviderApprovalReference = "provider-approval-001"
+	cfg.ProviderApprovedBy = "compliance"
+	cfg.ProviderApprovedAt = time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "FEATURE_PRODUCTION_PILOT") {
 		t.Fatalf("expected production pilot gate, got %v", err)
 	}
@@ -246,5 +327,28 @@ func TestDeemedAcceptanceWindowIsBoundedWhereMoneyCanMove(t *testing.T) {
 	cfg.DeemedAcceptanceMinHours = 72
 	if err := cfg.Validate(); err != nil && strings.Contains(err.Error(), "DEEMED_ACCEPTANCE_MIN_HOURS") {
 		t.Fatalf("the default window must be accepted, got %v", err)
+	}
+}
+
+func TestDisabledCollectionTimingCannotOverflow(t *testing.T) {
+	base := Config{Environment: "development", Version: "1", APIListenAddr: ":8080", Currency: "NGN", MoneyUnit: "kobo", CollectionProvider: "mock-collection"}
+	if err := base.Validate(); err != nil {
+		t.Fatalf("disabled defaults: %v", err)
+	}
+	for _, value := range []int64{-1, 721, 1<<63 - 1} {
+		cfg := base
+		cfg.CollectionNoticeMinHours = value
+		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "COLLECTION_NOTICE_MIN_HOURS") {
+			t.Fatalf("collection hours %d: %v", value, err)
+		}
+		cfg = base
+		cfg.DeemedAcceptanceMinHours = value
+		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "DEEMED_ACCEPTANCE_MIN_HOURS") {
+			t.Fatalf("acceptance hours %d: %v", value, err)
+		}
+	}
+	base.CollectionNoticeMinHours, base.DeemedAcceptanceMinHours = 720, 720
+	if err := base.Validate(); err != nil {
+		t.Fatalf("maximum bounded settings: %v", err)
 	}
 }

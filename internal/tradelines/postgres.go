@@ -9,6 +9,7 @@ import (
 
 	"kredit/internal/businesspolicy"
 	"kredit/internal/ledger"
+	"kredit/internal/legalpublication"
 	"kredit/internal/outbox"
 
 	"github.com/jackc/pgx/v5"
@@ -120,6 +121,10 @@ func (s *PostgresStore) list(where, value string) []TradeLine {
 }
 
 func (s *PostgresStore) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Reservation, TradeLine, error) {
+	versions, err := legalpublication.Resolve(s.legalReader)
+	if err != nil {
+		return Drawdown{}, Reservation{}, TradeLine{}, err
+	}
 	ctx := context.Background()
 	tx, local, lineID, err := s.loadForMutation(ctx, input.LineID, "")
 	if err != nil {
@@ -130,6 +135,7 @@ func (s *PostgresStore) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Re
 	if err != nil {
 		return Drawdown{}, Reservation{}, TradeLine{}, err
 	}
+	local.legalReader = func() (legalpublication.Versions, error) { return versions, nil }
 	input.FeeTerms = &ledger.FeeTerms{PolicyRevision: policy.Revision, BaseBPS: policy.Values.BaseFeeBPS, CollectionBPS: policy.Values.CollectionFeeBPS}
 	drawdown, reservation, line, err := local.ReserveDrawdown(input)
 	if err != nil {
@@ -201,6 +207,9 @@ func (s *PostgresStore) RecordDrawdownReceipt(input ReceiptInput) (Drawdown, Tra
 	s.mu.RLock()
 	transactionalHandler := s.transactionalActivationHandler
 	s.mu.RUnlock()
+	// Never fall back to a handler that commits financial writes outside this
+	// transaction. Existing successful receipt replays need no handler.
+	local.SetActivationHandler(nil)
 	if transactionalHandler != nil {
 		local.SetActivationHandler(func(activation ActivationInput) (string, error) {
 			obligationID, commitProjection, err := transactionalHandler(ctx, tx, activation)
@@ -305,7 +314,7 @@ func (s *PostgresStore) Statement(lineID string) (Statement, error) {
 		return Statement{}, errors.New("trade-line database is not configured")
 	}
 	ctx := context.Background()
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return Statement{}, err
 	}
@@ -361,14 +370,14 @@ func loadAggregateTx(ctx context.Context, tx pgx.Tx, local *Store, lineID string
 		return err
 	}
 	local.lines[line.ID] = &line
-	rows, err := tx.Query(ctx, `SELECT id::text,trade_line_id::text,principal_kobo,goods_description,COALESCE(invoice_reference,''),COALESCE(invoice_document_hash,''),COALESCE(due_date::text,''),collection_at,grace_hours,terms_version,agreement_hash,state,COALESCE(reservation_id::text,''),COALESCE(obligation_id::text,''),buyer_confirmed_at,COALESCE(release_actor_id::text,''),COALESCE(delivery_method,''),COALESCE(release_notes,''),COALESCE(release_evidence_reference,''),released_at,COALESCE(receipt_state,''),COALESCE(receipt_actor_id::text,''),COALESCE(receipt_issue_reason,''),COALESCE(receipt_dispute_id::text,''),receipt_at,activated_at,created_at,fee_terms,(SELECT o.outstanding_kobo FROM app.obligations o WHERE o.id=app.drawdowns.obligation_id) FROM app.drawdowns WHERE trade_line_id=$1::uuid ORDER BY created_at`, lineID)
+	rows, err := tx.Query(ctx, `SELECT id::text,trade_line_id::text,principal_kobo,goods_description,COALESCE(invoice_reference,''),COALESCE(invoice_document_hash,''),COALESCE(due_date::text,''),collection_at,grace_hours,terms_version,agreement_hash,state,COALESCE(reservation_id::text,''),COALESCE(obligation_id::text,''),buyer_confirmed_at,COALESCE(release_actor_id::text,''),COALESCE(delivery_method,''),COALESCE(release_notes,''),COALESCE(release_evidence_reference,''),released_at,COALESCE(receipt_state,''),COALESCE(receipt_actor_id::text,''),COALESCE(receipt_issue_reason,''),COALESCE(receipt_dispute_id::text,''),receipt_at,activated_at,created_at,fee_terms,(SELECT o.outstanding_kobo FROM app.obligations o WHERE o.id=app.drawdowns.obligation_id),legal_versions FROM app.drawdowns WHERE trade_line_id=$1::uuid ORDER BY created_at`, lineID)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var d Drawdown
 		var confirmed, released, receiptAt, activated *time.Time
-		if err := rows.Scan(&d.ID, &d.TradeLineID, &d.PrincipalKobo, &d.GoodsDescription, &d.InvoiceReference, &d.InvoiceDocumentHash, &d.DueDate, &d.CollectionAt, &d.GraceHours, &d.TermsVersion, &d.AgreementHash, &d.State, &d.ReservationID, &d.ObligationID, &confirmed, &d.ReleaseActorID, &d.DeliveryMethod, &d.ReleaseNotes, &d.ReleaseEvidenceReference, &released, &d.ReceiptState, &d.ReceiptActorID, &d.ReceiptIssueReason, &d.ReceiptDisputeID, &receiptAt, &activated, &d.CreatedAt, &d.FeeTerms, &d.OutstandingKobo); err != nil {
+		if err := rows.Scan(&d.ID, &d.TradeLineID, &d.PrincipalKobo, &d.GoodsDescription, &d.InvoiceReference, &d.InvoiceDocumentHash, &d.DueDate, &d.CollectionAt, &d.GraceHours, &d.TermsVersion, &d.AgreementHash, &d.State, &d.ReservationID, &d.ObligationID, &confirmed, &d.ReleaseActorID, &d.DeliveryMethod, &d.ReleaseNotes, &d.ReleaseEvidenceReference, &released, &d.ReceiptState, &d.ReceiptActorID, &d.ReceiptIssueReason, &d.ReceiptDisputeID, &receiptAt, &activated, &d.CreatedAt, &d.FeeTerms, &d.OutstandingKobo, &d.LegalVersions); err != nil {
 			rows.Close()
 			return err
 		}
@@ -423,7 +432,7 @@ func persistAggregateTx(ctx context.Context, tx pgx.Tx, local *Store, lineID str
 		if d == nil {
 			continue
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO app.drawdowns(fee_terms,id,trade_line_id,principal_kobo,goods_description,invoice_reference,invoice_document_hash,due_date,collection_at,grace_hours,terms_version,agreement_hash,state,reservation_id,obligation_id,buyer_confirmed_at,release_actor_id,delivery_method,release_notes,release_evidence_reference,released_at,receipt_state,receipt_actor_id,receipt_issue_reason,receipt_dispute_id,receipt_at,activated_at,created_at) VALUES($28::jsonb,$1::uuid,$2::uuid,$3,$4,NULLIF($5,''),NULLIF($6,''),$7::date,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,NULLIF($14,'')::uuid,$15,NULLIF($16,'')::uuid,NULLIF($17,''),NULLIF($18,''),NULLIF($19,''),$20,NULLIF($21,''),NULLIF($22,'')::uuid,NULLIF($23,''),NULLIF($24,'')::uuid,$25,$26,$27) ON CONFLICT(id) DO UPDATE SET state=EXCLUDED.state,reservation_id=EXCLUDED.reservation_id,obligation_id=EXCLUDED.obligation_id,buyer_confirmed_at=EXCLUDED.buyer_confirmed_at,release_actor_id=EXCLUDED.release_actor_id,delivery_method=EXCLUDED.delivery_method,release_notes=EXCLUDED.release_notes,release_evidence_reference=EXCLUDED.release_evidence_reference,released_at=EXCLUDED.released_at,receipt_state=EXCLUDED.receipt_state,receipt_actor_id=EXCLUDED.receipt_actor_id,receipt_issue_reason=EXCLUDED.receipt_issue_reason,receipt_dispute_id=EXCLUDED.receipt_dispute_id,receipt_at=EXCLUDED.receipt_at,activated_at=EXCLUDED.activated_at`, d.ID, d.TradeLineID, int64(d.PrincipalKobo), d.GoodsDescription, d.InvoiceReference, d.InvoiceDocumentHash, d.DueDate, d.CollectionAt, d.GraceHours, d.TermsVersion, d.AgreementHash, d.State, d.ReservationID, d.ObligationID, nullableTime(d.BuyerConfirmedAt), d.ReleaseActorID, d.DeliveryMethod, d.ReleaseNotes, d.ReleaseEvidenceReference, nullableTime(d.ReleasedAt), d.ReceiptState, d.ReceiptActorID, d.ReceiptIssueReason, d.ReceiptDisputeID, nullableTime(d.ReceiptAt), nullableTime(d.ActivatedAt), d.CreatedAt, feeTermsJSON(d.FeeTerms)); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO app.drawdowns(fee_terms,id,trade_line_id,principal_kobo,goods_description,invoice_reference,invoice_document_hash,due_date,collection_at,grace_hours,terms_version,agreement_hash,state,reservation_id,obligation_id,buyer_confirmed_at,release_actor_id,delivery_method,release_notes,release_evidence_reference,released_at,receipt_state,receipt_actor_id,receipt_issue_reason,receipt_dispute_id,receipt_at,activated_at,created_at,legal_versions) VALUES($28::jsonb,$1::uuid,$2::uuid,$3,$4,NULLIF($5,''),NULLIF($6,''),$7::date,$8,$9,$10,$11,$12,NULLIF($13,'')::uuid,NULLIF($14,'')::uuid,$15,NULLIF($16,'')::uuid,NULLIF($17,''),NULLIF($18,''),NULLIF($19,''),$20,NULLIF($21,''),NULLIF($22,'')::uuid,NULLIF($23,''),NULLIF($24,'')::uuid,$25,$26,$27,$29::jsonb) ON CONFLICT(id) DO UPDATE SET state=EXCLUDED.state,reservation_id=EXCLUDED.reservation_id,obligation_id=EXCLUDED.obligation_id,buyer_confirmed_at=EXCLUDED.buyer_confirmed_at,release_actor_id=EXCLUDED.release_actor_id,delivery_method=EXCLUDED.delivery_method,release_notes=EXCLUDED.release_notes,release_evidence_reference=EXCLUDED.release_evidence_reference,released_at=EXCLUDED.released_at,receipt_state=EXCLUDED.receipt_state,receipt_actor_id=EXCLUDED.receipt_actor_id,receipt_issue_reason=EXCLUDED.receipt_issue_reason,receipt_dispute_id=EXCLUDED.receipt_dispute_id,receipt_at=EXCLUDED.receipt_at,activated_at=EXCLUDED.activated_at`, d.ID, d.TradeLineID, int64(d.PrincipalKobo), d.GoodsDescription, d.InvoiceReference, d.InvoiceDocumentHash, d.DueDate, d.CollectionAt, d.GraceHours, d.TermsVersion, d.AgreementHash, d.State, d.ReservationID, d.ObligationID, nullableTime(d.BuyerConfirmedAt), d.ReleaseActorID, d.DeliveryMethod, d.ReleaseNotes, d.ReleaseEvidenceReference, nullableTime(d.ReleasedAt), d.ReceiptState, d.ReceiptActorID, d.ReceiptIssueReason, d.ReceiptDisputeID, nullableTime(d.ReceiptAt), nullableTime(d.ActivatedAt), d.CreatedAt, feeTermsJSON(d.FeeTerms), legalVersionsJSON(d.LegalVersions)); err != nil {
 			return fmt.Errorf("persist drawdown: %w", err)
 		}
 		if d.ReceiptDisputeID != "" {
@@ -528,3 +537,11 @@ func (s *PostgresStore) ReadForBuyer(id string) ([]TradeLine, error) {
 }
 
 func feeTermsJSON(f *ledger.FeeTerms) []byte { b, _ := json.Marshal(f); return b }
+
+func legalVersionsJSON(versions *legalpublication.Versions) []byte {
+	if versions == nil {
+		return nil
+	}
+	data, _ := json.Marshal(versions)
+	return data
+}

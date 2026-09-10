@@ -1,0 +1,1464 @@
+diff --git a/.env.example b/.env.example
+index 7644ed8..57d02c7 100644
+--- a/.env.example
++++ b/.env.example
+@@ -108,3 +108,7 @@ ADMIN_SURFACES=overview,attention,capabilities,approval-inbox,cases,disputes,mon
+ 
+ # Optional dedicated read-only Prometheus credential, minimum 32 characters.
+ METRICS_SCRAPE_TOKEN=
++
++# Independent random root (at least 32 bytes) for owner-managed provider secrets.
++# Generate locally; do not reuse TOKEN_HASH_KEY. Missing root disables secret writes.
++SETTINGS_ENCRYPTION_KEY=
+diff --git a/api/openapi.yaml b/api/openapi.yaml
+index 31e098e..4568d0d 100644
+--- a/api/openapi.yaml
++++ b/api/openapi.yaml
+@@ -50,7 +50,7 @@ paths:
+   /platform/capabilities:
+     get:
+       operationId: getPlatformCapabilities
+-      summary: Retrieve enabled platform features and launch controls
++      summary: Retrieve public enabled feature flags
+       responses:
+         '200':
+           description: Enabled platform capability flags
+@@ -94,13 +94,14 @@ paths:
+         required: true
+         content:
+           application/json:
+-            schema: { type: object, additionalProperties: true }
++            schema: { type: object, required: [key, expected_version, reason], properties: { key: { type: string }, expected_version: { type: integer, minimum: 0 }, reason: { type: string, minLength: 4 } }, additionalProperties: true }
+       responses:
+         '200':
+           description: Setting updated or proposal created
+           content:
+             application/json:
+               schema: { type: object, additionalProperties: true }
++        '409': { description: "Setting changed since it was reviewed" }
+         '400': { description: "Invalid setting key, type, or value" }
+         '401': { description: "Sign-in required" }
+         '403': { description: "Platform owner role required" }
+@@ -113,13 +114,14 @@ paths:
+         required: true
+         content:
+           application/json:
+-            schema: { type: object, additionalProperties: true }
++            schema: { type: object, required: [key, expected_version, reason], properties: { key: { type: string }, expected_version: { type: integer, minimum: 0 }, reason: { type: string, minLength: 4 } }, additionalProperties: true }
+       responses:
+         '200':
+           description: Secret rotated with AES-256-GCM encryption
+           content:
+             application/json:
+               schema: { type: object, additionalProperties: true }
++        '409': { description: "Setting changed since it was reviewed" }
+         '400': { description: "Invalid secret key or empty secret value" }
+         '401': { description: "Sign-in required" }
+         '403': { description: "Platform owner role required" }
+diff --git a/cmd/bootstrap-owner/main.go b/cmd/bootstrap-owner/main.go
+index b80316e..111e2f9 100644
+--- a/cmd/bootstrap-owner/main.go
++++ b/cmd/bootstrap-owner/main.go
+@@ -7,8 +7,6 @@ import (
+ 	"os"
+ 	"strings"
+ 
+-	"github.com/google/uuid"
+-	"github.com/jackc/pgx/v5"
+ 	"github.com/jackc/pgx/v5/pgxpool"
+ )
+ 
+@@ -49,34 +47,14 @@ func main() {
+ 
+ 	normID := strings.TrimSpace(strings.ToLower(identifier))
+ 	var userID string
+-	err = pool.QueryRow(ctx, `SELECT id::text FROM app.users WHERE normalized_email=$1 OR normalized_phone=$1`, normID).Scan(&userID)
++	err = pool.QueryRow(ctx, `SELECT u.id::text FROM app.users u
++      WHERE (normalized_email=$1 OR normalized_phone=$1) AND status='active'
++      AND EXISTS (SELECT 1 FROM app.sessions s WHERE s.user_id=u.id
++        AND s.authentication_level='AAL2' AND s.revoked_at IS NULL
++        AND s.expires_at>now() AND s.mfa_verified_at>now()-interval '10 minutes')`, normID).Scan(&userID)
+ 	if err != nil {
+-		if err == pgx.ErrNoRows {
+-			// Create user if not exists
+-			newID := uuid.New().String()
+-			isEmail := strings.Contains(normID, "@")
+-			var emailCol, phoneCol any
+-			if isEmail {
+-				emailCol = normID
+-				phoneCol = nil
+-			} else {
+-				emailCol = nil
+-				phoneCol = normID
+-			}
+-			err = pool.QueryRow(ctx, `
+-				INSERT INTO app.users(id, normalized_email, normalized_phone, display_name, status)
+-				VALUES($1::uuid, $2, $3, 'Platform Owner', 'active')
+-				RETURNING id::text
+-			`, newID, emailCol, phoneCol).Scan(&userID)
+-			if err != nil {
+-				fmt.Fprintf(os.Stderr, "Failed to create user for owner: %v\n", err)
+-				os.Exit(1)
+-			}
+-			fmt.Printf("Created active user %s for identifier %s\n", userID, normID)
+-		} else {
+-			fmt.Fprintf(os.Stderr, "Failed to query user: %v\n", err)
+-			os.Exit(1)
+-		}
++		fmt.Fprintln(os.Stderr, "Owner must first sign in and complete MFA within the last 10 minutes.")
++		os.Exit(1)
+ 	}
+ 
+ 	tx, err := pool.Begin(ctx)
+@@ -86,6 +64,17 @@ func main() {
+ 	}
+ 	defer func() { _ = tx.Rollback(ctx) }()
+ 
++	// One deployment bootstrap, including concurrent invocations. Recovery uses
++	// the existing authenticated account recovery flow, never a second bootstrap.
++	if _, err = tx.Exec(ctx, `LOCK TABLE app.platform_role_assignments IN SHARE ROW EXCLUSIVE MODE`); err != nil {
++		fmt.Fprintln(os.Stderr, err)
++		os.Exit(1)
++	}
++	var used bool
++	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.platform_role_assignments WHERE role='platform_owner')`).Scan(&used); err != nil || used {
++		fmt.Fprintln(os.Stderr, "Owner bootstrap has already been used or could not be checked.")
++		os.Exit(1)
++	}
+ 	// Assign platform_owner role
+ 	_, err = tx.Exec(ctx, `
+ 		INSERT INTO app.platform_role_assignments(user_id, role, granted_by, reason)
+@@ -127,8 +116,8 @@ func main() {
+ 		VALUES($1::uuid, 'platform_owner.bootstrapped', 'user', $1::uuid, 'success', 'high', jsonb_build_object('identifier', $2::text, 'reason', $3::text))
+ 	`, userID, normID, reason)
+ 	if err != nil {
+-		// Log but continue if audit_events schema details vary
+-		fmt.Fprintf(os.Stderr, "Notice: could not record audit event directly: %v\n", err)
++		fmt.Fprintf(os.Stderr, "Owner audit could not be recorded: %v\n", err)
++		os.Exit(1)
+ 	}
+ 
+ 	if err := tx.Commit(ctx); err != nil {
+diff --git a/internal/credit/store.go b/internal/credit/store.go
+index ab9a1d7..facdf04 100644
+--- a/internal/credit/store.go
++++ b/internal/credit/store.go
+@@ -14,6 +14,7 @@ import (
+ 
+ 	"kredit/internal/identifier"
+ 	"kredit/internal/ledger"
++	"kredit/internal/legalpublication"
+ 	"kredit/internal/mandates"
+ 	"kredit/internal/payments"
+ )
+@@ -456,7 +457,7 @@ func (s *Store) ActivateTradeLineDrawdown(input TradeLineActivationInput) (View,
+ 	}
+ 	now := s.now()
+ 	request := &CreditRequest{FeeTerms: input.FeeTerms.Clone(), ID: input.DrawdownID, SupplierOrganizationID: input.SupplierOrganizationID, SupplierLegalName: input.SupplierOrganizationID, BuyerUserID: input.BuyerUserID, BuyerBusinessID: input.BuyerBusinessID, BuyerLegalName: input.BuyerBusinessID, PrincipalKobo: input.PrincipalKobo, Currency: "NGN", GoodsDescription: strings.TrimSpace(input.GoodsDescription), InvoiceReference: strings.TrimSpace(input.InvoiceReference), InvoiceDocumentHash: strings.TrimSpace(input.InvoiceDocumentHash), DueDate: input.DueDate, CollectionPolicy: input.CollectionPolicy, GraceHours: input.GraceHours, CollectionAt: input.CollectionAt, ScheduleType: "one_time", ScheduleCount: 1, ScheduleCadence: "custom", State: Active, MandateID: input.MandateID, CreatedBy: input.ReleaseActorID, CreatedAt: now, UpdatedAt: now, Version: 1}
+-	canonical := agreementCanonical{FeeTerms: request.FeeTerms.Clone(), SourceType: "trade_line_drawdown", SourceID: input.DrawdownID, TradeLineID: input.TradeLineID, AcceptedSourceHash: input.DrawdownAgreementHash, SupplierLegalName: request.SupplierLegalName, BuyerLegalName: request.BuyerLegalName, BuyerBusinessID: request.BuyerBusinessID, GoodsDescription: request.GoodsDescription, InvoiceReference: request.InvoiceReference, InvoiceDocumentHash: request.InvoiceDocumentHash, PrincipalKobo: request.PrincipalKobo, Currency: request.Currency, DueDate: request.DueDate, GraceHours: request.GraceHours, CollectionAt: request.CollectionAt, ScheduleType: request.ScheduleType, ScheduleCount: 1, ScheduleCadence: request.ScheduleCadence, MandateDisclosure: "Buyer confirmed this drawdown under the active trade-line mandate.", BaseFeeDisclosure: request.FeeTerms.Disclosure(), TermsVersion: scheduleDefault(input.TermsVersion, "terms-v1"), PrivacyVersion: "privacy-v1"}
++	canonical := agreementCanonical{FeeTerms: request.FeeTerms.Clone(), SourceType: "trade_line_drawdown", SourceID: input.DrawdownID, TradeLineID: input.TradeLineID, AcceptedSourceHash: input.DrawdownAgreementHash, SupplierLegalName: request.SupplierLegalName, BuyerLegalName: request.BuyerLegalName, BuyerBusinessID: request.BuyerBusinessID, GoodsDescription: request.GoodsDescription, InvoiceReference: request.InvoiceReference, InvoiceDocumentHash: request.InvoiceDocumentHash, PrincipalKobo: request.PrincipalKobo, Currency: request.Currency, DueDate: request.DueDate, GraceHours: request.GraceHours, CollectionAt: request.CollectionAt, ScheduleType: request.ScheduleType, ScheduleCount: 1, ScheduleCadence: request.ScheduleCadence, MandateDisclosure: "Buyer confirmed this drawdown under the active trade-line mandate.", BaseFeeDisclosure: request.FeeTerms.Disclosure(), TermsVersion: scheduleDefault(input.TermsVersion, legalpublication.TermsVersion), PrivacyVersion: legalpublication.PrivacyVersion}
+ 	data, _ := json.Marshal(canonical)
+ 	hash := sha256.Sum256(data)
+ 	agreement := &AgreementVersion{ID: s.newID(), CreditRequestID: request.ID, Version: 1, CanonicalJSON: data, DocumentHash: hex.EncodeToString(hash[:]), PrincipalKobo: request.PrincipalKobo, DueDate: request.DueDate, GraceHours: request.GraceHours, CollectionAt: request.CollectionAt, TermsVersion: canonical.TermsVersion, PrivacyVersion: canonical.PrivacyVersion, CreatedBy: input.ReleaseActorID, CreatedAt: now}
+@@ -594,10 +595,10 @@ func (s *Store) Send(requestID, actorID string) (View, error) {
+ 	if r.State != Draft {
+ 		return View{}, fmt.Errorf("credit request cannot be sent from %s", r.State)
+ 	}
+-	canonical := agreementCanonical{FeeTerms: r.FeeTerms.Clone(), SupplierLegalName: r.SupplierLegalName, SupplierTradingName: r.SupplierTradingName, BuyerLegalName: r.BuyerLegalName, BuyerTradingName: r.BuyerTradingName, BuyerBusinessID: r.BuyerBusinessID, GoodsDescription: r.GoodsDescription, InvoiceReference: r.InvoiceReference, InvoiceDocumentHash: r.InvoiceDocumentHash, PrincipalKobo: r.PrincipalKobo, Currency: r.Currency, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, ScheduleType: r.ScheduleType, ScheduleCount: r.ScheduleCount, ScheduleCadence: r.ScheduleCadence, MonthEndPolicy: r.MonthEndPolicy, CustomScheduleItems: append([]ScheduleTerm(nil), r.CustomScheduleItems...), MandateDisclosure: "Automated repayment requires separate bank mandate authorization; each collection is limited to the outstanding accepted amount.", BaseFeeDisclosure: r.FeeTerms.Disclosure(), TermsVersion: "terms-v1", PrivacyVersion: "privacy-v1"}
++	canonical := agreementCanonical{FeeTerms: r.FeeTerms.Clone(), SupplierLegalName: r.SupplierLegalName, SupplierTradingName: r.SupplierTradingName, BuyerLegalName: r.BuyerLegalName, BuyerTradingName: r.BuyerTradingName, BuyerBusinessID: r.BuyerBusinessID, GoodsDescription: r.GoodsDescription, InvoiceReference: r.InvoiceReference, InvoiceDocumentHash: r.InvoiceDocumentHash, PrincipalKobo: r.PrincipalKobo, Currency: r.Currency, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, ScheduleType: r.ScheduleType, ScheduleCount: r.ScheduleCount, ScheduleCadence: r.ScheduleCadence, MonthEndPolicy: r.MonthEndPolicy, CustomScheduleItems: append([]ScheduleTerm(nil), r.CustomScheduleItems...), MandateDisclosure: "Automated repayment requires separate bank mandate authorization; each collection is limited to the outstanding accepted amount.", BaseFeeDisclosure: r.FeeTerms.Disclosure(), TermsVersion: legalpublication.TermsVersion, PrivacyVersion: legalpublication.PrivacyVersion}
+ 	data, _ := json.Marshal(canonical)
+ 	hash := sha256.Sum256(data)
+-	agreement := &AgreementVersion{ID: newIdentifier(), CreditRequestID: r.ID, Version: 1, CanonicalJSON: data, DocumentHash: hex.EncodeToString(hash[:]), PrincipalKobo: r.PrincipalKobo, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, TermsVersion: "terms-v1", PrivacyVersion: "privacy-v1", CreatedBy: actorID, CreatedAt: s.now()}
++	agreement := &AgreementVersion{ID: newIdentifier(), CreditRequestID: r.ID, Version: 1, CanonicalJSON: data, DocumentHash: hex.EncodeToString(hash[:]), PrincipalKobo: r.PrincipalKobo, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, TermsVersion: legalpublication.TermsVersion, PrivacyVersion: legalpublication.PrivacyVersion, CreatedBy: actorID, CreatedAt: s.now()}
+ 	s.agreements[agreement.ID] = agreement
+ 	r.AgreementVersionID = agreement.ID
+ 	r.State = Sent
+diff --git a/internal/onboarding/store.go b/internal/onboarding/store.go
+index 36cdfc8..91a2b23 100644
+--- a/internal/onboarding/store.go
++++ b/internal/onboarding/store.go
+@@ -7,11 +7,12 @@ import (
+ 	"time"
+ 
+ 	"kredit/internal/identifier"
++	"kredit/internal/legalpublication"
+ )
+ 
+ const (
+-	CurrentTermsVersion   = "supplier-terms-v1"
+-	CurrentPrivacyVersion = "privacy-v1"
++	CurrentTermsVersion   = legalpublication.TermsVersion
++	CurrentPrivacyVersion = legalpublication.PrivacyVersion
+ 	StateIncomplete       = "incomplete"
+ 	StateProviderReview   = "provider_review"
+ 	StatePilotReady       = "pilot_ready"
+diff --git a/internal/platformsettings/crypto.go b/internal/platformsettings/crypto.go
+index be4797e..fd4e3e3 100644
+--- a/internal/platformsettings/crypto.go
++++ b/internal/platformsettings/crypto.go
+@@ -22,11 +22,8 @@ func NewEncryptor(key string) *Encryptor {
+ 	if key == "" {
+ 		key = os.Getenv("SETTINGS_ENCRYPTION_KEY")
+ 	}
+-	if key == "" {
+-		key = os.Getenv("TOKEN_SECRET")
+-	}
+-	if key == "" {
+-		key = "kredit-default-dev-settings-encryption-key-32b"
++	if len(key) < 32 {
++		return &Encryptor{}
+ 	}
+ 	h := sha256.Sum256([]byte(key))
+ 	return &Encryptor{key: h[:]}
+@@ -36,6 +33,9 @@ func (e *Encryptor) Encrypt(plaintext string) (string, error) {
+ 	if plaintext == "" {
+ 		return "", nil
+ 	}
++	if e == nil || len(e.key) != 32 {
++		return "", errors.New("SETTINGS_ENCRYPTION_KEY must contain at least 32 bytes of independently generated key material")
++	}
+ 	block, err := aes.NewCipher(e.key)
+ 	if err != nil {
+ 		return "", fmt.Errorf("new cipher: %w", err)
+@@ -60,6 +60,9 @@ func (e *Encryptor) Decrypt(ciphertext string) (string, error) {
+ 	if err != nil {
+ 		return "", fmt.Errorf("base64 decode: %w", err)
+ 	}
++	if e == nil || len(e.key) != 32 {
++		return "", errors.New("SETTINGS_ENCRYPTION_KEY must contain at least 32 bytes of independently generated key material")
++	}
+ 	block, err := aes.NewCipher(e.key)
+ 	if err != nil {
+ 		return "", fmt.Errorf("new cipher: %w", err)
+diff --git a/internal/platformsettings/registry.go b/internal/platformsettings/registry.go
+index 649d2a8..6ec326a 100644
+--- a/internal/platformsettings/registry.go
++++ b/internal/platformsettings/registry.go
+@@ -343,7 +343,7 @@ func validateIntegrationStatus(raw json.RawMessage) error {
+ 		return errors.New("status must be a string")
+ 	}
+ 	switch s {
+-	case IntegrationStatusUnconfigured, IntegrationStatusConfigured, IntegrationStatusVerified, IntegrationStatusDegraded, IntegrationStatusDisabled:
++	case IntegrationStatusUnconfigured, IntegrationStatusConfigured, IntegrationStatusDegraded, IntegrationStatusDisabled:
+ 		return nil
+ 	default:
+ 		return fmt.Errorf("invalid integration status %q", s)
+@@ -366,18 +366,10 @@ func validateIntRange(minVal, maxVal int64) func(raw json.RawMessage) error {
+ func ValidateKeyAndValue(key string, raw json.RawMessage) (SettingMeta, error) {
+ 	meta, ok := KnownSettings[key]
+ 	if !ok {
+-		// If key not statically in map, check category prefix
+-		parts := strings.SplitN(key, ".", 2)
+-		if len(parts) < 2 {
+-			return SettingMeta{}, fmt.Errorf("invalid setting key format %q (expected category.name)", key)
+-		}
+-		category := parts[0]
+-		switch category {
+-		case CategoryLaunch, CategoryFeatures, CategoryIntegrations, CategorySecurity, CategoryKYC, CategoryFees, CategoryNotifications, CategoryGovernance:
+-		default:
+-			return SettingMeta{}, fmt.Errorf("unknown setting category %q", category)
+-		}
+-		meta = SettingMeta{Category: category, Description: key}
++		return SettingMeta{}, fmt.Errorf("unknown setting key %q", key)
++	}
++	if strings.TrimSpace(string(raw)) == "null" {
++		return meta, errors.New("setting value cannot be null")
+ 	}
+ 	if meta.Validate != nil {
+ 		if err := meta.Validate(raw); err != nil {
+diff --git a/internal/platformsettings/store.go b/internal/platformsettings/store.go
+index a8a033f..69a4731 100644
+--- a/internal/platformsettings/store.go
++++ b/internal/platformsettings/store.go
+@@ -11,6 +11,8 @@ import (
+ 	"github.com/jackc/pgx/v5/pgxpool"
+ )
+ 
++var ErrVersionConflict = errors.New("setting changed; reload and review the current version")
++
+ type Service interface {
+ 	GetAll(ctx context.Context, includeSecrets bool) ([]Setting, error)
+ 	Get(ctx context.Context, key string, includeSecret bool) (Setting, error)
+@@ -18,8 +20,8 @@ type Service interface {
+ 	GetString(ctx context.Context, key string, defaultVal string) string
+ 	GetInt(ctx context.Context, key string, defaultVal int) int
+ 	GetInt64(ctx context.Context, key string, defaultVal int64) int64
+-	Update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string) (Setting, error)
+-	RotateSecret(ctx context.Context, actorID string, key string, plaintextSecret string, reason string) (Setting, error)
++	Update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string, expectedVersion int) (Setting, error)
++	RotateSecret(ctx context.Context, actorID string, key string, plaintextSecret string, reason string, expectedVersion int) (Setting, error)
+ 	GetGovernance(ctx context.Context) (Governance, error)
+ 	SetGovernance(ctx context.Context, actorID string, mode string, reason string) (Governance, error)
+ 	GetHistory(ctx context.Context, key string, limit, offset int) ([]SettingHistory, error)
+@@ -70,6 +72,9 @@ func (s *PostgresStore) GetAll(ctx context.Context, includeSecrets bool) ([]Sett
+ 				var ciphertext string
+ 				_ = json.Unmarshal(item.Value, &ciphertext)
+ 				plain, err := s.enc.Decrypt(ciphertext)
++				if err != nil {
++					return nil, fmt.Errorf("decrypt configured secret: %w", err)
++				}
+ 				if err == nil {
+ 					b, _ := json.Marshal(plain)
+ 					item.Value = b
+@@ -118,6 +123,9 @@ func (s *PostgresStore) Get(ctx context.Context, key string, includeSecret bool)
+ 		_ = json.Unmarshal(item.Value, &ciphertext)
+ 		plain, err := s.enc.Decrypt(ciphertext)
+ 		if includeSecret {
++			if err != nil {
++				return Setting{}, fmt.Errorf("decrypt configured secret: %w", err)
++			}
+ 			if err == nil {
+ 				b, _ := json.Marshal(plain)
+ 				item.Value = b
+@@ -182,7 +190,7 @@ func (s *PostgresStore) GetInt64(ctx context.Context, key string, defaultVal int
+ 	return n
+ }
+ 
+-func (s *PostgresStore) Update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string) (Setting, error) {
++func (s *PostgresStore) Update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string, expectedVersion int) (Setting, error) {
+ 	reason = strings.TrimSpace(reason)
+ 	if len(reason) < 4 {
+ 		return Setting{}, errors.New("a reason of at least 4 characters is required")
+@@ -199,6 +207,10 @@ func (s *PostgresStore) Update(ctx context.Context, actorID string, key string,
+ 	}
+ 	defer func() { _ = tx.Rollback(ctx) }()
+ 
++	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key); err != nil {
++		return Setting{}, err
++	}
++
+ 	var current Setting
+ 	var currentRaw []byte
+ 	var isSecret bool
+@@ -218,6 +230,10 @@ func (s *PostgresStore) Update(ctx context.Context, actorID string, key string,
+ 		return Setting{}, err
+ 	}
+ 
++	if expectedVersion < 0 || expectedVersion != currentVersion {
++		return Setting{}, ErrVersionConflict
++	}
++
+ 	if exists {
+ 		current.Value = json.RawMessage(currentRaw)
+ 	}
+@@ -305,12 +321,12 @@ func (s *PostgresStore) Update(ctx context.Context, actorID string, key string,
+ 	return updated, nil
+ }
+ 
+-func (s *PostgresStore) RotateSecret(ctx context.Context, actorID string, key string, plaintextSecret string, reason string) (Setting, error) {
++func (s *PostgresStore) RotateSecret(ctx context.Context, actorID string, key string, plaintextSecret string, reason string, expectedVersion int) (Setting, error) {
+ 	b, err := json.Marshal(plaintextSecret)
+ 	if err != nil {
+ 		return Setting{}, err
+ 	}
+-	return s.Update(ctx, actorID, key, b, reason)
++	return s.Update(ctx, actorID, key, b, reason, expectedVersion)
+ }
+ 
+ func (s *PostgresStore) GetGovernance(ctx context.Context) (Governance, error) {
+@@ -414,6 +430,12 @@ func (s *PostgresStore) GetHistory(ctx context.Context, key string, limit, offse
+ 			h.OldValue = json.RawMessage(oldRaw)
+ 		}
+ 		h.NewValue = json.RawMessage(newRaw)
++		// History never discloses encrypted payloads, including retired keys.
++		meta, known := KnownSettings[h.Key]
++		if !known || meta.IsSecret {
++			h.OldValue = nil
++			h.NewValue = json.RawMessage(`null`)
++		}
+ 		list = append(list, h)
+ 	}
+ 	return list, rows.Err()
+diff --git a/internal/platformsettings/store_test.go b/internal/platformsettings/store_test.go
+index 8b56a61..d276143 100644
+--- a/internal/platformsettings/store_test.go
++++ b/internal/platformsettings/store_test.go
+@@ -100,7 +100,7 @@ func TestPostgresStoreIntegration(t *testing.T) {
+ 	}
+ 	defer pool.Close()
+ 
+-	enc := NewEncryptor("test-platform-settings-key")
++	enc := NewEncryptor("test-platform-settings-key-32-bytes-minimum")
+ 	store := NewPostgresStore(pool, enc, nil)
+ 
+ 	// Test GetAll contains seeded baseline settings
+@@ -118,8 +118,12 @@ func TestPostgresStoreIntegration(t *testing.T) {
+ 		t.Fatalf("expected features.trade_lines default false, got %v", tradeLines)
+ 	}
+ 
++	current, err := store.Get(ctx, "features.trade_lines", false)
++	if err != nil {
++		t.Fatal(err)
++	}
+ 	// Test Update
+-	updated, err := store.Update(ctx, "", "features.trade_lines", json.RawMessage(`true`), "Testing feature toggle")
++	updated, err := store.Update(ctx, "", "features.trade_lines", json.RawMessage(`true`), "Testing feature toggle", current.Version)
+ 	if err != nil {
+ 		t.Fatalf("Update failed: %v", err)
+ 	}
+@@ -130,12 +134,19 @@ func TestPostgresStoreIntegration(t *testing.T) {
+ 		t.Fatal("expected GetBool to reflect update")
+ 	}
+ 
++	if _, err := store.Update(ctx, "", "features.trade_lines", json.RawMessage(`false`), "Stale editor rejected", current.Version); err != ErrVersionConflict {
++		t.Fatalf("stale version was not rejected: %v", err)
++	}
+ 	// Reset features.trade_lines
+-	_, _ = store.Update(ctx, "", "features.trade_lines", json.RawMessage(`false`), "Reset after test")
++	_, _ = store.Update(ctx, "", "features.trade_lines", json.RawMessage(`false`), "Reset after test", updated.Version)
+ 
+ 	// Test Secret Rotation and Masking
+ 	secretVal := "sk_live_verysecretkey1234"
+-	rot, err := store.RotateSecret(ctx, "", "integrations.mono.secret_key", secretVal, "Rotating Mono secret")
++	secretSetting, err := store.Get(ctx, "integrations.mono.secret_key", false)
++	if err != nil {
++		t.Fatal(err)
++	}
++	rot, err := store.RotateSecret(ctx, "", "integrations.mono.secret_key", secretVal, "Rotating Mono secret", secretSetting.Version)
+ 	if err != nil {
+ 		t.Fatalf("RotateSecret failed: %v", err)
+ 	}
+@@ -143,6 +154,18 @@ func TestPostgresStoreIntegration(t *testing.T) {
+ 		t.Fatalf("secret was not masked on return: %s", string(rot.Value))
+ 	}
+ 
++	history, err := store.GetHistory(ctx, "integrations.mono.secret_key", 10, 0)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, item := range history {
++		if len(item.OldValue) != 0 || string(item.NewValue) != "null" {
++			t.Fatal("secret history payload exposed")
++		}
++	}
++	if _, err := pool.Exec(ctx, `UPDATE app.platform_settings_history SET reason='rewrite' WHERE key='integrations.mono.secret_key'`); err == nil {
++		t.Fatal("history mutation allowed")
++	}
+ 	// Get with secret decrypted
+ 	unmasked, err := store.Get(ctx, "integrations.mono.secret_key", true)
+ 	if err != nil {
+@@ -155,7 +178,7 @@ func TestPostgresStoreIntegration(t *testing.T) {
+ 	}
+ 
+ 	// Test History
+-	history, err := store.GetHistory(ctx, "integrations.mono.secret_key", 10, 0)
++	history, err = store.GetHistory(ctx, "integrations.mono.secret_key", 10, 0)
+ 	if err != nil {
+ 		t.Fatalf("GetHistory failed: %v", err)
+ 	}
+diff --git a/internal/web/platform_settings_handlers.go b/internal/web/platform_settings_handlers.go
+index b848c29..e246692 100644
+--- a/internal/web/platform_settings_handlers.go
++++ b/internal/web/platform_settings_handlers.go
+@@ -3,13 +3,13 @@ package web
+ import (
+ 	"context"
+ 	"encoding/json"
++	"errors"
+ 	"fmt"
+ 	"net/http"
+ 	"strings"
+ 
+ 	"kredit/internal/access"
+ 	"kredit/internal/audit"
+-	"kredit/internal/auth"
+ 	"kredit/internal/db"
+ 	"kredit/internal/operations"
+ 	"kredit/internal/platformsettings"
+@@ -24,59 +24,21 @@ func (s *Server) isFeatureEnabled(ctx context.Context, key string, defaultVal bo
+ 
+ func (s *Server) platformCapabilities(w http.ResponseWriter, r *http.Request) {
+ 	ctx := r.Context()
+-	var launchMode = platformsettings.LaunchModePreLaunch
+-	var bannerEnabled = false
+-	var bannerText = "Welcome to Kredit. Launching soon in private beta."
+-	var waitlistEnabled = true
+-	var govMode = platformsettings.GovernanceSoloOwner
+-
+ 	features := map[string]bool{
+-		"trade_lines":                false,
+-		"drawdowns":                  false,
+-		"repayment_extensions":       true,
+-		"disputes":                   true,
+-		"early_settlement_discounts": false,
+-		"notifications_whatsapp":     false,
+-		"mono_direct_debit":          false,
++		"trade_lines": false, "drawdowns": false, "repayment_extensions": false,
++		"disputes": true, "early_settlement_discounts": false,
++		"notifications_whatsapp": false, "mono_direct_debit": false,
+ 	}
+-
+ 	if s.runtime.PlatformSettings != nil {
+-		launchMode = s.runtime.PlatformSettings.GetString(ctx, "launch.mode", platformsettings.LaunchModePreLaunch)
+-		bannerEnabled = s.runtime.PlatformSettings.GetBool(ctx, "launch.banner_enabled", false)
+-		bannerText = s.runtime.PlatformSettings.GetString(ctx, "launch.banner_text", bannerText)
+-		waitlistEnabled = s.runtime.PlatformSettings.GetBool(ctx, "launch.waitlist_enabled", true)
+-		for k := range features {
+-			features[k] = s.runtime.PlatformSettings.GetBool(ctx, "features."+k, features[k])
+-		}
+-		if gov, err := s.runtime.PlatformSettings.GetGovernance(ctx); err == nil {
+-			govMode = gov.Mode
+-		}
+-	}
+-
+-	isOwner := false
+-	if token := sessionTokenFromRequest(r); token != "" {
+-		if session, user, err := s.runtime.Auth.SessionFromToken(token); err == nil && session.AuthenticationLevel == auth.AAL2 {
+-			roles, _ := s.adminRoles(r, user.ID)
+-			for _, role := range roles {
+-				if role == access.PlatformOwner {
+-					isOwner = true
+-					break
+-				}
++		for key := range features {
++			// Complaint access remains available independently of new-use controls.
++			if key != "disputes" {
++				features[key] = s.runtime.PlatformSettings.GetBool(ctx, "features."+key, false)
+ 			}
+ 		}
+ 	}
+-
+-	writeJSON(w, http.StatusOK, map[string]any{
+-		"launch_mode": launchMode,
+-		"banner": map[string]any{
+-			"enabled": bannerEnabled,
+-			"text":    bannerText,
+-		},
+-		"waitlist_enabled": waitlistEnabled,
+-		"features":         features,
+-		"governance_mode":  govMode,
+-		"is_owner":         isOwner,
+-	})
++	w.Header().Set("Cache-Control", "no-store")
++	writeJSON(w, http.StatusOK, map[string]any{"features": features})
+ }
+ 
+ func (s *Server) listPlatformSettings(w http.ResponseWriter, r *http.Request) {
+@@ -116,9 +78,10 @@ func (s *Server) listPlatformSettings(w http.ResponseWriter, r *http.Request) {
+ }
+ 
+ type updateSettingInput struct {
+-	Key    string          `json:"key"`
+-	Value  json.RawMessage `json:"value"`
+-	Reason string          `json:"reason"`
++	ExpectedVersion *int            `json:"expected_version"`
++	Key             string          `json:"key"`
++	Value           json.RawMessage `json:"value"`
++	Reason          string          `json:"reason"`
+ }
+ 
+ func (s *Server) updatePlatformSetting(w http.ResponseWriter, r *http.Request) {
+@@ -147,7 +110,15 @@ func (s *Server) updatePlatformSetting(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 
+-	updated, err := s.runtime.PlatformSettings.Update(r.Context(), user.ID, in.Key, in.Value, in.Reason)
++	if in.ExpectedVersion == nil {
++		writeProblem(w, 400, "version_required", "Reload this setting before saving.")
++		return
++	}
++	updated, err := s.runtime.PlatformSettings.Update(r.Context(), user.ID, in.Key, in.Value, in.Reason, *in.ExpectedVersion)
++	if errors.Is(err, platformsettings.ErrVersionConflict) {
++		writeProblem(w, 409, "setting_conflict", err.Error())
++		return
++	}
+ 	if err != nil {
+ 		writeProblem(w, http.StatusUnprocessableEntity, "setting_invalid", err.Error())
+ 		return
+@@ -172,9 +143,10 @@ func (s *Server) updatePlatformSetting(w http.ResponseWriter, r *http.Request) {
+ }
+ 
+ type rotateSecretInput struct {
+-	Key    string `json:"key"`
+-	Secret string `json:"secret"`
+-	Reason string `json:"reason"`
++	ExpectedVersion *int   `json:"expected_version"`
++	Key             string `json:"key"`
++	Secret          string `json:"secret"`
++	Reason          string `json:"reason"`
+ }
+ 
+ func (s *Server) rotatePlatformSecret(w http.ResponseWriter, r *http.Request) {
+@@ -203,7 +175,15 @@ func (s *Server) rotatePlatformSecret(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 
+-	updated, err := s.runtime.PlatformSettings.RotateSecret(r.Context(), user.ID, in.Key, in.Secret, in.Reason)
++	if in.ExpectedVersion == nil {
++		writeProblem(w, 400, "version_required", "Reload this setting before saving.")
++		return
++	}
++	updated, err := s.runtime.PlatformSettings.RotateSecret(r.Context(), user.ID, in.Key, in.Secret, in.Reason, *in.ExpectedVersion)
++	if errors.Is(err, platformsettings.ErrVersionConflict) {
++		writeProblem(w, 409, "setting_conflict", err.Error())
++		return
++	}
+ 	if err != nil {
+ 		writeProblem(w, http.StatusUnprocessableEntity, "secret_invalid", err.Error())
+ 		return
+diff --git a/internal/web/platform_settings_handlers_test.go b/internal/web/platform_settings_handlers_test.go
+index 6fbf0bf..15c0b01 100644
+--- a/internal/web/platform_settings_handlers_test.go
++++ b/internal/web/platform_settings_handlers_test.go
+@@ -23,6 +23,7 @@ import (
+ )
+ 
+ func TestPlatformSettingsEndpoints(t *testing.T) {
++	t.Setenv("SETTINGS_ENCRYPTION_KEY", "isolated-test-settings-encryption-root-32-bytes")
+ 	url := os.Getenv("DATABASE_URL")
+ 	if url == "" || os.Getenv("KREDIT_INTEGRATION") != "1" {
+ 		t.Skip("integration database required")
+@@ -88,8 +89,8 @@ func TestPlatformSettingsEndpoints(t *testing.T) {
+ 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
+ 		t.Fatal(err)
+ 	}
+-	if _, ok := caps["launch_mode"]; !ok {
+-		t.Fatalf("missing launch_mode in caps: %v", caps)
++	if _, ok := caps["launch_mode"]; ok {
++		t.Fatalf("private launch_mode leaked in caps: %v", caps)
+ 	}
+ 	if _, ok := caps["features"]; !ok {
+ 		t.Fatalf("missing features in caps: %v", caps)
+@@ -160,6 +161,7 @@ func TestPlatformSettingsEndpoints(t *testing.T) {
+ 		"key":    "integrations.paystack.secret_key",
+ 		"secret": "sk_test_abc1234567890xyz",
+ 		"reason": "Rotating test paystack key",
++ "expected_version": 1,
+ 	})
+ 	rotateReq := httptest.NewRequest(http.MethodPost, "/api/v1/ops/platform-settings/secret", bytes.NewReader(rotateBody))
+ 	rotateReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: aal2Token})
+diff --git a/internal/web/supplier_onboarding_test.go b/internal/web/supplier_onboarding_test.go
+index 6a63762..4d30047 100644
+--- a/internal/web/supplier_onboarding_test.go
++++ b/internal/web/supplier_onboarding_test.go
+@@ -87,7 +87,7 @@ func TestNewSupplierOwnerReachesPilotReadyAndCanInviteSales(t *testing.T) {
+ 		{"settlement", http.MethodPut, "onboard-settlement", map[string]any{"provider": "mock-settlement", "provider_reference": "settlement-ref", "bank_name": "Demo Bank", "account_name": "Fresh Foods Ltd", "account_last4": "1234"}},
+ 		{"billing", http.MethodPut, "onboard-billing", map[string]any{"method": "split_settlement", "provider_reference": "billing-ref", "cycle": "per_settlement"}},
+ 		{"credit-policy", http.MethodPut, "onboard-policy", map[string]any{"credit_limit_kobo": 100000000, "payment_days": 30, "grace_hours": 48}},
+-		{"consents", http.MethodPost, "onboard-consents", map[string]any{"terms_version": "supplier-terms-v1", "privacy_version": "privacy-v1"}},
++		{"consents", http.MethodPost, "onboard-consents", map[string]any{"terms_version": "supplier-terms-v2-2026-09-07", "privacy_version": "privacy-v2-2026-09-07"}},
+ 	} {
+ 		step.body["expected_version"] = getVersion()
+ 		r := doJSON(t, client, "/api/v1/organizations/"+org+"/onboarding/"+step.path, step.method, step.body, headers(step.key), http.StatusOK)
+diff --git a/web/src/app.css b/web/src/app.css
+index 0fb3bfd..ff85fa2 100644
+--- a/web/src/app.css
++++ b/web/src/app.css
+@@ -2,14 +2,14 @@
+ 	font-family:
+ 		Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+ 	color: #17181b;
+-	background: #f5f2ea;
++	background: #fafaf8;
+ 	font-synthesis: none;
+-	--color-background: #f5f2ea;
+-	--color-surface: #fffdf8;
+-	--color-surface-muted: #ebe7de;
++	--color-background: #fafaf8;
++	--color-surface: #ffffff;
++	--color-surface-muted: #f0f1f3;
+ 	--color-foreground: #17181b;
+ 	--color-muted: #565854;
+-	--color-border: #cec9bf;
++	--color-border: #d7d9de;
+ 	--color-primary: #2738d6;
+ 	--color-positive: #16794e;
+ 	--color-warning: #a15c00;
+@@ -412,7 +412,7 @@ th, td { padding: .75rem; border-bottom: 1px solid var(--color-border); text-ali
+ 	.site-menu { display: none; width: 100%; align-items: stretch; flex-direction: column; margin-top: 1.25rem; padding: 1.25rem; box-sizing: border-box; background: #17181b; }
+ 	.site-menu-disclosure[open] .site-menu { display: flex; animation: menu-enter 200ms cubic-bezier(.22, .8, .28, 1) both; }
+ 	.nav-links { display: grid; grid-template-columns: 1fr; width: 100%; margin: 0; }
+-	.nav-links a { display: inline-flex; align-items: center; min-height: 3.5rem; padding: .5rem 0; border-bottom: 1px solid #3e3f43; color: #f5f2ea; font-family: Georgia, 'Times New Roman', serif; font-size: 1.45rem; font-weight: 500; }
++	.nav-links a { display: inline-flex; align-items: center; min-height: 3.5rem; padding: .5rem 0; border-bottom: 1px solid #3e3f43; color: #fafaf8; font-family: Georgia, 'Times New Roman', serif; font-size: 1.45rem; font-weight: 500; }
+ 	.nav-links a:hover, .nav-links a.active { color: #aeb4ff; }
+ 	.nav-actions { width: 100%; padding-top: 1rem; border-top: 0; }
+ 	.nav-actions > a:not(.header-cta) { color: #b6b5b0; }
+diff --git a/web/src/hooks.server.ts b/web/src/hooks.server.ts
+index ae6f8a6..f67fba7 100644
+--- a/web/src/hooks.server.ts
++++ b/web/src/hooks.server.ts
+@@ -40,7 +40,7 @@ export const handle: Handle = async ({ event, resolve }) => {
+ 			response.headers.set(name, value);
+ 		}
+ 		const privateRoute = /^\/(app|buyer|admin|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(event.url.pathname);
+-		response.headers.set('cache-control', privateRoute
++		if (!response.headers.has('cache-control')) response.headers.set('cache-control', privateRoute
+ 			? 'private, no-store'
+ 			: 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
+ 		return response;
+diff --git a/web/src/lib/components/SiteFooter.svelte b/web/src/lib/components/SiteFooter.svelte
+index 01ef41c..872e537 100644
+--- a/web/src/lib/components/SiteFooter.svelte
++++ b/web/src/lib/components/SiteFooter.svelte
+@@ -1,9 +1,9 @@
+ <footer class="site-footer">
+ 	<div class="shell footer-grid">
+ 		<div><a class="wordmark" href="/"><span>K</span><b>Kredit</b></a><p>Credit sales.<br />Clear records.</p></div>
+-		<div><strong>Use Kredit</strong><a href="/demo">Try the demo</a><a href="/how-it-works">How it works</a><a href="/for-suppliers">For sellers</a><a href="/for-buyers">For customers</a><a href="/pricing">What it costs</a></div>
++		<div><strong>Use Kredit</strong><a href="/demo">Try the demo</a><a href="/how-it-works">How it works</a><a href="/for-suppliers">For sellers</a><a href="/for-buyers">For customers</a><a href="/pricing">Pricing</a></div>
+ 		<div><strong>Learn and get help</strong><a href="/blog">Helpful guides</a><a href="/glossary">What the words mean</a><a href="/faq">Common questions</a><a href="/legal/complaints">Get help</a></div>
+-		<div><strong>Trust and rules</strong><a href="/security">How we keep it safe</a><a href="/legal/privacy">How we use your information</a><a href="/legal/terms">Rules for using Kredit</a><a href="/app">Sign in</a></div>
++		<div><strong>Company</strong><a href="/security">Security</a><a href="/legal/privacy">Privacy notice</a><a href="/legal/terms">Terms of service</a><a href="/app">Sign in</a></div>
+ 	</div>
+ 	<div class="shell footer-bottom"><span>© {new Date().getFullYear()} Kredit</span><span>Know who owes you. Know what they paid. Know when.</span></div>
+ </footer>
+diff --git a/web/src/lib/server/legal-config.ts b/web/src/lib/server/legal-config.ts
+index 11e0c5b..8c6f56b 100644
+--- a/web/src/lib/server/legal-config.ts
++++ b/web/src/lib/server/legal-config.ts
+@@ -1,79 +1,9 @@
+ import { env } from '$env/dynamic/private';
+ import { error } from '@sveltejs/kit';
++import { legalPublication } from './legal-publication';
+ 
+-export type LegalConfig = {
+-	active: boolean;
+-	entityName: string;
+-	serviceAddress: string;
+-	legalEmail: string;
+-	privacyEmail: string;
+-	effectiveDate: string;
+-	termsVersion: string;
+-	privacyVersion: string;
+-};
+-
+-const requiredProductionValues = [
+-	'LEGAL_ENTITY_NAME',
+-	'LEGAL_SERVICE_ADDRESS',
+-	'LEGAL_CONTACT_EMAIL',
+-	'PRIVACY_CONTACT_EMAIL',
+-	'LEGAL_EFFECTIVE_DATE',
+-	'TERMS_VERSION',
+-	'PRIVACY_VERSION'
+-] as const;
+-
+-function validEmail(value: string) {
+-	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+-}
+-
+-function validDate(value: string) {
+-	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+-	const [year, month, day] = value.split('-').map(Number);
+-	const date = new Date(Date.UTC(year, month - 1, day));
+-	return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+-}
+-
+-export function loadLegalConfig(): LegalConfig {
+-	const production = env.APP_ENV?.trim().toLowerCase() === 'production';
+-	const active = env.LEGAL_DOCUMENTS_ACTIVE?.trim().toLowerCase() === 'true';
+-	const missing = requiredProductionValues.filter((name) => !env[name]?.trim());
+-
+-	if (production && !active) {
+-		throw error(503, 'LEGAL_DOCUMENTS_ACTIVE must be true before production can start.');
+-	}
+-	if (production && missing.length) {
+-		throw error(503, `Missing public legal configuration: ${missing.join(', ')}`);
+-	}
+-	if (active && missing.length) {
+-		throw error(503, `Legal documents cannot be activated without: ${missing.join(', ')}`);
+-	}
+-	if (active && !validEmail(env.LEGAL_CONTACT_EMAIL ?? '')) {
+-		throw error(503, 'LEGAL_CONTACT_EMAIL must be a valid email address.');
+-	}
+-	if (active && !validEmail(env.PRIVACY_CONTACT_EMAIL ?? '')) {
+-		throw error(503, 'PRIVACY_CONTACT_EMAIL must be a valid email address.');
+-	}
+-	if (active && !validDate(env.LEGAL_EFFECTIVE_DATE ?? '')) {
+-		throw error(503, 'LEGAL_EFFECTIVE_DATE must use YYYY-MM-DD.');
+-	}
+-	if (production && env.TERMS_VERSION !== 'supplier-terms-v1') {
+-		throw error(503, 'TERMS_VERSION must match the supplier onboarding version.');
+-	}
+-	if (production && env.PRIVACY_VERSION !== 'privacy-v1') {
+-		throw error(503, 'PRIVACY_VERSION must match the supplier onboarding version.');
+-	}
+-
+-	return {
+-		active,
+-		entityName: env.LEGAL_ENTITY_NAME?.trim() || 'Kredit operating company pending approval',
+-		serviceAddress: env.LEGAL_SERVICE_ADDRESS?.trim() || 'Service address pending approval',
+-		legalEmail: env.LEGAL_CONTACT_EMAIL?.trim() || '',
+-		privacyEmail: env.PRIVACY_CONTACT_EMAIL?.trim() || '',
+-		effectiveDate: env.LEGAL_EFFECTIVE_DATE?.trim() || '',
+-		termsVersion: env.TERMS_VERSION?.trim() || 'supplier-terms-v1',
+-		privacyVersion: env.PRIVACY_VERSION?.trim() || 'privacy-v1'
+-	};
+-}
++export type LegalConfig = typeof legalPublication;
++export function loadLegalConfig(): LegalConfig { return legalPublication; }
+ 
+ export function assertLaunchWebConfig() {
+ 	loadLegalConfig();
+diff --git a/web/src/routes/admin/approvals/+page.svelte b/web/src/routes/admin/approvals/+page.svelte
+index e1c048d..bc6883f 100644
+--- a/web/src/routes/admin/approvals/+page.svelte
++++ b/web/src/routes/admin/approvals/+page.svelte
+@@ -4,7 +4,7 @@
+  let changes:any[]=$state([]),context:any=$state(null),reference=$state(''),kind=$state('write_off'),amount=$state(''),reason=$state(''),expires=$state(''),dates:Record<string,string>=$state({}),notes:Record<string,string>=$state({});let proposalID=$state(crypto.randomUUID()),busy=$state(false),error=$state(''),message=$state(''),actor=$state(''),roles:string[]=$state([]),q=$state(''),offset=$state(0),more=$state(false);
+  let isPlatformOwner=$state(false),governanceMode=$state('solo_owner');
+  let canPropose=$derived(roles.includes('platform_admin')||roles.includes('finance_operator')||roles.includes('platform_owner'));let canApprove=$derived(roles.includes('platform_admin')||roles.includes('approver')||roles.includes('platform_owner'));
+- async function load(){busy=true;error='';try{const [b,c,gov]=await Promise.all([adminGet(`/api/v1/ops/admin-changes?q=${encodeURIComponent(q)}&offset=${offset}`),adminGet('/api/v1/ops/capabilities'),adminGet('/api/v1/platform/capabilities').catch(()=>({}))]);changes=b.changes.slice(0,100);more=b.changes.length>100;actor=c.actor_id;roles=c.roles;isPlatformOwner=c.roles?.includes('platform_owner')||false;if(gov.governance_mode)governanceMode=gov.governance_mode;}catch(e){error=String(e)}finally{busy=false}}
++ async function load(){busy=true;error='';try{const [b,c,gov]=await Promise.all([adminGet(`/api/v1/ops/admin-changes?q=${encodeURIComponent(q)}&offset=${offset}`),adminGet('/api/v1/ops/capabilities'),adminGet('/api/v1/ops/governance').catch(()=>({}))]);changes=b.changes.slice(0,100);more=b.changes.length>100;actor=c.actor_id;roles=c.roles;isPlatformOwner=c.roles?.includes('platform_owner')||false;if(gov.governance?.mode)governanceMode=gov.governance?.mode;}catch(e){error=String(e)}finally{busy=false}}
+  async function lookup(){busy=true;error='';context=null;try{context=await adminGet(`/api/v1/ops/change-context?q=${encodeURIComponent(reference)}`);dates=Object.fromEntries(context.snapshot.items.filter((i:any)=>!i.cancelled&&i.principal_due_kobo>i.allocated_kobo).map((i:any)=>[i.id,localInput(i.due_at)]));proposalID=crypto.randomUUID()}catch(e){error=String(e)}finally{busy=false}}
+  async function propose(){busy=true;error='';message='';try{const values=kind==='schedule_amendment'?{amount_kobo:0,dates:Object.entries(dates).map(([item_id,date])=>({item_id,due_at:lagosISO(date)}))}:{amount_kobo:parseNaira(amount),dates:[]};await adminPost('/api/v1/ops/admin-changes',{id:proposalID,obligation_id:context.obligation_id,kind,reason,values,expires_at:lagosISO(expires)});context=null;amount='';reason='';message='Proposal recorded for review.';await load()}catch(e){error=String(e)}finally{busy=false}}
+  async function decide(c:any,action:string){busy=true;error='';try{await adminPost(`/api/v1/ops/admin-changes/${c.id}/decision`,{action,reason:notes[c.id]||''});message='Decision recorded.';await load()}catch(e){error=String(e)}finally{busy=false}}
+diff --git a/web/src/routes/admin/platform-settings/+page.svelte b/web/src/routes/admin/platform-settings/+page.svelte
+index c1bc77e..e330eb2 100644
+--- a/web/src/routes/admin/platform-settings/+page.svelte
++++ b/web/src/routes/admin/platform-settings/+page.svelte
+@@ -39,11 +39,10 @@
+ 		{ id: 'all', label: 'All Settings' },
+ 		{ id: 'launch', label: 'Launch & Visibility' },
+ 		{ id: 'features', label: 'Features & Switches' },
+-		{ id: 'financial_caps', label: 'Financial & Policy Caps' },
+-		{ id: 'risk_limits', label: 'Risk Limits' },
++		{ id: 'fees', label: 'Fees' },
++		{ id: 'kyc', label: 'Verification' },
+ 		{ id: 'integrations', label: 'Integrations & Credentials' },
+ 		{ id: 'security', label: 'Security & Auth' },
+-		{ id: 'legal', label: 'Legal & Compliance' },
+ 		{ id: 'notifications', label: 'Notifications' }
+ 	];
+ 
+@@ -120,6 +119,7 @@
+ 		try {
+ 			await adminPost('/api/v1/ops/platform-settings', {
+ 				key: editingSetting.key,
++ expected_version: editingSetting.version,
+ 				value: editDraftValue,
+ 				reason: editReason
+ 			});
+@@ -148,6 +148,7 @@
+ 		try {
+ 			await adminPost('/api/v1/ops/platform-settings/secret', {
+ 				key: secretRotateSetting.key,
++ expected_version: secretRotateSetting.version,
+ 				secret: newSecretValue,
+ 				reason: secretRotateReason
+ 			});
+@@ -312,8 +313,8 @@
+ 					{#each filteredSettings as s (s.key)}
+ 						<tr class="setting-row">
+ 							<td class="key-col">
+-								<span class="setting-key">{s.key}</span>
+-								<p class="setting-desc">{s.description}</p>
++								<span class="setting-key">{s.description}</span>
++								<details class="setting-desc"><summary>Technical details</summary><code>{s.key}</code></details>
+ 							</td>
+ 							<td>
+ 								<span class="category-tag">{s.category}</span>
+diff --git a/web/src/routes/admin/settings/+page.svelte b/web/src/routes/admin/settings/+page.svelte
+index 96b30cd..f56b96e 100644
+--- a/web/src/routes/admin/settings/+page.svelte
++++ b/web/src/routes/admin/settings/+page.svelte
+@@ -23,7 +23,7 @@
+  function when(value:string){return new Intl.DateTimeFormat('en-NG',{dateStyle:'medium',timeStyle:'short',timeZone:'Africa/Lagos'}).format(new Date(value))}
+  function status(c:Change){if(c.state!=='approved')return c.state;return c.revision===data?.current.revision?'active':new Date(c.effective_at).getTime()>Date.now()?'scheduled':'superseded'}
+  function reset(){if(!data)return;draft={...data.current.values};units=Object.fromEntries(data.fields.filter(scaled).map(f=>[f.key,decimal(draft[f.key])]));preview=null;reason='';effective='';proposalID=crypto.randomUUID()}
+- async function load(){loading=true;error='';try{const [r,caps,gov]=await Promise.all([fetch('/api/v1/ops/business-policies',{credentials:'include'}),fetch('/api/v1/ops/capabilities',{credentials:'include'}).then(x=>x.ok?x.json():{} as any),fetch('/api/v1/platform/capabilities',{credentials:'include'}).then(x=>x.ok?x.json():{} as any)]);const b=await r.json();if(!r.ok)throw new Error(b.detail||'Settings could not be loaded');data=b;isPlatformOwner=(caps as any).roles?.includes('platform_owner')||false;if((gov as any).governance_mode)governanceMode=(gov as any).governance_mode;reset()}catch(e){error=e instanceof Error?e.message:'Settings could not be loaded'}finally{loading=false}}
++ async function load(){loading=true;error='';try{const [r,caps,gov]=await Promise.all([fetch('/api/v1/ops/business-policies',{credentials:'include'}),fetch('/api/v1/ops/capabilities',{credentials:'include'}).then(x=>x.ok?x.json():{} as any),fetch('/api/v1/ops/governance',{credentials:'include'}).then(x=>x.ok?x.json():{} as any)]);const b=await r.json();if(!r.ok)throw new Error(b.detail||'Settings could not be loaded');data=b;isPlatformOwner=(caps as any).roles?.includes('platform_owner')||false;if((gov as any).governance?.mode)governanceMode=(gov as any).governance?.mode;reset()}catch(e){error=e instanceof Error?e.message:'Settings could not be loaded'}finally{loading=false}}
+  async function post(path:string,body:unknown){const r=await fetch(path,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify(body)});const b=await r.json();if(!r.ok)throw new Error(b.detail||'That change could not be saved. Please try again.')}
+  async function soloApprove(c:Change){if(!confirm('Confirm solo-owner self-approval for this policy proposal? This will be permanently recorded in the audit trail.'))return;busy=true;error='';message='';try{await post('/api/v1/ops/solo-owner/approve',{target_type:'policy',target_id:c.id,reason:notes[c.id]||'Solo-owner self-approval execution',confirm:true});await load();message='Solo-owner self-approval applied successfully.'}catch(e){error=e instanceof Error?e.message:'Solo-owner self-approval failed'}finally{busy=false}}
+  async function propose(){if(!data)return;busy=true;error='';message='';try{for(const f of data.fields){if(f.kind==='number'||f.kind==='money'){const n=draft[f.key];if(typeof n!=='number'||!Number.isSafeInteger(n)||n<f.min||n>f.max)throw new Error(`Enter a whole number between ${f.min} and ${f.max} for ${label(f)}`)}}if(!effective)throw new Error('Choose an effective date');await post('/api/v1/ops/business-policies',{id:proposalID,base_revision:data.current.revision,values:draft,reason,effective_at:new Date(`${effective}:00+01:00`).toISOString()});await load();message='Proposal saved.'+(governanceMode==='solo_owner'&&isPlatformOwner?' You can self-approve as platform owner or wait for review.':' Another platform administrator must approve it before its effective date.')}catch(e){error=e instanceof Error?e.message:'Proposal could not be saved'}finally{busy=false}}
+diff --git a/web/src/routes/app/+page.svelte b/web/src/routes/app/+page.svelte
+index ae372d2..97dab4c 100644
+--- a/web/src/routes/app/+page.svelte
++++ b/web/src/routes/app/+page.svelte
+@@ -6,7 +6,7 @@
+   let identifier = $state(''), challengeID = $state(''), code = $state(''), developmentCode = $state(''), error = $state('');
+   let channel = $state<'email' | 'sms'>('sms');
+   let busy = $state(false), sentTo = $state(''), expiresAt = $state(0), resendAt = $state(0), now = $state(Date.now());
+-  let checking = $state(true), sessionWarning = $state('');
++  let { data } = $props();
+   const countdown = $derived(Math.max(0, Math.ceil((resendAt - now) / 1000)));
+   const expired = $derived(challengeID !== '' && now >= expiresAt);
+   function destination() { return safeNext(page.url.searchParams.get('next'), location.origin); }
+@@ -15,10 +15,8 @@
+     return at >= 0 ? `${value.slice(0, 2)}…${value.slice(at)}` : `${value.slice(0, 4)} •••• ${value.slice(-4)}`;
+   }
+   async function checkSession(signal: AbortSignal | undefined = undefined) {
+-    checking = true; sessionWarning = '';
+     try { await checkedJSON('/api/v1/me', value => text(record(record(value).user).id), { signal }); await goto(destination()); }
+-    catch (cause) { if (!signal?.aborted && !(cause instanceof RequestError && cause.status === 401)) sessionWarning = 'We could not check your current session. You can try the check again or sign in below.'; }
+-    finally { checking = false; }
++    catch { /* A background lookup never determines access or blocks sign-in. */ }
+   }
+   async function requestCode() {
+     if (busy || (challengeID && countdown > 0)) return;
+@@ -53,7 +51,7 @@
+   function editIdentifier() { if (busy) return; challengeID = ''; code = ''; developmentCode = ''; error = ''; expiresAt = 0; }
+   onMount(() => {
+     const controller = new AbortController();
+-    void checkSession(controller.signal);
++    if (data.hasSessionCookie) void checkSession(controller.signal);
+     const timer = setInterval(() => now = Date.now(), 1000);
+     return () => { clearInterval(timer); controller.abort(); };
+   });
+@@ -64,7 +62,6 @@
+   <form class="card auth-card" onsubmit={(event) => { event.preventDefault(); void (challengeID ? verifyCode() : requestCode()); }}>
+     <h2>{challengeID ? 'Enter your six-digit code' : 'Open your account'}</h2>
+     {#if page.url.searchParams.get('signed_out') === '1'}<p class="inline-notice" role="status">You are signed out.</p>{/if}
+-    {#if sessionWarning}<div class="inline-notice"><p>{sessionWarning}</p><button type="button" class="text-button" disabled={checking} onclick={() => void checkSession()}>Check session again</button></div>{/if}
+     {#if !challengeID}
+       <fieldset class="channel"><legend>Where should we send your code?</legend><label><input type="radio" value="sms" bind:group={channel} disabled={busy} />Phone (SMS)</label><label><input type="radio" value="email" bind:group={channel} disabled={busy} />Email</label></fieldset>
+       <label>{channel === 'sms' ? 'Phone number' : 'Email address'}<input bind:value={identifier} type={channel === 'sms' ? 'tel' : 'email'} autocomplete={channel === 'sms' ? 'tel' : 'email'} placeholder={channel === 'sms' ? '0801 234 5678' : 'you@example.com'} disabled={busy} required /></label>
+diff --git a/web/src/routes/app/trade-lines/+page.svelte b/web/src/routes/app/trade-lines/+page.svelte
+index c0a2110..31ade0f 100644
+--- a/web/src/routes/app/trade-lines/+page.svelte
++++ b/web/src/routes/app/trade-lines/+page.svelte
+@@ -5,9 +5,9 @@
+ 	import { productLabel } from '$lib/product-language';
+ 	let organizations:any[]=$state([]),organizationID=$state(''),lines:any[]=$state([]),customers:any[]=$state([]),loading=$state(true),busy=$state(false),error=$state(''),notice=$state('');
+ 	let buyerUserID=$state(''),buyerBusinessID=$state(''),mandateID=$state(''),limit=$state(''),cadence=$state('monthly'),grace=$state(48),startAt=$state(''),endAt=$state(''),termsVersion=$state('trade-line-v1');
+-	let canCreateLimit = $state(true);
++	let canCreateLimit = $state(false);
+ 	const money=(value:number)=>new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format((value??0)/100);
+-	async function load(){loading=true;error='';try{fetch('/api/v1/platform/capabilities',{credentials:'include'}).then(r=>r.ok?r.json():{}).then((c:any)=>{if(c.features&&c.features.trade_lines===false)canCreateLimit=false;}).catch(()=>{});if(!organizationID){const response=await fetch('/api/v1/organizations',{credentials:'include'});if(!response.ok)throw new Error('We could not open your businesses.');organizations=(await response.json()).organizations??[];organizationID=organizations[0]?.id??''}if(!organizationID){lines=[];return}const [lineResponse,customerResponse]=await Promise.all([fetch(`/api/v1/organizations/${organizationID}/trade-lines`,{credentials:'include'}),fetch(`/api/v1/organizations/${organizationID}/customers`,{credentials:'include'})]);const lineData=await lineResponse.json().catch(()=>({}));if(!lineResponse.ok)throw new Error(lineData.detail??'We could not open your customer limits.');lines=lineData.trade_lines??[];customers=customerResponse.ok?(await customerResponse.json()).customers??[]:[]}catch(cause){error=cause instanceof Error?cause.message:'We could not open your customer limits.'}finally{loading=false}}
++	async function load(){loading=true;error='';try{canCreateLimit=false;fetch('/api/v1/platform/capabilities',{credentials:'include'}).then(r=>r.ok?r.json():{}).then((c:any)=>{canCreateLimit=c.features?.trade_lines===true;}).catch(()=>{});if(!organizationID){const response=await fetch('/api/v1/organizations',{credentials:'include'});if(!response.ok)throw new Error('We could not open your businesses.');organizations=(await response.json()).organizations??[];organizationID=organizations[0]?.id??''}if(!organizationID){lines=[];return}const [lineResponse,customerResponse]=await Promise.all([fetch(`/api/v1/organizations/${organizationID}/trade-lines`,{credentials:'include'}),fetch(`/api/v1/organizations/${organizationID}/customers`,{credentials:'include'})]);const lineData=await lineResponse.json().catch(()=>({}));if(!lineResponse.ok)throw new Error(lineData.detail??'We could not open your customer limits.');lines=lineData.trade_lines??[];customers=customerResponse.ok?(await customerResponse.json()).customers??[]:[]}catch(cause){error=cause instanceof Error?cause.message:'We could not open your customer limits.'}finally{loading=false}}
+ 	function selectCustomer(){const customer=customers.find((item)=>item.buyer_user_id===buyerUserID);buyerBusinessID=customer?.buyer_business_id??''}
+ 	async function create(event:SubmitEvent){event.preventDefault();const approvedLimitKobo=parseNaira(limit);if(approvedLimitKobo<=0){error='Please enter the most this customer may owe you.';return}busy=true;error='';notice='';const response=await fetch(`/api/v1/organizations/${organizationID}/trade-lines`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','Idempotency-Key':idempotencyKey(),...csrfHeaders()},body:JSON.stringify({buyer_user_id:buyerUserID,buyer_business_id:buyerBusinessID,mandate_id:mandateID,approved_limit_kobo:approvedLimitKobo,cadence,default_grace_hours:Number(grace),start_at:new Date(startAt).toISOString(),end_at:new Date(endAt).toISOString(),terms_version:termsVersion})});const data=await response.json().catch(()=>({}));busy=false;if(!response.ok){error=data.detail??'We could not save this limit. Check the bank debit permission and try again.';return}notice=`Your customer can now owe up to ${money(approvedLimitKobo)}.`;buyerUserID='';buyerBusinessID='';mandateID='';limit='';await load()}
+ 	onMount(load);
+diff --git a/web/src/routes/app/trade-lines/[id]/+page.svelte b/web/src/routes/app/trade-lines/[id]/+page.svelte
+index c6602b7..de091a6 100644
+--- a/web/src/routes/app/trade-lines/[id]/+page.svelte
++++ b/web/src/routes/app/trade-lines/[id]/+page.svelte
+@@ -50,11 +50,11 @@
+ 		await load();
+ 	}
+ 
+-	let canAddDrawdown = $state(true);
++	let canAddDrawdown = $state(false);
+ 	onMount(async () => {
+ 		fetch('/api/v1/platform/capabilities', { credentials: 'include' })
+ 			.then(r => r.ok ? r.json() : {})
+-			.then((c: any) => { if (c.features && c.features.drawdowns === false) canAddDrawdown = false; })
++			.then((c: any) => { canAddDrawdown = c.features?.drawdowns === true; })
+ 			.catch(() => {});
+ 		const response = await fetch('/api/v1/organizations', { credentials: 'include' });
+ 		if (response.ok) { organizations = (await response.json()).organizations ?? []; await load(); }
+diff --git a/web/src/routes/legal/complaints/+page.svelte b/web/src/routes/legal/complaints/+page.svelte
+index 4fb92f2..3fcf4a3 100644
+--- a/web/src/routes/legal/complaints/+page.svelte
++++ b/web/src/routes/legal/complaints/+page.svelte
+@@ -1,7 +1,12 @@
+-<main class="shell prose-page support-page">
+-	<p class="eyebrow">Help and complaints</p><h1>Tell us what went wrong.</h1><p class="lede">Sign in to the Kredit account where the problem happened. That way we can find the exact sale or payment, and you never have to type private details on a public page.</p>
+-	<section class="steps-grid" aria-label="How to get help"><article><span>01</span><h2>Open your account</h2><p>Choose below whether you buy or you sell.</p></article><article><span>02</span><h2>Tell us what happened</h2><p>Give us the Kredit number, the date, the amount and what you expected to happen.</p></article><article><span>03</span><h2>Come back for our answer</h2><p>Everything you send and everything we reply stays in one place, so nothing gets lost.</p></article></section>
+-	<section class="do-not card"><div><h2>You can share</h2><ul><li>The Kredit number</li><li>Dates and money amounts</li><li>A clear story of what happened</li><li>A receipt or photo that helps</li></ul></div><div><h2>Never share</h2><ul><li>Your password, OTP or recovery code</li><li>Your card number or bank sign-in details</li><li>Another person's private information</li></ul></div></section>
+-	<section class="routes"><h2>Where do you use Kredit?</h2><div><a class="primary-button" href="/buyer">I buy goods</a><a class="secondary" href="/app/settings">I sell goods</a><a class="secondary" href="/recover">I cannot sign in</a></div><p>If it might be a security problem, send only a short description first. We will then give you a safe way to send the rest.</p></section>
+-</main>
+-<style>.support-page{max-width:72rem}.steps-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:3rem 0}.steps-grid article{padding:1.25rem;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface)}.steps-grid span{color:var(--color-primary);font-weight:850}.steps-grid h2,.do-not h2{font-size:1.2rem}.steps-grid p,.routes p{color:var(--color-muted);line-height:1.65}.do-not{display:grid;grid-template-columns:1fr 1fr;gap:2rem;padding:2rem}.do-not li{margin:.55rem 0;color:var(--color-muted)}.routes{margin-top:4rem}.routes>div{display:flex;flex-wrap:wrap;gap:.7rem;margin:1.5rem 0}.secondary{display:inline-flex;align-items:center;padding:.7rem 1rem;border:1px solid var(--color-border);border-radius:999px;color:var(--color-foreground);font-weight:750;text-decoration:none;background:var(--color-surface)}@media(max-width:720px){.steps-grid,.do-not{grid-template-columns:1fr}}</style>
++<script lang="ts">
++ import DocumentLayout from '$lib/components/DocumentLayout.svelte';
++ const sections = [{id:'contact',title:'Contact us'},{id:'details',title:'What to include'},{id:'review',title:'How we handle complaints'},{id:'payments',title:'Payment disputes'},{id:'escalation',title:'Review and escalation'}];
++</script>
++<svelte:head><title>Complaints — Kredit</title></svelte:head>
++<DocumentLayout title="Complaints" description="Contact Kredit about your account, a service issue or a payment record." version="complaints-v2-2026-09-07" effectiveDate="7 September 2026" {sections}>
++ <section id="contact"><h2>Contact us</h2><p>Email <a href="mailto:hello@kredit.com.ng">hello@kredit.com.ng</a>. You can raise a complaint without signing in, including if you have lost account access.</p><p>Write to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.</p><p>For an existing transaction, use the dispute controls in your <a href="/buyer/disputes">buyer account</a> or <a href="/app/disputes">supplier account</a> to attach the concern to its record.</p></section>
++ <section id="details"><h2>What to include</h2><p>Include your contact details, the sale or payment reference, relevant dates and amounts, a description of the problem and the outcome you are seeking. Relevant receipts or delivery evidence can help us investigate.</p><p>Do not send sign-in codes, recovery codes, bank PINs or full card details. We may verify your identity before discussing private account information.</p></section>
++ <section id="review"><h2>How we handle complaints</h2><p>We review the concern, request any missing information and explain the outcome and available next steps. Keep the case or transaction reference for follow-up. If more investigation is needed, we will explain what remains outstanding.</p><p>We handle complaint information according to our <a href="/legal/privacy">privacy notice</a>. Relevant records may be retained for dispute resolution, fraud prevention and applicable legal obligations.</p></section>
++ <section id="payments"><h2>Payment disputes</h2><p>Reporting a transfer does not confirm that the supplier received it. A supplier must verify receipt before confirming payment. If a payment result is uncertain, retain the original reference and check its status before attempting another payment.</p><p>A recorded dispute may pause collection of the affected amount according to the agreement and the dispute's recorded effect. A debit already submitted may still complete. A complaint does not automatically cancel the sale or an undisputed balance.</p></section>
++ <section id="escalation"><h2>Review and escalation</h2><p>If you disagree with the outcome, reply with the reference, explain the point that remains unresolved and provide any further evidence. You may request a further review.</p><p>For privacy concerns, you may also complain to the <a href="https://www.ndpc.gov.ng/" rel="noreferrer">Nigeria Data Protection Commission</a>. This process does not restrict your right to seek a remedy from a competent court or relevant regulator.</p></section>
++</DocumentLayout>
+diff --git a/web/src/routes/legal/privacy/+page.svelte b/web/src/routes/legal/privacy/+page.svelte
+index 1ea0194..f64f4b9 100644
+--- a/web/src/routes/legal/privacy/+page.svelte
++++ b/web/src/routes/legal/privacy/+page.svelte
+@@ -1,62 +1,39 @@
+ <script lang="ts">
+-	let { data } = $props();
+-	let effectiveDate = $derived(data.legal.effectiveDate
+-		? new Date(`${data.legal.effectiveDate}T12:00:00Z`).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+-		: '');
++ import DocumentLayout from '$lib/components/DocumentLayout.svelte';
++ let { data } = $props();
++ const sections = [{"id": "who", "title": "Who is responsible for your information?"}, {"id": "information", "title": "What we keep about you"}, {"id": "source", "title": "Where it comes from"}, {"id": "use", "title": "Why we use your information"}, {"id": "decisions", "title": "There is no secret score"}, {"id": "sharing", "title": "Who may receive your information"}, {"id": "transfers", "title": "If information leaves Nigeria"}, {"id": "retention", "title": "How long we keep information"}, {"id": "rights", "title": "Your rights and choices"}, {"id": "cookies", "title": "What we keep on your phone"}, {"id": "safety", "title": "How we protect information"}, {"id": "children", "title": "Children"}, {"id": "changes", "title": "If we change this notice"}, {"id": "contact", "title": "Questions and complaints"}];
++ const effectiveDate = $derived(new Date(`${data.legal.effectiveDate}T12:00:00Z`).toLocaleDateString('en-NG', {day:'numeric', month:'long', year:'numeric', timeZone:'UTC'}));
+ </script>
+-
+ <svelte:head><title>Privacy notice — Kredit</title></svelte:head>
++<DocumentLayout title="Privacy notice" description="How we collect, use and protect personal information, and how to exercise your rights." version={data.legal.privacyVersion} {effectiveDate} {sections}>
++	<section id="who"><h2>Who is responsible for your information?</h2><p>Kredit is the service described in this notice. {data.legal.active ? data.legal.entityName : 'The company operating Kredit'} is the data controller for account, product, support and platform records. A seller remains responsible for the customer information the seller puts into Kredit for their own business purposes.{''}</p><p>This notice covers the Kredit website, seller account, customer account, private links, support service and messages sent by Kredit. It does not cover a seller's own records outside Kredit or the separate privacy practices of a bank, identity-check company, payment company or mobile network.</p>{#if data.legal.active}<p><strong>Service address:</strong> {data.legal.serviceAddress}</p>{/if}</section>
+ 
+-<main class="shell prose-page legal-page">
+-	<p class="eyebrow">Privacy notice · {data.legal.privacyVersion}</p>
+-	<h1>Your information belongs to you.</h1>
+-	<p class="lede">This notice explains, in plain words, what Kredit keeps about you, why we need it, who else can see it and the choices you have.</p>
+-	<aside class="plain-intro"><strong>Before you read all this</strong><p>Every section below starts with a short box in plain words. Those boxes are only a helping hand. The full wording under each one is what counts in law.</p></aside>
+-
+-	{#if data.legal.active}
+-		<aside class="active-note"><strong>Effective {effectiveDate}</strong><p>This notice is issued by {data.legal.entityName}. It applies to Kredit users and visitors in Nigeria.</p></aside>
+-	{:else}
+-		<aside class="review-note"><strong>Complete pre-launch draft — legal approval pending</strong><p>The product rules are described below. Kredit's final registered company name, service address, privacy contact and effective date must be added and approved before launch. No user will be asked to accept this notice until that review is complete.</p></aside>
+-	{/if}
+-
+-	<div class="document-meta" aria-label="Document information"><span>{data.legal.privacyVersion}</span><span>{data.legal.active ? `Effective ${effectiveDate}` : 'Last reviewed 31 August 2026'}</span><span>Applies in Nigeria</span></div>
+-
+-	<nav class="contents" aria-label="Privacy notice contents">
+-		<strong>On this page</strong>
+-		<a href="#who">1. Who is responsible</a><a href="#information">2. Information we collect</a><a href="#use">3. How we use it</a><a href="#sharing">4. Who receives it</a><a href="#retention">5. How long we keep it</a><a href="#rights">6. Your rights</a><a href="#safety">7. How we protect it</a><a href="#contact">8. Questions and complaints</a>
+-	</nav>
+-
+-	<section id="who"><h2>1. Who is responsible for your information?</h2><p class="plain">Kredit is responsible for your account and platform records. A seller is separately responsible for whatever they put into Kredit about their own customers. This notice does not cover a bank, a payment company or your phone network. They have their own rules.</p><p>Kredit is the service described in this notice. {data.legal.active ? data.legal.entityName : 'The company operating Kredit'} is the data controller for account, product, support and platform records. A seller remains responsible for the customer information the seller puts into Kredit for their own business purposes.{data.legal.active ? '' : ' Kredit will explain this division clearly in the final approved notice.'}</p><p>This notice covers the Kredit website, seller account, customer account, private links, support service and messages sent by Kredit. It does not cover a seller's own records outside Kredit or the separate privacy practices of a bank, identity-check company, payment company or mobile network.</p>{#if data.legal.active}<p><strong>Service address:</strong> {data.legal.serviceAddress}</p>{/if}</section>
+-
+-	<section id="information"><h2>2. What we keep about you</h2><p class="plain">Your name and contact, your business details and everything about your sales and payments. That is all. We never ask you for your password, your OTP, your bank PIN or your card number. If anybody asks you for those in our name, it is not us.</p><p>We collect only information needed to run the account, record a sale, protect people and meet legal duties.</p><div class="detail-grid"><article><h3>Account details</h3><ul><li>Your name, phone number or email.</li><li>Sign-in, device, verification and account-recovery records.</li><li>Your message choices and security settings.</li></ul></article><article><h3>Business details</h3><ul><li>Business or shop name, address, industry and business type.</li><li>Registration information when the business is registered.</li><li>The authorised person and documents used to check the business.</li></ul></article><article><h3>Sale and payment records</h3><ul><li>The seller and customer, goods, amount, dates and agreed payment plan.</li><li>Acceptance, delivery, receipt, payment, bank-debit and reversal records.</li><li>Disputes, corrections, receipts and supporting documents.</li></ul></article><article><h3>Service information</h3><ul><li>Pages and product steps used, errors and service-performance records.</li><li>Privacy-safe product events with hashed user or business references.</li><li>Support cases, complaints and messages Kredit sends.</li></ul></article></div><p>A private note saved by a seller about a customer stays on that seller's phone when the page says so. Kredit does not receive that note. We do not ask you to put a password, OTP, bank PIN or full card number in a support message.</p></section>
++	<section id="information"><h2>What we keep about you</h2><p>We collect only information needed to run the account, record a sale, protect people and meet legal duties.</p><div class="detail-grid"><article><h3>Account details</h3><ul><li>Your name, phone number or email.</li><li>Sign-in, device, verification and account-recovery records.</li><li>Your message choices and security settings.</li></ul></article><article><h3>Business details</h3><ul><li>Business or shop name, address, industry and business type.</li><li>Registration information when the business is registered.</li><li>The authorised person and documents used to check the business.</li></ul></article><article><h3>Sale and payment records</h3><ul><li>The seller and customer, goods, amount, dates and agreed payment plan.</li><li>Acceptance, delivery, receipt, payment, bank-debit and reversal records.</li><li>Disputes, corrections, receipts and supporting documents.</li></ul></article><article><h3>Service information</h3><ul><li>Pages and product steps used, errors and service-performance records.</li><li>Privacy-safe product events with hashed user or business references.</li><li>Support cases, complaints and messages Kredit sends.</li></ul></article></div><p>A private note saved by a seller about a customer stays on that seller's phone when the page says so. Kredit does not receive that note. We do not ask you to put a password, OTP, bank PIN or full card number in a support message.</p></section>
+ 
+-	<section id="source"><h2>Where it comes from</h2><p class="plain">Most of it comes from you. Some comes from the seller who invited you, and some from the banks, payment companies and identity-check companies we work with.</p><ul><li><strong>From you:</strong> when you sign in, add a business, accept a sale, report a payment, change a setting or ask for help.</li><li><strong>From the other side of a sale:</strong> a seller may add a customer's proposed business details, while a customer may report delivery, payment or a problem.</li><li><strong>From approved service companies:</strong> identity-check results, bank-debit status, payment confirmations and message-delivery results.</li><li><strong>From the service:</strong> security logs, audit history, device information and records created when a product step is completed.</li></ul><p>We do not buy lists of people for Kredit accounts. We do not secretly collect another seller's private customer notes.</p></section>
++	<section id="source"><h2>Where it comes from</h2><ul><li><strong>From you:</strong> when you sign in, add a business, accept a sale, report a payment, change a setting or ask for help.</li><li><strong>From the other side of a sale:</strong> a seller may add a customer's proposed business details, while a customer may report delivery, payment or a problem.</li><li><strong>From approved service companies:</strong> identity-check results, bank-debit status, payment confirmations and message-delivery results.</li><li><strong>From the service:</strong> security logs, audit history, device information and records created when a product step is completed.</li></ul><p>We do not buy lists of people for Kredit accounts. We do not secretly collect another seller's private customer notes.</p></section>
+ 
+-	<section id="use"><h2>3. Why we use your information</h2><p class="plain">To run your account, record your sales, follow your payments, stop fraud, answer your questions and obey the law. Nothing more.</p><div class="purpose-list"><div><h3>To provide Kredit</h3><p>Create and protect accounts, show the same sale to both sides, save acceptance and delivery, calculate money left, record payments and provide receipts.</p></div><div><h3>To protect people and money</h3><p>Check identity or business details, prevent duplicate collection, investigate suspicious activity, block unsafe actions and keep an audit record.</p></div><div><h3>To communicate</h3><p>Send required account, sale, payment, recovery and security messages. Optional product messages are sent only when your choice allows them.</p></div><div><h3>To provide support and settle problems</h3><p>Find the correct record, review evidence, answer complaints, correct mistakes and explain a decision.</p></div><div><h3>To improve the product</h3><p>Measure whether people complete important steps and whether pages are easy to understand. This measurement is limited and does not include raw phone numbers, names, bank details or the description of goods.</p></div><div><h3>To meet legal duties</h3><p>Keep records, respond to lawful requests, protect consumer and privacy rights, and support accounting, tax, dispute or regulatory work.</p></div></div><p>Depending on the activity, we rely on the need to perform a contract, take a step you asked for, meet a legal duty, protect a legitimate interest, establish or defend a legal claim, or use consent. Where consent is the reason, you may withdraw it. Withdrawing consent does not make earlier lawful use invalid.</p></section>
++	<section id="use"><h2>Why we use your information</h2><div class="purpose-list"><div><h3>To provide Kredit</h3><p>Create and protect accounts, show the same sale to both sides, save acceptance and delivery, calculate money left, record payments and provide receipts.</p></div><div><h3>To protect people and money</h3><p>Check identity or business details, prevent duplicate collection, investigate suspicious activity, block unsafe actions and keep an audit record.</p></div><div><h3>To communicate</h3><p>Send required account, sale, payment, recovery and security messages. Optional product messages are sent only when your choice allows them.</p></div><div><h3>To provide support and settle problems</h3><p>Find the correct record, review evidence, answer complaints, correct mistakes and explain a decision.</p></div><div><h3>To improve the product</h3><p>Measure whether people complete important steps and whether pages are easy to understand. This measurement is limited and does not include raw phone numbers, names, bank details or the description of goods.</p></div><div><h3>To meet legal duties</h3><p>Keep records, respond to lawful requests, protect consumer and privacy rights, and support accounting, tax, dispute or regulatory work.</p></div></div><p>Depending on the activity, we rely on the need to perform a contract, take a step you asked for, meet a legal duty, protect a legitimate interest, establish or defend a legal claim, or use consent. Where consent is the reason, you may withdraw it. Withdrawing consent does not make earlier lawful use invalid.</p></section>
+ 
+-	<section id="decisions"><h2>There is no secret score</h2><p class="plain">No hidden number decides anything about you here. You see the same facts we see. A seller decides who gets goods on credit. Not a machine, and not Kredit.</p><p>Kredit does not use a hidden score to decide whether a seller should trust a customer. The seller chooses the customer and decides whether to give goods on credit. Kredit may apply clear safety limits or hold an action when an account, payment or provider result needs review. A person can ask for an explanation and use the complaint process.</p></section>
++	<section id="decisions"><h2>There is no secret score</h2><p>Kredit does not use a hidden score to decide whether a seller should trust a customer. The seller chooses the customer and decides whether to give goods on credit. Kredit may apply clear safety limits or hold an action when an account, payment or provider result needs review. A person can ask for an explanation and use the complaint process.</p></section>
+ 
+-	<section id="sharing"><h2>4. Who may receive your information</h2><p class="plain">Only who needs to: the other side of your own sale, the banks and payment companies that move the money, the people who help us run the service, and the authorities when the law requires it. We do not sell your information to anybody.</p><p>We share only what is needed for a clear purpose.</p><ul><li><strong>The seller and customer:</strong> each side sees the sale, agreed dates, delivery, payments and problems they are allowed to see.</li><li><strong>Authorised business staff:</strong> a business owner may give staff limited roles. Staff see only the pages needed for that role.</li><li><strong>Identity and business-check companies:</strong> to confirm a person or business when required.</li><li><strong>Banks and licensed payment companies:</strong> to set up an authorised mandate, process a payment or bank debit, reconcile a result and handle a reversal.</li><li><strong>Messaging, hosting, document and security companies:</strong> to deliver messages, store protected files, run the service and detect abuse.</li><li><strong>Professional advisers, auditors and insurers:</strong> when they need the information for a lawful professional duty and are required to protect it.</li><li><strong>Courts, regulators and public authorities:</strong> when the law requires it or when needed to protect a right, investigate fraud or answer a lawful request.</li><li><strong>A new owner of the business:</strong> if Kredit is involved in a genuine investment, sale or reorganisation, subject to confidentiality and applicable law.</li></ul><p>Kredit does not sell personal information. We do not give one seller another seller's customer list. We do not publish private sale or payment records.</p></section>
++	<section id="sharing"><h2>Who may receive your information</h2><p>We share only what is needed for a clear purpose.</p><ul><li><strong>The seller and customer:</strong> each side sees the sale, agreed dates, delivery, payments and problems they are allowed to see.</li><li><strong>Authorised business staff:</strong> a business owner may give staff limited roles. Staff see only the pages needed for that role.</li><li><strong>Identity and business-check companies:</strong> to confirm a person or business when required.</li><li><strong>Banks and licensed payment companies:</strong> to set up an authorised mandate, process a payment or bank debit, reconcile a result and handle a reversal.</li><li><strong>Messaging, hosting, document and security companies:</strong> to deliver messages, store protected files, run the service and detect abuse.</li><li><strong>Professional advisers, auditors and insurers:</strong> when they need the information for a lawful professional duty and are required to protect it.</li><li><strong>Courts, regulators and public authorities:</strong> when the law requires it or when needed to protect a right, investigate fraud or answer a lawful request.</li><li><strong>A new owner of the business:</strong> if Kredit is involved in a genuine investment, sale or reorganisation, subject to confidentiality and applicable law.</li></ul><p>Kredit does not sell personal information. We do not give one seller another seller's customer list. We do not publish private sale or payment records.</p></section>
+ 
+-	<section id="transfers"><h2>If information leaves Nigeria</h2><p class="plain">Some of the companies we use keep data outside Nigeria. When that happens, we make sure your information is still protected the way Nigerian law requires.</p><p>Some approved service companies may store or process information outside Nigeria. Before that happens, Kredit must check the destination and provider, limit the information sent, use an approved transfer safeguard and record the assessment required by Nigerian data-protection law. The final provider register will identify material international processors before launch.</p></section>
++	<section id="transfers"><h2>If information leaves Nigeria</h2><p>Some approved service companies may store or process information outside Nigeria. Before that happens, Kredit must check the destination and provider, limit the information sent, use an approved transfer safeguard and record the assessment required by Nigerian data-protection law. Contact hello@kredit.com.ng for information about relevant processors and transfer safeguards.</p></section>
+ 
+-	<section id="retention"><h2>5. How long we keep information</h2><p class="plain">As long as your account is open, and after that only for as long as the law, a court case or a fraud check requires. Then it is deleted or made anonymous.</p><p>We do not keep every record forever. The period depends on why the information exists and whether a law, dispute, investigation or financial record requires it to be kept.</p><ul><li><strong>Account and business details:</strong> while the account is open and for the approved period needed for support, fraud prevention and legal claims after it closes.</li><li><strong>Agreements, delivery, payments, fees and ledger records:</strong> for the statutory and legal-claim period that applies to financial and commercial records.</li><li><strong>Identity-check documents:</strong> only for the approved compliance period. Kredit should keep a check result or reference instead of a full document where possible.</li><li><strong>OTP and security records:</strong> for a short security period, except an audit event needed to investigate abuse.</li><li><strong>Support, complaint and dispute evidence:</strong> until the matter and any review or legal period have ended.</li><li><strong>Optional marketing choices:</strong> until you withdraw the choice or the approved inactivity period ends.</li><li><strong>Product measurement:</strong> in pseudonymous form for the approved product-measurement period.</li></ul><p>The exact retention schedule is a required launch approval. When deletion is due, information is securely deleted, anonymised or made inaccessible. A legal hold may pause deletion. Backup copies are removed through the normal protected backup cycle.</p></section>
++	<section id="retention"><h2>How long we keep information</h2><p>We do not keep every record forever. The period depends on why the information exists and whether a law, dispute, investigation or financial record requires it to be kept.</p><ul><li><strong>Account and business details:</strong> while the account is open and for the approved period needed for support, fraud prevention and legal claims after it closes.</li><li><strong>Agreements, delivery, payments, fees and ledger records:</strong> for the statutory and legal-claim period that applies to financial and commercial records.</li><li><strong>Identity-check documents:</strong> only for the approved compliance period. Kredit should keep a check result or reference instead of a full document where possible.</li><li><strong>OTP and security records:</strong> for a short security period, except an audit event needed to investigate abuse.</li><li><strong>Support, complaint and dispute evidence:</strong> until the matter and any review or legal period have ended.</li><li><strong>Optional marketing choices:</strong> until you withdraw the choice or the approved inactivity period ends.</li><li><strong>Product measurement:</strong> in pseudonymous form for the approved product-measurement period.</li></ul><p>When deletion is due, information is securely deleted, anonymised or made inaccessible. A legal hold may pause deletion. Backup copies are removed through the normal protected backup cycle.</p></section>
+ 
+-	<section id="rights"><h2>6. Your rights and choices</h2><p class="plain">You can ask to see what we hold, correct it, get a copy, delete what can be deleted or take back a permission you gave. Ask from your settings, and we will answer. Some payment records we must keep by law, and we will tell you which.</p><p>Subject to the Nigeria Data Protection Act 2023 and any lawful exception, you may:</p><ul><li>ask whether Kredit uses your personal information;</li><li>ask to see it and receive a copy;</li><li>ask us to correct information that is wrong or incomplete;</li><li>ask us to remove information when there is no lawful reason to keep it;</li><li>ask us to limit a use while a concern is checked;</li><li>object to a use based on legitimate interests or direct marketing;</li><li>withdraw consent where consent is the reason for the use;</li><li>ask for portable information in a usable format where applicable;</li><li>ask for an explanation of a significant automated decision and request human review; and</li><li>complain to Kredit or the Nigeria Data Protection Commission.</li></ul><p>Open <a href="/app/settings/privacy">Your information</a> after signing in to send a request and follow its progress. We will verify the requester before releasing or changing private information. We may keep a limited record that a request was completed. If we cannot do everything requested, we will explain the lawful reason.</p></section>
++	<section id="rights"><h2>Your rights and choices</h2><p>Subject to the Nigeria Data Protection Act 2023 and any lawful exception, you may:</p><ul><li>ask whether Kredit uses your personal information;</li><li>ask to see it and receive a copy;</li><li>ask us to correct information that is wrong or incomplete;</li><li>ask us to remove information when there is no lawful reason to keep it;</li><li>ask us to limit a use while a concern is checked;</li><li>object to a use based on legitimate interests or direct marketing;</li><li>withdraw consent where consent is the reason for the use;</li><li>ask for portable information in a usable format where applicable;</li><li>ask for an explanation of a significant automated decision and request human review; and</li><li>complain to Kredit or the Nigeria Data Protection Commission.</li></ul><p>Open <a href="/app/settings/privacy">Your information</a> after signing in to send a request and follow its progress. We will verify the requester before releasing or changing private information. We may keep a limited record that a request was completed. If we cannot do everything requested, we will explain the lawful reason.</p></section>
+ 
+-	<section id="cookies"><h2>What we keep on your phone</h2><p class="plain">Small files that keep you signed in and keep the app working. Some notes, like a private note you write about a customer, never leave your phone at all.</p><p>Kredit uses strictly necessary cookies to keep you signed in, protect forms and maintain security. The service may keep display choices, unfinished sale details and a private customer note on your own phone. You can remove local information through your browser or device settings, but doing so may sign you out or remove an unfinished draft. Kredit does not need advertising cookies to operate the first release.</p></section>
++	<section id="cookies"><h2>What we keep on your phone</h2><p>Kredit uses strictly necessary cookies to keep you signed in, protect forms and maintain security. The service may keep display choices, unfinished sale details and a private customer note on your own phone. You can remove local information through your browser or device settings, but doing so may sign you out or remove an unfinished draft. Kredit does not need advertising cookies to operate the first release.</p></section>
+ 
+-	<section id="safety"><h2>7. How we protect information</h2><p class="plain">We lock your account behind a code, limit which staff can see what, keep a record of every important change and test all of it before launch.</p><p>Protection includes encrypted connections, restricted staff roles, extra sign-in checks for sensitive work, expiring private links, audit history, protected storage, provider-signature checks, backups and monitoring. Bank and regulated payment work is performed through appropriately approved providers. No system can promise that a breach will never happen. Kredit must investigate suspected incidents, reduce harm and notify affected people or regulators where the law requires it.</p><p>You also help by keeping your phone, email, password, OTP and recovery codes safe. Tell Kredit quickly if you see an action you do not recognise.</p></section>
++	<section id="safety"><h2>How we protect information</h2><p>Protection includes encrypted connections, restricted staff roles, extra sign-in checks for sensitive work, expiring private links, audit history, protected storage, provider-signature checks, backups and monitoring. Bank and regulated payment work is performed through appropriately approved providers. No system can promise that a breach will never happen. Kredit must investigate suspected incidents, reduce harm and notify affected people or regulators where the law requires it.</p><p>You also help by keeping your phone, email, password, OTP and recovery codes safe. Tell Kredit quickly if you see an action you do not recognise.</p></section>
+ 
+-	<section id="children"><h2>Children</h2><p class="plain">Kredit is for people 18 and over. It is not for children.</p><p>Kredit is for adults and authorised business representatives. It is not designed for a child to open an account or agree to a commercial credit sale. If we learn that a child's information was added without a lawful reason and proper authority, we will restrict it and take the steps required by law.</p></section>
++	<section id="children"><h2>Children</h2><p>Kredit is for adults and authorised business representatives. It is not designed for a child to open an account or agree to a commercial credit sale. If we learn that a child's information was added without a lawful reason and proper authority, we will restrict it and take the steps required by law.</p></section>
+ 
+-	<section id="changes"><h2>If we change this notice</h2><p class="plain">If we change something important, we will tell you before it applies and ask you again where that is needed.</p><p>We may update this notice when the service, providers or law changes. A material change will have a new version and date. When the change affects an existing use or choice, Kredit will give clear notice and ask for a new acceptance or consent where required. Old versions and acceptance records are kept so there is evidence of what a person saw.</p></section>
++	<section id="changes"><h2>If we change this notice</h2><p>We may update this notice when the service, providers or law changes. A material change will have a new version and date. When the change affects an existing use or choice, Kredit will give clear notice and ask for a new acceptance or consent where required. Old versions and acceptance records are kept so there is evidence of what a person saw.</p></section>
+ 
+-	<section id="contact"><h2>8. Questions and complaints</h2><p class="plain">Ask us first. If we do not sort it out, you can take it to the Nigeria Data Protection Commission. Never send us your password, your OTP or your bank details.</p><p>Use <a href="/legal/complaints">Help and complaints</a> for a privacy concern, or use Your information after signing in. Include the Kredit reference and a short explanation, but never send your password, OTP, bank PIN or full card number.</p>{#if data.legal.active}<p>Email the privacy team at <a href={`mailto:${data.legal.privacyEmail}`}>{data.legal.privacyEmail}</a> or write to {data.legal.entityName}, {data.legal.serviceAddress}.</p>{/if}<p>If Kredit does not resolve the concern, you may complain to the <a href="https://www.ndpc.gov.ng/" rel="noreferrer">Nigeria Data Protection Commission</a>.{data.legal.active ? '' : " The final notice will add Kredit's approved privacy email, registered service address and Data Protection Officer details before activation."}</p></section>
++	<section id="contact"><h2>Questions and complaints</h2><p>Use <a href="/legal/complaints">Help and complaints</a> for a privacy concern, or use Your information after signing in. Include the Kredit reference and a short explanation, but never send your password, OTP, bank PIN or full card number.</p>{#if data.legal.active}<p>For privacy enquiries, contact <a href={`mailto:${data.legal.privacyEmail}`}>{data.legal.privacyEmail}</a> or write to {data.legal.entityName} (RC 9834452), {data.legal.serviceAddress}.</p>{/if}<p>If Kredit does not resolve the concern, you may complain to the <a href="https://www.ndpc.gov.ng/" rel="noreferrer">Nigeria Data Protection Commission</a>.</p></section>
+ 
+ 	<div class="document-actions"><a class="primary-button" href="/app/settings/privacy">Manage my information</a><a href="/legal/complaints">Get help</a></div>
+-</main>
+ 
+-<style>
+-	.legal-page{max-width:72rem;padding-bottom:7rem}.legal-page>h1{max-width:12ch;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3.5rem,8vw,7rem);font-weight:500;line-height:.9;letter-spacing:-.06em}.review-note,.active-note,.plain-intro{margin:2rem 0;padding:1.25rem;border-left:5px solid #ad641b;background:#fff4e6}.plain-intro{border-color:#2738d6;background:#eef0ff}.plain-intro p{margin:.4rem 0 0}.legal-page p.plain{margin:.9rem 0 1.4rem;padding:.9rem 1.1rem;border-left:4px solid #2738d6;background:#f2f4ff;color:#2b3040;font-size:.98rem;line-height:1.65}.legal-page p.plain::before{content:"In simple words";display:block;margin-bottom:.3rem;color:#2738d6;font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.active-note{border-color:#176b45;background:#edf8f2}.review-note p,.active-note p,.legal-page li,.legal-page section>p{color:var(--color-muted);line-height:1.72}.document-meta{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;padding:1rem 0;border-top:1px solid var(--color-border);border-bottom:1px solid var(--color-border);font-size:.82rem;font-weight:750}.contents{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem 2rem;margin:3rem 0;padding:1.5rem;color:#fff;background:#17181b}.contents strong{grid-column:1/-1}.contents a{color:#c9cdff}.legal-page section{scroll-margin-top:2rem;margin:3.5rem 0}.legal-page h2{max-width:22ch;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2rem,4vw,3.1rem);font-weight:500;line-height:1}.legal-page h3{font-size:1.05rem}.legal-page li{margin:.7rem 0}.detail-grid,.purpose-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:1.5rem 0;border-top:1px solid var(--color-border);border-left:1px solid var(--color-border)}.detail-grid article,.purpose-list>div{padding:1.25rem;border-right:1px solid var(--color-border);border-bottom:1px solid var(--color-border);background:#fffdf8}.purpose-list p{color:var(--color-muted);line-height:1.65}.document-actions{display:flex;align-items:center;gap:1.5rem;margin-top:4rem;padding-top:1.5rem;border-top:3px solid #17181b}.document-actions>a:not(.primary-button){font-weight:750}@media(max-width:640px){.contents,.detail-grid,.purpose-list{grid-template-columns:1fr}.contents strong{grid-column:auto}.document-actions{align-items:flex-start;flex-direction:column}}
+-</style>
++</DocumentLayout>
+diff --git a/web/src/routes/legal/terms/+page.svelte b/web/src/routes/legal/terms/+page.svelte
+index 309760d..9b8114f 100644
+--- a/web/src/routes/legal/terms/+page.svelte
++++ b/web/src/routes/legal/terms/+page.svelte
+@@ -1,54 +1,39 @@
+ <script lang="ts">
+-	let { data } = $props();
+-	let effectiveDate = $derived(data.legal.effectiveDate
+-		? new Date(`${data.legal.effectiveDate}T12:00:00Z`).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+-		: '');
++ import DocumentLayout from '$lib/components/DocumentLayout.svelte';
++ let { data } = $props();
++ const sections = [{"id": "agreement", "title": "Before you use Kredit"}, {"id": "service", "title": "What Kredit does"}, {"id": "accounts", "title": "Accounts, age and business authority"}, {"id": "sale", "title": "Making a credit sale"}, {"id": "goods", "title": "Goods, delivery and problems"}, {"id": "payments", "title": "Payments, balances and Kredit fees"}, {"id": "debit", "title": "Bank-debit permission and late payment"}, {"id": "communications", "title": "Messages and electronic records"}, {"id": "responsibilities", "title": "What every user must and must not do"}, {"id": "availability", "title": "When the service is slow or down"}, {"id": "ending", "title": "Suspension, closure and records after closure"}, {"id": "legal", "title": "Who is responsible for what"}, {"id": "changes", "title": "If we change these terms"}, {"id": "help", "title": "Help, complaints and regulators"}];
++ const effectiveDate = $derived(new Date(`${data.legal.effectiveDate}T12:00:00Z`).toLocaleDateString('en-NG', {day:'numeric', month:'long', year:'numeric', timeZone:'UTC'}));
+ </script>
+-
+ <svelte:head><title>Terms of service — Kredit</title></svelte:head>
++<DocumentLayout title="Terms of service" description="The agreement governing your account, credit-sale records and use of Kredit." version={data.legal.termsVersion} {effectiveDate} {sections}>
++	<section id="agreement"><h2>Before you use Kredit</h2><p>Read these terms together with the Privacy Notice, the exact sale shown to you before you accepted it, the bank-debit permission and any fee shown to the seller. If you are acting for a business, “you” means that business too.</p><p>By accepting these terms you confirm that you understand them and are allowed to use the account. Accepting these general terms does not force a customer to accept any particular sale. Each sale requires separate acceptance.</p></section>
+ 
+-<main class="shell prose-page legal-page">
+-	<p class="eyebrow">Terms of service · {data.legal.termsVersion}</p>
+-	<h1>The rules for using Kredit.</h1>
+-	<p class="lede">Kredit helps a seller and a customer put a sale in writing, confirm the goods and keep one payment record. These terms say what each person is responsible for.</p>
+-	<aside class="plain-intro"><strong>Before you read all this</strong><p>Every section below starts with a short box in plain words, so you know what it means. Those boxes are only a helping hand. The full wording under each one is what counts in law.</p></aside>
+-
+-	{#if data.legal.active}<aside class="active-note"><strong>Effective {effectiveDate}</strong><p>These terms form an agreement between you and {data.legal.entityName} when you accept them while using Kredit.</p></aside>{:else}<aside class="review-note"><strong>Complete pre-launch draft — legal approval pending</strong><p>The product and commercial rules are described below. Kredit's final registered company name, service address, effective date and approved provider disclosures must be added before launch. These terms are not active and no user will be asked to accept them until legal and provider review is complete.</p></aside>{/if}
+-	<div class="document-meta" aria-label="Document information"><span>{data.legal.termsVersion}</span><span>{data.legal.active ? `Effective ${effectiveDate}` : 'Last reviewed 31 August 2026'}</span><span>Nigeria</span></div>
+-
+-	<nav class="contents" aria-label="Terms contents"><strong>On this page</strong><a href="#service">1. What Kredit does</a><a href="#accounts">2. Accounts and businesses</a><a href="#sale">3. Making a credit sale</a><a href="#goods">4. Goods and problems</a><a href="#payments">5. Payments and fees</a><a href="#debit">6. Bank-debit permission</a><a href="#responsibilities">7. Responsibilities</a><a href="#ending">8. Suspension and closure</a><a href="#legal">9. Legal terms</a><a href="#help">10. Help and complaints</a></nav>
+-
+-	<section id="agreement"><h2>Before you use Kredit</h2><p>Read these terms together with the Privacy Notice, the exact sale shown to you before you accepted it, the bank-debit permission and any fee shown to the seller. If you are acting for a business, “you” means that business too.</p><p>By accepting these terms you confirm that you understand them and are allowed to use the account. Accepting these general terms does not force a customer to accept any particular sale. Every single sale needs its own clear yes.</p></section>
+-
+-	<section id="service"><h2>1. What Kredit does</h2><p class="plain">Kredit writes your sale down and helps you follow the payment. Kredit does not lend you money, does not own the goods, does not choose your customer and cannot promise that anybody will pay you.</p><p>Kredit provides tools that allow an existing seller and customer to:</p><ul><li>record the goods, price, payment day, extra time and any payment plan;</li><li>show the same terms to the customer before the customer says yes;</li><li>keep evidence of acceptance, goods release and customer receipt;</li><li>record payments made to the seller or through an approved provider;</li><li>show the amount still unpaid;</li><li>send account and payment reminders;</li><li>report and review a problem; and</li><li>request an authorised bank debit for an eligible unpaid amount after the agreed time.</li></ul><p><strong>Kredit is not the seller and does not supply the goods.</strong> Kredit does not choose the customer, decide the quality of goods or promise that a customer will pay. In the first release, Kredit does not lend the purchase money to either side. The seller supplies its own goods and allows payment later.</p><p>Kredit is not a bank, wallet, credit bureau, insurance company, marketplace or debt buyer. Any regulated identity, banking or payment function must be performed through an appropriately approved provider. A provider's own terms may also apply to that function.</p></section>
++	<section id="service"><h2>What Kredit does</h2><p>Kredit provides tools that allow an existing seller and customer to:</p><ul><li>record the goods, price, payment day, extra time and any payment plan;</li><li>show the same terms to the customer before the customer says yes;</li><li>keep evidence of acceptance, goods release and customer receipt;</li><li>record payments made to the seller or through an approved provider;</li><li>show the amount still unpaid;</li><li>send account and payment reminders;</li><li>report and review a problem; and</li><li>request an authorised bank debit for an eligible unpaid amount after the agreed time.</li></ul><p><strong>Kredit is not the seller and does not supply the goods.</strong> Kredit does not choose the customer, decide the quality of goods or promise that a customer will pay. The supplier funds the credit sale. The seller supplies its own goods and allows payment later.</p><p>Kredit is not a bank, wallet, credit bureau, insurance company, marketplace or debt buyer. Any regulated identity, banking or payment function must be performed through an appropriately approved provider. A provider's own terms may also apply to that function.</p></section>
+ 
+-	<section id="accounts"><h2>2. Accounts, age and business authority</h2><p class="plain">You must be 18 or older, give correct details and really have the right to act for your business. Keep your codes to yourself. Never share your OTP, backup codes or bank PIN with anybody. Kredit will never ask you for your bank PIN or full card number.</p><ul><li>You must be at least 18 years old and able to enter a binding agreement.</li><li>You must give correct, current information and update it when it changes.</li><li>You must control the phone number or email used for your account.</li><li>If you represent a business, you must have permission to bind or act for it.</li><li>A business does not need a CAC registration number merely to begin setup, but Kredit or a provider may require other proof before money can move.</li><li>You must complete identity, business, bank-account or extra sign-in checks when a sensitive action requires them.</li></ul><p>A business owner may invite staff and choose their roles. The owner is responsible for removing access when a staff member should no longer act. Kredit records important access and account actions.</p><p>Keep your device, sign-in method, OTP, authenticator and recovery codes secure. Do not share them. Tell Kredit quickly if an account or device may have been taken over. Kredit will never ask for your bank PIN or a full card number in a support message.</p></section>
++	<section id="accounts"><h2>Accounts, age and business authority</h2><ul><li>You must be at least 18 years old and able to enter a binding agreement.</li><li>You must give correct, current information and update it when it changes.</li><li>You must control the phone number or email used for your account.</li><li>If you represent a business, you must have permission to bind or act for it.</li><li>A business does not need a CAC registration number merely to begin setup, but Kredit or a provider may require other proof before money can move.</li><li>You must complete identity, business, bank-account or extra sign-in checks when a sensitive action requires them.</li></ul><p>A business owner may invite staff and choose their roles. The owner is responsible for removing access when a staff member should no longer act. Kredit records important access and account actions.</p><p>Keep your device, sign-in method, OTP, authenticator and recovery codes secure. Do not share them. Tell Kredit quickly if an account or device may have been taken over. Kredit will never ask for your bank PIN or a full card number in a support message.</p></section>
+ 
+-	<section id="sale"><h2>3. Making a credit sale</h2><p class="plain">The seller writes the sale. The customer reads it and decides. A sale only becomes real when the customer says yes. After that, nobody can quietly change the goods, the amount or the dates.</p><h3>The seller creates the offer</h3><p>The seller chooses the customer and enters the goods, price, payment date, extra time, payment plan and bank-debit timing. The seller must check these details before sending them. A draft may be changed or deleted before it is sent.</p><h3>The customer checks and accepts</h3><p>The customer receives a private link, confirms the required details and sees the exact sale before accepting. The customer may say no. A sale does not become active merely because the seller created it, sent a link or obtained a general account registration.</p><h3>Accepted terms cannot be secretly changed</h3><p>Kredit keeps a version and protected document hash for accepted terms. A seller cannot replace the accepted amount, goods or dates without a new, lawful agreement. Where the product allows payment dates to be changed, both sides must first agree and the change cannot rewrite a payment already made.</p><h3>Keep your own commercial records</h3><p>Kredit records the transaction in the service but does not replace every invoice, tax record, stock record, warranty or document a business may be required to keep.</p></section>
++	<section id="sale"><h2>Making a credit sale</h2><h3>The seller creates the offer</h3><p>The seller chooses the customer and enters the goods, price, payment date, extra time, payment plan and bank-debit timing. The seller must check these details before sending them. A draft may be changed or deleted before it is sent.</p><h3>The customer checks and accepts</h3><p>The customer receives a private link, confirms the required details and sees the exact sale before accepting. The customer may say no. A sale does not become active merely because the seller created it, sent a link or obtained a general account registration.</p><h3>Accepted terms cannot be secretly changed</h3><p>Kredit keeps a version and protected document hash for accepted terms. A seller cannot replace the accepted amount, goods or dates without a new, lawful agreement. Where the product allows payment dates to be changed, both sides must first agree and the change cannot rewrite a payment already made.</p><h3>Keep your own commercial records</h3><p>Kredit records the transaction in the service but does not replace every invoice, tax record, stock record, warranty or document a business may be required to keep.</p></section>
+ 
+-	<section id="goods"><h2>4. Goods, delivery and problems</h2><p class="plain">The goods are the seller’s responsibility, not Kredit’s. If something is wrong, the customer reports it with proof, and the money in question goes on hold while it is sorted out. The rest of the money may still be due. Do not report a false problem just to delay paying.</p><p>The seller is responsible for the goods, description, price, quality, safety, delivery and any promise made about them. Kredit does not inspect or approve goods.</p><p>After customer acceptance, the seller records when and how the goods leave. The customer confirms receipt or reports a problem. Both sides must act honestly and keep useful evidence such as a delivery number, receipt, photo or document.</p><p>If the customer reports a genuine problem, Kredit may pause bank debit for the amount affected while the matter is reviewed. The remaining undisputed amount may still be due where the accepted sale and applicable law allow it. Reporting a problem does not automatically cancel the full sale, and it must not be used only to delay payment.</p><p>The seller and customer should first try to settle the matter with clear evidence. Kredit may help record the decision or apply a permitted adjustment, but is not a court and may require a formal complaint or external legal process where the issue cannot be resolved in the product.</p></section>
++	<section id="goods"><h2>Goods, delivery and problems</h2><p>The seller is responsible for the goods, description, price, quality, safety, delivery and any promise made about them. Kredit does not inspect or approve goods.</p><p>After customer acceptance, the seller records when and how the goods leave. The customer confirms receipt or reports a problem. Both sides must act honestly and keep useful evidence such as a delivery number, receipt, photo or document.</p><p>If the customer reports a genuine problem, Kredit may pause bank debit for the amount affected while the matter is reviewed. The remaining undisputed amount may still be due where the accepted sale and applicable law allow it. Reporting a problem does not automatically cancel the full sale, and it must not be used only to delay payment.</p><p>The seller and customer should first try to settle the matter with clear evidence. Kredit may help record the decision or apply a permitted adjustment, but is not a court and may require a formal complaint or external legal process where the issue cannot be resolved in the product.</p></section>
+ 
+-	<section id="payments"><h2>5. Payments, balances and Kredit fees</h2><p class="plain">A customer can pay the seller directly or through Kredit. The seller must see the money in their bank before confirming it. If money is reversed later, it becomes owed again. The seller pays Kredit’s fees, not the customer. And only when a sale starts, or when Kredit actually collects money.</p><h3>Payments</h3><p>A customer may pay the seller directly or through an available approved payment method. When a customer reports a direct transfer, the seller must check the seller's bank before confirming it. Kredit reduces the amount left only when the payment is recognised. A reversed or failed payment may make money due again.</p><p>A customer must not pay more than the amount lawfully due. Kredit recalculates the true unpaid amount before any bank-debit request and uses controls intended to prevent duplicate collection. A pending payment, provider delay or reconciliation issue may temporarily stop another money action.</p><h3>Fees paid by the seller</h3><p>Adding a customer or draft sale has no fee. The rates recorded in each offer govern that sale:</p><ul><li>the supplier base service fee applies to activated principal after the required acceptance and goods steps; and</li><li>the recorded additional collection fee applies only to money successfully collected through Kredit at or after the permitted collection time.</li></ul><p>Changing the published rates does not change existing offers. <a href="/pricing">Current pricing</a> applies to new offers. A failed debit does not earn the additional collection fee. A sale cancelled before activation does not earn the base fee. The seller must review the applicable rates before agreeing to the sale.</p><p>The customer pays the accepted price of the goods and any customer charge clearly included in the individual sale and permitted by law. Kredit does not silently add the seller's platform fee to the customer's debt.</p><p>Taxes may apply to Kredit fees. The final invoice and tax treatment will follow applicable law. If a fee or payment record is wrong, use the correction or complaint process; do not edit a completed financial record outside the provided reversal or correction flow.</p></section>
++	<section id="payments"><h2>Payments, balances and Kredit fees</h2><h3>Payments</h3><p>A customer may pay the seller directly or through an available approved payment method. When a customer reports a direct transfer, the seller must check the seller's bank before confirming it. Kredit reduces the amount left only when the payment is recognised. A reversed or failed payment may make money due again.</p><p>A customer must not pay more than the amount lawfully due. Kredit recalculates the true unpaid amount before any bank-debit request and uses controls intended to prevent duplicate collection. A pending payment, provider delay or reconciliation issue may temporarily stop another money action.</p><h3>Fees paid by the seller</h3><p>Adding a customer or draft sale has no fee. The rates recorded in each offer govern that sale:</p><ul><li>the supplier base service fee applies to activated principal after the required acceptance and goods steps; and</li><li>the recorded additional collection fee applies only to money successfully collected through Kredit at or after the permitted collection time.</li></ul><p>Changing the published rates does not change existing offers. <a href="/pricing">Current pricing</a> applies to new offers. A failed debit does not earn the additional collection fee. A sale cancelled before activation does not earn the base fee. The seller must review the applicable rates before agreeing to the sale.</p><p>The customer pays the accepted price of the goods and any customer charge clearly included in the individual sale and permitted by law. Kredit does not silently add the seller's platform fee to the customer's debt.</p><p>Taxes may apply to Kredit fees. The final invoice and tax treatment will follow applicable law. If a fee or payment record is wrong, use the correction or complaint process; do not edit a completed financial record outside the provided reversal or correction flow.</p></section>
+ 
+-	<section id="debit"><h2>6. Bank-debit permission and late payment</h2><p class="plain">Bank debit is a separate permission the customer gives, with a limit on how much can ever be taken. The customer can cancel it at any time. But cancelling it does not cancel money they already owe. A debit can fail, and Kredit cannot promise it will work.</p><p>A customer may be asked to create a separate mandate with a bank or approved payment provider. The mandate is authority for payments within its stated amount, duration and scope. It is not itself proof that the underlying sale is valid, and it does not give Kredit unrestricted access to every account.</p><p>Before a sale is accepted, the customer sees the payment day, extra time and the earliest time an automatic debit may be requested. Kredit may request only an eligible unpaid amount within the accepted terms and active mandate. Reminders, provider availability, a payment claim, a dispute, a risk hold or a legal requirement may change whether or when a request is sent.</p><p>The customer may stop or cancel a mandate through an available provider or Kredit control. Cancelling a mandate stops future use of that permission when the cancellation takes effect; it does not erase money already owed under a valid sale. The customer should arrange another payment method with the seller.</p><p>A bank or provider may reject, delay, partially complete or reverse a request. Kredit does not promise successful collection. Both sides must wait for a final confirmed result before treating an uncertain provider response as payment.</p></section>
++	<section id="debit"><h2>Bank-debit permission and late payment</h2><p>A customer may be asked to create a separate mandate with a bank or approved payment provider. The mandate is authority for payments within its stated amount, duration and scope. It is not itself proof that the underlying sale is valid, and it does not give Kredit unrestricted access to every account.</p><p>Before a sale is accepted, the customer sees the payment day, extra time and the earliest time an automatic debit may be requested. Kredit may request only an eligible unpaid amount within the accepted terms and active mandate. Reminders, provider availability, a payment claim, a dispute, a risk hold or a legal requirement may change whether or when a request is sent.</p><p>The customer may stop or cancel a mandate through an available provider or Kredit control. Cancelling a mandate stops future use of that permission when the cancellation takes effect; it does not erase money already owed under a valid sale. The customer should arrange another payment method with the seller.</p><p>A bank or provider may reject, delay, partially complete or reverse a request. Kredit does not promise successful collection. Both sides must wait for a final confirmed result before treating an uncertain provider response as payment.</p></section>
+ 
+-	<section id="communications"><h2>Messages and electronic records</h2><p class="plain">Kredit will message you about your account, your sales and your payments. You can switch off extra reminders, but not the important messages. What you tap and agree to in the app counts as proof of what happened.</p><p>You agree that Kredit may send required service, security, sale, payment, recovery and complaint messages by the contact method connected to your account. You may control optional messages and quiet hours, but you cannot turn off a message needed to protect the account or complete a transaction.</p><p>Electronic acceptance, timestamps, audit records, provider confirmations and protected document hashes may be used as evidence of what happened. Download or print any record you need for your business. Delivery of a message can fail, so you should also check the account for an important update.</p></section>
++	<section id="communications"><h2>Messages and electronic records</h2><p>You agree that Kredit may send required service, security, sale, payment, recovery and complaint messages by the contact method connected to your account. You may control optional messages and quiet hours, but you cannot turn off a message needed to protect the account or complete a transaction.</p><p>Electronic acceptance, timestamps, audit records, provider confirmations and protected document hashes may be used as evidence of what happened. Download or print any record you need for your business. Delivery of a message can fail, so you should also check the account for an important update.</p></section>
+ 
+-	<section id="responsibilities"><h2>7. What every user must and must not do</h2><p class="plain">Be honest. Do not invent a customer, a delivery, a payment or a problem. Do not use another person’s details. Do not threaten or shame anybody over money. Do not use Kredit for anything against the law.</p><p>You must use Kredit honestly, follow applicable law and cooperate with a reasonable check or correction. You must not:</p><ul><li>create a false person, business, sale, delivery, payment, receipt or dispute;</li><li>use another person's contact, bank or identity information without authority;</li><li>sell illegal, unsafe, stolen or prohibited goods through a Kredit record;</li><li>split, repeat or manipulate a sale to avoid a limit or review;</li><li>attempt to collect money already paid, reversed, adjusted or genuinely disputed;</li><li>harass, threaten, shame or mislead a seller or customer;</li><li>probe, copy, damage or interfere with Kredit or another user's account;</li><li>upload malware or a document you have no right to use; or</li><li>use Kredit to hide fraud, money laundering or another unlawful activity.</li></ul><p>Kredit may limit a document type, transaction size, customer group, business industry, provider, retry or other pilot feature. A displayed limit does not mean Kredit has approved a customer's creditworthiness or guaranteed a transaction.</p></section>
++	<section id="responsibilities"><h2>What every user must and must not do</h2><p>You must use Kredit honestly, follow applicable law and cooperate with a reasonable check or correction. You must not:</p><ul><li>create a false person, business, sale, delivery, payment, receipt or dispute;</li><li>use another person's contact, bank or identity information without authority;</li><li>sell illegal, unsafe, stolen or prohibited goods through a Kredit record;</li><li>split, repeat or manipulate a sale to avoid a limit or review;</li><li>attempt to collect money already paid, reversed, adjusted or genuinely disputed;</li><li>harass, threaten, shame or mislead a seller or customer;</li><li>probe, copy, damage or interfere with Kredit or another user's account;</li><li>upload malware or a document you have no right to use; or</li><li>use Kredit to hide fraud, money laundering or another unlawful activity.</li></ul><p>Kredit may limit a document type, transaction size, customer group, business industry, provider, retry or other service feature. A displayed limit does not mean Kredit has approved a customer's creditworthiness or guaranteed a transaction.</p></section>
+ 
+-	<section id="availability"><h2>When the service is slow or down</h2><p class="plain">We work hard to keep Kredit up and your records correct, but networks, banks and payment companies can fail. If your phone is offline, nothing to do with money is saved. We will never quietly rewrite a sale you already agreed to.</p><p>Kredit aims to keep the service available and records accurate, but maintenance, poor networks, banks, providers or events outside reasonable control may delay a page, message or payment result. Financial actions that require the server are not completed or queued merely because a device is offline.</p><p>We may improve, replace or stop a non-essential feature after reasonable notice. We will not intentionally rewrite an accepted agreement or completed financial history because a feature changes. If a provider becomes unavailable or a result is unknown, Kredit may pause the affected action and reconcile it before trying again.</p></section>
++	<section id="availability"><h2>When the service is slow or down</h2><p>Kredit aims to keep the service available and records accurate, but maintenance, poor networks, banks, providers or events outside reasonable control may delay a page, message or payment result. Financial actions that require the server are not completed or queued merely because a device is offline.</p><p>We may improve, replace or stop a non-essential feature after reasonable notice. We will not intentionally rewrite an accepted agreement or completed financial history because a feature changes. If a provider becomes unavailable or a result is unknown, Kredit may pause the affected action and reconcile it before trying again.</p></section>
+ 
+-	<section id="ending"><h2>8. Suspension, closure and records after closure</h2><p class="plain">You can stop using Kredit, but closing your account does not wipe out money you owe. We may pause an account to protect people, follow the law, or look into something suspicious. Where we can, we will tell you why and how to appeal.</p><p>You may stop using Kredit and ask to close the account, subject to any open sale, payment, dispute, investigation or legal record. Closing an account does not cancel a valid agreement or amount already due.</p><p>Kredit may restrict or suspend an account, business or money action to protect users, obey the law, investigate suspected abuse, respond to a provider issue or enforce these terms. Where safe and lawful, we will explain the reason and how to ask for review. Urgent security action may happen before notice.</p><p>After closure, some information may be kept for the approved legal, financial, fraud-prevention and dispute period. Other information is removed or anonymised under the Privacy Notice.</p></section>
++	<section id="ending"><h2>Suspension, closure and records after closure</h2><p>You may stop using Kredit and ask to close the account, subject to any open sale, payment, dispute, investigation or legal record. Closing an account does not cancel a valid agreement or amount already due.</p><p>Kredit may restrict or suspend an account, business or money action to protect users, obey the law, investigate suspected abuse, respond to a provider issue or enforce these terms. Where safe and lawful, we will explain the reason and how to ask for review. Urgent security action may happen before notice.</p><p>After closure, some information may be kept for the approved legal, financial, fraud-prevention and dispute period. Other information is removed or anonymised under the Privacy Notice.</p></section>
+ 
+-	<section id="legal"><h2>9. Who is responsible for what</h2><p class="plain">The seller answers for the goods. The customer answers for the money they agreed to pay. Kredit answers for running its service properly. Nigerian law applies, and nothing here removes a right Nigerian law says you must have.</p><p>Each seller remains responsible for its goods and each customer remains responsible for a valid accepted payment duty. Kredit remains responsible for providing its service with reasonable care and for rights that cannot lawfully be excluded.</p><p>To the extent allowed by law, Kredit is not responsible for a seller's goods, a customer's business decision, loss caused by false information from a user, or a bank/provider failure outside Kredit's reasonable control. Nothing in these terms removes a right, remedy or responsibility that Nigerian law says cannot be removed. Any limitation in the final approved terms must be fair, clear and proportionate to the service.</p><p>These terms and the Kredit service are governed by the laws of the Federal Republic of Nigeria. The parties should first use the complaint process. If the matter is not resolved, a person may use a competent court or regulator.{data.legal.active ? ` Legal notices may be sent to ${data.legal.entityName}, ${data.legal.serviceAddress}.` : ' The final company and legal-service details will be inserted before these terms become active.'}</p></section>
++	<section id="legal"><h2>Who is responsible for what</h2><p>Each seller remains responsible for its goods and each customer remains responsible for a valid accepted payment duty. Kredit remains responsible for providing its service with reasonable care and for rights that cannot lawfully be excluded.</p><p>To the extent allowed by law, Kredit is not responsible for a seller's goods, a customer's business decision, loss caused by false information from a user, or a bank/provider failure outside Kredit's reasonable control. Nothing in these terms removes a right, remedy or responsibility that Nigerian law says cannot be removed. Any limitation remains subject to mandatory rights under applicable law.</p><p>These terms and the Kredit service are governed by the laws of the Federal Republic of Nigeria. The parties should first use the complaint process. If the matter is not resolved, a person may use a competent court or regulator.{` Legal notices may be sent to ${data.legal.entityName} (RC 9834452), ${data.legal.serviceAddress}.`}</p></section>
+ 
+-	<section id="changes"><h2>If we change these terms</h2><p class="plain">If we change something important, we will tell you first and ask you to agree again where that is needed. The version you agreed to for a particular sale stays with that sale.</p><p>A new version will show its date and important changes. A material change that affects existing users will be communicated before it applies, and a new acceptance will be requested where required. The version accepted for an individual sale remains part of that sale's record. We will not use a later general update to secretly change accepted goods, price or payment dates.</p><p>If one part of these terms cannot be enforced, the remaining parts continue where the law allows. Delay in enforcing a term is not a permanent waiver. You may not transfer an account or agreement without the permissions required by the product and law. Kredit may transfer the service to a lawful successor with appropriate notice and protection of user rights.</p></section>
++	<section id="changes"><h2>If we change these terms</h2><p>A new version will show its date and important changes. A material change that affects existing users will be communicated before it applies, and a new acceptance will be requested where required. The version accepted for an individual sale remains part of that sale's record. We will not use a later general update to secretly change accepted goods, price or payment dates.</p><p>If one part of these terms cannot be enforced, the remaining parts continue where the law allows. Delay in enforcing a term is not a permanent waiver. You may not transfer an account or agreement without the permissions required by the product and law. Kredit may transfer the service to a lawful successor with appropriate notice and protection of user rights.</p></section>
+ 
+-	<section id="help"><h2>10. Help, complaints and regulators</h2><p class="plain">Tell us first, through Help and complaints. Give us the Kredit number, the date, the amount and what you expected. Never send your password, OTP, bank PIN or card number. If we do not sort it out, you can go to a Nigerian regulator or a court.</p><p>Use <a href="/legal/complaints">Help and complaints</a> and include the Kredit reference, date, amount, what happened and the result you expect. Never send your password, OTP, bank PIN or full card number.</p>{#if data.legal.active}<p>You may also email <a href={`mailto:${data.legal.legalEmail}`}>{data.legal.legalEmail}</a> or write to {data.legal.entityName}, {data.legal.serviceAddress}.</p>{/if}<p>If the concern is not resolved, you may use a competent Nigerian regulator or court. Consumer concerns may fall within the remit of the <a href="https://fccpc.gov.ng/" rel="noreferrer">Federal Competition and Consumer Protection Commission</a>. Privacy complaints may be made to the <a href="https://www.ndpc.gov.ng/" rel="noreferrer">Nigeria Data Protection Commission</a>. A bank or payment-provider complaint may also need the provider's process or the appropriate financial regulator.</p></section>
++	<section id="help"><h2>Help, complaints and regulators</h2><p>Use <a href="/legal/complaints">Help and complaints</a> and include the Kredit reference, date, amount, what happened and the result you expect. Never send your password, OTP, bank PIN or full card number.</p>{#if data.legal.active}<p>You may also email <a href={`mailto:${data.legal.legalEmail}`}>{data.legal.legalEmail}</a> or write to {data.legal.entityName} (RC 9834452), {data.legal.serviceAddress}.</p>{/if}<p>If the concern is not resolved, you may use a competent Nigerian regulator or court. Consumer concerns may fall within the remit of the <a href="https://fccpc.gov.ng/" rel="noreferrer">Federal Competition and Consumer Protection Commission</a>. Privacy complaints may be made to the <a href="https://www.ndpc.gov.ng/" rel="noreferrer">Nigeria Data Protection Commission</a>. A bank or payment-provider complaint may also need the provider's process or the appropriate financial regulator.</p></section>
+ 
+ 	<div class="document-actions"><a class="primary-button" href="/how-it-works">See how Kredit works</a><a href="/pricing">See what it costs</a><a href="/legal/privacy">Read the privacy notice</a></div>
+-</main>
+ 
+-<style>
+-	.legal-page{max-width:72rem;padding-bottom:7rem}.legal-page>h1{max-width:12ch;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3.5rem,8vw,7rem);font-weight:500;line-height:.9;letter-spacing:-.06em}.review-note,.active-note,.plain-intro{margin:2rem 0;padding:1.25rem;border-left:5px solid #ad641b;background:#fff4e6}.plain-intro{border-color:#2738d6;background:#eef0ff}.plain-intro p{margin:.4rem 0 0}.legal-page p.plain{margin:.9rem 0 1.4rem;padding:.9rem 1.1rem;border-left:4px solid #2738d6;background:#f2f4ff;color:#2b3040;font-size:.98rem;line-height:1.65}.legal-page p.plain::before{content:"In simple words";display:block;margin-bottom:.3rem;color:#2738d6;font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.active-note{border-color:#176b45;background:#edf8f2}.review-note p,.active-note p,.legal-page li,.legal-page section>p{color:var(--color-muted);line-height:1.72}.document-meta{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;padding:1rem 0;border-top:1px solid var(--color-border);border-bottom:1px solid var(--color-border);font-size:.82rem;font-weight:750}.contents{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem 2rem;margin:3rem 0;padding:1.5rem;color:#fff;background:#17181b}.contents strong{grid-column:1/-1}.contents a{color:#c9cdff}.legal-page section{scroll-margin-top:2rem;margin:3.5rem 0}.legal-page h2{max-width:22ch;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2rem,4vw,3.1rem);font-weight:500;line-height:1}.legal-page h3{margin-top:1.5rem;font-size:1.05rem}.legal-page li{margin:.7rem 0}.document-actions{display:flex;align-items:center;flex-wrap:wrap;gap:1.5rem;margin-top:4rem;padding-top:1.5rem;border-top:3px solid #17181b}.document-actions>a:not(.primary-button){font-weight:750}@media(max-width:640px){.contents{grid-template-columns:1fr}.contents strong{grid-column:auto}.document-actions{align-items:flex-start;flex-direction:column}}
+-</style>
++</DocumentLayout>
+diff --git a/web/src/routes/pricing/+page.svelte b/web/src/routes/pricing/+page.svelte
+index 0324790..66437e0 100644
+--- a/web/src/routes/pricing/+page.svelte
++++ b/web/src/routes/pricing/+page.svelte
+@@ -1,11 +1,11 @@
+ <script lang="ts">
+-  import { onMount } from 'svelte';
+   import { checkedJSON, record } from '$lib/api/reliable';
+   import { baseFeeForKobo, feeForKobo, validFeeTerms, type FeeTerms } from '$lib/fee-terms';
+   import { parseNaira } from '$lib/money';
+   import { collectionBoundary, creditBoundary } from '$lib/financial-copy';
+   import Money from '$lib/components/Money.svelte';
+-  let rates = $state<FeeTerms | null>(null), pricingError = $state(''), loading = $state(true);
++  let { data } = $props();
++  let rates = $derived<FeeTerms | null>(data.rates), pricingError = $derived(data.rates ? '' : 'Pricing is temporarily unavailable.'), loading = $state(false);
+   let principalNaira = $state('500000'), collectedNaira = $state('0'), collectEverything = $state(false);
+   const principal = $derived(parseNaira(principalNaira));
+   const collected = $derived(collectEverything ? principal : parseNaira(collectedNaira));
+@@ -21,10 +21,9 @@
+         if (!validFeeTerms(result)) throw new Error('Fee rates were not verified.');
+         return result;
+       }, { signal });
+-    } catch { if (!signal?.aborted) pricingError = 'We could not verify the current fees. Try again before relying on a quote.'; }
++    } catch { if (!signal?.aborted) pricingError = 'Pricing is temporarily unavailable.'; }
+     finally { loading = false; }
+   }
+-  onMount(() => { const controller = new AbortController(); void loadRates(controller.signal); return () => controller.abort(); });
+ </script>
+ <main class="pricing-page">
+   <section class="shell pricing-hero"><div><p class="eyebrow">What it costs</p><h1>Clear fees.<br /><em>Before you send.</em></h1></div><div class="hero-side"><p>Creating your account and drafting a sale are free. A base fee applies when the sale becomes active. A collection fee applies only to money Kredit successfully collects.</p><p>Your accepted sale keeps its agreed fee terms, even if rates change later.</p><span>No monthly fee · No joining fee</span></div></section>
+diff --git a/web/src/routes/security/+page.svelte b/web/src/routes/security/+page.svelte
+index 5fcb867..488d8dc 100644
+--- a/web/src/routes/security/+page.svelte
++++ b/web/src/routes/security/+page.svelte
+@@ -1,8 +1,8 @@
+ <script lang="ts">
+ 	const safeguards = [
+ 		['Extra checks for sensitive actions', 'Sign-in codes help protect your account. Sensitive actions require additional checks. Keep your codes private, including when speaking to support.'],
+-		['Every kobo is counted', 'We count in kobo, not rough figures. Transfer references stop the same payment being counted twice. And we always check what has already been paid before we ask for more.'],
+-		['Only the right eyes see it', 'Your staff see only what their job needs. Documents open through private links that stop working after a short while.'],
++		['Payment accuracy', 'Amounts are recorded in kobo. Payment references and balance checks help prevent duplicate recognition and collection.'],
++		['Restricted access', 'Staff access follows assigned roles. Private document links expire.'],
+ 		['A traceable record', 'Important account and financial actions have a history, so a change can be investigated without guessing what happened.'],
+ 		['Permission before bank collection', 'Bank collection requires customer authorisation and an eligible payment. A reported payment or dispute is handled according to its recorded status; a debit already submitted may still finish.'],
+ 		['A clear way to get help', 'Use Help and complaints to report an account, sale or payment problem. Include the Kredit reference and what happened, but never send a password, one-time code or bank PIN.']
+@@ -12,7 +12,7 @@
+ <main class="trust-page">
+ 	<section class="trust-hero shell"><div><p class="eyebrow">Your account and records</p><h1>How Kredit protects you.</h1></div><div class="hero-side"><p>Kredit uses sign-in checks, staff permissions and transaction records to help protect your account. Report anything unexpected so it can be investigated.</p><dl><div><dt>Your staff</dt><dd>See only what they need</dd></div><div><dt>Your sale</dt><dd>Every change is recorded</dd></div><div><dt>A problem</dt><dd>Report it for review</dd></div></dl></div></section>
+ 
+-	<section class="safeguards shell"><div class="section-head"><p class="eyebrow">How we keep it safe</p><h2>We check every money step.</h2></div><div class="safeguard-list">{#each safeguards as [title, body], index}<article><span>0{index + 1}</span><h3>{title}</h3><p>{body}</p></article>{/each}</div></section>
++	<section class="safeguards shell"><div class="section-head"><p class="eyebrow">How we keep it safe</p><h2>Account and payment safeguards.</h2></div><div class="safeguard-list">{#each safeguards as [title, body], index}<article><span>0{index + 1}</span><h3>{title}</h3><p>{body}</p></article>{/each}</div></section>
+ 
+ 	<section class="boundaries-section"><div class="shell boundaries"><article><span>01 / LINKS YOU SHARE</span><h2>Shared receipts hide your details.</h2><p>A receipt you forward carries no full names, no bank details and no private notes. But a private invitation or document link is a different thing. Send those to one person only, the person they were meant for.</p></article><article><span>02 / WHEN A DEBIT IS SLOW</span><h2>Check before retrying.</h2><p>If a bank debit is slow, we do not just try again and hope. We go back and ask the bank what happened to the first one.</p></article></div></section>
+ 
+diff --git a/web/tests/content-seo.spec.ts b/web/tests/content-seo.spec.ts
+index 7baca5e..7ff6c0c 100644
+--- a/web/tests/content-seo.spec.ts
++++ b/web/tests/content-seo.spec.ts
+@@ -46,25 +46,25 @@ test('sitemap and RSS publish the guide library for discovery',async({request})=
+ test('privacy notice gives a complete, readable account of information use and rights', async ({ page }) => {
+ 	await page.goto('/legal/privacy');
+ 	await expect(page).toHaveTitle('Privacy notice — Kredit');
+-	await expect(page.getByRole('heading', { name: 'Your information belongs to you.' })).toBeVisible();
+-	await expect(page.getByText('Complete pre-launch draft — legal approval pending')).toBeVisible();
+-	await expect(page.getByRole('heading', { name: '2. What we keep about you' })).toBeVisible();
+-	await expect(page.getByRole('heading', { name: '6. Your rights and choices' })).toBeVisible();
+-	await expect(page.getByRole('heading', { name: '7. How we protect information' })).toBeVisible();
++	await expect(page.getByRole('heading', { name: 'Privacy notice', exact: true })).toBeVisible();
++	await expect(page.getByText('Complete pre-launch draft — legal approval pending')).toHaveCount(0);
++	await expect(page.getByRole('heading', { name: 'What we keep about you' })).toBeVisible();
++	await expect(page.getByRole('heading', { name: 'Your rights and choices' })).toBeVisible();
++	await expect(page.getByRole('heading', { name: 'How we protect information' })).toBeVisible();
+ 	await expect(page.getByRole('link', { name: 'Nigeria Data Protection Commission' })).toBeVisible();
+-	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
++	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow,max-image-preview:large,max-snippet:-1');
+ });
+ 
+ test('terms explain the complete sale, payment and complaint journey', async ({ page }) => {
+ 	await page.goto('/legal/terms');
+ 	await expect(page).toHaveTitle('Terms of service — Kredit');
+-	await expect(page.getByRole('heading', { name: 'The rules for using Kredit.' })).toBeVisible();
+-	await expect(page.getByRole('heading', { name: '3. Making a credit sale' })).toBeVisible();
+-	await expect(page.getByRole('heading', { name: '5. Payments, balances and Kredit fees' })).toBeVisible();
+-	await expect(page.getByRole('heading', { name: '6. Bank-debit permission and late payment' })).toBeVisible();
+-	await expect(page.getByRole('heading', { name: '10. Help, complaints and regulators' })).toBeVisible();
++	await expect(page.getByRole('heading', { name: 'Terms of service', exact: true })).toBeVisible();
++	await expect(page.getByRole('heading', { name: 'Making a credit sale' })).toBeVisible();
++	await expect(page.getByRole('heading', { name: 'Payments, balances and Kredit fees' })).toBeVisible();
++	await expect(page.getByRole('heading', { name: 'Bank-debit permission and late payment' })).toBeVisible();
++	await expect(page.getByRole('heading', { name: 'Help, complaints and regulators' })).toBeVisible();
+ 	await expect(page.getByText('Kredit is not a bank, wallet, credit bureau, insurance company, marketplace or debt buyer.')).toBeVisible();
+-	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
++	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow,max-image-preview:large,max-snippet:-1');
+ });
+ 
+ test('detailed legal content stays readable on a small phone', async ({ page }) => {
+@@ -73,18 +73,17 @@ test('detailed legal content stays readable on a small phone', async ({ page })
+ 		await page.goto(path);
+ 		const sizes = await page.evaluate(() => ({ page: document.documentElement.scrollWidth, screen: window.innerWidth }));
+ 		expect(sizes.page, `${path} must not scroll sideways`).toBeLessThanOrEqual(sizes.screen);
+-		await expect(page.getByRole('navigation', { name: /contents/i })).toBeVisible();
++		await page.locator('.mobile-contents summary').click();
++ await expect(page.getByRole('navigation', { name: 'Document sections' })).toBeVisible();
+ 		await expect(page.locator('.document-actions')).toBeVisible();
+ 	}
+ });
+ 
+ test('approved production details activate both legal documents', async ({ page }) => {
+-	const environment = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+-	test.skip(environment?.TEST_ACTIVE_LEGAL !== '1', 'runs against the active-legal configuration');
+ 	for (const path of ['/legal/privacy', '/legal/terms']) {
+ 		await page.goto(path);
+-		await expect(page.getByText('Kredit Launch Test Limited').first()).toBeVisible();
+-		await expect(page.getByText(/Effective 1 September 2026/).first()).toBeVisible();
++		await expect(page.getByText('KREDIT TECHNOLOGIES LIMITED').first()).toBeVisible();
++		await expect(page.getByText(/Effective 7 September 2026/).first()).toBeVisible();
+ 		await expect(page.getByText('Complete pre-launch draft — legal approval pending')).toHaveCount(0);
+ 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow,max-image-preview:large,max-snippet:-1');
+ 	}
+diff --git a/db/migrations/088_settings_history_immutable.sql b/db/migrations/088_settings_history_immutable.sql
+new file mode 100644
+index 0000000..51d0fca
+--- /dev/null
++++ b/db/migrations/088_settings_history_immutable.sql
+@@ -0,0 +1,17 @@
++-- +goose Up
++-- +goose StatementBegin
++CREATE FUNCTION app.reject_settings_history_mutation() RETURNS trigger
++LANGUAGE plpgsql AS $$
++BEGIN
++  RAISE EXCEPTION 'platform settings history is append-only';
++END;
++$$;
++-- +goose StatementEnd
++CREATE TRIGGER platform_settings_history_immutable
++BEFORE UPDATE OR DELETE ON app.platform_settings_history
++FOR EACH ROW EXECUTE FUNCTION app.reject_settings_history_mutation();
++REVOKE UPDATE, DELETE, TRUNCATE ON app.platform_settings_history FROM kredit_app;
++
++-- +goose Down
++-- Intentionally preserve the integrity boundary when rolling back application code.
++SELECT 1;
+diff --git a/internal/legalpublication/versions.go b/internal/legalpublication/versions.go
+new file mode 100644
+index 0000000..079fbb1
+--- /dev/null
++++ b/internal/legalpublication/versions.go
+@@ -0,0 +1,6 @@
++// Package legalpublication identifies the initial local release documents.
++// Existing stored agreement versions are immutable; these apply to new records.
++package legalpublication
++
++const TermsVersion = "supplier-terms-v2-2026-09-07"
++const PrivacyVersion = "privacy-v2-2026-09-07"
+diff --git a/internal/platformsettings/crypto_root_test.go b/internal/platformsettings/crypto_root_test.go
+new file mode 100644
+index 0000000..ae4e609
+--- /dev/null
++++ b/internal/platformsettings/crypto_root_test.go
+@@ -0,0 +1,32 @@
++package platformsettings
++
++import "testing"
++
++func TestMissingEncryptionRootFailsClosed(t *testing.T) {
++	t.Setenv("SETTINGS_ENCRYPTION_KEY", "")
++	t.Setenv("TOKEN_SECRET", "legacy-token-secret-must-not-encrypt-settings")
++	enc := NewEncryptor("")
++	if _, err := enc.Encrypt("provider-secret"); err == nil {
++		t.Fatal("missing root allowed secret encryption")
++	}
++	if _, err := enc.Decrypt("YWJj"); err == nil {
++		t.Fatal("missing root allowed secret decryption")
++	}
++}
++
++func TestShortEncryptionRootFailsClosed(t *testing.T) {
++	if _, err := NewEncryptor("short").Encrypt("secret"); err == nil {
++		t.Fatal("short root accepted")
++	}
++}
++
++func TestRegistryRejectsUnknownNullAndManualVerification(t *testing.T) {
++	for _, tc := range []struct{ key, value string }{
++		{"features.typo", "true"}, {"features.trade_lines", "null"},
++		{"integrations.mono.status", `"verified"`},
++	} {
++		if _, err := ValidateKeyAndValue(tc.key, []byte(tc.value)); err == nil {
++			t.Fatalf("accepted %s=%s", tc.key, tc.value)
++		}
++	}
++}
+diff --git a/scripts/launch-browser-check.mjs b/scripts/launch-browser-check.mjs
+new file mode 100644
+index 0000000..561abc1
+--- /dev/null
++++ b/scripts/launch-browser-check.mjs
+@@ -0,0 +1,28 @@
++import { chromium } from '../web/node_modules/@playwright/test/index.mjs';
++import assert from 'node:assert/strict';
++const browser = await chromium.launch({executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || '/Users/macbookpro/Library/Caches/ms-playwright/chromium-1234/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',headless:true});
++const page = await browser.newPage({viewport:{width:1440,height:1000}});
++const base=process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5173';
++let sessionRequests=0;page.on('request',r=>{if(r.url().endsWith('/api/v1/me'))sessionRequests++});
++try {
++ for (const [name,path] of [['home','/'],['pricing','/pricing'],['terms','/legal/terms'],['privacy','/legal/privacy'],['complaints','/legal/complaints'],['signin','/app']]) {
++  const response=await page.goto(base+path); assert.equal(response.status(),200,path);
++  await page.locator('h1').waitFor();
++  const text=await page.locator('body').innerText();
++  assert.doesNotMatch(text,/pre-launch|approval pending|Before you read all this|Check session again|current session|Invalid Date/i);
++  if(name==='pricing') {assert.match(text,/0.5%/);assert.doesNotMatch(text,/temporarily unavailable/)}
++  if(['terms','privacy','complaints'].includes(name)) assert.match(text,/hello@kredit.com.ng/);
++  await page.screenshot({path:`docs/launch-readiness/evidence/after-${name}.png`,fullPage:true});
++  console.log('PASS rendered',path,'1440x1000');
++ }
++ assert.equal(sessionRequests,0,'ordinary guests must not request /me');
++ for(const width of [320,360,390,430,768,1024,1440]) {
++  await page.setViewportSize({width,height:900});await page.goto(base+'/legal/terms');
++  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow at ${width}`);
++  const links=await page.locator('.document nav a').evaluateAll(els=>els.map(a=>a.getAttribute('href')));
++  for(const link of links) assert(await page.locator(link).count(),`missing anchor ${link}`);
++  if(width===390){await page.screenshot({path:'docs/launch-readiness/evidence/after-terms-mobile-closed.png'});await page.locator('.mobile-contents summary').click();await page.screenshot({path:'docs/launch-readiness/evidence/after-terms-mobile-open.png'});await page.locator('.mobile-contents a').last().click();assert.equal(await page.locator('.mobile-contents').getAttribute('open'),null)}
++  console.log('PASS legal reflow and anchors',width);
++ }
++ await page.goto(base+'/admin/platform-settings');assert.match(page.url(),/\/app\?next=/);console.log('PASS protected guest redirect');
++} finally {await browser.close()}
+diff --git a/scripts/launch-outage-check.mjs b/scripts/launch-outage-check.mjs
+new file mode 100644
+index 0000000..43c7e93
+--- /dev/null
++++ b/scripts/launch-outage-check.mjs
+@@ -0,0 +1,24 @@
++import {chromium} from '../web/node_modules/@playwright/test/index.mjs';
++import assert from 'node:assert/strict';
++const browser=await chromium.launch({executablePath:'/Users/macbookpro/Library/Caches/ms-playwright/chromium-1234/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',headless:true});
++const page=await browser.newPage({viewport:{width:1440,height:1000}});
++try {
++ for (const path of ['/','/legal/terms','/legal/privacy','/security','/blog','/app']) {
++  const response=await page.goto('http://127.0.0.1:3001'+path);assert.equal(response.status(),200);
++  assert.doesNotMatch(await page.locator('body').innerText(),/current session|Check session again|approval pending/i);
++  console.log('PASS API unavailable, public route',path);
++ }
++ await page.getByLabel('Phone number',{exact:true}).fill('08012345678');
++ await page.getByRole('button',{name:'Send me a code'}).click();
++ await page.getByRole('alert').waitFor();
++ assert.match(await page.getByRole('alert').innerText(),/could not confirm/);
++ assert.equal(await page.getByLabel('Six-digit code',{exact:true}).count(),0);
++ console.log('PASS failed sign-in does not invent delivery');
++ await page.goto('http://127.0.0.1:3001/pricing');
++ assert.match(await page.locator('body').innerText(),/Pricing is temporarily unavailable/);
++ assert.equal(await page.locator('.rates').count(),0);
++ await page.screenshot({path:'docs/launch-readiness/evidence/pricing-source-outage.png'});
++ console.log('PASS missing pricing source does not fabricate rates');
++ const response=await page.request.get('http://127.0.0.1:3001/api/v1/me');assert.equal(response.status(),503);
++ console.log('PASS protected API outage remains unavailable');
++} finally {await browser.close()}
+diff --git a/web/src/lib/components/DocumentLayout.svelte b/web/src/lib/components/DocumentLayout.svelte
+new file mode 100644
+index 0000000..97f57b9
+--- /dev/null
++++ b/web/src/lib/components/DocumentLayout.svelte
+@@ -0,0 +1,27 @@
++<script lang="ts">
++  import { onMount, type Snippet } from 'svelte';
++  let { title, description, version, effectiveDate, sections, children }:
++    { title: string; description: string; version: string; effectiveDate: string; sections: {id:string; title:string}[]; children: Snippet } = $props();
++  let active = $state('');
++  let mobile: HTMLDetailsElement;
++  onMount(() => {
++    const observer = new IntersectionObserver(entries => {
++      for (const entry of entries) if (entry.isIntersecting) active = entry.target.id;
++    }, { rootMargin: '-100px 0px -60% 0px' });
++    sections.forEach(section => { const el = document.getElementById(section.id); if (el) observer.observe(el); });
++    return () => observer.disconnect();
++  });
++</script>
++{#snippet links()}
++  {#each sections as section}<a href={`#${section.id}`} aria-current={active === section.id ? 'location' : undefined} onclick={() => { if (mobile) mobile.open = false; }}>{section.title}</a>{/each}
++{/snippet}
++<main class="shell document">
++  <header><p class="eyebrow">Kredit · Legal</p><h1>{title}</h1><p class="description">{description}</p><p class="metadata">Effective {effectiveDate} <span aria-hidden="true">·</span> {version}</p></header>
++  <div class="document-grid">
++    <aside><nav class="desktop-contents" aria-label="On this page"><strong>On this page</strong>{@render links()}</nav><details class="mobile-contents" bind:this={mobile}><summary>On this page</summary><nav aria-label="Document sections">{@render links()}</nav></details></aside>
++    <article>{@render children()}</article>
++  </div>
++</main>
++<style>
++.document{max-width:1160px;padding-block:3.5rem 6rem}.document header{max-width:760px;margin-bottom:3rem}.document h1{font-size:clamp(2.3rem,5vw,4rem);font-family:Georgia,serif;font-weight:500;letter-spacing:-.035em;line-height:1.1;margin:.7rem 0 1.2rem}.description{font-size:1.1rem;line-height:1.65;color:var(--color-muted);max-width:65ch}.metadata{font-size:.85rem;color:var(--color-muted);display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1.5rem}.document-grid{display:grid;grid-template-columns:240px minmax(0,1fr);gap:4rem;border-top:1px solid var(--color-border);padding-top:2rem}.desktop-contents{position:sticky;top:7rem;max-height:calc(100dvh - 9rem);overflow:auto;display:grid;gap:.15rem}.desktop-contents strong{font-size:.85rem;margin-bottom:.7rem}nav a{display:block;padding:.55rem .7rem;border-left:2px solid transparent;color:var(--color-muted);font-size:.88rem;line-height:1.45;text-decoration:none}nav a:hover,nav a[aria-current]{color:var(--color-primary);border-left-color:var(--color-primary);background:#f3f4fc}article{min-width:0;max-width:72ch}article :global(section){scroll-margin-top:7rem;margin:0 0 2.8rem}article :global(h2){font:650 1.4rem/1.35 var(--font-sans,Arial,sans-serif);letter-spacing:-.015em;margin:0 0 1rem}article :global(h3){font-size:1.05rem;margin-top:1.6rem}article :global(p),article :global(li){font-size:1rem;line-height:1.8;color:var(--color-foreground)}article :global(li){margin:.5rem 0}article :global(.detail-grid),article :global(.purpose-list){display:block}article :global(.document-actions){display:flex;flex-wrap:wrap;gap:1rem;border-top:1px solid var(--color-border);padding-top:1.5rem}.mobile-contents{display:none}@media(max-width:800px){.document{padding-block:2rem 4rem}.document header{margin-bottom:1.5rem}.document-grid{display:block;padding-top:0}.desktop-contents{display:none}.mobile-contents{display:block;margin-bottom:2rem;border-bottom:1px solid var(--color-border)}summary{min-height:3rem;display:flex;align-items:center;cursor:pointer;font-weight:650}summary::after{content:'+';margin-left:auto}details[open] summary::after{content:'−'}nav a{min-height:44px;box-sizing:border-box;display:flex;align-items:center}.document-grid article{max-width:100%}}@media print{.document{max-width:none;padding:0}.document-grid{display:block}.document-grid aside{display:none}article{max-width:none}article :global(section){break-inside:auto}article :global(.document-actions){display:none}}
++</style>
+diff --git a/web/src/lib/server/legal-publication.ts b/web/src/lib/server/legal-publication.ts
+new file mode 100644
+index 0000000..1864120
+--- /dev/null
++++ b/web/src/lib/server/legal-publication.ts
+@@ -0,0 +1,13 @@
++// Initial local release publication authorised by the replacement launch brief.
++// Stable metadata: this is a publication date, not a render date or CAC-derived date.
++export const legalPublication = Object.freeze({
++  active: true,
++  entityName: 'KREDIT TECHNOLOGIES LIMITED',
++  registrationNumber: 'RC 9834452',
++  serviceAddress: 'House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria',
++  legalEmail: 'hello@kredit.com.ng',
++  privacyEmail: 'hello@kredit.com.ng',
++  effectiveDate: '2026-09-07',
++  termsVersion: 'supplier-terms-v2-2026-09-07',
++  privacyVersion: 'privacy-v2-2026-09-07'
++});
+diff --git a/web/src/routes/app/+page.server.ts b/web/src/routes/app/+page.server.ts
+new file mode 100644
+index 0000000..3ffb977
+--- /dev/null
++++ b/web/src/routes/app/+page.server.ts
+@@ -0,0 +1,2 @@
++import type { PageServerLoad } from './$types';
++export const load: PageServerLoad = ({ cookies }) => ({ hasSessionCookie: Boolean(cookies.get('kredit_session')) });
+diff --git a/web/src/routes/pricing/+page.server.ts b/web/src/routes/pricing/+page.server.ts
+new file mode 100644
+index 0000000..5be2559
+--- /dev/null
++++ b/web/src/routes/pricing/+page.server.ts
+@@ -0,0 +1,14 @@
++import { validFeeTerms, type FeeTerms } from '$lib/fee-terms';
++import type { PageServerLoad } from './$types';
++
++export const load: PageServerLoad = async ({ fetch, setHeaders }) => {
++  // Prices are public policy. Never forward session state or cache superseded rates.
++  setHeaders({ 'cache-control': 'no-store' });
++  try {
++    const response = await fetch('/api/v1/pricing', { signal: AbortSignal.timeout(5000) });
++    if (!response.ok) throw new Error('Pricing unavailable');
++    const rates: unknown = await response.json();
++    if (!validFeeTerms(rates)) throw new Error('Invalid pricing');
++    return { rates: rates as FeeTerms };
++  } catch { return { rates: null }; }
++};

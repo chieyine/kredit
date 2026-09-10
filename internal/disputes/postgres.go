@@ -213,8 +213,12 @@ func postDisputeLedgerTx(ctx context.Context, tx pgx.Tx, referenceID, key string
 		account       string
 		debit, credit int64
 	}{{ledger.AccountReturnsAdjustment, int64(amount), 0}, {ledger.AccountTradeReceivable, 0, int64(amount)}} {
-		if _, err := tx.Exec(ctx, `INSERT INTO ledger.postings(transaction_id,account_id,debit_kobo,credit_kobo) SELECT $1::uuid,id,$3,$4 FROM ledger.accounts WHERE code=$2`, id, p.account, p.debit, p.credit); err != nil {
+		command, err := tx.Exec(ctx, `INSERT INTO ledger.postings(transaction_id,account_id,debit_kobo,credit_kobo) SELECT $1::uuid,id,$3,$4 FROM ledger.accounts WHERE code=$2`, id, p.account, p.debit, p.credit)
+		if err != nil {
 			return err
+		}
+		if command.RowsAffected() != 1 {
+			return errors.New("required ledger account is unavailable")
 		}
 	}
 	return nil

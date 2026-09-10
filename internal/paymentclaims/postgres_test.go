@@ -2,11 +2,13 @@ package paymentclaims
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
+	"kredit/internal/db"
 	"kredit/internal/ledger"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -51,6 +53,7 @@ func TestPostgresClaimIsRestartSafeAndExpiresHold(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM app.organizations WHERE id=$1::uuid`, orgID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id=$1::uuid`, userID)
 	}()
+	ctx = db.WithTenantContext(ctx, userID, orgID)
 	store := NewPostgresStore(pool)
 	claim, err := store.Create(ctx, CreateInput{ObligationID: obligationID, BuyerUserID: userID, AmountKobo: ledger.Money(2500), PaidAt: time.Now().UTC(), TransferReference: "BANK-" + unique, IdempotencyKey: "claim-" + unique})
 	if err != nil {
@@ -60,11 +63,68 @@ func TestPostgresClaimIsRestartSafeAndExpiresHold(t *testing.T) {
 	if err != nil || loaded.TransferReference != claim.TransferReference {
 		t.Fatalf("loaded=%+v err=%v", loaded, err)
 	}
+	if _, err = store.Decide(ctx, claim.ID, userID, Confirmed, "Unverified payment reference", transactionID); err == nil {
+		t.Fatal("legacy decision path accepted an arbitrary payment ID")
+	}
+	after, err := store.Get(ctx, claim.ID)
+	if err != nil || after.State != Pending || after.PaymentID != "" {
+		t.Fatalf("rejected confirmation changed the claim: %+v %v", after, err)
+	}
 	if hold := store.ActiveHold(ctx, obligationID, time.Now().UTC()); hold != 2500 {
 		t.Fatalf("hold=%d", hold)
 	}
 	if hold := store.ActiveHold(ctx, obligationID, claim.HoldExpiresAt.Add(time.Second)); hold != 0 {
 		t.Fatalf("expired hold=%d", hold)
+	}
+
+	app, err := db.OpenAsRole(ctx, os.Getenv("APP_DATABASE_URL"), "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	restricted := NewPostgresStore(app.Raw())
+	for _, scope := range []string{"buyer", "supplier", "obligation"} {
+		var list []Claim
+		switch scope {
+		case "buyer":
+			list, err = restricted.ReadForBuyer(ctx, userID)
+		case "supplier":
+			list, err = restricted.ReadForSupplier(ctx, orgID)
+		case "obligation":
+			list, err = restricted.ReadForObligation(ctx, obligationID)
+		}
+		if err != nil || len(list) != 1 || list[0].ID != claim.ID {
+			t.Fatalf("restricted %s read=%+v error=%v", scope, list, err)
+		}
+	}
+	if _, err = restricted.Get(ctx, claim.ID); err != nil {
+		t.Fatalf("restricted claim read: %v", err)
+	}
+	var otherOrg string
+	if err = pool.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&otherOrg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = restricted.Get(db.WithTenantContext(ctx, userID, otherOrg), claim.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("claim leaked across explicit organization: %v", err)
+	}
+	if hold := restricted.ActiveHold(ctx, obligationID, time.Now()); hold != 2500 {
+		t.Fatalf("restricted role ignored payment hold: %d", hold)
+	}
+	if hold := restricted.ActiveHold(context.Background(), obligationID, time.Now()); hold != ledger.Money(1<<63-1) {
+		t.Fatalf("missing identity did not block collection: %d", hold)
+	}
+	if _, err = restricted.Decide(ctx, claim.ID, userID, Rejected, "Transfer was not received", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = restricted.Decide(ctx, claim.ID, userID, Rejected, "Transfer was not received", ""); err != nil {
+		t.Fatalf("same decision retry failed: %v", err)
+	}
+	if _, err = restricted.Decide(ctx, claim.ID, userID, Rejected, "Changed review details", ""); err == nil {
+		t.Fatal("changed rejection replay was accepted")
+	}
+	app.Close()
+	if _, err = restricted.Get(ctx, claim.ID); err == nil || errors.Is(err, ErrNotFound) {
+		t.Fatalf("outage was reported as absence: %v", err)
 	}
 }
 

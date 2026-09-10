@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -126,6 +127,39 @@ func TestPostgresPaymentIsAtomicIdempotentAndRestartSafe(t *testing.T) {
 	loaded, err := f.store().GetContext(f.ctx, payment.ID)
 	if err != nil || loaded.ID != payment.ID {
 		t.Fatalf("restart-safe load failed: %v %+v", err, loaded)
+	}
+}
+
+func TestPostgresPaymentReplayPreservesDatabaseTimestampPrecision(t *testing.T) {
+	f := newPaymentFixture(t, 10000)
+	input := RecordInput{ObligationID: f.obligationID, SourceType: SourceVoluntary, AmountKobo: 2500, RecordedBy: f.userID, IdempotencyKey: f.paymentKeyPrefix + "-precision", PaidAt: time.Now().UTC().Truncate(time.Second).Add(123456789 * time.Nanosecond)}
+	first, _, err := f.store().RecordContext(f.ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, _, err := f.store().RecordContext(f.ctx, input)
+	if err != nil || replay.ID != first.ID || !replay.PaidAt.Equal(first.PaidAt) {
+		t.Fatalf("same timestamp input did not replay: %v", err)
+	}
+	input.PaidAt = input.PaidAt.Add(time.Microsecond)
+	if _, _, err := f.store().RecordContext(f.ctx, input); err == nil {
+		t.Fatal("materially different timestamp reused payment identity")
+	}
+}
+
+func TestPaymentCannotBypassAnExistingClosedSchedule(t *testing.T) {
+	f := newPaymentFixture(t, 10000)
+	tx, err := f.pool.Begin(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err := tx.Exec(f.ctx, `UPDATE app.schedule_items SET state='CANCELLED' WHERE schedule_id IN(SELECT id FROM app.repayment_schedules WHERE obligation_id=$1::uuid)`, f.obligationID); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = f.store().RecordTx(f.ctx, tx, RecordInput{ObligationID: f.obligationID, SourceType: SourceVoluntary, AmountKobo: 2500, RecordedBy: f.userID, IdempotencyKey: f.paymentKeyPrefix + "-closed-schedule"})
+	if err == nil || !strings.Contains(err.Error(), "no outstanding allocation capacity") {
+		t.Fatalf("payment bypassed the closed schedule: %v", err)
 	}
 }
 

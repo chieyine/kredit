@@ -30,6 +30,7 @@ type CustomerResolver func(context.Context, string, string) (string, error)
 
 type Client struct {
 	initiationDisabled                          bool
+	live                                        bool
 	baseURL, secret, webhookSecret, redirectURL string
 	partial                                     bool
 	resolve                                     CustomerResolver
@@ -37,18 +38,37 @@ type Client struct {
 	now                                         func() time.Time
 }
 
+// New builds a sandbox client. Use NewLive for a deployment that is entitled to
+// move real money; the two differ in which provider events they will accept.
 func New(baseURL, secret, webhookSecret, redirectURL string, partial bool, resolver CustomerResolver) (*Client, error) {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
 	u, err := url.Parse(baseURL)
-	if err != nil || u.Scheme != "https" || u.Host == "" {
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 		return nil, errors.New("mono HTTPS API endpoint is required")
 	}
 	if secret == "" || webhookSecret == "" || redirectURL == "" || resolver == nil {
 		return nil, errors.New("mono secret, webhook secret, redirect URL, and customer resolver are required")
 	}
+	redirect, err := url.Parse(redirectURL)
+	if err != nil || redirect.Scheme != "https" || redirect.Host == "" || redirect.User != nil || redirect.Fragment != "" {
+		return nil, errors.New("mono HTTPS return URL is required")
+	}
 	return &Client{baseURL: strings.TrimRight(baseURL, "/"), secret: secret, webhookSecret: webhookSecret, redirectURL: redirectURL, partial: partial, resolve: resolver, http: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, now: func() time.Time { return time.Now().UTC() }}, nil
+}
+
+// NewLive builds a client entitled to accept live provider events. It is the
+// only constructor that will process a webhook whose live_mode is true, so a
+// sandbox deployment can never act on production bank traffic and a production
+// deployment is never silently limited to sandbox events.
+func NewLive(baseURL, secret, webhookSecret, redirectURL string, partial bool, resolver CustomerResolver) (*Client, error) {
+	client, err := New(baseURL, secret, webhookSecret, redirectURL, partial, resolver)
+	if err != nil {
+		return nil, err
+	}
+	client.live = true
+	return client, nil
 }
 
 // ReconciliationOnly returns an immutable configuration that can observe and
@@ -104,6 +124,9 @@ func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.Aut
 	if c.initiationDisabled {
 		return mandates.Mandate{}, errors.New("new Mono authorizations are disabled")
 	}
+	if strings.TrimSpace(in.UserID) == "" || strings.TrimSpace(in.BusinessID) == "" || strings.TrimSpace(in.Purpose) == "" || in.AmountCeiling <= 0 {
+		return mandates.Mandate{}, errors.New("buyer, business, purpose, and positive mandate ceiling are required")
+	}
 	customer, err := c.resolve(ctx, in.UserID, in.BusinessID)
 	if err != nil || customer == "" {
 		return mandates.Mandate{}, errors.New("registered Mono customer binding is required")
@@ -123,12 +146,15 @@ func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.Aut
 	if id == "" {
 		id = out.Data.ID
 	}
-	if !successfulEnvelope(out.Status) || id == "" || validateHostedAuthorizationURL(out.Data.MonoURL) != nil {
+	if !successfulEnvelope(out.Status) || !validReference(id) || validateHostedAuthorizationURL(out.Data.MonoURL) != nil {
 		return mandates.Mandate{}, errors.New("mono returned an incomplete mandate authorization")
 	}
-	return mandates.Mandate{Provider: "mono-sweep", ProviderID: id, UserID: in.UserID, BusinessID: in.BusinessID, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, AuthorizationURL: out.Data.MonoURL, StartsAt: start, EndsAt: end, Variable: true, MultiAccount: true, PartialRecovery: c.partial, CreatedAt: c.now()}, nil
+	return mandates.Mandate{SupplierOrganizationID: in.SupplierOrganizationID, Provider: "mono-sweep", ProviderID: id, UserID: in.UserID, BusinessID: in.BusinessID, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, AuthorizationURL: out.Data.MonoURL, StartsAt: start, EndsAt: end, Variable: true, MultiAccount: true, PartialRecovery: c.partial, CreatedAt: c.now()}, nil
 }
 func (c *Client) GetMandate(ctx context.Context, id string) (mandates.Mandate, error) {
+	if !validReference(id) {
+		return mandates.Mandate{}, errors.New("valid mandate reference is required")
+	}
 	var out envelope[mandateData]
 	if err := c.request(ctx, http.MethodGet, "/v3/payments/mandates/"+url.PathEscape(id), nil, &out); err != nil {
 		return mandates.Mandate{}, err
@@ -148,14 +174,30 @@ func (c *Client) GetMandate(ctx context.Context, id string) (mandates.Mandate, e
 	case "failed", "rejected":
 		status = mandates.Failed
 	}
-	if status == mandates.Pending && d.Status == "approved" && d.Approved && d.Ready {
+	if status == mandates.Pending && strings.ToLower(d.Status) == "approved" && d.Approved && d.Ready {
 		status = mandates.Active
 	}
-	start, _ := time.Parse(time.RFC3339, d.StartRaw)
-	end, _ := time.Parse(time.RFC3339, d.EndRaw)
+	start, err := parseMandateDate(d.StartRaw)
+	if err != nil {
+		return mandates.Mandate{}, err
+	}
+	end, err := parseMandateDate(d.EndRaw)
+	if err != nil || (!start.IsZero() && !end.IsZero() && !end.After(start)) {
+		return mandates.Mandate{}, errors.New("mono mandate validity dates are invalid")
+	}
+	if status == mandates.Active {
+		if !end.IsZero() && !c.now().Before(end) {
+			status = mandates.Expired
+		} else if !start.IsZero() && c.now().Before(start) {
+			status = mandates.Pending
+		}
+	}
 	return mandates.Mandate{Provider: "mono-sweep", ProviderID: id, Status: status, AmountCeiling: d.Amount, StartsAt: start, EndsAt: end, Variable: true, MultiAccount: true, PartialRecovery: c.partial}, nil
 }
 func (c *Client) CancelMandate(ctx context.Context, id, _ string) (mandates.Mandate, error) {
+	if !validReference(id) {
+		return mandates.Mandate{}, errors.New("valid mandate reference is required")
+	}
 	var out envelope[json.RawMessage]
 	if err := c.request(ctx, http.MethodPatch, "/v3/payments/mandates/"+url.PathEscape(id)+"/cancel", nil, &out); err != nil {
 		return mandates.Mandate{}, err
@@ -173,10 +215,10 @@ func (c *Client) Submit(ctx context.Context, in collections.Request) (collection
 	if c.initiationDisabled {
 		return collections.Response{}, errors.New("new Mono collections are disabled")
 	}
-	if in.AmountKobo <= 0 || in.Currency != "NGN" || in.ExternalReference == "" {
+	if in.AmountKobo <= 0 || in.Currency != "NGN" || !validReference(in.ExternalReference) {
 		return collections.Response{}, errors.New("valid NGN debit amount and reference are required")
 	}
-	if in.MandateReference == "" {
+	if !validReference(in.MandateReference) {
 		return collections.Response{}, errors.New("active provider mandate is required")
 	}
 	narration := fmt.Sprintf("Kredit repayment Ref:%s", in.ExternalReference)
@@ -188,12 +230,15 @@ func (c *Client) Submit(ctx context.Context, in collections.Request) (collection
 	if !successfulEnvelope(out.Status) || (out.Data.Reference != "" && out.Data.Reference != in.ExternalReference) || (out.Data.Mandate != "" && out.Data.Mandate != in.MandateReference) {
 		return collections.Response{}, errors.New("mono did not confirm a matching debit response; reconciliation required")
 	}
-	return debitResponse(out.Data, in.MandateReference, in.ExternalReference, in.AmountKobo), nil
+	return debitResponse(out.Data, in.MandateReference, in.ExternalReference, in.AmountKobo, c.live), nil
 }
 func (c *Client) Get(context.Context, string) (collections.Response, error) {
 	return collections.Response{}, errors.New("mono debit lookup requires the persisted mandate and reference")
 }
 func (c *Client) GetByReference(ctx context.Context, in collections.Request) (collections.Response, error) {
+	if !validReference(in.MandateReference) || !validReference(in.ExternalReference) || in.AmountKobo <= 0 || (in.Currency != "" && in.Currency != "NGN") {
+		return collections.Response{}, errors.New("persisted NGN debit amount, mandate, and reference are required")
+	}
 	var out envelope[debitData]
 	path := "/v3/payments/mandates/" + url.PathEscape(in.MandateReference) + "/debit/" + url.PathEscape(in.ExternalReference)
 	if err := c.request(ctx, http.MethodGet, path, nil, &out); err != nil {
@@ -202,12 +247,12 @@ func (c *Client) GetByReference(ctx context.Context, in collections.Request) (co
 	if !successfulEnvelope(out.Status) || out.Data.Reference != in.ExternalReference || out.Data.Mandate != in.MandateReference {
 		return collections.Response{}, errors.New("mono debit identity did not match the persisted request")
 	}
-	return debitResponse(out.Data, in.MandateReference, in.ExternalReference, in.AmountKobo), nil
+	return debitResponse(out.Data, in.MandateReference, in.ExternalReference, in.AmountKobo, c.live), nil
 }
-func debitResponse(d debitData, mandate, reference string, requested ledger.Money) collections.Response {
+func debitResponse(d debitData, mandate, reference string, requested ledger.Money, live bool) collections.Response {
 	// Malformed monetary evidence is an unknown outcome, not a failed debit.
 	// Keep reconciliation/reservation semantics rather than guessing a payment.
-	if requested <= 0 || d.Amount < 0 || d.Collected < 0 || d.Pending < 0 || d.LiveMode || (d.Currency != "" && d.Currency != "NGN") {
+	if requested <= 0 || d.Amount < 0 || d.Collected < 0 || d.Pending < 0 || d.LiveMode != live || (d.Currency != "" && d.Currency != "NGN") {
 		return collections.Response{State: collections.ProviderPending}
 	}
 	state := collections.ProviderPending
@@ -243,6 +288,22 @@ func debitResponse(d debitData, mandate, reference string, requested ledger.Mone
 	return collections.Response{State: state, ProviderCollectionID: mandate + ":" + reference, SucceededAmountKobo: amount, FailureCode: d.ResponseCode, Retryable: false}
 }
 func successfulEnvelope(status string) bool { return status == "successful" || status == "success" }
+
+func validReference(value string) bool {
+	return value != "" && len(value) <= 256 && strings.TrimSpace(value) == value && value != "." && value != ".." && !strings.ContainsAny(value, "/\\?#\x00\r\n")
+}
+
+func parseMandateDate(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, errors.New("mono mandate validity dates are invalid")
+}
 func (c *Client) Sign(event collections.Webhook) string {
 	event.Signature = ""
 	encoded, _ := json.Marshal(event)
@@ -280,7 +341,8 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		return fmt.Errorf("mono returned HTTP %d", resp.StatusCode)
 	}
-	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(output); err != nil {
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+	if err != nil || len(payload) > 1<<20 || json.Unmarshal(payload, output) != nil {
 		return errors.New("mono returned an invalid response")
 	}
 	return nil

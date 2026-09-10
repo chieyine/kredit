@@ -3,6 +3,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+const require = createRequire(new URL('../web/package.json', import.meta.url));
+const ts = require('typescript');
 
 const root = resolve(import.meta.dirname, '..');
 const serverSource = readFileSync(resolve(root, 'internal/web/server.go'), 'utf8');
@@ -37,36 +40,40 @@ function hasDynamicRouteChoice(path) {
 	return false;
 }
 
-function readFetchCall(source, start) {
-	let depth = 1;
-	let quote = '';
-	let escaped = false;
-	for (let index = start; index < source.length; index++) {
-		const character = source[index];
-		if (quote) {
-			if (escaped) escaped = false;
-			else if (character === '\\') escaped = true;
-			else if (character === quote) quote = '';
-			continue;
-		}
-		if (character === '"' || character === "'" || character === '`') { quote = character; continue; }
-		if (character === '(') depth++;
-		if (character === ')' && --depth === 0) return source.slice(start, index);
-	}
-	return '';
-}
-
+// Parse call arguments: decoder bodies may themselves contain a `method`
+// field, which must never be mistaken for the request options.
 const frontendCalls = [];
 for (const file of listing.stdout.trim().split('\n').filter(Boolean)) {
-	const source = readFileSync(resolve(root, file), 'utf8');
-	for (const match of source.matchAll(/\bfetch\(/g)) {
-		const call = readFetchCall(source, match.index + match[0].length);
-		const pathMatch = call.match(/^\s*([`'"])(\/api\/v1\/[\s\S]*?)\1/);
-		if (!pathMatch) continue;
-		if (hasDynamicRouteChoice(pathMatch[2])) continue;
-		const method = call.match(/\bmethod\s*:\s*['"]([A-Z]+)['"]/)?.[1] ?? 'GET';
-		frontendCalls.push({ file, method, path: normalize(pathMatch[2]) });
-	}
+ const source = readFileSync(resolve(root, file), 'utf8');
+ const scripts = file.endsWith('.svelte') ? [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1]) : [source];
+ for (const script of scripts) {
+  const tree = ts.createSourceFile(file, script, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  function visit(node) {
+   if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ['fetch','checkedJSON'].includes(node.expression.text)) {
+    const argument = node.arguments[0];
+    let path;
+    if (argument && (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument))) path = argument.text;
+    else if (argument && ts.isTemplateExpression(argument)) path = argument.getText(tree).slice(1,-1);
+    if (path?.startsWith('/api/v1/') && !hasDynamicRouteChoice(path)) {
+     const options = node.arguments[node.expression.text === 'checkedJSON' ? 2 : 1];
+     let method = 'GET', known = true;
+     if (options && options.kind !== ts.SyntaxKind.UndefinedKeyword) {
+      if (!ts.isObjectLiteralExpression(options)) known = false;
+      else for (const property of options.properties) {
+       if (ts.isSpreadAssignment(property)) known = false;
+       else if (property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === 'method') {
+        if (ts.isPropertyAssignment(property) && ts.isStringLiteral(property.initializer)) { method = property.initializer.text.toUpperCase(); known = true; }
+        else known = false;
+       }
+      }
+     }
+     if (known) frontendCalls.push({file,method,path:normalize(path)});
+    }
+   }
+   ts.forEachChild(node,visit);
+  }
+  visit(tree);
+ }
 }
 
 const missingBackend = frontendCalls.filter(({ method, path }) => !serverRoutes.has(`${method} ${path}`));

@@ -45,7 +45,7 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusTooManyRequests, "otp_unavailable", err.Error())
 		return
 	}
-	if err := s.runtime.Notifications.SendOTP(r.Context(), input.Identifier, input.Channel, code); err != nil {
+	if err := s.runtime.Notifications.SendOTP(r.Context(), challenge.TargetValue, challenge.TargetType, code); err != nil {
 		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "We cannot send codes right now. Please try again shortly.")
 		return
 	}
@@ -105,7 +105,12 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": user, "session": session, "mfa_enrolled": s.runtime.Auth.IsMFAEnrolled(user.ID), "organizations": s.runtime.Organizations.ListForUser(user.ID)})
+	organizations, err := s.runtime.Organizations.ReadForUser(r.Context(), user.ID)
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "organizations_unavailable", "Your account businesses could not be loaded. Please try again.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": user, "session": session, "mfa_enrolled": s.runtime.Auth.IsMFAEnrolled(user.ID), "organizations": organizations})
 }
 
 func (s *Server) enrollTOTP(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +131,9 @@ func (s *Server) enrollTOTP(w http.ResponseWriter, r *http.Request) {
 		label = user.Phone
 	}
 	issuer := "Kredit"
-	uri := "otpauth://totp/" + issuer + ":" + label + "?secret=" + method.Secret + "&issuer=" + issuer + "&algorithm=SHA1&digits=6&period=30"
+	uri := (&url.URL{Scheme: "otpauth", Host: "totp", Path: "/" + issuer + ":" + label, RawQuery: url.Values{
+		"secret": {method.Secret}, "issuer": {issuer}, "algorithm": {"SHA1"}, "digits": {"6"}, "period": {"30"},
+	}.Encode()}).String()
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "auth.mfa.enrollment.started", ResourceType: "mfa_method", ResourceID: method.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"type": method.Type}})
 	writeJSON(w, http.StatusOK, map[string]any{"method_id": method.ID, "type": method.Type, "secret": method.Secret, "otpauth_uri": uri, "warning": "Store this secret securely. It is shown only during enrollment."})
 }

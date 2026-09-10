@@ -22,8 +22,8 @@ action. Distinguish agreement accepted, bank permission pending, ready to releas
 goods released, goods received and payment confirmed. Never turn missing data into
 zero or an empty state. No fake testimonials, customer counts or guaranteed recovery.
 
-A dispute may hold only its contested amount or all new debits, depending on the
-recorded effect. A request already sent to a bank may still complete. All public and
+New dispute reports hold their contested amount. Separate authorized risk-hold
+controls can stop broader collections. A request already sent to a bank may still complete. All public and
 private explanations must preserve that distinction.
 
 ## Nigerian business use

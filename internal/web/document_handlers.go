@@ -3,11 +3,13 @@ package web
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"time"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
+	"kredit/internal/documents"
 )
 
 type documentUploadRequest struct {
@@ -71,14 +73,22 @@ func (s *Server) documentDownload(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_path", err.Error())
 		return
 	}
-	doc, exists := s.runtime.Documents.GetForTenant(r.Context(), documentID, user.ID, organizationID)
-	if !exists || doc.OrganizationID != organizationID {
+	doc, readErr := s.runtime.Documents.ReadForTenant(r.Context(), documentID, user.ID, organizationID)
+	if errors.Is(readErr, documents.ErrNotFound) {
 		writeProblem(w, http.StatusNotFound, "document_not_found", "We could not find that document.")
+		return
+	}
+	if readErr != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "document_unavailable", "The document could not be opened. Try again.")
 		return
 	}
 	url, err := s.runtime.Documents.SignedDownloadForTenant(r.Context(), documentID, user.ID, organizationID, 10*time.Minute)
 	if err != nil {
-		writeProblem(w, http.StatusConflict, "document_unavailable", err.Error())
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, documents.ErrScanNotClean) {
+			status = http.StatusConflict
+		}
+		writeProblem(w, status, "document_unavailable", "The document is unavailable. It must finish scanning before it can be downloaded.")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"document": doc, "url": url, "expires_in_seconds": 600})

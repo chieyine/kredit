@@ -8,6 +8,131 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /ops/customer-registrations:
+    get:
+      operationId: listCustomerRegistrations
+      summary: List uncertain registrations for provider operators with elevated identity
+      responses:
+        '200':
+          description: Pending attempt identifiers, business identifiers and creation timestamps; no identity numbers
+        '403':
+          description: Provider operations permission and elevated identity required
+  /ops/customer-registrations/{attemptID}:
+    post:
+      operationId: resolveCustomerRegistration
+      summary: Verify an existing provider reference or record confirmed non-creation to permit retry
+      parameters:
+        - name: attemptID
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, reason]
+              properties:
+                action: {type: string, enum: [link, not_created]}
+                provider_reference: {type: string, maxLength: 128}
+                reason: {type: string, minLength: 20, maxLength: 2000}
+      responses:
+        '200':
+          description: Resolution saved; linking requires provider identity to match original intent
+        '409':
+          description: Attempt still running, identity mismatch, ownership change or conflicting resolution
+        '503':
+          description: Provider lookup or durable completion unavailable; preserve the original attempt
+  /website-guides:
+    get:
+      operationId: getPublishedGuides
+      summary: Read published guide copy without drafts or credentials
+      security: []
+      responses:
+        '200':
+          description: Published guides keyed by existing guide slug
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publications]
+                properties:
+                  publications:
+                    type: object
+                    additionalProperties: { $ref: '#/components/schemas/WebsitePublication' }
+        '503': { description: Publication store unavailable }
+  /website/{page}:
+    parameters:
+      - { name: page, in: path, required: true, schema: { type: string, pattern: "^(home|faq|pricing|terms|privacy|complaints|contact|guide-[a-z0-9-]+)$" } }
+    get:
+      operationId: getPublishedWebsiteCopy
+      summary: Read published website copy without exposing drafts or owner history
+      security: []
+      responses:
+        '200':
+          description: Published copy, or null when the initial release copy applies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publication]
+                properties:
+                  publication:
+                    oneOf:
+                      - { $ref: '#/components/schemas/WebsitePublication' }
+                      - { type: 'null' }
+        '404': { description: Unsupported page }
+        '503': { description: Publication store unavailable }
+  /ops/website/{page}:
+    parameters:
+      - { name: page, in: path, required: true, schema: { type: string, pattern: "^(home|faq|pricing|terms|privacy|complaints|contact|guide-[a-z0-9-]+)$" } }
+    get:
+      operationId: getWebsiteDraft
+      summary: Open the owner website editor with fresh MFA
+      responses:
+        '200':
+          description: Current edit version and draft/publication state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebsiteEditorRecord' }
+        '401': { description: Sign-in required }
+        '403': { description: Owner role and fresh MFA required }
+        '404': { description: Unsupported page }
+        '503': { description: Editor unavailable }
+    post:
+      operationId: changeWebsiteCopy
+      summary: Save a draft, publish reviewed copy or restore the current publication as a draft
+      description: Requires owner role, fresh MFA and CSRF. Publication must exactly match the saved draft and expected version. History remains immutable. Earlier history can be loaded and saved as a new draft.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, expected_version, copy, reason]
+              properties:
+                action: { type: string, enum: [save, publish, restore] }
+                expected_version: { type: integer, minimum: 0 }
+                copy: { $ref: '#/components/schemas/WebsiteCopy' }
+                reason: { type: string, minLength: 4, maxLength: 500 }
+      responses:
+        '200':
+          description: Saved version and current editor state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebsiteEditorRecord' }
+        '400': { description: Invalid action or edit version }
+        '401': { description: Sign-in required }
+        '403': { description: Owner role, fresh MFA and CSRF required }
+        '404': { description: Unsupported page }
+        '409': { description: Saved copy changed or publishing unsaved content }
+        '422': { description: Invalid copy or missing saved publication }
+        '503': { description: Editor unavailable }
   /organizations/{organizationID}/credit-terms/preview:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
@@ -49,8 +174,9 @@ paths:
         '503': {description: Service unavailable.}
   /platform/capabilities:
     get:
+      security: []
       operationId: getPlatformCapabilities
-      summary: Retrieve enabled platform features and launch controls
+      summary: Retrieve public enabled feature flags
       responses:
         '200':
           description: Enabled platform capability flags
@@ -94,33 +220,15 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema: { type: object, required: [key, expected_version, reason], properties: { key: { type: string }, expected_version: { type: integer, minimum: 0 }, reason: { type: string, minLength: 4 } }, additionalProperties: true }
       responses:
         '200':
           description: Setting updated or proposal created
           content:
             application/json:
               schema: { type: object, additionalProperties: true }
+        '409': { description: "Setting changed since it was reviewed" }
         '400': { description: "Invalid setting key, type, or value" }
-        '401': { description: "Sign-in required" }
-        '403': { description: "Platform owner role required" }
-        '503': { description: "Service unavailable" }
-  /ops/platform-settings/secret:
-    post:
-      operationId: rotatePlatformSecret
-      summary: Securely rotate an encrypted credential setting
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, additionalProperties: true }
-      responses:
-        '200':
-          description: Secret rotated with AES-256-GCM encryption
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-        '400': { description: "Invalid secret key or empty secret value" }
         '401': { description: "Sign-in required" }
         '403': { description: "Platform owner role required" }
         '503': { description: "Service unavailable" }
@@ -226,6 +334,8 @@ paths:
         '503': { description: "Persistence unavailable" }
   /ops/review-assignments:
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: assignAdminReview
       summary: Record review ownership, deadline and reason
       description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
@@ -261,6 +371,8 @@ paths:
         '409': { description: "Stale, expired, conflicted, or invalid proposal" }
         '503': { description: "Persistence unavailable" }
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: proposeAdminChange
       summary: Propose a correction or repayment-date amendment
       description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
@@ -285,6 +397,7 @@ paths:
       summary: Independently approve, reject or cancel an exact proposal
       description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - { name: changeID, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
         required: true
@@ -401,6 +514,7 @@ paths:
       summary: Accept or reject exact independently approved repayment dates
       description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - { name: changeID, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
         required: true
@@ -603,6 +717,8 @@ paths:
         '200':
           description: Organization members.
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: inviteMember
       summary: Invite a non-owner organization member
       requestBody:
@@ -619,6 +735,8 @@ paths:
       - $ref: '#/components/parameters/OrganizationID'
       - $ref: '#/components/parameters/UserID'
     patch:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: changeMemberRole
       summary: Change a non-owner member role or access status
       requestBody:
@@ -743,6 +861,8 @@ paths:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: uploadDocument
       summary: Upload an invoice or evidence document for scanning
       requestBody:
@@ -764,6 +884,8 @@ paths:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: createDocumentUploadSlot
       summary: Create quarantined document metadata and a short-lived direct-upload URL
       requestBody:
@@ -789,6 +911,8 @@ paths:
         required: true
         schema: {type: string}
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: completeDocumentUpload
       summary: Verify a direct upload and enqueue it for malware scanning
       responses:
@@ -814,6 +938,8 @@ paths:
       responses:
         '200': {description: "Support cases"}
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: openSupportCase
       summary: Open a support case tied to a subject
       requestBody:
@@ -838,6 +964,8 @@ paths:
         required: true
         schema: {type: string}
     patch:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: transitionSupportCase
       summary: Transition a support case and append an event
       requestBody:
@@ -855,9 +983,29 @@ paths:
   /buyer/relationships/consents:
     get:
       operationId: listBuyerConsents
-      summary: List the authenticated buyer's relationship consents
+      summary: List the authenticated buyer's relationship consents and known suppliers
       responses:
-        '200': {description: "Buyer relationship consents"}
+        '200':
+          description: Buyer consent history and supplier display names, including limits before sale activation and previous consent relationships
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [consents, suppliers]
+                properties:
+                  consents:
+                    type: array
+                    items: {type: object}
+                  suppliers:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, legal_name, trading_name]
+                      properties:
+                        id: {type: string, format: uuid}
+                        legal_name: {type: string}
+                        trading_name: {type: string}
+        '503': {description: Consent history or supplier directory could not be verified}
     post:
       operationId: recordBuyerConsent
       summary: Record a versioned buyer relationship consent decision
@@ -880,6 +1028,8 @@ paths:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       operationId: createBuyerInvitation
       summary: Create a secure buyer onboarding invitation
       requestBody:
@@ -921,6 +1071,8 @@ paths:
     parameters:
       - $ref: '#/components/parameters/InvitationToken'
     post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       security: []
       operationId: acceptBuyerInvitation
       summary: Verify the buyer and create the buyer portal account
@@ -1007,6 +1159,7 @@ paths:
     post:
       operationId: sendCreditRequest
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/RequestID'
       responses:
@@ -1146,6 +1299,7 @@ paths:
     post:
       operationId: reversePayment
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/RequestID'
         - $ref: '#/components/parameters/PaymentID'
@@ -1335,8 +1489,9 @@ paths:
     post:
       operationId: createRepaymentSchedule
       deprecated: true
-      description: Accepted repayment schedules are immutable. A replacement requires a separate buyer-accepted amendment workflow, which is currently unavailable.
+      description: Accepted repayment schedules are immutable. Date changes require the separate admin proposal and buyer-accepted amendment workflow; this endpoint cannot replace accepted schedules.
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/RequestID'
       requestBody:
@@ -1368,6 +1523,7 @@ paths:
     post:
       operationId: createTradeLine
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
       requestBody:
         required: true
@@ -1550,6 +1706,7 @@ paths:
     post:
       operationId: suspendTradeLine
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/LineID'
       responses:
@@ -1559,6 +1716,7 @@ paths:
     post:
       operationId: resumeTradeLine
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/LineID'
       responses:
@@ -1611,6 +1769,7 @@ paths:
     post:
       operationId: retryCollection
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/AttemptID'
       responses:
@@ -1620,6 +1779,7 @@ paths:
     post:
       operationId: reconcileCollection
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/AttemptID'
       responses:
@@ -1704,13 +1864,26 @@ paths:
           required: true
           schema: {type: string, format: uuid}
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notification_id]
+              properties:
+                notification_id: {type: string, format: uuid, description: Delivered notification shown for the current payment date and amount.}
       responses:
         '204': {description: "Notice acknowledged idempotently."}
+        '400': {description: "A valid notification ID is required."}
+        '409': {description: "Notice is no longer current, delivered, or eligible for acknowledgement. Refresh the sale."}
+        '503': {description: "Acknowledgement could not be saved."}
         '404': {description: "Schedule item is not owned by the authenticated buyer."}
   /organizations/{organizationID}/credit-requests/{requestID}/disputes:
     post:
       operationId: openDispute
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/RequestID'
       requestBody:
@@ -1726,6 +1899,7 @@ paths:
     post:
       operationId: openBuyerDispute
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/RequestID'
       requestBody:
         required: true
@@ -1757,6 +1931,7 @@ paths:
     post:
       operationId: addDisputeEvidence
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - $ref: '#/components/parameters/DisputeID'
       requestBody:
@@ -2213,6 +2388,7 @@ paths:
       operationId: transitionOperationsCase
       summary: Move a platform support case to its next state
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - name: caseID
           in: path
           required: true
@@ -2357,6 +2533,7 @@ paths:
       operationId: exportReceivables
       summary: Export a reconciled receivables report as CSV
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
       responses:
         '200': { description: "CSV export" }
@@ -2433,6 +2610,7 @@ paths:
       operationId: decideCorrection
       summary: Review or decide a correction request
       parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
         - $ref: '#/components/parameters/OrganizationID'
         - name: correctionID
           in: path
@@ -2611,12 +2789,14 @@ paths:
   /me/privacy-requests/{requestID}/export:
     get:
       operationId: downloadPrivacyExport
-      summary: Download an unexpired privacy-filtered export belonging to the authenticated user
+      summary: Download an unexpired privacy-filtered export belonging to the user after fresh MFA
       parameters:
         - { name: requestID, in: path, required: true, schema: { type: string } }
       responses:
         '200': { description: "Protected authoritative JSON export" }
         '404': { description: "Export missing, expired, or belongs to another user" }
+        '403': { description: Fresh MFA required }
+        '503': { description: Export persistence unavailable }
   /me/account-recovery/{requestID}/cancel:
     post:
       operationId: cancelAccountRecovery
@@ -2659,12 +2839,27 @@ paths:
   /ops/privacy-requests/{requestID}/complete:
     post:
       operationId: completePrivacyRequest
-      summary: Complete approved privacy work under dual control
+      summary: Complete approved privacy work under current owner or delegated governance
+      description: Fresh MFA and CSRF are required. The current owner in solo-owner mode may complete their own approval with a recorded reason. Delegated governance requires a different reviewer. Neither mode allows completing one’s own personal request.
       parameters:
         - { name: requestID, in: path, required: true, schema: { type: string } }
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision_reviewer_id, expected_version]
+              properties:
+                decision_reviewer_id: { type: string, format: uuid }
+                expected_version: { type: integer, minimum: 1 }
+                reason: { type: string, minLength: 8, maxLength: 2000, description: Required for solo-owner completion. }
       responses:
         '200': { description: "Privacy request completed" }
+        '403': { description: Authorized reviewer and fresh MFA required }
+        '409': { description: Review version or governance does not permit completion }
 
 components:
   securitySchemes:
@@ -2684,7 +2879,7 @@ components:
     IdempotencyKey:
       name: Idempotency-Key
       in: header
-      required: false
+      required: true
       description: Reuse this key to safely retry a mutating request; a different payload returns IDEMPOTENCY_CONFLICT.
       schema:
         type: string
@@ -2756,6 +2951,65 @@ components:
         type: string
         minLength: 64
   schemas:
+    WebsiteCopy:
+      type: object
+      additionalProperties: false
+      required: [title, accent, introduction, sections]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        accent: { type: string, maxLength: 160 }
+        introduction: { type: string, minLength: 1, maxLength: 2000 }
+        sections:
+          type: array
+          maxItems: 40
+          description: Sections for FAQ, legal documents and guides. Introductions and contact pages use an empty array.
+          items:
+            type: object
+            additionalProperties: false
+            required: [heading, body]
+            properties:
+              heading: { type: string, minLength: 1, maxLength: 200 }
+              body: { type: string, minLength: 1, maxLength: 6000 }
+              points: { type: array, maxItems: 40, items: { type: string, minLength: 1, maxLength: 2000 } }
+        guide:
+          type: object
+          required: [description, category, keyphrase, faq, sources, related]
+          properties:
+            description: { type: string, minLength: 1, maxLength: 2000 }
+            category: { type: string }
+            keyphrase: { type: string, minLength: 1, maxLength: 200 }
+            faq: { type: array, maxItems: 40, items: { type: object, required: [heading, body], properties: { heading: { type: string }, body: { type: string } } } }
+            sources: { type: array, maxItems: 40, items: { type: object, required: [name, url, note], properties: { name: { type: string }, url: { type: string, format: uri }, note: { type: string } } } }
+            related: { type: array, maxItems: 12, uniqueItems: true, items: { type: string } }
+        contact:
+          type: object
+          required: [support_email, privacy_email, phone, address]
+          properties:
+            support_email: { type: string, format: email, maxLength: 254 }
+            privacy_email: { type: string, format: email, maxLength: 254 }
+            phone: { type: string, maxLength: 40 }
+            address: { type: string, minLength: 1, maxLength: 2000 }
+    WebsitePublication:
+      type: object
+      required: [copy, version, published_at, content_hash]
+      properties:
+        copy: { $ref: '#/components/schemas/WebsiteCopy' }
+        version: { type: integer, minimum: 1 }
+        published_at: { type: string, format: date-time }
+        content_hash: { type: string, pattern: '^[a-f0-9]{64}$' }
+    WebsiteEditorRecord:
+      type: object
+      required: [version, content]
+      properties:
+        version: { type: integer, minimum: 0 }
+        content:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [draft]
+              properties:
+                draft: { $ref: '#/components/schemas/WebsiteCopy' }
+                published: { $ref: '#/components/schemas/WebsitePublication' }
     AdminChangeProposal:
       type: object
       additionalProperties: false
@@ -2842,7 +3096,7 @@ components:
       properties:
         command_type:
           type: string
-          enum: [retry_job, retry_webhook, suspend_user, restore_user, suspend_organization, restore_organization, place_risk_hold, lift_risk_hold, request_reconciliation, resolve_unknown_submission, retry_collection, cancel_collection]
+          enum: [retry_job, retry_webhook, retry_document_scan, suspend_user, restore_user, suspend_organization, restore_organization, place_risk_hold, lift_risk_hold, request_reconciliation, resolve_unknown_submission, retry_collection, cancel_collection]
         target_type: { type: string, minLength: 1, maxLength: 64 }
         target_id: { type: string, minLength: 1, maxLength: 256 }
         organization_id: { type: string, format: uuid }
@@ -2931,7 +3185,7 @@ components:
         grace_hours: {type: integer, minimum: 0, maximum: 720}
         collection_at: {type: string, format: date-time}
         schedule_type: {type: string, enum: [one_time, equal, custom], default: one_time}
-        schedule_count: {type: integer, minimum: 2, maximum: 60}
+        schedule_count: {type: integer, minimum: 1, maximum: 60, description: One for a one-time sale; at least two for instalments.}
         schedule_cadence: {type: string, enum: [weekly, fortnightly, monthly, custom]}
         month_end_policy: {type: string, enum: [last_day, cap]}
         custom_schedule_items:
@@ -2965,7 +3219,7 @@ components:
         grace_hours: {type: integer, minimum: 0, maximum: 720}
         collection_at: {type: string, format: date-time}
         schedule_type: {type: string, enum: [one_time, equal, custom]}
-        schedule_count: {type: integer, minimum: 2, maximum: 60}
+        schedule_count: {type: integer, minimum: 1, maximum: 60, description: One for a one-time sale; at least two for instalments.}
         schedule_cadence: {type: string, enum: [weekly, fortnightly, monthly, custom]}
         month_end_policy: {type: string, enum: [last_day, cap]}
         custom_schedule_items:
@@ -2980,9 +3234,9 @@ components:
               due_date: {type: string, format: date}
     PaymentInput:
       type: object
-      required: [amount_kobo, idempotency_key]
+      required: [amount_kobo]
       properties:
-        source_type: {type: string, enum: [integrated_voluntary, supplier_recorded_transfer, buyer_payment_claim, cash_recorded, kredit_collection, adjustment]}
+        source_type: {type: string, enum: [integrated_voluntary, supplier_recorded_transfer, buyer_payment_claim, cash_recorded, adjustment], description: kredit_collection is reserved for verified provider processing and rejected on this endpoint.}
         amount_kobo: {type: integer, format: int64, minimum: 1}
         currency: {type: string, enum: [NGN]}
         provider: {type: string}
@@ -3042,7 +3296,7 @@ components:
         terms_version: {type: string}
     DrawdownInput:
       type: object
-      required: [principal_kobo, goods_description, due_date, collection_at, idempotency_key]
+      required: [principal_kobo, goods_description, due_date, collection_at]
       properties:
         principal_kobo: {type: integer, format: int64, minimum: 1}
         goods_description: {type: string}
@@ -3054,7 +3308,7 @@ components:
         expires_at: {type: string, format: date-time}
     CollectionStartInput:
       type: object
-      required: [idempotency_key]
+      description: The Idempotency-Key header supplies the request identity when the body key is omitted.
       properties:
         idempotency_key: {type: string}
     CollectionWebhook:
@@ -3115,7 +3369,7 @@ components:
         disputed_amount_kobo: {type: integer, format: int64, minimum: 1}
         reason: {type: string}
         explanation: {type: string}
-        collection_effect: {type: string, enum: [FULL_BLOCK, CONTESTED_ONLY, NO_AUTOMATIC_BLOCK]}
+        collection_effect: {type: string, const: CONTESTED_ONLY, description: New disputes always hold the contested amount. Legacy effect values cannot change that behavior.}
     EvidenceInput:
       type: object
       properties:
@@ -3131,13 +3385,13 @@ components:
         remaining_disputed_kobo: {type: integer, format: int64, minimum: 0}
         reason: {type: string}
     OperationInput:
-      description: Individual and cumulative write-offs plus fee waivers below 1000000 kobo per obligation are supported. Larger corrections remain blocked pending a verified approval workflow.
+      description: Individual and cumulative corrections must stay below the effective correction threshold (at most 1000000 kobo). Larger corrections use the separate durable admin-change approval workflow.
       type: object
       required: [amount_kobo, reason]
       properties:
         amount_kobo: {type: integer, format: int64, minimum: 1, maximum: 999999}
         reason: {type: string}
-        approved_by: {type: string, const: "", deprecated: true, description: Caller-asserted approval is rejected. Verified dual approval is not yet available.}
+        approved_by: {type: string, const: "", deprecated: true, description: Caller-asserted approval is rejected. Use the separate admin-change workflow for verified approval.}
     WhatsAppWebhook:
       type: object
       required: [id, from, text, signature]

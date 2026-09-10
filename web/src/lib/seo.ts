@@ -18,6 +18,7 @@ export const publicSitemapEntries = [
 	{ path: '/for-buyers', priority: '0.9', changeFrequency: 'monthly' },
 	{ path: '/pricing', priority: '0.8', changeFrequency: 'monthly' },
 	{ path: '/security', priority: '0.7', changeFrequency: 'monthly' },
+	{ path: '/contact', priority: '0.5', changeFrequency: 'monthly' },
 	{ path: '/faq', priority: '0.7', changeFrequency: 'monthly' },
 	{ path: '/glossary', priority: '0.6', changeFrequency: 'monthly' },
 	{ path: '/blog', priority: '0.8', changeFrequency: 'weekly' },
@@ -27,15 +28,15 @@ export const publicSitemapEntries = [
 ] as const;
 
 const defaultSEO: PageSEO = {
-	title: 'Kredit — give goods now, get your money later',
-	description: 'Write the sale down, let your customer accept it, keep the delivery proof and follow every payment. Built for Nigerian businesses. Free to start.'
+	title: 'Kredit — credit sales, clearly recorded',
+	description: 'Record what you supplied, let your customer accept the terms, keep the delivery proof and follow every payment. Built for Nigerian businesses.'
 };
 
 export const pageSEOByPath: Record<string, PageSEO> = {
 	'/': defaultSEO,
 	'/demo': {
-		title: 'Try Kredit free in 60 seconds — no sign-in',
-		description: 'Play both sides of a sample sale. Accept the deal, confirm the goods and enter a payment. No sign-in, no real money, about 60 seconds.'
+		title: 'Try a sample sale — no sign-in needed',
+		description: 'See both sides of a sample sale. Accept the terms, confirm the goods and record a payment. No sign-in and no real money.'
 	},
 	'/how-it-works': {
 		title: 'How Kredit works — from handshake to last naira',
@@ -61,9 +62,13 @@ export const pageSEOByPath: Record<string, PageSEO> = {
 		title: 'Common questions — Kredit',
 		description: 'Straight answers about selling goods on credit, getting paid, what Kredit costs, late customers, your privacy and keeping your account safe.'
 	},
+	'/contact': {
+		title: 'Contact Kredit — account help and privacy',
+		description: 'Contact Kredit for help with your account, a sale or a privacy request. Find our support channels, office address and complaints process.'
+	},
 	'/glossary': {
 		title: 'What the words mean — Kredit glossary',
-		description: 'Plain meanings for the business words you will see on Kredit: mandate, grace period, principal, dispute, drawdown and more. No big grammar.'
+		description: 'What the words on Kredit mean: mandate, grace period, principal, dispute, drawdown and the rest, explained in one line each.'
 	},
 	'/blog': {
 		title: 'Guides for selling on credit — Kredit',

@@ -64,7 +64,7 @@ func TestPrivacyNeedsIndependentCompletionAndAppliesRestriction(t *testing.T) {
 	if _, err = s.CompletePrivacy(context.Background(), r.ID, "reviewer-a", "reviewer-a", r.Version); err == nil {
 		t.Fatal("single-person destructive completion accepted")
 	}
-	r, err = s.CompletePrivacy(context.Background(), r.ID, "reviewer-a", "reviewer-b", r.Version)
+	r, err = s.CompletePrivacyWithReason(context.Background(), r.ID, "reviewer-a", "reviewer-b", r.Version, "Verified completed processing restriction and documented retained records")
 	if err != nil || r.State != "COMPLETED" {
 		t.Fatalf("complete=%+v err=%v", r, err)
 	}
@@ -118,5 +118,30 @@ func TestRecoveryApprovalDoesNotCommitWhenPrivateDeliveryFails(t *testing.T) {
 	stored, err := s.Recovery(context.Background(), id)
 	if err != nil || stored.State != RecoveryPendingReview {
 		t.Fatalf("state=%s err=%v", stored.State, err)
+	}
+}
+
+func TestApprovedPrivacyChoicesStopOptionalProcessing(t *testing.T) {
+	for _, kind := range []string{"DELETION", "RESTRICTION", "OBJECTION", "CONSENT_WITHDRAWAL"} {
+		t.Run(kind, func(t *testing.T) {
+			s := NewStore("secret")
+			ctx := context.Background()
+			r, err := s.CreatePrivacyRequest(ctx, "subject", "", kind, "Stop the optional use of my information")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if allowed, err := s.AllowsOptionalProcessing(ctx, "subject"); err != nil || !allowed {
+				t.Fatal("unreviewed request changed processing")
+			}
+			if _, err = s.DecidePrivacy(ctx, r.ID, "reviewer", "APPROVED", "Verified requested optional processing restriction", r.Version); err != nil {
+				t.Fatal(err)
+			}
+			if allowed, err := s.AllowsOptionalProcessing(ctx, "subject"); err != nil || allowed {
+				t.Fatalf("restriction not applied: %v %v", allowed, err)
+			}
+			if allowed, err := s.AllowsOptionalProcessing(ctx, "other-subject"); err != nil || !allowed {
+				t.Fatal("restriction leaked across users")
+			}
+		})
 	}
 }

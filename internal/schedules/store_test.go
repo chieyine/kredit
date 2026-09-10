@@ -136,3 +136,60 @@ func TestMonthEndPoliciesAreDistinct(t *testing.T) {
 		}
 	}
 }
+
+func TestScheduleRejectsUnsupportedPoliciesAndDuplicateCalendarDays(t *testing.T) {
+	start := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	for _, kind := range []string{"allocation", "month_end", "negative_amount", "duplicate_day"} {
+		t.Run(kind, func(t *testing.T) {
+			in := CreateInput{ObligationID: "invalid", PrincipalKobo: 100, ScheduleType: TypeEqual, Count: 1, StartDate: start, Timezone: "UTC"}
+			switch kind {
+			case "allocation":
+				in.AllocationPolicy = "latest_first"
+			case "month_end":
+				in.MonthEndPolicy = "unrecognized"
+			case "negative_amount":
+				in.InstalmentAmountKobo = -1
+			case "duplicate_day":
+				in.ScheduleType = TypeCustom
+				in.CustomItems = []CustomItem{{AmountKobo: 50, DueDate: start}, {AmountKobo: 50, DueDate: start.Add(time.Hour)}}
+			}
+			store := NewStore()
+			if _, _, err := store.Create(in); err == nil {
+				t.Fatal("invalid terms accepted")
+			}
+			if _, _, err := store.GetForObligation(in.ObligationID); err == nil {
+				t.Fatal("rejected terms created a schedule")
+			}
+		})
+	}
+}
+
+func TestScheduleReadDerivesCurrentStateWithoutMutatingOtherSchedules(t *testing.T) {
+	store := NewStore()
+	start := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	for _, id := range []string{"requested", "unrelated"} {
+		if _, _, err := store.Create(CreateInput{ObligationID: id, PrincipalKobo: 100, ScheduleType: TypeEqual, Count: 1, StartDate: start, Timezone: "UTC", GraceHours: 24}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, scenario := range []struct {
+		at   time.Time
+		want string
+	}{{start.Add(-time.Hour), ItemOpen}, {start.Add(time.Hour), ItemInGrace}, {start.Add(25 * time.Hour), ItemOverdue}} {
+		_, items, err := store.GetForObligationAt("requested", scenario.at)
+		if err != nil || items[0].State != scenario.want {
+			t.Fatalf("state=%+v err=%v", items, err)
+		}
+	}
+	_, items, err := store.GetForObligation("unrelated")
+	if err != nil || items[0].State != ItemOpen {
+		t.Fatalf("unrelated schedule mutated: %+v %v", items, err)
+	}
+	if _, err := store.Allocate("requested", 40); err != nil {
+		t.Fatal(err)
+	}
+	_, items, err = store.GetForObligationAt("requested", start.Add(25*time.Hour))
+	if err != nil || items[0].State != ItemPartiallyPaid {
+		t.Fatalf("partial payment state lost: %+v %v", items, err)
+	}
+}

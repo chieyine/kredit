@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type Scanner interface {
@@ -32,7 +35,11 @@ func NewWebhookScanner(endpoint, token string) (*WebhookScanner, error) {
 	if strings.TrimSpace(endpoint) == "" || strings.TrimSpace(token) == "" {
 		return nil, errors.New("document scanner endpoint and token are required")
 	}
-	return &WebhookScanner{endpoint: strings.TrimSpace(endpoint), token: strings.TrimSpace(token), client: &http.Client{Timeout: 30 * time.Second}}, nil
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" || parsed.RawQuery != "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return nil, errors.New("document scanner endpoint is invalid")
+	}
+	return &WebhookScanner{endpoint: strings.TrimSpace(endpoint), token: strings.TrimSpace(token), client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 
 func (s *WebhookScanner) Scan(ctx context.Context, document Document, downloadURL string) (ScanState, error) {
@@ -78,13 +85,41 @@ func (s *Store) Scan(ctx context.Context, id string, scanner Scanner) (Document,
 	if scanner == nil {
 		return Document{}, errors.New("document scanner is not configured")
 	}
-	document, ok := s.Get(id)
-	if !ok {
-		return Document{}, errors.New("document not found")
+	document, err := s.readContext(ctx, id, "", "")
+	if err != nil {
+		return Document{}, err
 	}
 	if document.ScanState != ScanPending && document.ScanState != ScanQuarantine {
 		return document, nil
 	}
+	if document.UploadCompletedAt.IsZero() || s.objects == nil {
+		return Document{}, errors.New("document upload is not complete")
+	}
+	// Claim at execution, not discovery: an old queued job must never borrow
+	// the attempt identity of a newer worker after the discovery lease expires.
+	if s.pool != nil {
+		err := s.pool.QueryRow(ctx, `UPDATE app.documents SET scan_attempts=scan_attempts+1,scan_lease_until=now()+interval '5 minutes' WHERE id=$1::uuid AND scan_state=$2 AND scan_attempts=$3 AND upload_completed_at IS NOT NULL AND (scan_lease_until IS NULL OR scan_lease_until<=now()) AND scan_attempts<5 RETURNING scan_attempts,scan_lease_until`, document.ID, string(document.ScanState), document.ScanAttempts).Scan(&document.ScanAttempts, &document.ScanLeaseUntil)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Document{}, errors.New("document scan is already claimed or needs review")
+		}
+		if err != nil {
+			return Document{}, err
+		}
+	} else {
+		s.mu.Lock()
+		current, exists := s.items[id]
+		if !exists || current.ScanState != document.ScanState || current.ScanAttempts != document.ScanAttempts || current.ScanAttempts >= 5 || current.ScanLeaseUntil.After(s.now()) {
+			s.mu.Unlock()
+			return Document{}, errors.New("document scan is already claimed or changed")
+		}
+		current.ScanAttempts++
+		current.ScanLeaseUntil = s.now().Add(5 * time.Minute)
+		s.items[id] = current
+		document = current
+		s.mu.Unlock()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	url, err := s.objects.SignedURL(ctx, document.ObjectKey, 5*time.Minute)
 	if err != nil {
 		return Document{}, err
@@ -93,7 +128,7 @@ func (s *Store) Scan(ctx context.Context, id string, scanner Scanner) (Document,
 	if err != nil {
 		return Document{}, err
 	}
-	return s.CompleteScan(id, state)
+	return s.completeScan(ctx, document, state)
 }
 
 func (s *Store) PendingScanIDs(ctx context.Context, limit int) ([]string, error) {
@@ -106,7 +141,7 @@ func (s *Store) PendingScanIDs(ctx context.Context, limit int) ([]string, error)
 	if _, err := s.pool.Exec(ctx, `UPDATE app.documents SET scan_state='QUARANTINED',scanned_at=now(),scan_lease_until=NULL WHERE scan_state='PENDING' AND ((upload_completed_at IS NULL AND upload_expires_at<=now()) OR (scan_attempts>=5 AND (scan_lease_until IS NULL OR scan_lease_until<=now())))`); err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `WITH claimed AS (SELECT id FROM app.documents WHERE scan_state='PENDING' AND upload_completed_at IS NOT NULL AND scan_attempts<5 AND (scan_lease_until IS NULL OR scan_lease_until<=now()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $1) UPDATE app.documents d SET scan_attempts=d.scan_attempts+1,scan_lease_until=now()+interval '5 minutes' FROM claimed WHERE d.id=claimed.id RETURNING d.id::text`, limit)
+	rows, err := s.pool.Query(ctx, `SELECT id::text FROM app.documents WHERE scan_state='PENDING' AND upload_completed_at IS NOT NULL AND scan_attempts<5 AND (scan_lease_until IS NULL OR scan_lease_until<=now()) ORDER BY created_at LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}

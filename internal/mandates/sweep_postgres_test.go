@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"kredit/internal/db"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -14,11 +16,15 @@ type reusableRemote struct {
 	*MockProvider
 	creates   int
 	beforeGet func()
+	replay    *Mandate
 }
 
 func (p *reusableRemote) Name() string { return "sandbox-mandate" }
 func (p *reusableRemote) CreateAuthorizationSession(ctx context.Context, in AuthorizationInput) (Mandate, error) {
 	p.creates++
+	if p.replay != nil {
+		return *p.replay, nil
+	}
 	m, err := p.MockProvider.CreateAuthorizationSession(ctx, in)
 	m.Variable = true
 	m.StartsAt = time.Now().Add(-time.Hour)
@@ -30,6 +36,14 @@ func (p *reusableRemote) GetMandate(ctx context.Context, id string) (Mandate, er
 		p.beforeGet()
 	}
 	return p.MockProvider.GetMandate(ctx, id)
+}
+
+func (p *reusableRemote) RestoreAuthorization(ctx context.Context, id string) (Mandate, error) {
+	previous, err := p.MockProvider.GetMandate(ctx, id)
+	if err != nil {
+		return Mandate{}, err
+	}
+	return p.CreateAuthorizationSession(ctx, AuthorizationInput{UserID: previous.UserID, BusinessID: previous.BusinessID, SupplierOrganizationID: previous.SupplierOrganizationID, AmountCeiling: previous.AmountCeiling})
 }
 func TestPostgresVariableMandateReuseAndRevocationAreDurable(t *testing.T) {
 	if os.Getenv("KREDIT_INTEGRATION") != "1" {
@@ -81,5 +95,46 @@ func TestPostgresVariableMandateReuseAndRevocationAreDurable(t *testing.T) {
 	m, err = p.GetMandate(ctx, first.ProviderID)
 	if err != nil || m.Status != Cancelled {
 		t.Fatalf("out of order pause reactivated: %s %v", m.Status, err)
+	}
+	if m.SupplierOrganizationID != org || !m.Variable || m.EndsAt.IsZero() {
+		t.Fatalf("terminal lookup lost mandate details: %+v", m)
+	}
+	if os.Getenv("APP_DATABASE_URL") == "" {
+		t.Fatal("restricted application database required for restoration check")
+	}
+	app, err := db.OpenAsRole(ctx, os.Getenv("APP_DATABASE_URL"), "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	appProvider := NewPostgresProviderWithRemote(app.Raw(), remote)
+	restored, err := appProvider.RestoreAuthorization(ctx, first.ProviderID)
+	if err != nil {
+		t.Fatalf("restore under application role: %v", err)
+	}
+	if restored.ID == first.ID || restored.SupplierOrganizationID != org || restored.UserID != user || restored.BusinessID != business {
+		t.Fatalf("restoration lost ownership or reused old mandate: %+v", restored)
+	}
+	// A provider-neutral read after restart must preserve all accepted details.
+	reloaded, err := NewPostgresProvider(app.Raw(), remote.Name()).GetMandate(ctx, restored.ProviderID)
+	if err != nil || reloaded.SupplierOrganizationID != org || !reloaded.Variable || !reloaded.EndsAt.Equal(restored.EndsAt.Truncate(time.Microsecond)) {
+		t.Fatalf("restored mandate details were not durable: %+v %v", reloaded, err)
+	}
+	listed, err := appProvider.ReadForBuyer(ctx, user)
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("standalone mandates unavailable under app role: %+v %v", listed, err)
+	}
+	other, err := appProvider.ReadForBuyer(ctx, "00000000-0000-7000-8000-000000000099")
+	if err != nil || len(other) != 0 {
+		t.Fatalf("another buyer saw mandates: %+v %v", other, err)
+	}
+	remote.replay = &first
+	input.SupplierOrganizationID = "00000000-0000-7000-8000-000000000010"
+	if _, err := p.CreateAuthorizationSession(ctx, input); err == nil {
+		t.Fatal("provider reference replay reassigned a mandate to another supplier")
+	}
+	var savedOrg string
+	if err := pool.QueryRow(ctx, `SELECT supplier_organization_id::text FROM app.payment_mandates WHERE id=$1::uuid`, first.ID).Scan(&savedOrg); err != nil || savedOrg != org {
+		t.Fatalf("replay changed original supplier: %s %v", savedOrg, err)
 	}
 }

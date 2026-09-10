@@ -43,6 +43,7 @@ func (h *sanitizingHandler) WithGroup(name string) slog.Handler {
 }
 
 func sanitizeAttr(attribute slog.Attr) slog.Attr {
+	attribute.Value = attribute.Value.Resolve()
 	lower := strings.ToLower(attribute.Key)
 	if lower == "error" || lower == "panic" {
 		if err, ok := attribute.Value.Any().(error); ok {
@@ -52,6 +53,15 @@ func sanitizeAttr(attribute slog.Attr) slog.Attr {
 	}
 	if sensitiveMetadataKey(lower) {
 		return slog.String(attribute.Key, "[redacted]")
+	}
+	if attribute.Value.Kind() == slog.KindGroup {
+		children := attribute.Value.Group()
+		safe := make([]slog.Attr, len(children))
+		for index, child := range children {
+			safe[index] = sanitizeAttr(child)
+		}
+		attribute.Value = slog.GroupValue(safe...)
+		return attribute
 	}
 	if attribute.Value.Kind() == slog.KindString {
 		return slog.String(attribute.Key, Redact(attribute.Value.String()))

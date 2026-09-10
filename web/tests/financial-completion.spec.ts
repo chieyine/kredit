@@ -10,7 +10,7 @@ test('financial review shows unresolved evidence and closes only after records a
   expect(route.request().headers()['idempotency-key']).toBeTruthy();
   const body=route.request().postDataJSON();
   if(body.action==='claim'){item.owner_id='operator';await route.fulfill({json:{status:'applied'}})}
-  else if(!agrees){await route.fulfill({status:409,json:{detail:'Financial discrepancy remains unresolved'}})}
+  else if(!agrees){await route.fulfill({status:409,json:{title:'financial_difference_unresolved',detail:'Financial discrepancy remains unresolved'}})}
   else{resolved=true;await route.fulfill({json:{status:'applied'}})}
  });
  await page.goto('/admin/reconciliation');
@@ -20,7 +20,7 @@ test('financial review shows unresolved evidence and closes only after records a
  await page.getByRole('button',{name:'Take this review'}).click();
  await expect(page.getByText('Assigned to a reviewer')).toBeVisible();
  await page.getByRole('button',{name:'Close this review'}).click();
- await expect(page.getByRole('alert')).toHaveText('Financial discrepancy remains unresolved');
+ await expect(page.getByRole('alert')).toHaveText('Financial discrepancy remains unresolved. Correct the underlying records before closing this review.');
  agrees=true;
  await page.getByRole('button',{name:'Close this review'}).click();
  await expect(page.getByText('No open financial reviews.')).toBeVisible();

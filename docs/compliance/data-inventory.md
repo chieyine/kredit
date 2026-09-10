@@ -2,7 +2,7 @@
 
 The authoritative field-level register is generated at
 `docs/compliance/data-inventory.tsv`. It contains one reviewed row for every
-column in the `app`, `ledger`, and `river` production schemas. CI/database
+column in the `app`, `ledger`, and `jobs` production schemas. CI/database
 certification runs `scripts/data-inventory-check.sh`; schema drift without an
 inventory row fails the check.
 

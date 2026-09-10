@@ -38,6 +38,11 @@ func TestPostgresInvitationHashAndSecondSupplierReuse(t *testing.T) {
 	}
 	defer runtimePool.Close()
 	s := NewPostgresStore(runtimePool, "audit-invitation", identity.NewMockProvider())
+	var count int64
+	if err = pool.QueryRow(ctx, `SELECT app.business_count()`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	s.SetBusinessLimit(count + 1)
 	var first Portal
 	for i := 0; i < 2; i++ {
 		var org string
@@ -60,8 +65,21 @@ func TestPostgresInvitationHashAndSecondSupplierReuse(t *testing.T) {
 		} else if portal.Person.ID != first.Person.ID || portal.Business.ID != first.Business.ID || portal.Representative.ID != first.Representative.ID {
 			t.Fatal("duplicate identity on second invitation")
 		}
-		if _, err = s.Accept(ctx, invitation.RawToken, buyer, AcceptInput{FullName: "Buyer Name"}); err == nil {
-			t.Fatal("used invitation replay accepted")
+		replay, err := s.Accept(ctx, invitation.RawToken, buyer, AcceptInput{FullName: "Buyer Name"})
+		if err != nil || replay.Business.ID != portal.Business.ID {
+			t.Fatalf("same-buyer acceptance recovery failed: %v", err)
+		}
+		if _, err = s.Accept(ctx, invitation.RawToken, owner, AcceptInput{FullName: "Other person"}); err == nil {
+			t.Fatal("another user replayed accepted invitation")
+		}
+		if i == 1 {
+			next, err := s.CreateInvitation(owner, org, CreateInvitationInput{Target: "buyer@example.test", TargetType: "email", LegalName: "Another Buyer Ltd", BusinessType: "limited_company", BusinessAddress: "Lagos", Industry: "retail"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.Accept(ctx, next.RawToken, buyer, AcceptInput{FullName: "Buyer Name"}); err == nil {
+				t.Fatal("new business exceeded the persisted limit")
+			}
 		}
 	}
 }

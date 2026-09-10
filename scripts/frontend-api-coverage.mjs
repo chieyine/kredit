@@ -47,6 +47,11 @@ const noSeparateScreen = new Map([
 // string matching cannot reconstruct those paths, so each one is tied to the
 // component that exposes it. Removing that component makes this check fail.
 const coveredThroughComponent = new Map([
+	['POST /api/v1/buyer-invitations/{id}/otp', 'web/src/routes/buyer-invitations/[token]/+page.svelte'],
+	['POST /api/v1/buyer-invitations/{id}/accept', 'web/src/routes/buyer-invitations/[token]/+page.svelte'],
+	['GET /api/v1/organizations/{id}/payments', 'web/src/routes/app/payments/+page.svelte'],
+	['GET /api/v1/organizations/{id}/customers/{id}/history', 'web/src/routes/app/customers/[id]/+page.svelte'],
+	['GET /api/v1/organizations/{id}/customers/{id}/statement', 'web/src/routes/app/customers/[id]/+page.svelte'],
 	['POST /api/v1/buyer/credit-requests/{id}/mandate', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
 	['POST /api/v1/buyer/credit-requests/{id}/accept', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
 	['POST /api/v1/buyer/credit-requests/{id}/decline', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
@@ -99,6 +104,18 @@ const coveredThroughComponent = new Map([
 
 for (const [route, file] of coveredThroughComponent) {
 	if (!listing.stdout.split('\n').includes(file)) throw new Error(`${route} points to missing frontend component ${file}`);
+}
+
+// These paths are assembled from local helper/base variables. Check their
+// actual request expressions as well as the screen mapping above.
+const dynamicBindings = [
+	['web/src/routes/buyer-invitations/[token]/+page.svelte', ["checkedJSON(invitationPath()+'/otp'", "{method:'POST'}", "new MutationIntent('accept-buyer-invitation',invitationPath()+'/accept')", 'acceptance.run(']],
+	['web/src/routes/app/payments/+page.svelte', ['checkedJSON(`${root}/payments`']],
+	['web/src/routes/app/customers/[id]/+page.svelte', ['checkedJSON(`${base}/history`', 'checkedJSON(`${base}/statement`']]
+];
+for (const [file, bindings] of dynamicBindings) {
+	const source = readFileSync(resolve(root, file), 'utf8');
+	for (const binding of bindings) if (!source.includes(binding)) throw new Error(`Dynamic API controller is missing in ${file}: ${binding}`);
 }
 
 // Dynamic financial actions must retain their actual controller binding, not

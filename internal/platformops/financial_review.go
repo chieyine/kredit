@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"kredit/internal/access"
 	"strings"
+	"time"
 )
+
+var ErrFinancialDifferenceUnresolved = errors.New("financial discrepancy remains unresolved")
 
 // RefreshFinancialReviews records discrepancies without changing balances or
 // inventing provider settlements. Reappearing discrepancies reopen the case.
@@ -61,6 +65,11 @@ func (s *Store) FinancialReviews(ctx context.Context) (json.RawMessage, error) {
 // Resolve requires current evidence to agree, an assigned owner, and a written
 // reason. This endpoint never accepts a replacement balance or settlement.
 func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, reason string) error {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if s == nil || s.pool == nil {
+		return errors.New("financial review database unavailable")
+	}
 	if action != "claim" && action != "resolve" {
 		return errors.New("action must be claim or resolve")
 	}
@@ -73,6 +82,9 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('financial-review-refresh',0))`); err != nil {
+		return err
+	}
+	if err = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionProviderOperations); err != nil {
 		return err
 	}
 	var owner, kind, target, state string
@@ -94,7 +106,7 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 			return err
 		}
 		if mismatch {
-			return errors.New("financial discrepancy remains unresolved")
+			return ErrFinancialDifferenceUnresolved
 		}
 		_, err = tx.Exec(ctx, `UPDATE app.financial_review_cases SET state='RESOLVED',resolved_at=now() WHERE id=$1::uuid`, id)
 	} else {

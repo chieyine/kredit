@@ -92,18 +92,19 @@ func TestPostgresTradeLineActivationCommitsAsOneFinancialTransaction(t *testing.
 	tradeStore := runtime.TradeLines.(*tradelines.PostgresStore)
 	creditStore := runtime.Credit.(*credit.PostgresStore)
 	scheduleStore := schedules.NewPostgresStore(pool)
+	forcedRollback := errors.New("forced rollback after every financial write")
 	tradeStore.SetTransactionalActivationHandler(func(ctx context.Context, tx pgx.Tx, input tradelines.ActivationInput) (string, func(), error) {
-		view, _, _, err := creditStore.ActivateTradeLineDrawdownTx(ctx, tx, credit.TradeLineActivationInput{DrawdownID: input.Drawdown.ID, TradeLineID: input.Line.ID, SupplierOrganizationID: input.Line.SupplierOrganizationID, BuyerUserID: input.Line.BuyerUserID, BuyerBusinessID: input.Line.BuyerBusinessID, MandateID: input.Line.MandateID, PrincipalKobo: input.Drawdown.PrincipalKobo, GoodsDescription: input.Drawdown.GoodsDescription, DueDate: input.Drawdown.DueDate, GraceHours: input.Drawdown.GraceHours, CollectionAt: input.Drawdown.CollectionAt, TermsVersion: input.Drawdown.TermsVersion, DrawdownAgreementHash: input.Drawdown.AgreementHash, BuyerConfirmedAt: input.Drawdown.BuyerConfirmedAt, ReleaseActorID: input.Drawdown.ReleaseActorID, DeliveryMethod: input.Drawdown.DeliveryMethod, ReleasedAt: input.Drawdown.ReleasedAt, ReceiptActorID: input.Drawdown.ReceiptActorID, ReceiptAt: input.Drawdown.ReceiptAt})
+		view, _, _, err := creditStore.ActivateTradeLineDrawdownTx(ctx, tx, credit.TradeLineActivationInput{FeeTerms: input.Drawdown.FeeTerms.Clone(), DrawdownID: input.Drawdown.ID, TradeLineID: input.Line.ID, SupplierOrganizationID: input.Line.SupplierOrganizationID, BuyerUserID: input.Line.BuyerUserID, BuyerBusinessID: input.Line.BuyerBusinessID, MandateID: input.Line.MandateID, PrincipalKobo: input.Drawdown.PrincipalKobo, GoodsDescription: input.Drawdown.GoodsDescription, DueDate: input.Drawdown.DueDate, GraceHours: input.Drawdown.GraceHours, CollectionAt: input.Drawdown.CollectionAt, LegalVersions: input.Drawdown.LegalVersions, TermsVersion: input.Drawdown.TermsVersion, DrawdownAgreementHash: input.Drawdown.AgreementHash, BuyerConfirmedAt: input.Drawdown.BuyerConfirmedAt, ReleaseActorID: input.Drawdown.ReleaseActorID, DeliveryMethod: input.Drawdown.DeliveryMethod, ReleasedAt: input.Drawdown.ReleasedAt, ReceiptActorID: input.Drawdown.ReceiptActorID, ReceiptAt: input.Drawdown.ReceiptAt})
 		if err != nil {
 			return "", nil, err
 		}
 		if _, _, err := scheduleStore.CreateTx(ctx, tx, schedules.CreateInput{ObligationID: view.Obligation.ID, PrincipalKobo: view.Obligation.PrincipalKobo, ScheduleType: schedules.TypeEqual, Count: 1, StartDate: time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC), DueHour: 9, Timezone: "Africa/Lagos", GraceHours: 24, Cadence: schedules.CadenceCustom}); err != nil {
 			return "", nil, err
 		}
-		return "", nil, errors.New("forced rollback after every financial write")
+		return "", nil, forcedRollback
 	})
-	if _, _, err := runtime.TradeLines.RecordDrawdownReceipt(tradelines.ReceiptInput{DrawdownID: drawdown.ID, BuyerUserID: userID, State: "no_issue"}); err == nil {
-		t.Fatal("expected forced atomic rollback")
+	if _, _, err := runtime.TradeLines.RecordDrawdownReceipt(tradelines.ReceiptInput{DrawdownID: drawdown.ID, BuyerUserID: userID, State: "no_issue"}); !errors.Is(err, forcedRollback) {
+		t.Fatalf("expected forced atomic rollback after financial writes, got %v", err)
 	}
 	var creditCount, ledgerCount, scheduleCount int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM app.credit_requests WHERE id=$1::uuid`, drawdown.ID).Scan(&creditCount); err != nil {
@@ -155,6 +156,26 @@ func TestPostgresTradeLineActivationCommitsAsOneFinancialTransaction(t *testing.
 	current, found = committingRuntime.TradeLines.Get(lineID)
 	if !found || current.ApprovedLimitKobo != 400000 {
 		t.Fatalf("reduced limit did not persist: %+v found=%v", current, found)
+	}
+
+	reader := credit.NewPostgresStore(pool, nil)
+	if rows, err := reader.ReadForBuyer(ctx, userID); err != nil || len(rows) != 1 {
+		t.Fatalf("saved sale history unavailable: %v %v", rows, err)
+	}
+	var savedSnapshot []byte
+	if err := pool.QueryRow(ctx, `SELECT to_jsonb(s) FROM app.credit_aggregate_snapshots s WHERE credit_request_id=$1`, drawdown.ID).Scan(&savedSnapshot); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM app.credit_aggregate_snapshots WHERE credit_request_id=$1`, drawdown.ID); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := pool.Exec(ctx, `INSERT INTO app.credit_aggregate_snapshots SELECT * FROM jsonb_populate_record(NULL::app.credit_aggregate_snapshots,$1::jsonb)`, savedSnapshot); err != nil {
+			t.Errorf("restore synthetic projection: %v", err)
+		}
+	}()
+	if rows, err := reader.ReadForBuyer(ctx, userID); err == nil {
+		t.Fatalf("missing projection silently hid a saved sale: %v", rows)
 	}
 
 }

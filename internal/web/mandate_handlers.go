@@ -28,7 +28,10 @@ func (s *Server) cancelBuyerMandate(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	current, views, found := s.findBuyerMandate(r.Context(), user.ID, mandateID)
+	current, views, found, readErr := s.findBuyerMandate(r.Context(), user.ID, mandateID)
+	if financialReadError(w, readErr) {
+		return
+	}
 	if !found {
 		writeProblem(w, 404, "mandate_not_found", "We could not find that bank debit permission.")
 		return
@@ -58,7 +61,10 @@ func (s *Server) restoreBuyerMandate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mandateID, _ := pathID(r, "mandateID")
-	current, views, found := s.findBuyerMandate(r.Context(), user.ID, mandateID)
+	current, views, found, readErr := s.findBuyerMandate(r.Context(), user.ID, mandateID)
+	if financialReadError(w, readErr) {
+		return
+	}
 	if !found {
 		writeProblem(w, 404, "mandate_not_found", "We could not find that bank debit permission.")
 		return
@@ -78,10 +84,10 @@ func (s *Server) restoreBuyerMandate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"mandate": restored, "affected_credit_requests": len(views)})
 }
 
-func (s *Server) findBuyerMandate(ctx context.Context, userID, id string) (mandates.Mandate, []credit.View, bool) {
+func (s *Server) findBuyerMandate(ctx context.Context, userID, id string) (mandates.Mandate, []credit.View, bool, error) {
 	views, err := s.runtime.readCreditForBuyer(ctx, userID)
 	if err != nil {
-		return mandates.Mandate{}, nil, false
+		return mandates.Mandate{}, nil, false, err
 	}
 	matching := []credit.View{}
 	var current mandates.Mandate
@@ -94,7 +100,20 @@ func (s *Server) findBuyerMandate(ctx context.Context, userID, id string) (manda
 		}
 		matching = append(matching, view)
 	}
-	return current, matching, current.ID != ""
+	if reader, ok := s.runtime.Mandates.(mandates.BuyerReader); ok {
+		items, err := reader.ReadForBuyer(ctx, userID)
+		if err != nil {
+			return mandates.Mandate{}, nil, false, err
+		}
+		current = mandates.Mandate{}
+		for _, item := range items {
+			if item.ID == id || item.ProviderID == id {
+				current = item
+				break
+			}
+		}
+	}
+	return current, matching, current.ID != "", nil
 }
 
 func (s *Server) applyMandateToBuyerResources(userID string, previous, next mandates.Mandate, views []credit.View) error {

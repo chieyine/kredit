@@ -26,12 +26,13 @@ import (
 // not reveal an organisation context; all subsequent writes use request-local
 // user and organisation RLS settings.
 type PostgresStore struct {
-	pool        *pgxpool.Pool
-	key         []byte
-	identity    identity.IdentityProvider
-	guardMu     sync.RWMutex
-	inviteGuard func(CreateInvitationInput) error
-	acceptGuard func(AcceptInput) error
+	pool          *pgxpool.Pool
+	key           []byte
+	identity      identity.IdentityProvider
+	guardMu       sync.RWMutex
+	inviteGuard   func(CreateInvitationInput) error
+	acceptGuard   func(AcceptInput) error
+	businessLimit int64
 }
 
 var _ Service = (*PostgresStore)(nil)
@@ -53,6 +54,12 @@ func (s *PostgresStore) SetAcceptanceGuard(guard func(AcceptInput) error) {
 	s.guardMu.Lock()
 	defer s.guardMu.Unlock()
 	s.acceptGuard = guard
+}
+
+func (s *PostgresStore) SetBusinessLimit(limit int64) {
+	s.guardMu.Lock()
+	defer s.guardMu.Unlock()
+	s.businessLimit = limit
 }
 
 func (s *PostgresStore) CountBusinesses() int {
@@ -160,6 +167,7 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 	}
 	s.guardMu.RLock()
 	guard := s.acceptGuard
+	limit := s.businessLimit
 	s.guardMu.RUnlock()
 	if guard != nil {
 		if err := guard(input); err != nil {
@@ -169,6 +177,9 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 	row, err := s.lookup(rawToken)
 	if err != nil {
 		return Portal{}, err
+	}
+	if row.Status == "accepted" && row.AcceptedByUserID != nil && *row.AcceptedByUserID == userID {
+		return s.ReadPortal(ctx, userID)
 	}
 	if row.Status != "pending" {
 		return Portal{}, errors.New("invitation is no longer available")
@@ -181,11 +192,16 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 	if legalName == "" || businessType == "" || address == "" || industry == "" {
 		return Portal{}, errors.New("complete buyer business details are required")
 	}
-	tx, err := s.beginTx(userID, row.OrganizationID)
+	tx, err := s.beginTxContext(ctx, userID, row.OrganizationID)
 	if err != nil {
 		return Portal{}, err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	if limit > 0 {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('buyer-business-limit',0))`); err != nil {
+			return Portal{}, err
+		}
+	}
 	// Serialize identity reuse for concurrent invitations for the same user.
 	var lockedUser string
 	if err := tx.QueryRow(ctx, `SELECT id::text FROM app.users WHERE id=$1::uuid FOR UPDATE`, userID).Scan(&lockedUser); err != nil {
@@ -201,6 +217,15 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 		return Portal{}, err
 	}
 
+	if errors.Is(err, pgx.ErrNoRows) && limit > 0 {
+		var count int64
+		if err := tx.QueryRow(ctx, `SELECT app.business_count()`).Scan(&count); err != nil {
+			return Portal{}, err
+		}
+		if count >= limit {
+			return Portal{}, errors.New("buyer business limit reached")
+		}
+	}
 	err = tx.QueryRow(ctx, `SELECT id::text FROM app.business_representatives WHERE business_id=$1::uuid AND person_id=$2::uuid AND authority_verification_status IN ('pending','verified')`, businessID, personID).Scan(&representativeID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Portal{}, err
@@ -248,14 +273,14 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 			return Portal{}, fmt.Errorf("record buyer consent: %w", err)
 		}
 	}
-	result, err := tx.Exec(ctx, `UPDATE app.buyer_invitations SET status = 'accepted', accepted_at = $2, accepted_by_user_id = $3 WHERE id = $1 AND status = 'pending'`, row.ID, now, userID)
+	result, err := tx.Exec(ctx, `UPDATE app.buyer_invitations SET status = 'accepted', accepted_at = $2, accepted_by_user_id = $3 WHERE id = $1 AND status = 'pending' AND expires_at > clock_timestamp()`, row.ID, now, userID)
 	if err != nil || result.RowsAffected() != 1 {
 		return Portal{}, errors.New("invitation was accepted by another session")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Portal{}, fmt.Errorf("commit buyer acceptance: %w", err)
 	}
-	return s.Portal(userID)
+	return s.ReadPortal(ctx, userID)
 }
 
 func (s *PostgresStore) ListCustomers(organizationID string) []Customer {
@@ -288,22 +313,35 @@ func (s *PostgresStore) ListCustomers(organizationID string) []Customer {
 }
 
 func (s *PostgresStore) Portal(userID string) (Portal, error) {
-	tx, err := s.beginTx(userID, "")
+	return s.ReadPortal(context.Background(), userID)
+}
+
+func (s *PostgresStore) ReadPortal(ctx context.Context, userID string) (Portal, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	tx, err := s.beginTxContext(ctx, userID, "")
 	if err != nil {
 		return Portal{}, err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 	var person Person
-	if err := tx.QueryRow(context.Background(), `SELECT id::text, user_id::text, full_name, status, created_at FROM app.persons WHERE user_id = $1`, userID).Scan(&person.ID, &person.UserID, &person.FullName, &person.Status, &person.CreatedAt); err != nil {
-		return Portal{}, errors.New("buyer portal profile not found")
+	if err := tx.QueryRow(ctx, `SELECT id::text, user_id::text, full_name, status, created_at FROM app.persons WHERE user_id = $1`, userID).Scan(&person.ID, &person.UserID, &person.FullName, &person.Status, &person.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Portal{}, ErrPortalNotFound
+		}
+		return Portal{}, fmt.Errorf("load buyer profile: %w", err)
 	}
 	var business Business
 	var representative Representative
-	if err := tx.QueryRow(context.Background(), `SELECT b.id::text, b.owner_user_id::text, b.legal_name, COALESCE(b.trading_name,''), b.business_type, b.business_address, b.industry, b.status, b.created_at, r.id::text, r.person_id::text, r.role_title, r.authority_type, r.authority_verification_status, r.created_at FROM app.businesses b JOIN app.business_representatives r ON r.business_id = b.id WHERE b.owner_user_id = $1 AND r.person_id = $2 ORDER BY b.created_at DESC LIMIT 1`, userID, person.ID).Scan(&business.ID, &business.OwnerUserID, &business.LegalName, &business.TradingName, &business.BusinessType, &business.BusinessAddress, &business.Industry, &business.Status, &business.CreatedAt, &representative.ID, &representative.PersonID, &representative.RoleTitle, &representative.AuthorityType, &representative.AuthorityStatus, &representative.CreatedAt); err != nil {
-		return Portal{}, errors.New("buyer business profile not found")
+	if err := tx.QueryRow(ctx, `SELECT b.id::text, b.owner_user_id::text, b.legal_name, COALESCE(b.trading_name,''), b.business_type, b.business_address, b.industry, b.status, b.created_at, r.id::text, r.person_id::text, r.role_title, r.authority_type, r.authority_verification_status, r.created_at FROM app.businesses b JOIN app.business_representatives r ON r.business_id = b.id WHERE b.owner_user_id = $1 AND r.person_id = $2 ORDER BY b.created_at DESC, b.id DESC, r.created_at DESC, r.id DESC LIMIT 1`, userID, person.ID).Scan(&business.ID, &business.OwnerUserID, &business.LegalName, &business.TradingName, &business.BusinessType, &business.BusinessAddress, &business.Industry, &business.Status, &business.CreatedAt, &representative.ID, &representative.PersonID, &representative.RoleTitle, &representative.AuthorityType, &representative.AuthorityStatus, &representative.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Portal{}, ErrPortalNotFound
+		}
+		return Portal{}, fmt.Errorf("load buyer profile: %w", err)
 	}
+	representative.BusinessID = business.ID
 	verificationCases := make([]VerificationCase, 0)
-	rows, err := tx.Query(context.Background(), `SELECT id::text, subject_type, subject_id::text, provider, provider_reference, verification_level, state, reasons, safe_result, started_at, completed_at, expires_at FROM app.verification_cases WHERE subject_id IN ($1::uuid, $2::uuid, $3::uuid) ORDER BY started_at`, person.ID, business.ID, representative.ID)
+	rows, err := tx.Query(ctx, `SELECT id::text, subject_type, subject_id::text, provider, provider_reference, verification_level, state, reasons, safe_result, started_at, completed_at, expires_at FROM app.verification_cases WHERE subject_id IN ($1::uuid, $2::uuid, $3::uuid) ORDER BY started_at`, person.ID, business.ID, representative.ID)
 	if err != nil {
 		return Portal{}, fmt.Errorf("load buyer verification: %w", err)
 	}
@@ -330,7 +368,7 @@ func (s *PostgresStore) Portal(userID string) (Portal, error) {
 		return Portal{}, err
 	}
 	consents := make([]Consent, 0)
-	consentRows, err := tx.Query(context.Background(), `SELECT id::text, user_id::text, consent_type, version, accepted_at FROM app.identity_consents WHERE user_id = $1 ORDER BY accepted_at`, userID)
+	consentRows, err := tx.Query(ctx, `SELECT id::text, user_id::text, consent_type, version, accepted_at FROM app.identity_consents WHERE user_id = $1 ORDER BY accepted_at`, userID)
 	if err != nil {
 		return Portal{}, err
 	}
@@ -347,7 +385,7 @@ func (s *PostgresStore) Portal(userID string) (Portal, error) {
 		return Portal{}, err
 	}
 	accounts := make([]BankAccountReference, 0)
-	accountRows, err := tx.Query(context.Background(), `SELECT id::text, owner_type, owner_id::text, provider, provider_reference, COALESCE(bank_code,''), COALESCE(masked_account,''), COALESCE(account_name_result,''), COALESCE(account_type,''), ownership_state, active, created_at FROM app.bank_account_references WHERE (owner_type = 'person' AND owner_id = $1) OR (owner_type = 'business' AND owner_id = $2) ORDER BY created_at`, person.ID, business.ID)
+	accountRows, err := tx.Query(ctx, `SELECT id::text, owner_type, owner_id::text, provider, provider_reference, COALESCE(bank_code,''), COALESCE(masked_account,''), COALESCE(account_name_result,''), COALESCE(account_type,''), ownership_state, active, created_at FROM app.bank_account_references WHERE (owner_type = 'person' AND owner_id = $1) OR (owner_type = 'business' AND owner_id = $2) ORDER BY created_at`, person.ID, business.ID)
 	if err != nil {
 		return Portal{}, err
 	}
@@ -363,7 +401,7 @@ func (s *PostgresStore) Portal(userID string) (Portal, error) {
 	if err := accountRows.Err(); err != nil {
 		return Portal{}, err
 	}
-	if err := tx.Commit(context.Background()); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return Portal{}, err
 	}
 	return Portal{Person: person, Business: business, Representative: representative, VerificationCases: verificationCases, Consents: consents, BankAccounts: accounts}, nil
@@ -402,6 +440,9 @@ type invitationRow struct {
 }
 
 func (s *PostgresStore) lookup(rawToken string) (invitationRow, error) {
+	if s == nil || s.pool == nil {
+		return invitationRow{}, errors.New("buyer database is not configured")
+	}
 	if strings.TrimSpace(rawToken) == "" {
 		return invitationRow{}, errors.New("invitation token is required")
 	}
@@ -417,14 +458,18 @@ func (s *PostgresStore) lookup(rawToken string) (invitationRow, error) {
 }
 
 func (s *PostgresStore) beginTx(userID, organizationID string) (pgx.Tx, error) {
+	return s.beginTxContext(context.Background(), userID, organizationID)
+}
+
+func (s *PostgresStore) beginTxContext(ctx context.Context, userID, organizationID string) (pgx.Tx, error) {
 	if s == nil || s.pool == nil {
 		return nil, errors.New("buyer database is not configured")
 	}
-	tx, err := s.pool.Begin(context.Background())
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(context.Background(), `SELECT set_config('app.current_user_id', $1, true), set_config('app.current_organization_id', $2, true)`, userID, organizationID); err != nil {
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id', $1, true), set_config('app.current_organization_id', $2, true)`, userID, organizationID); err != nil {
 		_ = tx.Rollback(context.Background())
 		return nil, err
 	}

@@ -1,0 +1,6 @@
+runtime/race: package testmain: cannot find package
+FAIL	kredit/internal/platformsettings [build failed]
+FAIL	kredit/internal/credit [build failed]
+FAIL	kredit/internal/payments [build failed]
+FAIL	kredit/internal/onboarding [build failed]
+FAIL

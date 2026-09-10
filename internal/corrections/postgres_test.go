@@ -2,6 +2,7 @@ package corrections
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -46,6 +47,15 @@ func TestPostgresCorrectionIsRestartSafeAndEnforcesSeparateReviewer(t *testing.T
 	if _, _, err := store.Decide(opened.ID, requesterID, StateApproved, "self approval"); err == nil {
 		t.Fatal("requester was allowed to approve their own correction")
 	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if rows, err := store.ListForOrganization(cancelled, organizationID); !errors.Is(err, context.Canceled) || rows != nil {
+		t.Fatalf("failed correction read appeared empty: %+v, %v", rows, err)
+	}
+	rows, err := store.ListForOrganization(ctx, organizationID)
+	if err != nil || len(rows) != 1 || rows[0].ID != opened.ID {
+		t.Fatalf("correction history: %+v, %v", rows, err)
+	}
 	restarted := NewPostgresStore(pool)
 	loaded, _, err := restarted.Get(opened.ID)
 	if err != nil || loaded.Reason != opened.Reason || len(loaded.Evidence) != 1 {
@@ -57,6 +67,14 @@ func TestPostgresCorrectionIsRestartSafeAndEnforcesSeparateReviewer(t *testing.T
 	decided, decision, err := restarted.Decide(opened.ID, reviewerID, StateApproved, "Evidence confirms the correction")
 	if err != nil {
 		t.Fatal(err)
+	}
+	own, err := restarted.ReadForBuyer(ctx, requesterID)
+	if err != nil || len(own) != 1 || len(own[0].Decisions) != 1 || own[0].Decisions[0].CorrectionID != decision.ID {
+		t.Fatalf("durable correction annotation missing: %v", err)
+	}
+	other, err := restarted.ReadForBuyer(ctx, reviewerID)
+	if err != nil || len(other) != 0 {
+		t.Fatalf("unrelated request exposed: %v", err)
 	}
 	if decided.State != StateApproved || decision.CorrectionID == "" {
 		t.Fatalf("unexpected decision: %+v %+v", decided, decision)

@@ -1,6 +1,7 @@
 package organizations
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -40,6 +41,7 @@ type Membership struct {
 }
 
 type Invitation struct {
+	membershipID   string
 	ID             string      `json:"id"`
 	OrganizationID string      `json:"organization_id"`
 	Target         string      `json:"target"`
@@ -83,6 +85,7 @@ type Service interface {
 	Create(string, CreateInput) (Organization, Membership, error)
 	Get(string) (Organization, bool)
 	ListForUser(string) []Organization
+	ReadForUser(context.Context, string) ([]Organization, error)
 	Membership(string, string) (Membership, bool)
 	ListMembers(string) []Membership
 	Invite(string, string, string, string, string, access.Role) (Invitation, Membership, error)
@@ -166,6 +169,13 @@ func (s *Store) Get(organizationID string) (Organization, bool) {
 	return cloneOrganization(*organization), true
 }
 
+func (s *Store) ReadForUser(ctx context.Context, userID string) ([]Organization, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s.ListForUser(userID), nil
+}
+
 func (s *Store) ListForUser(userID string) []Organization {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -214,17 +224,25 @@ func (s *Store) Invite(actorUserID, organizationID, target, targetType string, t
 	now := s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.canManageMembersLocked(organizationID, actorUserID, access.PermissionInviteMembers) {
+		return Invitation{}, Membership{}, errors.New("active owner or administrator authority is required")
+	}
 	if _, ok := s.organizations[organizationID]; !ok {
 		return Invitation{}, Membership{}, errors.New("organisation not found")
 	}
 	for _, membershipID := range s.byOrg[organizationID] {
 		membership := s.memberships[membershipID]
+		if membership.UserID == targetUserID && membership.Status == "invited" && !now.Before(membership.InvitedAt.Add(7*24*time.Hour)) {
+			membership.Status = "removed"
+			s.closeInvitationLocked(membership.ID, "expired")
+		}
 		if membership.UserID == targetUserID && membership.Status != "removed" {
 			return Invitation{}, Membership{}, errors.New("user already belongs to organisation")
 		}
 	}
 	invitation := &Invitation{ID: s.newID(), OrganizationID: organizationID, Target: strings.TrimSpace(target), TargetType: targetType, Role: role, Status: "pending", InvitedBy: actorUserID, ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now}
 	membership := &Membership{ID: s.newID(), OrganizationID: organizationID, UserID: targetUserID, Role: role, Status: "invited", InvitedBy: actorUserID, InvitedAt: now, CreatedAt: now}
+	invitation.membershipID = membership.ID
 	s.invitations[invitation.ID] = invitation
 	s.addMembership(membership)
 	return cloneInvitation(*invitation), cloneMembership(*membership), nil
@@ -240,8 +258,14 @@ func (s *Store) ActivateInvitations(userID string) []Membership {
 		if membership.Status != "invited" {
 			continue
 		}
+		if membership.InvitedAt.IsZero() || !now.Before(membership.InvitedAt.Add(7*24*time.Hour)) {
+			membership.Status = "removed"
+			s.closeInvitationLocked(membership.ID, "expired")
+			continue
+		}
 		membership.Status = "active"
 		membership.AcceptedAt = now
+		s.closeInvitationLocked(membership.ID, "accepted")
 		activated = append(activated, cloneMembership(*membership))
 	}
 	return activated
@@ -253,6 +277,9 @@ func (s *Store) ChangeRole(organizationID, actorUserID, targetUserID string, rol
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.canManageMembersLocked(organizationID, actorUserID, access.PermissionManageMembers) {
+		return Membership{}, errors.New("active owner or administrator authority is required")
+	}
 	var target *Membership
 	for _, membershipID := range s.byOrg[organizationID] {
 		membership := s.memberships[membershipID]
@@ -280,6 +307,9 @@ func (s *Store) ChangeStatus(organizationID, actorUserID, targetUserID, status s
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.canManageMembersLocked(organizationID, actorUserID, access.PermissionManageMembers) {
+		return Membership{}, errors.New("active owner or administrator authority is required")
+	}
 	var target *Membership
 	for _, membershipID := range s.byOrg[organizationID] {
 		membership := s.memberships[membershipID]
@@ -294,14 +324,14 @@ func (s *Store) ChangeStatus(organizationID, actorUserID, targetUserID, status s
 	if target.Role == access.RoleOwner {
 		return Membership{}, errors.New("the owner membership cannot be suspended or removed")
 	}
-	if target.Role == access.RoleOwner {
-		return Membership{}, errors.New("owner role cannot be changed")
-	}
 	if target.UserID == actorUserID {
 		return Membership{}, errors.New("members cannot change their own access status")
 	}
-	if status == "active" && target.Status == "invited" {
+	if target.Status == "invited" && status != "removed" {
 		return Membership{}, errors.New("an invitation must be accepted by the invited user")
+	}
+	if target.Status == "invited" && status == "removed" {
+		s.closeInvitationLocked(target.ID, "revoked")
 	}
 	target.Status = status
 	return cloneMembership(*target), nil
@@ -341,3 +371,21 @@ func newIdentifier() string {
 func cloneOrganization(value Organization) Organization { return value }
 func cloneMembership(value Membership) Membership       { return value }
 func cloneInvitation(value Invitation) Invitation       { return value }
+
+func (s *Store) canManageMembersLocked(orgID, actorID string, permission access.Permission) bool {
+	for _, id := range s.byOrg[orgID] {
+		m := s.memberships[id]
+		if m.UserID == actorID && m.Status == "active" && access.Can(m.Role, permission) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) closeInvitationLocked(membershipID, status string) {
+	for _, invitation := range s.invitations {
+		if invitation.membershipID == membershipID && invitation.Status == "pending" {
+			invitation.Status = status
+		}
+	}
+}

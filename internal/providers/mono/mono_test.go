@@ -20,7 +20,7 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client.http = server.Client()
+	client.http.Transport = server.Client().Transport
 	return client
 }
 func TestVariableSweepAuthorizationIsPending(t *testing.T) {
@@ -80,9 +80,40 @@ func TestPartialSweepUsesCollectedAmountNotRequestedAmount(t *testing.T) {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 }
+
+func TestDebitResultsMatchConfiguredEnvironment(t *testing.T) {
+	for _, live := range []bool{false, true} {
+		for _, responseLive := range []bool{false, true} {
+			c := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				if err := json.NewEncoder(w).Encode(map[string]any{
+					"status": "successful",
+					"data":   map[string]any{"status": "successful", "amount": 100000, "mandate": "mmc_test", "reference": "kredit-test", "live_mode": responseLive, "currency": "NGN"},
+				}); err != nil {
+					t.Error(err)
+				}
+			})
+			c.live = live
+			input := collections.Request{MandateReference: "mmc_test", ExternalReference: "kredit-test", AmountKobo: 100000, Currency: "NGN"}
+			for _, operation := range []func(context.Context, collections.Request) (collections.Response, error){c.Submit, c.GetByReference} {
+				result, err := operation(context.Background(), input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if live == responseLive {
+					if result.State != collections.ProviderSucceeded || result.SucceededAmountKobo != 100000 {
+						t.Fatalf("matching environment was not credited: live=%v result=%+v", live, result)
+					}
+				} else if result.State != collections.ProviderPending || result.SucceededAmountKobo != 0 {
+					t.Fatalf("foreign environment credited money: live=%v responseLive=%v result=%+v", live, responseLive, result)
+				}
+			}
+		}
+	}
+}
+
 func TestUnknownOrMalformedOutcomesDoNotCreditMoney(t *testing.T) {
 	for _, d := range []debitData{{Status: "successful", Amount: 50000000, Currency: "USD"}, {Status: "successful", Amount: 50000000, LiveMode: true}, {Status: "processing", Amount: 50000000}, {Status: "unrecognized", Amount: 50000000}, {Status: "successful"}, {Status: "partial-debit-successful", Amount: 50000000}, {Status: "successful", Amount: 60000000}} {
-		out := debitResponse(d, "mandate", "reference", 50000000)
+		out := debitResponse(d, "mandate", "reference", 50000000, false)
 		if out.State != collections.ProviderPending || out.SucceededAmountKobo != 0 {
 			t.Errorf("unsafe outcome %+v", out)
 		}
@@ -179,5 +210,25 @@ func TestReconciliationModeRejectsNewMoneyActionsButAllowsLookup(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatal("reconciliation did not reach provider")
+	}
+}
+
+func TestCustomerRecoveryRequiresUnmaskedMatchingReferenceEvidence(t *testing.T) {
+	for _, body := range []string{`{"status":"successful","data":{"id":"other","bvn":"12345678901"}}`, `{"status":"successful","data":{"id":"customer-reference","bvn":"*******8901"}}`} {
+		c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" || r.URL.Path != "/v2/customers/customer-reference" {
+				t.Error("incorrect recovery request")
+			}
+			_, _ = w.Write([]byte(body))
+		})
+		if _, err := c.CustomerIdentity(context.Background(), "customer-reference"); err == nil {
+			t.Fatal("inadequate evidence accepted")
+		}
+	}
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"successful","data":{"id":"customer-reference","identification_type":"bvn","identification_no":"12345678901"}}`))
+	})
+	if identity, err := c.CustomerIdentity(context.Background(), "customer-reference"); err != nil || identity != "12345678901" {
+		t.Fatalf("expected verified transient identity: %v", err)
 	}
 }

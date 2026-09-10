@@ -49,7 +49,8 @@ unwinding the feature the business is defended by. Assess it while changing the
 consent flow is still cheap.
 
 `DPIA_REFERENCE` is already a production launch gate in `internal/config`. This
-document is the assessment that reference should point at.
+draft is not an approval reference; only the reviewed and signed assessment
+may support that configuration.
 
 ## 1. The processing
 
@@ -91,7 +92,7 @@ later; nothing is lost by starting from the protective position.
 | Verified-since date, completed obligation counts and amounts | `app.obligations`, `app.credit_requests` | Commercial |
 | On-time percentage, average days late, unresolved overdue | `app.payments`, `app.schedule_items` | Adverse inference |
 | Dispute counts and outcomes | `app.disputes`, `app.dispute_decisions` | Adverse inference |
-| Mandate cancellations while owing | `app.mandates`, `app.mandate_events` | Adverse inference, high |
+| Mandate cancellations while owing | `app.payment_mandates`, `app.mandate_events` | Adverse inference, high |
 | Repeat supplier relationships | `app.trade_relationships` | Reveals the buyer's other suppliers |
 
 The last row deserves separate attention: the set of suppliers a buyer trades

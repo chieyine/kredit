@@ -46,25 +46,25 @@ test('sitemap and RSS publish the guide library for discovery',async({request})=
 test('privacy notice gives a complete, readable account of information use and rights', async ({ page }) => {
 	await page.goto('/legal/privacy');
 	await expect(page).toHaveTitle('Privacy notice — Kredit');
-	await expect(page.getByRole('heading', { name: 'Your information belongs to you.' })).toBeVisible();
-	await expect(page.getByText('Complete pre-launch draft — legal approval pending')).toBeVisible();
-	await expect(page.getByRole('heading', { name: '2. What we keep about you' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: '6. Your rights and choices' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: '7. How we protect information' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Privacy notice', exact: true })).toBeVisible();
+	await expect(page.getByText('Complete pre-launch draft — legal approval pending')).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'What we keep about you' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Your rights and choices' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'How we protect information' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Nigeria Data Protection Commission' })).toBeVisible();
-	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
+	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow,max-image-preview:large,max-snippet:-1');
 });
 
 test('terms explain the complete sale, payment and complaint journey', async ({ page }) => {
 	await page.goto('/legal/terms');
 	await expect(page).toHaveTitle('Terms of service — Kredit');
-	await expect(page.getByRole('heading', { name: 'The rules for using Kredit.' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: '3. Making a credit sale' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: '5. Payments, balances and Kredit fees' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: '6. Bank-debit permission and late payment' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: '10. Help, complaints and regulators' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Terms of service', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Making a credit sale' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Payments, balances and Kredit fees' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Bank-debit permission and late payment' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Help, complaints and regulators' })).toBeVisible();
 	await expect(page.getByText('Kredit is not a bank, wallet, credit bureau, insurance company, marketplace or debt buyer.')).toBeVisible();
-	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
+	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow,max-image-preview:large,max-snippet:-1');
 });
 
 test('detailed legal content stays readable on a small phone', async ({ page }) => {
@@ -73,18 +73,17 @@ test('detailed legal content stays readable on a small phone', async ({ page }) 
 		await page.goto(path);
 		const sizes = await page.evaluate(() => ({ page: document.documentElement.scrollWidth, screen: window.innerWidth }));
 		expect(sizes.page, `${path} must not scroll sideways`).toBeLessThanOrEqual(sizes.screen);
-		await expect(page.getByRole('navigation', { name: /contents/i })).toBeVisible();
+		await page.locator('.mobile-contents summary').click();
+ await expect(page.getByRole('navigation', { name: 'Document sections' })).toBeVisible();
 		await expect(page.locator('.document-actions')).toBeVisible();
 	}
 });
 
 test('approved production details activate both legal documents', async ({ page }) => {
-	const environment = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
-	test.skip(environment?.TEST_ACTIVE_LEGAL !== '1', 'runs against the active-legal configuration');
 	for (const path of ['/legal/privacy', '/legal/terms']) {
 		await page.goto(path);
-		await expect(page.getByText('Kredit Launch Test Limited').first()).toBeVisible();
-		await expect(page.getByText(/Effective 1 September 2026/).first()).toBeVisible();
+		await expect(page.getByText('KREDIT TECHNOLOGIES LIMITED').first()).toBeVisible();
+		await expect(page.getByText(/Effective 7 September 2026/).first()).toBeVisible();
 		await expect(page.getByText('Complete pre-launch draft — legal approval pending')).toHaveCount(0);
 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow,max-image-preview:large,max-snippet:-1');
 	}

@@ -1,0 +1,9 @@
+PASS API unavailable, public route /
+PASS API unavailable, public route /legal/terms
+PASS API unavailable, public route /legal/privacy
+PASS API unavailable, public route /security
+PASS API unavailable, public route /blog
+PASS API unavailable, public route /app
+PASS failed sign-in does not invent delivery
+PASS missing pricing source does not fabricate rates
+PASS protected API outage remains unavailable

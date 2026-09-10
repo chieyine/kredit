@@ -64,7 +64,7 @@ test('an expired session cannot flash the next page during an account navigation
 });
 
 test('the secure payment link is public but never shows the seller account', async ({ page }) => {
-	await page.route('**/api/v1/public/payment-intents/example', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payment_intent: { supplier_name: 'Adebayo Supplies', description: 'Twenty bags of rice', amount_kobo: 25000000, payment_status: 'ready', provider_action: 'Continue to your approved payment provider.' } }) }));
+	await page.route('**/api/v1/public/payment-intents/example', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payment_intent: { reference: 'sale-example', supplier_name: 'Adebayo Supplies', description: 'Twenty bags of rice', amount_kobo: 25000000, payment_status: 'ready', provider_action: 'Continue to your approved payment provider.' } }) }));
 	await page.goto('/pay/example');
 	await expect(page.getByRole('heading', { name: 'Check the amount before you pay.' })).toBeVisible();
 	await expect(page.getByText('₦250,000.00')).toBeVisible();
@@ -98,4 +98,18 @@ test('the signed-in payments page prioritizes money and items needing an answer'
 	await expect(moreMenu.getByText('Account and help', { exact: true })).toBeVisible();
 	await expect(moreMenu.getByRole('link', { name: /Settings/ })).toBeVisible();
 	await expect(moreMenu.getByRole('button', { name: 'Find a page' })).toHaveCount(0);
+});
+
+test('payment review keeps the selected business fixed until dismissed', async ({page,context,baseURL}) => {
+ await context.addCookies([{name:'kredit_session',value:'payments-session',url:baseURL!}]);
+ await page.route('**/api/v1/me',route=>route.fulfill({json:{user:{id:'seller'},session:{id:'session'},organizations:[]}}));
+ await page.route('**/api/v1/organizations',route=>route.fulfill({json:{organizations:[{id:'org-first',legal_name:'First business'},{id:'org-second',legal_name:'Second business'}]}}));
+ await page.route('**/api/v1/organizations/*/payments',route=>route.fulfill({json:{payments:[]}}));
+ await page.route('**/api/v1/organizations/*/payment-claims',route=>route.fulfill({json:{payment_claims:[{id:'claim-first',amount_kobo:10000,transfer_reference:'TRANSFER-1',state:'pending',paid_at:'2026-09-09T09:00:00Z',hold_expires_at:'2026-09-10T09:00:00Z'}]}}));
+ await page.goto('/app/payments');
+ await page.getByRole('button',{name:'Yes, I got the money'}).click();
+ await expect(page.getByRole('dialog',{name:'Confirm money received'})).toBeVisible();
+ await expect(page.getByRole('combobox',{name:'Business',exact:true,includeHidden:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Back',exact:true}).click();
+ await expect(page.getByRole('combobox',{name:'Business',exact:true,includeHidden:true})).toBeEnabled();
 });

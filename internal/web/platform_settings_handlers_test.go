@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 )
 
 func TestPlatformSettingsEndpoints(t *testing.T) {
+	t.Setenv("SETTINGS_ENCRYPTION_KEY", "isolated-test-settings-encryption-root-32-bytes")
 	url := os.Getenv("DATABASE_URL")
 	if url == "" || os.Getenv("KREDIT_INTEGRATION") != "1" {
 		t.Skip("integration database required")
@@ -88,8 +90,8 @@ func TestPlatformSettingsEndpoints(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := caps["launch_mode"]; !ok {
-		t.Fatalf("missing launch_mode in caps: %v", caps)
+	if _, ok := caps["launch_mode"]; ok {
+		t.Fatalf("private launch_mode leaked in caps: %v", caps)
 	}
 	if _, ok := caps["features"]; !ok {
 		t.Fatalf("missing features in caps: %v", caps)
@@ -139,59 +141,90 @@ func TestPlatformSettingsEndpoints(t *testing.T) {
 		t.Fatalf("expected seeded settings, got 0")
 	}
 
-	// Verify secrets are masked
-	foundSecret := false
-	for _, s := range settingsResp.Settings {
-		if s.IsSecret {
-			foundSecret = true
-			var valStr string
-			_ = json.Unmarshal(s.Value, &valStr)
-			if valStr != "" && !strings.Contains(valStr, "•••") {
-				t.Fatalf("secret setting %s should have masked value, got %s", s.Key, valStr)
-			}
+	// The console includes consumed connectors before their first save, but
+	// never exposes plaintext credentials.
+	if len(settingsResp.Settings) != (len(platformsettings.KnownSettings) - len(platformsettings.WebsitePages)) {
+		t.Fatalf("expected %d registered settings, got %d", (len(platformsettings.KnownSettings) - len(platformsettings.WebsitePages)), len(settingsResp.Settings))
+	}
+	for _, item := range settingsResp.Settings {
+		meta, known := platformsettings.KnownSettings[item.Key]
+		if !known || item.IsSecret != meta.IsSecret {
+			t.Fatalf("unexpected setting metadata: %s", item.Key)
+		}
+		if strings.HasPrefix(item.Key, "integrations.notifications.") && !item.IsSecret {
+			t.Fatal("connector not marked secret")
+		}
+		if item.Description == "" {
+			t.Fatalf("%s has no description", item.Key)
 		}
 	}
-	if !foundSecret {
-		t.Fatalf("expected at least one secret setting in seeded settings")
-	}
 
-	// 5. Rotate secret test
-	rotateBody, _ := json.Marshal(map[string]any{
-		"key":    "integrations.paystack.secret_key",
-		"secret": "sk_test_abc1234567890xyz",
-		"reason": "Rotating test paystack key",
+	originalSettings := runtime.PlatformSettings
+	runtime.PlatformSettings = unavailableGovernance{Service: originalSettings}
+	unavailable := httptest.NewRecorder()
+	server.Handler().ServeHTTP(unavailable, req.Clone(ctx))
+	if unavailable.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing governance must fail closed: %d %s", unavailable.Code, unavailable.Body.String())
+	}
+	runtime.PlatformSettings = originalSettings
+
+	t.Run("website publication keeps drafts private", func(t *testing.T) { verifyWebsitePublication(t, server, aal2Token, token) })
+
+	// 5. A retired key cannot be written back in through the update endpoint.
+	retiredBody, _ := json.Marshal(map[string]any{
+		"key":              "integrations.paystack.secret_key",
+		"value":            json.RawMessage(`"sk_test_abc1234567890xyz"`),
+		"reason":           "Attempting to restore a retired provider key",
+		"expected_version": 0,
 	})
-	rotateReq := httptest.NewRequest(http.MethodPost, "/api/v1/ops/platform-settings/secret", bytes.NewReader(rotateBody))
-	rotateReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: aal2Token})
-	rotateReq.Header.Set("Origin", "http://localhost")
-	rotateReq.Header.Set("Sec-Fetch-Site", "same-origin")
+	retiredReq := httptest.NewRequest(http.MethodPost, "/api/v1/ops/platform-settings", bytes.NewReader(retiredBody))
+	retiredReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: aal2Token})
+	retiredReq.Header.Set("Origin", "http://localhost")
+	retiredReq.Header.Set("Sec-Fetch-Site", "same-origin")
 	csrfToken := "test-csrf-token-1234"
-	rotateReq.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfToken})
-	rotateReq.Header.Set("X-CSRF-Token", csrfToken)
-
-	rotateRec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rotateRec, rotateReq)
-	if rotateRec.Code != http.StatusOK {
-		t.Fatalf("secret rotation failed: status=%d body=%s", rotateRec.Code, rotateRec.Body.String())
+	retiredReq.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfToken})
+	retiredReq.Header.Set("X-CSRF-Token", csrfToken)
+	retiredRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(retiredRec, retiredReq)
+	if retiredRec.Code == http.StatusOK {
+		t.Fatalf("a retired setting key was accepted: %s", retiredRec.Body.String())
 	}
 
-	var rotateResp struct {
-		Setting platformsettings.Setting `json:"setting"`
-	}
-	if err := json.Unmarshal(rotateRec.Body.Bytes(), &rotateResp); err != nil {
+	// 6. Use the version actually read, as an operator must. Other integration
+	// tests legitimately advance this global setting's immutable history.
+	currentSetting, err := runtime.PlatformSettings.Get(ctx, "features.trade_lines", false)
+	if err != nil {
 		t.Fatal(err)
 	}
-	var rotVal string
-	_ = json.Unmarshal(rotateResp.Setting.Value, &rotVal)
-	if !strings.HasSuffix(rotVal, "0xyz") || !strings.Contains(rotVal, "•••") {
-		t.Fatalf("expected secret mask ending in 0xyz, got %s", rotVal)
-	}
-	if rotateResp.Setting.SecretFingerprint == "" {
-		t.Fatalf("expected secret fingerprint to be populated")
+	defer func() {
+		latest, readErr := runtime.PlatformSettings.Get(ctx, currentSetting.Key, false)
+		if readErr != nil {
+			t.Error(readErr)
+			return
+		}
+		if _, restoreErr := runtime.PlatformSettings.Update(ctx, user.ID, currentSetting.Key, currentSetting.Value, "Restore setting after endpoint verification", latest.Version); restoreErr != nil {
+			t.Error(restoreErr)
+		}
+	}()
+	updateBody, _ := json.Marshal(map[string]any{
+		"key":              "features.trade_lines",
+		"value":            json.RawMessage(`true`),
+		"reason":           "Turning customer limits on for this test",
+		"expected_version": currentSetting.Version,
+	})
+	updateReq := httptest.NewRequest(http.MethodPost, "/api/v1/ops/platform-settings", bytes.NewReader(updateBody))
+	updateReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: aal2Token})
+	updateReq.Header.Set("Origin", "http://localhost")
+	updateReq.Header.Set("Sec-Fetch-Site", "same-origin")
+	updateReq.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfToken})
+	updateReq.Header.Set("X-CSRF-Token", csrfToken)
+	updateRec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("updating a registered setting failed: status=%d body=%s", updateRec.Code, updateRec.Body.String())
 	}
 
-	// 6. Test History
-	histReq := httptest.NewRequest(http.MethodGet, "/api/v1/ops/platform-settings/history?key=integrations.paystack.secret_key", nil)
+	histReq := httptest.NewRequest(http.MethodGet, "/api/v1/ops/platform-settings/history?key=features.trade_lines", nil)
 	histReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: aal2Token})
 	histRec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(histRec, histReq)
@@ -205,7 +238,7 @@ func TestPlatformSettingsEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(histResp.History) == 0 {
-		t.Fatalf("expected history entries after secret rotation")
+		t.Fatalf("a settings change left no history entry")
 	}
 
 	// 7. Test Governance API
@@ -225,7 +258,6 @@ func TestPlatformSettingsEndpoints(t *testing.T) {
 	newValues := policy.Values
 	newValues.UpcomingNoticeDays = 4
 	proposalUUID := uuid.NewString()
-	_, _ = database.Raw().Exec(ctx, `UPDATE app.business_policy_changes SET state='cancelled' WHERE state='pending' OR (state='approved' AND effective_at>now())`)
 	defer func() {
 		_, _ = database.Raw().Exec(ctx, `UPDATE app.business_policy_changes SET state='cancelled' WHERE id=$1::uuid`, proposalUUID)
 	}()
@@ -259,3 +291,31 @@ func TestPlatformSettingsEndpoints(t *testing.T) {
 		t.Fatalf("solo-owner approval failed: status=%d body=%s", approveRec.Code, approveRec.Body.String())
 	}
 }
+
+type unavailableGovernance struct{ platformsettings.Service }
+
+func (unavailableGovernance) GetGovernance(context.Context) (platformsettings.Governance, error) {
+	return platformsettings.Governance{}, errors.New("governance read unavailable")
+}
+
+// A public capability describes the same feature switch the write handlers use.
+func TestCapabilitiesReflectDisputeSwitch(t *testing.T) {
+	runtime := NewRuntime(config.Config{Environment: "development"})
+	runtime.PlatformSettings = disputeDisabledSettings{}
+	server := NewServerWithRuntime(config.Config{Environment: "development"}, slog.Default(), runtime)
+	response := httptest.NewRecorder()
+	server.platformCapabilities(response, httptest.NewRequest(http.MethodGet, "/api/v1/platform/capabilities", nil))
+	var payload struct {
+		Features map[string]bool `json:"features"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Features["disputes"] {
+		t.Fatal("disabled disputes advertised as enabled")
+	}
+}
+
+type disputeDisabledSettings struct{ platformsettings.Service }
+
+func (disputeDisabledSettings) GetBool(_ context.Context, _ string, _ bool) bool { return false }

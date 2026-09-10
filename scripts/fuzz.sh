@@ -13,7 +13,7 @@ go test ./...
 # Randomised fuzzing is bounded so the gate stays usable in CI. Go accepts one
 # -fuzz target per invocation, so each target is run on its own.
 duration="${FUZZTIME:-20s}"
-targets="$(grep -rn --include='*_test.go' '^func Fuzz' . \
+targets="$(grep -rn --include='*_test.go' '^func Fuzz' internal cmd \
   | sed -E 's#^\./##; s#/[^/]*_test\.go:[0-9]+:func (Fuzz[A-Za-z0-9_]*).*#\t\1#' \
   | sort -u)"
 

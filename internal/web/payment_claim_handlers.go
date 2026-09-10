@@ -1,6 +1,10 @@
 package web
 
 import (
+	"context"
+	"errors"
+	"kredit/internal/db"
+	"kredit/internal/payments"
 	"net/http"
 	"strings"
 	"time"
@@ -91,7 +95,7 @@ func (s *Server) listPaymentClaims(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	financialRows2, readErr2 := s.runtime.readPaymentClaimsForObligation(r.Context(), view.Obligation.ID)
+	financialRows2, readErr2 := s.runtime.readPaymentClaimsForObligation(db.WithTenantContext(r.Context(), "", orgID), view.Obligation.ID)
 	if financialReadError(w, readErr2) {
 		return
 	}
@@ -120,7 +124,12 @@ func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCSRF(w, r) {
 		return
 	}
+	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
 	claim, err := s.runtime.PaymentClaims.Get(r.Context(), claimID)
+	if err != nil && !errors.Is(err, paymentclaims.ErrNotFound) {
+		writeProblem(w, 503, "payment_claim_unavailable", "We could not load that reported payment. Please try again.")
+		return
+	}
 	if err != nil || claim.SupplierOrganizationID != orgID {
 		writeProblem(w, 404, "payment_claim_not_found", "We could not find that reported payment.")
 		return
@@ -141,7 +150,7 @@ func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "payment_claim." + decision, ResourceType: "payment_claim", ResourceID: claim.ID, Outcome: "success"})
-	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-claim-decision:" + claim.ID, Type: "PaymentClaimDecision", RecipientID: claim.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the supplier decision", SecurePath: "/buyer/history"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-claim-decision:" + claim.ID, Type: "PaymentClaimDecision", RecipientID: claim.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the supplier decision", SecurePath: "/buyer/payments"})
 	paymentID := claim.PaymentID
 	response := map[string]any{"payment_claim": claim}
 	if paymentID != "" {
@@ -159,12 +168,19 @@ func (s *Server) publicReceipt(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusGone, "receipt_unavailable", "Receipt link is invalid or expired")
 		return
 	}
-	payment, err := s.runtime.getPayment(r.Context(), paymentID)
+	reader, ok := s.runtime.Payments.(interface {
+		PublicReceiptContext(context.Context, string) (payments.Receipt, error)
+	})
+	if !ok {
+		writeProblem(w, 503, "receipt_unavailable", "The receipt could not be loaded.")
+		return
+	}
+	receipt, err := reader.PublicReceiptContext(r.Context(), paymentID)
 	if err != nil {
 		writeProblem(w, 404, "receipt_not_found", "We could not find that receipt.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"receipt": map[string]any{"reference": payment.ID, "amount_kobo": payment.AmountKobo, "currency": payment.Currency, "source_type": payment.SourceType, "state": payment.State, "paid_at": payment.PaidAt, "recognized_at": payment.RecognizedAt}})
+	writeJSON(w, 200, map[string]any{"receipt": receipt})
 }
 
 func (s *Server) createPaymentLink(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +202,7 @@ func (s *Server) createPaymentLink(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 500, "payment_link_failed", "We could not create the payment link. Please try again.")
 		return
 	}
-	_, _ = s.runtime.Reports.TrackContext(r.Context(), "payment_link.created", requestID, "product_improvement", map[string]string{"surface": "buyer_portal"})
+	s.trackOptionalActivity(r, user.ID, "payment_link.created", requestID, "product_improvement", map[string]string{"surface": "buyer_portal"})
 	writeJSON(w, 201, map[string]any{"payment_url": strings.TrimRight(s.config.PublicBaseURL, "/") + "/pay/" + token, "expires_in_seconds": 3600})
 }
 

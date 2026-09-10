@@ -1,2 +1,0 @@
-<script lang="ts">let { open = false, onclose = () => {} } = $props<{ open?: boolean; onclose?: () => void }>();</script>
-{#if open}<dialog open aria-labelledby="step-up-title"><h2 id="step-up-title">Prove it is really you</h2><p>Open your authenticator app and type the six digits it shows.</p><input inputmode="numeric" autocomplete="one-time-code" aria-label="Authenticator code" /><button type="button" onclick={onclose}>Cancel</button></dialog>{/if}

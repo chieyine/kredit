@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — 9 September direct audit (verification pending)
+
+- Continued the direct per-file review across backend, frontend, migrations,
+  provider adapters, scripts, tests, assets and project documents.
+- Corrected collection webhooks being mistaken for client financial commands:
+  every delivery reaches provider authentication, including repeated keys.
+- Required retry identities for trade-line creation.
+- Corrected public example progress, keyboard tab wrapping, guide route guards
+  and sample restart focus.
+- Updated sensitive-data inventory generation for encrypted provider settings,
+  owner-only administration and personal-data exports.
+- Aligned the specification with explicit buyer receipt confirmation, accepted
+  fee snapshots, supported admin controls and the maintained API/SQL approach.
+- Preserved historical test reports as historical evidence. Current review and
+  unresolved fixes are recorded in docs/launch-audit-2026-09-08/FILE-BY-FILE.md;
+  this entry does not claim a completed audit or new test passes.
+
 ## Unreleased — 6 September product audit
 
 - Separate sale acceptance from hosted bank-debit permission and confirmed readiness.

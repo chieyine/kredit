@@ -3,16 +3,20 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
-	"kredit/internal/auth"
+	"kredit/internal/config"
 	"kredit/internal/db"
 	"kredit/internal/operations"
 	"kredit/internal/platformsettings"
+
+	"github.com/google/uuid"
 )
 
 func (s *Server) isFeatureEnabled(ctx context.Context, key string, defaultVal bool) bool {
@@ -24,59 +28,20 @@ func (s *Server) isFeatureEnabled(ctx context.Context, key string, defaultVal bo
 
 func (s *Server) platformCapabilities(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	var launchMode = platformsettings.LaunchModePreLaunch
-	var bannerEnabled = false
-	var bannerText = "Welcome to Kredit. Launching soon in private beta."
-	var waitlistEnabled = true
-	var govMode = platformsettings.GovernanceSoloOwner
-
 	features := map[string]bool{
-		"trade_lines":                false,
-		"drawdowns":                  false,
-		"repayment_extensions":       true,
-		"disputes":                   true,
-		"early_settlement_discounts": false,
-		"notifications_whatsapp":     false,
-		"mono_direct_debit":          false,
+		"trade_lines": false, "drawdowns": false, "repayment_extensions": false,
+		"disputes": true, "early_settlement_discounts": false,
+		"notifications_whatsapp": false, "mono_direct_debit": false,
 	}
-
 	if s.runtime.PlatformSettings != nil {
-		launchMode = s.runtime.PlatformSettings.GetString(ctx, "launch.mode", platformsettings.LaunchModePreLaunch)
-		bannerEnabled = s.runtime.PlatformSettings.GetBool(ctx, "launch.banner_enabled", false)
-		bannerText = s.runtime.PlatformSettings.GetString(ctx, "launch.banner_text", bannerText)
-		waitlistEnabled = s.runtime.PlatformSettings.GetBool(ctx, "launch.waitlist_enabled", true)
-		for k := range features {
-			features[k] = s.runtime.PlatformSettings.GetBool(ctx, "features."+k, features[k])
-		}
-		if gov, err := s.runtime.PlatformSettings.GetGovernance(ctx); err == nil {
-			govMode = gov.Mode
+		for key := range features {
+			// Match the defaults used by the corresponding action handlers. Public
+			// capabilities must not claim a switched-off action is available.
+			features[key] = s.runtime.PlatformSettings.GetBool(ctx, "features."+key, key == "disputes")
 		}
 	}
-
-	isOwner := false
-	if token := sessionTokenFromRequest(r); token != "" {
-		if session, user, err := s.runtime.Auth.SessionFromToken(token); err == nil && session.AuthenticationLevel == auth.AAL2 {
-			roles, _ := s.adminRoles(r, user.ID)
-			for _, role := range roles {
-				if role == access.PlatformOwner {
-					isOwner = true
-					break
-				}
-			}
-		}
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"launch_mode": launchMode,
-		"banner": map[string]any{
-			"enabled": bannerEnabled,
-			"text":    bannerText,
-		},
-		"waitlist_enabled": waitlistEnabled,
-		"features":         features,
-		"governance_mode":  govMode,
-		"is_owner":         isOwner,
-	})
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"features": features})
 }
 
 func (s *Server) listPlatformSettings(w http.ResponseWriter, r *http.Request) {
@@ -95,6 +60,67 @@ func (s *Server) listPlatformSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Website drafts belong in the owner editor, never the generic value table.
+	visible := all[:0]
+	for _, item := range all {
+		if !strings.HasPrefix(item.Key, platformsettings.WebsitePrefix) {
+			visible = append(visible, item)
+		}
+	}
+	all = visible
+
+	// List every consumed connection even before the first save.
+	present := make(map[string]bool)
+	for _, item := range all {
+		present[item.Key] = true
+	}
+	keys := []string{"integrations.notifications.email", "integrations.notifications.sms", "integrations.notifications.whatsapp"}
+	for key := range platformsettings.RuntimeConnections {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if !present[key] {
+			meta := platformsettings.KnownSettings[key]
+			all = append(all, platformsettings.Setting{Key: key, Category: meta.Category, IsSecret: true, Value: json.RawMessage(`""`), Description: meta.Description})
+		}
+	}
+	for i := range all {
+		definition, ok := platformsettings.RuntimeConnections[all[i].Key]
+		if !ok {
+			continue
+		}
+		all[i].RequiresRestart = true
+		all[i].ConnectionFields = definition.Fields
+		all[i].AppliedVersion = s.config.AdminConnectionVersions[all[i].Key]
+		all[i].ConnectionValues = config.PublicConnectionValues(s.config, all[i].Key)
+		if all[i].Version > 0 {
+			saved, readErr := s.runtime.PlatformSettings.Get(r.Context(), all[i].Key, true)
+			if readErr != nil {
+				all[i].ConnectionState = "unavailable"
+				continue
+			}
+			values, decodeErr := platformsettings.DecodeRuntimeConnection(all[i].Key, saved.Value)
+			if decodeErr != nil {
+				all[i].ConnectionState = "unavailable"
+				continue
+			}
+			for _, field := range definition.Fields {
+				if field.Kind == "password" {
+					continue
+				}
+				var value any
+				if json.Unmarshal(values[field.Key], &value) == nil {
+					all[i].ConnectionValues[field.Key] = value
+				}
+			}
+			all[i].ConnectionState = "restart_required"
+			if all[i].AppliedVersion == all[i].Version {
+				all[i].ConnectionState = "applied_unverified"
+			}
+		}
+	}
+
 	category := strings.TrimSpace(r.URL.Query().Get("category"))
 	var filtered []platformsettings.Setting
 	for _, item := range all {
@@ -106,7 +132,11 @@ func (s *Server) listPlatformSettings(w http.ResponseWriter, r *http.Request) {
 		filtered = []platformsettings.Setting{}
 	}
 
-	gov, _ := s.runtime.PlatformSettings.GetGovernance(r.Context())
+	gov, err := s.runtime.PlatformSettings.GetGovernance(r.Context())
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "governance_unavailable", "The approval rules could not be verified.")
+		return
+	}
 
 	s.auditPlatformRead(r, user.ID, "platform_settings.viewed", "platform_settings", category)
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -116,9 +146,11 @@ func (s *Server) listPlatformSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateSettingInput struct {
-	Key    string          `json:"key"`
-	Value  json.RawMessage `json:"value"`
-	Reason string          `json:"reason"`
+	ClearCredentials bool            `json:"clear_credentials"`
+	ExpectedVersion  *int            `json:"expected_version"`
+	Key              string          `json:"key"`
+	Value            json.RawMessage `json:"value"`
+	Reason           string          `json:"reason"`
 }
 
 func (s *Server) updatePlatformSetting(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +169,10 @@ func (s *Server) updatePlatformSetting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in.Key = strings.TrimSpace(in.Key)
+	if strings.HasPrefix(in.Key, platformsettings.WebsitePrefix) {
+		writeProblem(w, 400, "use_website_editor", "Use the website editor to save or publish page content.")
+		return
+	}
 	in.Reason = strings.TrimSpace(in.Reason)
 	if in.Key == "" {
 		writeProblem(w, http.StatusBadRequest, "key_required", "Setting key is required")
@@ -147,7 +183,36 @@ func (s *Server) updatePlatformSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := s.runtime.PlatformSettings.Update(r.Context(), user.ID, in.Key, in.Value, in.Reason)
+	if in.ExpectedVersion == nil {
+		writeProblem(w, 400, "version_required", "Reload this setting before saving.")
+		return
+	}
+	var updated platformsettings.Setting
+	var err error
+	if _, runtimeConnection := platformsettings.RuntimeConnections[in.Key]; runtimeConnection {
+		updater, ok := s.runtime.PlatformSettings.(platformsettings.ValidatedUpdater)
+		if !ok {
+			writeProblem(w, http.StatusServiceUnavailable, "settings_unavailable", "Connection validation is unavailable.")
+			return
+		}
+		updated, err = updater.UpdateValidated(r.Context(), user.ID, in.Key, in.Value, in.Reason, *in.ExpectedVersion, func(snapshot platformsettings.Service, raw json.RawMessage) (json.RawMessage, error) {
+			prepared, err := config.PrepareConnectionUpdate(r.Context(), s.config, snapshot, in.Key, raw, in.ClearCredentials)
+			if err != nil {
+				return nil, err
+			}
+			if _, err = config.ApplyStoredConnections(r.Context(), s.config, snapshot, in.Key, prepared); err != nil {
+				return nil, err
+			}
+			return prepared, nil
+		})
+	} else {
+		updated, err = s.runtime.PlatformSettings.Update(r.Context(), user.ID, in.Key, in.Value, in.Reason, *in.ExpectedVersion)
+	}
+
+	if errors.Is(err, platformsettings.ErrVersionConflict) {
+		writeProblem(w, 409, "setting_conflict", err.Error())
+		return
+	}
 	if err != nil {
 		writeProblem(w, http.StatusUnprocessableEntity, "setting_invalid", err.Error())
 		return
@@ -165,63 +230,6 @@ func (s *Server) updatePlatformSetting(w http.ResponseWriter, r *http.Request) {
 			"key":     in.Key,
 			"version": fmt.Sprintf("%d", updated.Version),
 			"reason":  in.Reason,
-		},
-	})
-
-	writeJSON(w, http.StatusOK, map[string]any{"setting": updated})
-}
-
-type rotateSecretInput struct {
-	Key    string `json:"key"`
-	Secret string `json:"secret"`
-	Reason string `json:"reason"`
-}
-
-func (s *Server) rotatePlatformSecret(w http.ResponseWriter, r *http.Request) {
-	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionPlatformSettings)
-	if !ok || !s.requireFreshMFA(w, session) || !s.requireCSRF(w, r) {
-		return
-	}
-	if s.runtime.PlatformSettings == nil {
-		writeProblem(w, http.StatusServiceUnavailable, "settings_unavailable", "platform settings store is unavailable")
-		return
-	}
-
-	var in rotateSecretInput
-	if !decodeJSONRequest(w, r, &in) {
-		return
-	}
-
-	in.Key = strings.TrimSpace(in.Key)
-	in.Reason = strings.TrimSpace(in.Reason)
-	if in.Key == "" {
-		writeProblem(w, http.StatusBadRequest, "key_required", "Setting key is required")
-		return
-	}
-	if len(in.Reason) < 4 {
-		writeProblem(w, http.StatusBadRequest, "reason_required", "Provide a reason of at least 4 characters")
-		return
-	}
-
-	updated, err := s.runtime.PlatformSettings.RotateSecret(r.Context(), user.ID, in.Key, in.Secret, in.Reason)
-	if err != nil {
-		writeProblem(w, http.StatusUnprocessableEntity, "secret_invalid", err.Error())
-		return
-	}
-
-	s.runtime.Audit.Append(audit.Event{
-		ActorUserID:  user.ID,
-		Action:       "platform_settings.secret_rotated",
-		ResourceType: "platform_settings",
-		ResourceID:   in.Key,
-		Outcome:      "success",
-		Severity:     "warning",
-		RequestID:    requestIDFromContext(r.Context()),
-		Metadata: map[string]string{
-			"key":         in.Key,
-			"version":     fmt.Sprintf("%d", updated.Version),
-			"fingerprint": updated.SecretFingerprint,
-			"reason":      in.Reason,
 		},
 	})
 
@@ -426,6 +434,12 @@ func (s *Server) transferOwnership(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in.TargetUserID = strings.TrimSpace(in.TargetUserID)
+	targetID, parseErr := uuid.Parse(in.TargetUserID)
+	if parseErr != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_target_user", "Target user must be a valid Kredit user reference")
+		return
+	}
+	in.TargetUserID = targetID.String()
 	in.Reason = strings.TrimSpace(in.Reason)
 	if in.TargetUserID == "" || in.TargetUserID == user.ID {
 		writeProblem(w, http.StatusBadRequest, "invalid_target_user", "Target user must be a different active user")
@@ -443,45 +457,12 @@ func (s *Server) transferOwnership(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
 
-	var targetActive bool
-	err = tx.QueryRow(r.Context(), `SELECT (status = 'active') FROM app.users WHERE id=$1::uuid`, in.TargetUserID).Scan(&targetActive)
-	if err != nil || !targetActive {
-		writeProblem(w, http.StatusBadRequest, "target_user_inactive", "Target user must be an active registered user")
-		return
-	}
-
-	// 1. Grant platform_owner to target user first (ensuring at least one active owner always exists)
-	_, err = tx.Exec(r.Context(), `
-		INSERT INTO app.platform_role_assignments(user_id, role, granted_by, reason)
-		VALUES($1::uuid, 'platform_owner', $2::uuid, $3)
-		ON CONFLICT(user_id, role) WHERE revoked_at IS NULL
-		DO UPDATE SET reason=EXCLUDED.reason
-	`, in.TargetUserID, user.ID, in.Reason)
-	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "grant_failed", err.Error())
-		return
-	}
-
-	// Also grant platform_admin to target user
-	_, err = tx.Exec(r.Context(), `
-		INSERT INTO app.platform_role_assignments(user_id, role, granted_by, reason)
-		VALUES($1::uuid, 'platform_admin', $2::uuid, $3)
-		ON CONFLICT(user_id, role) WHERE revoked_at IS NULL
-		DO UPDATE SET reason=EXCLUDED.reason
-	`, in.TargetUserID, user.ID, in.Reason)
-	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "grant_admin_failed", err.Error())
-		return
-	}
-
-	// 2. Revoke platform_owner from caller
-	_, err = tx.Exec(r.Context(), `
-		UPDATE app.platform_role_assignments
-		SET revoked_at=now(), revoked_by=$2::uuid
-		WHERE user_id=$1::uuid AND role='platform_owner' AND revoked_at IS NULL
-	`, user.ID, user.ID)
-	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "revoke_failed", err.Error())
+	if err := transferOwnershipTx(r.Context(), tx, user.ID, in.TargetUserID, in.Reason); err != nil {
+		if errors.Is(err, errOwnershipChanged) {
+			writeProblem(w, http.StatusConflict, "ownership_changed", err.Error())
+		} else {
+			writeProblem(w, http.StatusServiceUnavailable, "transfer_unavailable", "Ownership transfer could not be completed. Reload and check the owner before retrying.")
+		}
 		return
 	}
 

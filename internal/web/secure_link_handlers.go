@@ -3,12 +3,20 @@ package web
 import (
 	"encoding/hex"
 	"net/http"
+	"net/url"
+	pathpkg "path"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 func (s *Server) resolveSecureLink(w http.ResponseWriter, r *http.Request) {
+	if s.runtime.Notifications == nil {
+		writeProblem(w, http.StatusServiceUnavailable, "secure_link_unavailable", "This link could not be checked. Please try again.")
+		return
+	}
 	encodedPath := strings.TrimSpace(r.URL.Query().Get("path"))
 	signature := strings.TrimSpace(r.URL.Query().Get("sig"))
 	expiresUnix, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("exp")), 10, 64)
@@ -31,6 +39,21 @@ func (s *Server) resolveSecureLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func safeSecureRedirect(path string) bool {
+	if !utf8.ValidString(path) || strings.IndexFunc(path, unicode.IsControl) >= 0 {
+		return false
+	}
+	parsed, err := url.ParseRequestURI(path)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" {
+		return false
+	}
+	decoded := parsed.Path
+	if !utf8.ValidString(decoded) || strings.IndexFunc(decoded, unicode.IsControl) >= 0 || strings.Contains(decoded, "\\") {
+		return false
+	}
+	if pathpkg.Clean(decoded) != strings.TrimSuffix(decoded, "/") {
+		return false
+	}
+	path = decoded
 	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "\r\n\\") {
 		return false
 	}

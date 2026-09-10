@@ -1,11 +1,13 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
+	"kredit/internal/documents"
 )
 
 type documentUploadSlotRequest struct {
@@ -31,9 +33,13 @@ func (s *Server) completeDocumentUpload(w http.ResponseWriter, r *http.Request) 
 	if !ok || !s.requireCSRF(w, r) {
 		return
 	}
-	document, exists := s.runtime.Documents.GetForTenant(r.Context(), documentID, user.ID, organizationID)
-	if !exists || document.OrganizationID != organizationID {
+	document, readErr := s.runtime.Documents.ReadForTenant(r.Context(), documentID, user.ID, organizationID)
+	if errors.Is(readErr, documents.ErrNotFound) {
 		writeProblem(w, http.StatusNotFound, "document_not_found", "We could not find that document.")
+		return
+	}
+	if readErr != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "document_unavailable", "The document could not be opened. Try again.")
 		return
 	}
 	document, err = s.runtime.Documents.CompleteUploadForTenant(r.Context(), documentID, user.ID, organizationID)

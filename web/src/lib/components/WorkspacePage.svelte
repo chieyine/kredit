@@ -1,60 +1,237 @@
 <script lang="ts">
-	import { onMount } from 'svelte'; import { page } from '$app/state';
+	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import Money from '$lib/components/Money.svelte';
-	import { productLabel } from '$lib/product-language';
-	let { eyebrow,title,description,primaryLabel='',primaryHref='',endpoint='',organizationPath='',collectionKey='',detailBase='',showDetails=true,detailQueryOrganization=false,emptyTitle='Nothing here yet',emptyCopy='New items will show here.',tips=[] }:{eyebrow:string;title:string;description:string;primaryLabel?:string;primaryHref?:string;endpoint?:string;organizationPath?:string;collectionKey?:string;detailBase?:string;showDetails?:boolean;detailQueryOrganization?:boolean;emptyTitle?:string;emptyCopy?:string;tips?:string[]}=$props();
-	let loading=$state(true),error=$state(''),records:any[]=$state([]),organizations:any[]=$state([]),organizationID=$state(''),query=$state(''),pageNumber=$state(1);const pageSize=9;
-	let filtered=$derived(records.filter((record)=>JSON.stringify(record).toLowerCase().includes(query.toLowerCase())));let visible=$derived(filtered.slice((pageNumber-1)*pageSize,pageNumber*pageSize));
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { checkedJSON, publicError, RequestError, record as objectRecord, text } from '$lib/api/reliable';
+	import type { KoboValue } from '$lib/money';
+
+	/**
+	 * A list of records, where the caller says what each record means.
+	 *
+	 * The previous version guessed: it tried six field names for a title and
+	 * printed the record's UUID when none matched, which is what the audit trail
+	 * and half the workspace lists ended up showing. Guessing is what made every
+	 * list look the same and read like nothing. Each page now names its own
+	 * title, status, amount and link, and a record it cannot describe is not
+	 * rendered as a row of identifiers.
+	 */
+	type Row = Record<string, any>;
+	let {
+		eyebrow,
+		title,
+		description,
+		primaryLabel = '',
+		primaryHref = '',
+		endpoint = '',
+		organizationPath = '',
+		collectionKey = '',
+		emptyTitle = 'Nothing here yet',
+		emptyCopy = 'New items appear here.',
+		rowTitle,
+		rowStatus = () => '',
+		rowDetail = () => '',
+		rowAmount = () => null,
+		rowAmountLabel = '',
+		rowHref = () => '',
+		searchPlaceholder = 'Search',
+		keep = () => true
+	}: {
+		eyebrow: string;
+		title: string;
+		description: string;
+		primaryLabel?: string;
+		primaryHref?: string;
+		endpoint?: string;
+		organizationPath?: string;
+		collectionKey?: string;
+		emptyTitle?: string;
+		emptyCopy?: string;
+		rowTitle: (record: Row) => string;
+		rowStatus?: (record: Row) => string;
+		rowDetail?: (record: Row) => string;
+		rowAmount?: (record: Row) => KoboValue;
+		rowAmountLabel?: string;
+		rowHref?: (record: Row, organizationID: string) => string;
+		searchPlaceholder?: string;
+		/**
+		 * Which records belong on this page. Two pages read the same endpoint —
+		 * sales a customer has not answered yet, and sales they are now paying
+		 * off — and before this they showed the identical list under two names.
+		 */
+		keep?: (record: Row) => boolean;
+	} = $props();
+
+	let loading = $state(true), error = $state(''), records = $state<Row[]>([]);
+	let organizations = $state<Row[]>([]), organizationID = $state(''), query = $state(''), pageNumber = $state(1);
+	const pageSize = 20;
+
+	// Search reads the words this page actually shows. Matching a stringified
+	// record meant a search for "paid" hit any row whose internal id contained
+	// those letters, and the result could not be explained to the person typing.
+	const mine = $derived(records.filter((record) => keep(record)));
+	const filtered = $derived.by(() => {
+		const needle = query.trim().toLowerCase();
+		if (!needle) return mine;
+		return mine.filter((record) =>
+			`${rowTitle(record)} ${rowDetail(record)} ${rowStatus(record)}`.toLowerCase().includes(needle)
+		);
+	});
+	const visible = $derived(filtered.slice((pageNumber - 1) * pageSize, pageNumber * pageSize));
+	const pages = $derived(Math.max(1, Math.ceil(filtered.length / pageSize)));
+
 	let requestVersion = 0;
 	let controller: AbortController | undefined;
-	async function refresh() {
+
+	async function refresh(keepRecords = false) {
 		const version = ++requestVersion;
 		controller?.abort();
 		controller = new AbortController();
 		const signal = controller.signal;
 		loading = true;
 		error = '';
-		records = [];
+		if (!keepRecords) records = [];
 		pageNumber = 1;
 		async function read(url: string) {
-			const response = await fetch(url, { credentials: 'include', signal });
-			if (response.status === 401) {
-				location.assign(`/app?next=${encodeURIComponent(page.url.pathname + page.url.search)}`);
-				throw new Error('Please sign in again.');
+			try { return await checkedJSON<any>(url, value => value, { signal }); }
+			catch(cause) {
+				if(cause instanceof RequestError && cause.status === 401) location.assign(`/app?next=${encodeURIComponent(page.url.pathname + page.url.search)}`);
+				throw cause;
 			}
-			if (!response.ok) throw new Error('We could not open this page. Please try again.');
-			return response.json();
 		}
 		try {
 			if (organizationPath && !organizations.length) {
 				const data = await read('/api/v1/organizations');
 				if (version !== requestVersion) return;
-				if (!Array.isArray(data.organizations)) throw new Error('We could not open your businesses. Please try again.');
-				organizations = data.organizations;
-				organizationID = organizations[0]?.id ?? '';
+				if (!Array.isArray(data.organizations)) throw new Error('unavailable');
+				organizations = data.organizations.map((value: unknown) => {
+                  const item = objectRecord(value);
+                  text(item.id); text(item.legal_name);
+                  return item;
+                });
+				const requested = new URLSearchParams(location.search).get('organization');
+				organizationID = organizations.find((item) => item.id === requested)?.id ?? organizations[0]?.id ?? '';
 			}
 			if (organizationPath && !organizationID) return;
-			const data = await read(organizationPath ? `/api/v1/organizations/${organizationID}${organizationPath}` : endpoint);
+			const data = await read(organizationPath ? `/api/v1/organizations/${encodeURIComponent(organizationID)}${organizationPath}` : endpoint);
 			if (version !== requestVersion) return;
 			const value = collectionKey ? data[collectionKey] : data;
-			if (!Array.isArray(value)) throw new Error('We could not open these records. Please try again.');
-			records = detailBase === '/buyer/obligations' ? value.filter(item => item.obligation) : value;
+			if (!Array.isArray(value)) throw new Error('unavailable');
+			records = value.map(objectRecord);
 		} catch (cause) {
-			if (version === requestVersion && !signal.aborted) error = cause instanceof Error ? cause.message : 'We could not open this page.';
+			if (version === requestVersion && !signal.aborted) {
+				error = publicError(cause, title.toLowerCase());
+			}
 		} finally {
 			if (version === requestVersion) loading = false;
 		}
 	}
+
 	onMount(() => {
 		if (endpoint || organizationPath) void refresh();
 		else loading = false;
 		return () => { requestVersion++; controller?.abort(); };
 	});
 </script>
+
 <svelte:head><title>{title} — Kredit</title></svelte:head>
-<main class="shell workspace"><header class="heading"><div><p class="eyebrow">{eyebrow}</p><h1>{title}</h1><p class="lede">{description}</p></div>{#if primaryHref}<a class="primary" href={primaryHref}>{primaryLabel}</a>{/if}</header>
-{#if tips.length}<section class="tips" aria-label="Highlights">{#each tips as tip}<article><b>✓</b><p>{tip}</p></article>{/each}</section>{/if}
-{#if endpoint||organizationPath}<div class="toolbar">{#if organizations.length>1}<label>Business<select bind:value={organizationID} onchange={refresh}>{#each organizations as org}<option value={org.id}>{org.trading_name||org.legal_name}</option>{/each}</select></label>{/if}<label class="search"><span class="sr-only">Search</span><input bind:value={query} oninput={()=>pageNumber=1} type="search" placeholder="Search here…" /></label><button onclick={refresh}>Check again</button></div>{/if}
-	{#if loading}<div class="loading" role="status"><span class="sr-only">Opening {title}</span><Skeleton rows={6} tall /></div>{:else if error}<div class="error" role="alert">{error} <button onclick={refresh}>Try again</button></div>{:else if filtered.length}<section class="records" aria-label={title}>{#each visible as item}{@const record=item.request??item}{@const amount=item.obligation?.outstanding_kobo??record.outstanding_kobo??record.amount_kobo??record.principal_kobo}{@const detailID=detailBase.includes('/obligations')?(item.obligation?.id??''):record.id}<article><div><strong>{record.buyer_legal_name??record.legal_name??record.reason??record.reference??record.provider??record.id??'Item'}</strong><span class="status">{productLabel(record.state??record.status??'OPEN')}</span></div><p>{record.goods_description??record.explanation??record.subject_type??record.description??'Open this item to see more.'}</p>{#if amount !== undefined}<p class="record-amount"><Money amountKobo={amount} /></p>{/if}{#if showDetails && detailID}<a href={`${detailBase||page.url.pathname}/${detailID}${(detailQueryOrganization || (organizationPath && detailBase === '/app/credit'))?`?organization=${encodeURIComponent(organizationID)}`:''}`}>Open →</a>{/if}</article>{/each}</section>{#if filtered.length>pageSize}<nav class="pagination" aria-label="Pages"><button disabled={pageNumber===1} onclick={()=>pageNumber--}>Back</button><span>Page {pageNumber} of {Math.ceil(filtered.length/pageSize)}</span><button disabled={pageNumber>=Math.ceil(filtered.length/pageSize)} onclick={()=>pageNumber++}>Next</button></nav>{/if}{:else}<section class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h2>{query?'Nothing found':emptyTitle}</h2><p>{query?'Try another word.':emptyCopy}</p>{#if primaryHref}<a class="primary-button" href={primaryHref}>{primaryLabel}</a>{/if}</section>{/if}</main>
-<style>.heading{display:flex;align-items:end;justify-content:space-between;gap:3rem;margin-bottom:2.5rem;padding-bottom:2rem;border-bottom:3px solid #17181b}.heading h1{max-width:15ch;margin:.55rem 0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3rem,6vw,5.4rem);font-weight:500;line-height:.92;letter-spacing:-.055em}.tips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:1.5rem 0;border-top:1px solid var(--color-border);border-left:1px solid var(--color-border)}.tips article{display:flex;gap:.8rem;padding:1.15rem;border-right:1px solid var(--color-border);border-bottom:1px solid var(--color-border)}.tips b{color:#e85f3d}.tips p,.records p{margin:.1rem 0;color:var(--color-muted);line-height:1.5}.toolbar{display:flex;align-items:end;gap:.75rem;margin:2rem 0;padding:1rem;color:#fff;background:#17181b}.toolbar label{display:grid;gap:.35rem;font-weight:700}.search{flex:1}.toolbar input,.toolbar select,.toolbar button,.pagination button{box-sizing:border-box;width:100%;min-height:3rem;padding:.65rem .75rem;border:1px solid #4b4c51;border-radius:0;background:#fff;color:#17181b;font:inherit}.toolbar button{width:auto;color:#fff;background:#2738d6;border-color:#2738d6;font-weight:750}.records{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1.5rem 0}.records article{min-height:11rem;padding:1.35rem;border:1px solid var(--color-border);background:#fffdf8;box-shadow:6px 6px 0 #ded8cc}.records article{min-width:0;overflow-wrap:anywhere}.records .record-amount{color:var(--color-foreground);font-size:1.5rem;font-weight:750;font-variant-numeric:tabular-nums}.records .status{flex-shrink:0;align-self:flex-start}.records article>div{display:flex;justify-content:space-between;gap:1rem}.records a{margin-top:auto;color:var(--color-primary);font-weight:750}.pagination{display:flex;justify-content:center;align-items:center;gap:1rem;margin:1.5rem}.pagination button{width:auto}.loading{padding:3rem;text-align:center;color:var(--color-muted)}.empty-state{padding:clamp(2rem,6vw,5rem);color:#fff;background:#2738d6}.empty-state h2{max-width:14ch;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2rem,4vw,3.5rem);font-weight:500}.empty-state p{color:#d6d9ff}.empty-icon{font-size:3rem;color:#ff8b70}.empty-state :global(.primary-button){color:#17181b;background:#fff}.error{padding:1rem;color:#fff;background:#b42318}@media(max-width:720px){.heading{display:block}.heading .primary{margin-top:1rem}.tips,.records{grid-template-columns:1fr}.toolbar{align-items:stretch;flex-direction:column}.toolbar button{width:100%}.records article{min-height:auto}}</style>
+
+<main class="shell workspace">
+	<header class="page-head">
+		<div>
+			<p class="eyebrow">{eyebrow}</p>
+			<h1>{title}</h1>
+			<p class="lede">{description}</p>
+		</div>
+		{#if primaryHref}<a class="primary" href={primaryHref}>{primaryLabel}</a>{/if}
+	</header>
+
+	{#if endpoint || organizationPath}
+		<div class="toolbar">
+			{#if organizations.length > 1}
+				<label>Business
+					<select bind:value={organizationID} onchange={() => refresh()}>
+						{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}
+					</select>
+				</label>
+			{/if}
+			<label class="search"><span>Find</span><input bind:value={query} oninput={() => (pageNumber = 1)} type="search" placeholder={searchPlaceholder} /></label>
+			<button type="button" onclick={() => refresh(true)} disabled={loading}>{loading ? 'Checking…' : 'Check again'}</button>
+		</div>
+	{/if}
+
+	{#if loading}
+		<div role="status"><span class="sr-only">Opening {title}</span><Skeleton rows={5} /></div>
+	{:else if error}
+		<div class="error" role="alert"><p>{error}</p><button type="button" onclick={() => refresh()}>Try again</button></div>
+	{:else if filtered.length}
+		<p class="count">{filtered.length === mine.length ? `${mine.length} ${mine.length === 1 ? 'item' : 'items'}` : `${filtered.length} of ${mine.length}`}</p>
+		<ul class="records">
+			<!-- Several attempts or businesses can legitimately link to the same detail page. -->
+			{#each visible as record}
+				{@const href = rowHref(record, organizationID)}
+				{@const amount = rowAmount(record)}
+				<li>
+					<svelte:element this={href ? 'a' : 'div'} href={href || undefined} class="record">
+						<span class="who">
+							<strong>{rowTitle(record)}</strong>
+							{#if rowDetail(record)}<small>{rowDetail(record)}</small>{/if}
+						</span>
+						{#if amount !== null && amount !== undefined}
+							<span class="amount"><Money amountKobo={amount} />{#if rowAmountLabel}<small>{rowAmountLabel}</small>{/if}</span>
+						{/if}
+						{#if rowStatus(record)}<StatusPill status={rowStatus(record)} />{/if}
+					</svelte:element>
+				</li>
+			{/each}
+		</ul>
+		{#if pages > 1}
+			<nav class="pagination" aria-label="Pages">
+				<button type="button" disabled={pageNumber === 1} onclick={() => pageNumber--}>Back</button>
+				<span>Page {pageNumber} of {pages}</span>
+				<button type="button" disabled={pageNumber >= pages} onclick={() => pageNumber++}>Next</button>
+			</nav>
+		{/if}
+	{:else}
+		<section class="empty">
+			<h2>{query ? 'Nothing matches that' : emptyTitle}</h2>
+			<p>{query ? 'Try a different name or word.' : emptyCopy}</p>
+			{#if primaryHref && !query}<a class="primary" href={primaryHref}>{primaryLabel}</a>{/if}
+		</section>
+	{/if}
+</main>
+
+<style>
+	.page-head { display: flex; align-items: end; justify-content: space-between; gap: 2rem; padding: 1.5rem 0; border-bottom: 1px solid var(--color-border); }
+	.page-head h1 { margin: .3rem 0; font-size: 1.9rem; line-height: 1.2; }
+	.lede { max-width: 60ch; margin: .4rem 0 0; color: var(--color-muted); line-height: 1.6; }
+	.toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem; margin: 1.5rem 0; }
+	.toolbar label { display: grid; gap: .35rem; font-weight: 650; }
+	.toolbar .search { flex: 1; min-width: min(100%, 15rem); }
+	.toolbar input, .toolbar select { box-sizing: border-box; width: 100%; min-height: 3rem; padding: .7rem; border: 1px solid var(--color-border); background: var(--color-surface); color: inherit; font: inherit; }
+	.toolbar button { min-height: 3rem; padding: .7rem 1rem; border: 1px solid var(--color-border); background: var(--color-surface); color: inherit; font: inherit; }
+	.count { color: var(--color-muted); font-size: .9rem; }
+	.records { display: grid; margin: .5rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--color-border); }
+	.record { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; min-height: 4rem; padding: .9rem .25rem; border-bottom: 1px solid var(--color-border); color: inherit; text-decoration: none; }
+	a.record:hover { background: var(--color-surface-muted); }
+	.who { display: grid; gap: .25rem; min-width: 0; }
+	.who strong { overflow-wrap: anywhere; }
+	.who small, .amount small { color: var(--color-muted); }
+	.amount { display: grid; gap: .2rem; text-align: right; white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
+	.pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.5rem 0; }
+	.pagination button { min-height: 2.75rem; padding: .6rem 1rem; border: 1px solid var(--color-border); background: var(--color-surface); color: inherit; font: inherit; }
+	.empty { margin-top: 1.5rem; padding: 2rem; border: 1px dashed var(--color-border); }
+	.empty h2 { margin: 0 0 .4rem; font-size: 1.15rem; }
+	.empty p { margin: 0 0 1rem; color: var(--color-muted); line-height: 1.6; }
+	.error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; padding: 1rem; border-left: 3px solid var(--color-destructive); background: #ffebe9; }
+	.error p { margin: 0; line-height: 1.6; }
+	.error button { min-height: 2.75rem; padding: .55rem .9rem; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; }
+	@media (max-width: 640px) {
+		.page-head { display: block; }
+		.page-head .primary { margin-top: 1rem; }
+		.toolbar label, .toolbar button { width: 100%; }
+		.record { align-items: start; flex-direction: column; gap: .5rem; }
+		.amount { text-align: left; }
+	}
+</style>

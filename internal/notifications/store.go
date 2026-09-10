@@ -8,9 +8,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"kredit/internal/identifier"
+	"kredit/internal/platform/logging"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -202,23 +205,25 @@ func (p *MockProvider) Messages() []Message {
 }
 
 type Store struct {
-	mu              sync.Mutex
-	secret          []byte
-	providers       map[string]Provider
-	templates       map[string]string
-	preferences     map[string]Preferences
-	deliveries      map[string]*Delivery
-	dedupe          map[string]string
-	now             func() time.Time
-	newID           func() string
-	baseURL         string
-	pool            *pgxpool.Pool
-	encryption      []byte
-	reminderConsent func(context.Context, string, string) (bool, error)
+	mu                 sync.Mutex
+	secret             []byte
+	providers          map[string]Provider
+	templates          map[string]string
+	preferences        map[string]Preferences
+	deliveries         map[string]*Delivery
+	dedupe             map[string]string
+	eventFingerprints  map[string]string
+	now                func() time.Time
+	newID              func() string
+	baseURL            string
+	pool               *pgxpool.Pool
+	encryption         []byte
+	reminderConsent    func(context.Context, string, string) (bool, error)
+	optionalProcessing func(context.Context, string) (bool, error)
 }
 
 func NewStore(secret string) *Store {
-	return &Store{secret: []byte(secret), providers: map[string]Provider{}, templates: map[string]string{}, preferences: map[string]Preferences{}, deliveries: map[string]*Delivery{}, dedupe: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier, baseURL: "https://app.kredit.com.ng"}
+	return &Store{secret: []byte(secret), providers: map[string]Provider{}, templates: map[string]string{}, preferences: map[string]Preferences{}, deliveries: map[string]*Delivery{}, dedupe: map[string]string{}, eventFingerprints: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier, baseURL: "https://app.kredit.com.ng"}
 }
 func NewPostgresStore(pool *pgxpool.Pool, secret string) *Store {
 	store := NewStore(secret)
@@ -291,13 +296,29 @@ func (s *Store) UpdatePreferences(ctx context.Context, recipient string, prefs P
 		return Preferences{}, errors.New("notification preference is invalid")
 	}
 	if s.pool != nil {
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return Preferences{}, err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		defaults := DefaultPreferences()
+		if _, err = tx.Exec(ctx, `INSERT INTO app.notification_preferences(recipient_id,preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone,version) VALUES($1::uuid,$2,$3,false,true,false,$4,$5,$6,1) ON CONFLICT(recipient_id) DO NOTHING`, recipient, defaults.PreferredChannel, defaults.FallbackChannel, defaults.QuietStart, defaults.QuietEnd, defaults.Timezone); err != nil {
+			return Preferences{}, err
+		}
 		var out Preferences
-		err := s.pool.QueryRow(ctx, `INSERT INTO app.notification_preferences(recipient_id,preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone,version) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,1) ON CONFLICT(recipient_id) DO UPDATE SET preferred_channel=EXCLUDED.preferred_channel,fallback_channel=EXCLUDED.fallback_channel,opted_out=EXCLUDED.opted_out,payment_reminders_enabled=EXCLUDED.payment_reminders_enabled,product_updates_enabled=EXCLUDED.product_updates_enabled,quiet_start_hour=EXCLUDED.quiet_start_hour,quiet_end_hour=EXCLUDED.quiet_end_hour,timezone=EXCLUDED.timezone,version=app.notification_preferences.version+1,updated_at=now() WHERE app.notification_preferences.version=$10 RETURNING preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone,version`, recipient, prefs.PreferredChannel, prefs.FallbackChannel, prefs.OptedOut, prefs.PaymentRemindersEnabled, prefs.ProductUpdatesEnabled, prefs.QuietStart, prefs.QuietEnd, prefs.Timezone, expectedVersion).Scan(&out.PreferredChannel, &out.FallbackChannel, &out.OptedOut, &out.PaymentRemindersEnabled, &out.ProductUpdatesEnabled, &out.QuietStart, &out.QuietEnd, &out.Timezone, &out.Version)
+		err = tx.QueryRow(ctx, `UPDATE app.notification_preferences SET preferred_channel=$2,fallback_channel=$3,opted_out=$4,payment_reminders_enabled=$5,product_updates_enabled=$6,quiet_start_hour=$7,quiet_end_hour=$8,timezone=$9,version=version+1,updated_at=now() WHERE recipient_id=$1::uuid AND version=$10 RETURNING preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone,version`, recipient, prefs.PreferredChannel, prefs.FallbackChannel, prefs.OptedOut, prefs.PaymentRemindersEnabled, prefs.ProductUpdatesEnabled, prefs.QuietStart, prefs.QuietEnd, prefs.Timezone, expectedVersion).Scan(&out.PreferredChannel, &out.FallbackChannel, &out.OptedOut, &out.PaymentRemindersEnabled, &out.ProductUpdatesEnabled, &out.QuietStart, &out.QuietEnd, &out.Timezone, &out.Version)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Preferences{}, errors.New("notification preference version conflict")
 		}
-		return out, err
+		if err != nil {
+			return Preferences{}, err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return Preferences{}, err
+		}
+		return out, nil
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.preferences[recipient]
@@ -321,14 +342,25 @@ func (s *Store) SetReminderConsent(check func(context.Context, string, string) (
 	defer s.mu.Unlock()
 	s.reminderConsent = check
 }
+func (s *Store) SetOptionalProcessing(check func(context.Context, string) (bool, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.optionalProcessing = check
+}
 func (s *Store) reminderAllowed(ctx context.Context, event Event) (bool, error) {
-	if event.Priority == PriorityCritical || event.Type != "PaymentDueSoon" {
+	if event.Priority == PriorityCritical {
 		return true, nil
 	}
 	s.mu.Lock()
-	check := s.reminderConsent
+	optional, check := s.optionalProcessing, s.reminderConsent
 	s.mu.Unlock()
-	if check == nil {
+	if optional != nil {
+		allowed, err := optional(ctx, event.RecipientID)
+		if err != nil || !allowed {
+			return false, err
+		}
+	}
+	if event.Type != "PaymentDueSoon" || check == nil {
 		return true, nil
 	}
 	if event.OrganizationID == "" {
@@ -338,6 +370,7 @@ func (s *Store) reminderAllowed(ctx context.Context, event Event) (bool, error) 
 }
 
 func (s *Store) Emit(ctx context.Context, event Event) ([]Delivery, error) {
+	event.Priority = defaultPriority(event.Priority)
 	if event.ID == "" || event.Type == "" || event.RecipientID == "" {
 		return nil, errors.New("event, type, and recipient are required")
 	}
@@ -390,8 +423,13 @@ func (s *Store) deliver(ctx context.Context, event Event, channel string, prefs 
 		return s.deliverPostgres(ctx, event, channel, prefs)
 	}
 	key := event.ID + "|" + channel
+	fingerprint := s.eventFingerprint(event)
 	s.mu.Lock()
 	if existing := s.dedupe[key]; existing != "" {
+		if s.eventFingerprints[key] != fingerprint {
+			s.mu.Unlock()
+			return Delivery{}, errors.New("notification event belongs to a different intent")
+		}
 		delivery := *s.deliveries[existing]
 		s.mu.Unlock()
 		return delivery, nil
@@ -412,6 +450,7 @@ func (s *Store) deliver(ctx context.Context, event Event, channel string, prefs 
 		}
 		s.deliveries[delivery.ID] = delivery
 		s.dedupe[key] = delivery.ID
+		s.eventFingerprints[key] = fingerprint
 		s.mu.Unlock()
 		return cloneDelivery(*delivery), nil
 	}
@@ -422,12 +461,16 @@ func (s *Store) deliver(ctx context.Context, event Event, channel string, prefs 
 		delivery.FailureReason = "provider unavailable"
 		s.deliveries[delivery.ID] = delivery
 		s.dedupe[key] = delivery.ID
+		s.eventFingerprints[key] = fingerprint
 		s.mu.Unlock()
 		return cloneDelivery(*delivery), nil
 	}
 	delivery.State = StateSending
 	s.deliveries[delivery.ID] = delivery
 	s.dedupe[key] = delivery.ID
+	s.eventFingerprints[key] = fingerprint
+	working := *delivery
+	delivery = &working
 	s.mu.Unlock()
 	if event.SecurePath != "" {
 		delivery.SecureLink = s.SecureLink(event.SecurePath, now.Add(15*time.Minute))
@@ -445,10 +488,11 @@ func (s *Store) deliver(ctx context.Context, event Event, channel string, prefs 
 		stored = delivery
 		s.deliveries[delivery.ID] = stored
 	}
+	stored.Body, stored.SecureLink = delivery.Body, delivery.SecureLink
 	if err != nil {
 		stored.State = StateFailed
 		stored.FailedAt = s.now()
-		stored.FailureReason = err.Error()
+		stored.FailureReason = logging.Redact(err.Error())
 	} else {
 		stored.State = StateSent
 		stored.ProviderMessageID = providerID
@@ -515,6 +559,8 @@ func defaultTemplate(eventType string) string {
 		return "We may try your bank again after {{date}} for money still unpaid. Check what you owe in Kredit."
 	case "ObligationAccepted":
 		return "You have agreed to this sale. Your payment days are saved in Kredit. Open it any time to see them."
+	case "SystemAcceptance":
+		return "The waiting period after your delivery notice has ended without a receipt confirmation or problem report. This sale is now active under its agreed delivery terms. This is a system record, not a confirmation from you. Open Kredit to review or report a problem."
 	case "GoodsReleased":
 		return "Your seller sent goods worth {{amount}}. Confirm they arrived or report a problem in Kredit. If we hear nothing by {{date}}, we record them as received."
 	case "ObligationRepaid":
@@ -697,8 +743,15 @@ func (s *Store) deliverPostgres(ctx context.Context, event Event, channel string
 		delivery.State = StateSending
 	}
 	inserted := false
-	err = s.pool.QueryRow(ctx, `INSERT INTO app.notifications(id,recipient_id,channel,template,template_version,event_reference,state,body,scheduled_at,failed_at,failure_reason,secure_link,destination_ciphertext,lease_expires_at,supplier_organization_id,priority) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),$13,$14,NULLIF($15,'')::uuid,$16) ON CONFLICT(event_reference,channel) DO NOTHING RETURNING true`, delivery.ID, delivery.RecipientID, delivery.Channel, delivery.Template, delivery.TemplateVersion, delivery.EventID, delivery.State, delivery.Body, nullableTime(delivery.ScheduledAt), nullableTime(delivery.FailedAt), delivery.FailureReason, delivery.SecureLink, ciphertext, leaseTime(shouldSend, now), event.OrganizationID, defaultPriority(event.Priority)).Scan(&inserted)
+	err = s.pool.QueryRow(ctx, `INSERT INTO app.notifications(id,recipient_id,channel,template,template_version,event_reference,state,body,scheduled_at,failed_at,failure_reason,secure_link,destination_ciphertext,lease_expires_at,supplier_organization_id,priority,send_started_at,event_fingerprint) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),$13,$14,NULLIF($15,'')::uuid,$16,CASE WHEN $17 THEN now() END,$18) ON CONFLICT(event_reference,channel) DO NOTHING RETURNING true`, delivery.ID, delivery.RecipientID, delivery.Channel, delivery.Template, delivery.TemplateVersion, delivery.EventID, delivery.State, delivery.Body, nullableTime(delivery.ScheduledAt), nullableTime(delivery.FailedAt), delivery.FailureReason, delivery.SecureLink, ciphertext, leaseTime(shouldSend, now), event.OrganizationID, defaultPriority(event.Priority), shouldSend, s.eventFingerprint(event)).Scan(&inserted)
 	if errors.Is(err, pgx.ErrNoRows) {
+		var fingerprint string
+		if err := s.pool.QueryRow(ctx, `SELECT COALESCE(event_fingerprint,'') FROM app.notifications WHERE event_reference=$1 AND channel=$2`, event.ID, channel).Scan(&fingerprint); err != nil {
+			return Delivery{}, err
+		}
+		if fingerprint != s.eventFingerprint(event) {
+			return Delivery{}, errors.New("notification event belongs to a different or unverifiable intent")
+		}
 		existing, loadErr := s.loadPersistentDelivery(ctx, event.ID, channel)
 		return existing, loadErr
 	}
@@ -712,14 +765,14 @@ func (s *Store) deliverPostgres(ctx context.Context, event Event, channel string
 	if sendErr != nil {
 		delivery.State = StateFailed
 		delivery.FailedAt = s.now()
-		delivery.FailureReason = sendErr.Error()
-		_, err = s.pool.Exec(ctx, `UPDATE app.notifications SET state='failed',failed_at=$2,failure_reason=$3,lease_expires_at=NULL,updated_at=now() WHERE id=$1::uuid`, delivery.ID, delivery.FailedAt, delivery.FailureReason)
+		delivery.FailureReason = logging.Redact(sendErr.Error())
+		_, err = s.pool.Exec(ctx, `UPDATE app.notifications SET state='failed',failed_at=$2,failure_reason=$3,lease_expires_at=NULL,updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=0`, delivery.ID, delivery.FailedAt, delivery.FailureReason)
 		return delivery, err
 	}
 	delivery.State = StateSent
 	delivery.ProviderMessageID = providerID
 	delivery.SentAt = s.now()
-	_, err = s.pool.Exec(ctx, `UPDATE app.notifications SET state='sent',provider_message_id=$2,sent_at=$3,lease_expires_at=NULL,updated_at=now() WHERE id=$1::uuid`, delivery.ID, providerID, delivery.SentAt)
+	_, err = s.pool.Exec(ctx, `UPDATE app.notifications SET state='sent',provider_message_id=$2,sent_at=$3,lease_expires_at=NULL,updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=0`, delivery.ID, providerID, delivery.SentAt)
 	return delivery, err
 }
 func (s *Store) loadPersistentDelivery(ctx context.Context, eventID, channel string) (Delivery, error) {
@@ -772,6 +825,8 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 	var message Message
 	var ciphertext []byte
 	var organizationID, priority string
+	var attempt int
+	var sendStarted *time.Time
 	err := s.pool.QueryRow(ctx, `
 		UPDATE app.notifications
 		SET state='sending', lease_expires_at=now()+interval '10 minutes',
@@ -779,13 +834,13 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 			failed_at=NULL, failure_reason=NULL, updated_at=now()
 		WHERE id=$1::uuid AND delivery_attempts < 8 AND (
 			(state='scheduled' AND scheduled_at<=now()) OR
-			state='failed' OR
+			(state='failed' AND COALESCE(next_attempt_at,now())<=now()) OR
 			(state='sending' AND lease_expires_at<=now())
 		)
 		RETURNING event_reference,recipient_id::text,channel,template,
-			template_version,body,COALESCE(secure_link,''),destination_ciphertext,COALESCE(supplier_organization_id::text,''),priority`, id).
+			template_version,body,COALESCE(secure_link,''),destination_ciphertext,COALESCE(supplier_organization_id::text,''),priority,delivery_attempts,send_started_at`, id).
 		Scan(&message.EventID, &message.RecipientID, &message.Channel, &message.Template,
-			&message.TemplateVersion, &message.Body, &message.SecureLink, &ciphertext, &organizationID, &priority)
+			&message.TemplateVersion, &message.Body, &message.SecureLink, &ciphertext, &organizationID, &priority, &attempt, &sendStarted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A sent row or a lease owned by another worker is already complete from
 		// this job's perspective.
@@ -796,32 +851,70 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 	}
 	prefs, err := s.GetPreferences(ctx, message.RecipientID)
 	if err != nil {
-		return s.failDelivery(ctx, id, err)
+		return s.failDelivery(ctx, id, attempt, err)
 	}
 	allowed, err := s.reminderAllowed(ctx, Event{RecipientID: message.RecipientID, OrganizationID: organizationID, Type: message.Template, Priority: priority})
 	if err != nil {
-		return s.failDelivery(ctx, id, err)
+		return s.failDelivery(ctx, id, attempt, err)
 	}
-	if !allowed || len(s.channelsFor(Event{Type: message.Template, Priority: priority}, prefs)) == 0 {
-		_, err = s.pool.Exec(ctx, "UPDATE app.notifications SET state='suppressed',lease_expires_at=NULL,next_attempt_at=NULL,updated_at=now() WHERE id=$1::uuid AND state='sending'", id)
+	channelAllowed := false
+	for _, channel := range s.channelsFor(Event{Type: message.Template, Priority: priority}, prefs) {
+		if channel == message.Channel {
+			channelAllowed = true
+		}
+	}
+	if !allowed || !channelAllowed {
+		_, err = s.pool.Exec(ctx, "UPDATE app.notifications SET state='suppressed',lease_expires_at=NULL,next_attempt_at=NULL,updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=$2", id, attempt)
+		return err
+	}
+	if priority != PriorityCritical && inQuietHours(s.now(), prefs) {
+		_, err = s.pool.Exec(ctx, `UPDATE app.notifications SET state='scheduled',scheduled_at=$3,lease_expires_at=NULL,next_attempt_at=NULL,delivery_attempts=delivery_attempts-1,updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=$2`, id, attempt, nextQuietEnd(s.now(), prefs))
 		return err
 	}
 	destination, err := s.decryptDestination(ciphertext)
 	if err != nil {
-		return s.failDelivery(ctx, id, err)
+		return s.failDelivery(ctx, id, attempt, err)
 	}
 	message.Destination = string(destination)
 	s.mu.Lock()
 	provider := s.providers[message.Channel]
 	s.mu.Unlock()
 	if provider == nil {
-		return s.failDelivery(ctx, id, errors.New("notification provider is unavailable"))
+		return s.failDelivery(ctx, id, attempt, errors.New("notification provider is unavailable"))
 	}
-	providerID, err := provider.Send(ctx, message)
+	if sendStarted == nil {
+		// Prepare the short-lived link when a queued message is actually sent.
+		// Persist it before contacting the provider so retries keep the exact
+		// same request identity and body, even after an unknown outcome.
+		if message.SecureLink != "" {
+			parsed, parseErr := url.Parse(message.SecureLink)
+			if parseErr != nil {
+				return s.failDelivery(ctx, id, attempt, errors.New("queued secure link is invalid"))
+			}
+			path, decodeErr := hex.DecodeString(parsed.Query().Get("path"))
+			if decodeErr != nil || len(path) == 0 || !strings.HasPrefix(string(path), "/") {
+				return s.failDelivery(ctx, id, attempt, errors.New("queued secure link path is invalid"))
+			}
+			fresh := s.SecureLink(string(path), s.now().Add(15*time.Minute))
+			message.Body = strings.ReplaceAll(message.Body, message.SecureLink, fresh)
+			message.SecureLink = fresh
+		}
+		saved, saveErr := s.pool.Exec(ctx, `UPDATE app.notifications SET body=$3,secure_link=NULLIF($4,''),send_started_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=$2 AND send_started_at IS NULL`, id, attempt, message.Body, message.SecureLink)
+		if saveErr != nil {
+			return saveErr
+		}
+		if saved.RowsAffected() != 1 {
+			return errors.New("notification delivery lease was lost")
+		}
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	providerID, err := provider.Send(sendCtx, message)
+	cancel()
+
 	if err != nil {
-		return s.failDelivery(ctx, id, err)
+		return s.failDelivery(ctx, id, attempt, err)
 	}
-	command, err := s.pool.Exec(ctx, `UPDATE app.notifications SET state='sent',provider_message_id=$2,sent_at=now(),lease_expires_at=NULL,next_attempt_at=NULL,updated_at=now() WHERE id=$1::uuid AND state='sending'`, id, providerID)
+	command, err := s.pool.Exec(ctx, `UPDATE app.notifications SET state='sent',provider_message_id=$2,sent_at=now(),lease_expires_at=NULL,next_attempt_at=NULL,updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=$3`, id, providerID, attempt)
 	if err != nil {
 		return err
 	}
@@ -831,11 +924,11 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *Store) failDelivery(ctx context.Context, id string, deliveryErr error) error {
+func (s *Store) failDelivery(ctx context.Context, id string, attempt int, deliveryErr error) error {
 	if deliveryErr == nil {
 		deliveryErr = errors.New("notification delivery failed")
 	}
-	_, updateErr := s.pool.Exec(ctx, `UPDATE app.notifications SET state='failed',failed_at=now(),failure_reason=$2,lease_expires_at=NULL,next_attempt_at=now() + LEAST(interval '1 hour', interval '30 seconds' * power(2, GREATEST(delivery_attempts-1,0))),updated_at=now() WHERE id=$1::uuid`, id, deliveryErr.Error())
+	_, updateErr := s.pool.Exec(ctx, `UPDATE app.notifications SET state='failed',failed_at=now(),failure_reason=$2,lease_expires_at=NULL,next_attempt_at=now() + LEAST(interval '1 hour', interval '30 seconds' * power(2, GREATEST(delivery_attempts-1,0))),updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=$3`, id, logging.Redact(deliveryErr.Error()), attempt)
 	if updateErr != nil {
 		return errors.Join(deliveryErr, updateErr)
 	}
@@ -914,4 +1007,13 @@ func defaultPriority(value string) string {
 		return PriorityRoutine
 	}
 	return PriorityCritical
+}
+
+// Match the actual day shown in the message, not incidental caller nanoseconds.
+// HMAC keeps contact details out of persistent evidence and offline guessing.
+func (s *Store) eventFingerprint(event Event) string {
+	encoded, _ := json.Marshal([]any{event.ID, event.Type, event.RecipientID, event.OrganizationID, event.Email, event.Phone, defaultPriority(event.Priority), event.AmountKobo, event.Currency, event.Date.In(time.FixedZone("Africa/Lagos", 3600)).Format("2006-01-02"), event.Reference, event.NextAction, event.SupportLink, event.SecurePath})
+	hash := hmac.New(sha256.New, s.secret)
+	_, _ = hash.Write(encoded)
+	return hex.EncodeToString(hash.Sum(nil))
 }

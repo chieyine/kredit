@@ -79,6 +79,9 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 	if input.SourceType == SourceCollected && !validCollectedPayment(input) {
 		return Payment{}, Allocation{}, errors.New("collected payments require collection-worker provenance, provider identity, and an attempt idempotency key")
 	}
+	// PostgreSQL timestamps retain microseconds. Normalize before comparing a
+	// replay with its stored value, including internal callers using time.Now.
+	input.PaidAt = input.PaidAt.Truncate(time.Microsecond)
 
 	// Tenant identity must come from an authenticated HTTP boundary or a
 	// tenant-scoped worker job, never from the obligation being requested.
@@ -128,7 +131,7 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 		return Payment{}, Allocation{}, errors.New("payment exceeds authoritative outstanding amount")
 	}
 
-	now := s.now()
+	now := s.now().UTC().Truncate(time.Microsecond)
 	paidAt := input.PaidAt
 	if paidAt.IsZero() {
 		paidAt = now
@@ -219,7 +222,7 @@ func allocateScheduleTx(ctx context.Context, tx pgx.Tx, payment Payment) ([]Allo
 		SELECT i.id::text, i.principal_due_kobo-i.allocated_kobo
 		FROM app.schedule_items i
 		JOIN app.repayment_schedules s ON s.id=i.schedule_id
-		WHERE s.obligation_id=$1::uuid AND i.state NOT IN ('PAID','CANCELLED')
+		WHERE s.obligation_id=$1::uuid AND i.state NOT IN ('PAID','CANCELLED') AND i.principal_due_kobo>i.allocated_kobo
 		ORDER BY i.sequence FOR UPDATE OF i`, payment.ObligationID)
 	if err != nil {
 		return nil, err
@@ -241,6 +244,15 @@ func allocateScheduleTx(ctx context.Context, tx pgx.Tx, payment Payment) ([]Allo
 	rows.Close()
 	if err != nil {
 		return nil, err
+	}
+	if len(items) == 0 {
+		var hasSchedule bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.repayment_schedules WHERE obligation_id=$1::uuid)`, payment.ObligationID).Scan(&hasSchedule); err != nil {
+			return nil, err
+		}
+		if hasSchedule {
+			return nil, errors.New("payment schedule has no outstanding allocation capacity")
+		}
 	}
 	remaining := payment.AmountKobo
 	allocations := []Allocation{}
@@ -545,8 +557,12 @@ func postLedgerTx(ctx context.Context, tx pgx.Tx, eventType, referenceID, key st
 		account       string
 		debit, credit ledger.Money
 	}{{debitAccount, amount, 0}, {creditAccount, 0, amount}} {
-		if _, err := tx.Exec(ctx, `INSERT INTO ledger.postings(transaction_id,account_id,debit_kobo,credit_kobo) SELECT $1::uuid,id,$3,$4 FROM ledger.accounts WHERE code=$2`, id, posting.account, int64(posting.debit), int64(posting.credit)); err != nil {
+		result, err := tx.Exec(ctx, `INSERT INTO ledger.postings(transaction_id,account_id,debit_kobo,credit_kobo) SELECT $1::uuid,id,$3,$4 FROM ledger.accounts WHERE code=$2`, id, posting.account, int64(posting.debit), int64(posting.credit))
+		if err != nil {
 			return err
+		}
+		if result.RowsAffected() != 1 {
+			return errors.New("payment ledger account is missing")
 		}
 	}
 	return nil

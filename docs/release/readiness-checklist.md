@@ -54,7 +54,7 @@ first-day review.
 
 ## Evidence references and controlled limits
 
-The following references and limits must be supplied through protected environment configuration, never hard-coded:
+The following references and limits must be supplied through protected deployment configuration or supported owner-managed connection settings, never hard-coded:
 
 - `SECURITY_REVIEW_REFERENCE`
 - `DPIA_REFERENCE`

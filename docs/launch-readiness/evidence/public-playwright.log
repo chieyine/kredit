@@ -1,0 +1,20 @@
+
+Running 11 tests using 1 worker
+
+(node:53356) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:53356) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › tests/content-seo.spec.ts:3:1 › guide library exposes individually written guides with search and categories (38.5s)
+  ✓   2 [chromium] › tests/content-seo.spec.ts:14:1 › guide renders useful content without invented publication or research claims (17.4s)
+  ✓   3 [chromium] › tests/content-seo.spec.ts:29:1 › topic hubs give every article a crawlable route into its guide cluster (19.2s)
+  ✓   4 [chromium] › tests/content-seo.spec.ts:40:1 › sitemap and RSS publish the guide library for discovery (737ms)
+  ✓   5 [chromium] › tests/content-seo.spec.ts:46:1 › privacy notice gives a complete, readable account of information use and rights (14.6s)
+  ✓   6 [chromium] › tests/content-seo.spec.ts:58:1 › terms explain the complete sale, payment and complaint journey (13.2s)
+  ✓   7 [chromium] › tests/content-seo.spec.ts:70:1 › detailed legal content stays readable on a small phone (19.1s)
+  ✓   8 [chromium] › tests/content-seo.spec.ts:82:1 › approved production details activate both legal documents (18.4s)
+  ✓   9 [chromium] › tests/content-seo.spec.ts:98:1 › FAQ matches activation fees and conditional collections (10.5s)
+  ✓  10 [chromium] › tests/public-security-content.spec.ts:3:1 › public security page uses service language instead of an internal launch checklist (15.9s)
+  ✓  11 [chromium] › tests/public-security-content.spec.ts:15:1 › public security content remains readable on a small phone (9.2s)
+
+  11 passed (4.8m)

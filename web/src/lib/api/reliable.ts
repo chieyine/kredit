@@ -91,7 +91,15 @@ export function clearPrivateBrowserData(): void {
       const store = storage();
       for (let index = store.length - 1; index >= 0; index -= 1) {
         const key = store.key(index);
-        if (key && (key === 'kredit:saved-sale-items' || key.startsWith('kredit:sale-draft:') || /^(kredit\.(quick-sale\.|intent\.|bank-return\.|account\.))/.test(key))) store.removeItem(key);
+        // Everything Kredit writes about a person or their business goes when
+        // they sign out. An allowlist of exact keys silently kept anything a
+        // later feature added, which is how private customer notes came to
+        // outlive the session on a shared phone. The rule is now the reverse:
+        // our namespace is cleared, apart from the two device preferences that
+        // contain nothing about anybody.
+        if (!key || !/^kredit[.:]/.test(key)) continue;
+        if (key === 'kredit:low-data') continue;
+        store.removeItem(key);
       }
     } catch { /* Server revocation remains authoritative when browser storage is unavailable. */ }
   }

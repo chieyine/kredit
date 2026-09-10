@@ -6,17 +6,14 @@
     "node": ">=24.20.0 <25"
   },
   "scripts": {
-	"audit": "node scripts/repository-audit.mjs && node scripts/product-contract-sync.mjs && node scripts/frontend-api-coverage.mjs && node --experimental-strip-types scripts/content-audit.mjs",
-	"audit:contract-sync": "node scripts/product-contract-sync.mjs",
-	"audit:frontend-api": "node scripts/frontend-api-coverage.mjs",
-	"audit:content": "node --experimental-strip-types scripts/content-audit.mjs",
+    "audit": "node scripts/repository-audit.mjs && node scripts/product-contract-sync.mjs && node scripts/frontend-api-coverage.mjs && node --experimental-strip-types scripts/content-audit.mjs",
+    "audit:contract-sync": "node scripts/product-contract-sync.mjs",
+    "audit:frontend-api": "node scripts/frontend-api-coverage.mjs",
+    "audit:content": "node --experimental-strip-types scripts/content-audit.mjs",
     "dev": "pnpm --dir web dev",
     "build": "pnpm --dir web build",
     "check": "pnpm --dir web check",
     "test": "pnpm --dir web test",
     "lint": "pnpm --dir web lint"
-  },
-  "devDependencies": {
-    "openapi-typescript": "7.9.1"
   }
 }

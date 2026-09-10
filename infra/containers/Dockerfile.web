@@ -16,7 +16,7 @@ WORKDIR /src
 RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/package.json
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --prod --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --prod --frozen-lockfile && mkdir -p node_modules web/node_modules
 
 FROM node:24.20.0-alpine AS runtime
 WORKDIR /app
@@ -24,7 +24,6 @@ ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 COPY --from=deps-prod /src/node_modules ./node_modules
 COPY --from=deps-prod /src/web/node_modules ./web/node_modules
 COPY --from=build /src/web/build ./web/build
-RUN node --input-type=module -e "import { createRequire } from 'node:module'; createRequire('/app/web/build/index.js').resolve('openapi-fetch');"
 USER node
 EXPOSE 3000
 CMD ["node", "web/build"]

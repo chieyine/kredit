@@ -86,69 +86,99 @@ func (s *PostgresStore) Create(ctx context.Context, input CreateInput) (Claim, e
 	return claim, tx.Commit(ctx)
 }
 
-func (s *PostgresStore) Get(ctx context.Context, id string) (Claim, error) {
-	var claim Claim
-	err := s.pool.QueryRow(ctx, claimSelect+` WHERE id=$1::uuid`, id).Scan(claimFields(&claim)...)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Claim{}, errors.New("payment claim not found")
+func (s *PostgresStore) beginScoped(ctx context.Context) (pgx.Tx, error) {
+	if s == nil || s.pool == nil {
+		return nil, errors.New("payment claim database is unavailable")
 	}
-	return claim, err
+	if _, ok := db.TenantFromContext(ctx); !ok {
+		return nil, errors.New("authorized payment claim context is required")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
+}
+
+func (s *PostgresStore) Get(ctx context.Context, id string) (Claim, error) {
+	tx, err := s.beginScoped(ctx)
+	if err != nil {
+		return Claim{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var claim Claim
+	identity, _ := db.TenantFromContext(ctx)
+	err = tx.QueryRow(ctx, claimSelect+` WHERE id=$1::uuid AND ($2='' OR supplier_organization_id=NULLIF($2,'')::uuid)`, id, identity.OrganizationID).Scan(claimFields(&claim)...)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Claim{}, ErrNotFound
+	}
+	if err != nil {
+		return Claim{}, err
+	}
+	return claim, tx.Commit(ctx)
 }
 
 func (s *PostgresStore) ListForObligation(ctx context.Context, id string) []Claim {
-	return s.list(ctx, `obligation_id=$1::uuid`, id)
+	items, _ := s.ReadForObligation(ctx, id)
+	return items
 }
 func (s *PostgresStore) ListForBuyer(ctx context.Context, id string) []Claim {
-	return s.list(ctx, `buyer_user_id=$1::uuid`, id)
+	items, _ := s.ReadForBuyer(ctx, id)
+	return items
 }
 func (s *PostgresStore) ListForSupplier(ctx context.Context, id string) []Claim {
-	return s.list(ctx, `supplier_organization_id=$1::uuid`, id)
-}
-
-func (s *PostgresStore) list(ctx context.Context, where, id string) []Claim {
-	rows, err := s.pool.Query(ctx, claimSelect+` WHERE `+where+` ORDER BY created_at DESC`, id)
-	if err != nil {
-		return []Claim{}
-	}
-	defer rows.Close()
-	result := []Claim{}
-	for rows.Next() {
-		var claim Claim
-		if rows.Scan(claimFields(&claim)...) != nil {
-			return []Claim{}
-		}
-		result = append(result, claim)
-	}
-	if rows.Err() != nil {
-		return []Claim{}
-	}
-	return result
+	items, _ := s.ReadForSupplier(ctx, id)
+	return items
 }
 
 func (s *PostgresStore) Decide(ctx context.Context, id, actor, decision, reason, paymentID string) (Claim, error) {
-	if decision != Confirmed && decision != Rejected {
-		return Claim{}, errors.New("payment claim decision must be confirmed or rejected")
+	if decision != Rejected || paymentID != "" {
+		return Claim{}, errors.New("confirmation requires the transactional payment confirmation flow")
 	}
-	if actor == "" || reason == "" || (decision == Confirmed && paymentID == "") {
-		return Claim{}, errors.New("reviewer, reason, and confirmed payment are required")
+	reason = strings.TrimSpace(reason)
+	identity, ok := db.TenantFromContext(ctx)
+	if !ok || identity.OrganizationID == "" || identity.UserID != actor || strings.TrimSpace(actor) == "" || reason == "" {
+		return Claim{}, errors.New("authorized supplier reviewer and reason are required")
 	}
+	tx, err := s.beginScoped(ctx)
+	if err != nil {
+		return Claim{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	var claim Claim
-	err := s.pool.QueryRow(ctx, `UPDATE app.payment_claims SET state=$2,reviewed_by=$3::uuid,review_reason=$4,payment_id=NULLIF($5,'')::uuid,reviewed_at=now() WHERE id=$1::uuid AND state='pending' RETURNING id::text,obligation_id::text,buyer_user_id::text,supplier_organization_id::text,amount_kobo,currency,paid_at,COALESCE(source_account_masked,''),transfer_reference,COALESCE(evidence_document_id::text,''),state,hold_expires_at,COALESCE(reviewed_by::text,''),COALESCE(review_reason,''),COALESCE(payment_id::text,''),created_at,reviewed_at`, id, decision, actor, reason, paymentID).Scan(claimFields(&claim)...)
+	err = tx.QueryRow(ctx, `UPDATE app.payment_claims SET state='rejected',reviewed_by=$2::uuid,review_reason=$3,reviewed_at=now() WHERE id=$1::uuid AND supplier_organization_id=$4::uuid AND state='pending' RETURNING id::text,obligation_id::text,buyer_user_id::text,supplier_organization_id::text,amount_kobo,currency,paid_at,COALESCE(source_account_masked,''),transfer_reference,COALESCE(evidence_document_id::text,''),state,hold_expires_at,COALESCE(reviewed_by::text,''),COALESCE(review_reason,''),COALESCE(payment_id::text,''),created_at,reviewed_at`, id, actor, reason, identity.OrganizationID).Scan(claimFields(&claim)...)
 	if errors.Is(err, pgx.ErrNoRows) {
-		existing, getErr := s.Get(ctx, id)
-		if getErr == nil && existing.State == decision {
-			return existing, nil
+		err = tx.QueryRow(ctx, claimSelect+` WHERE id=$1::uuid AND supplier_organization_id=$2::uuid`, id, identity.OrganizationID).Scan(claimFields(&claim)...)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Claim{}, ErrNotFound
 		}
-		return Claim{}, errors.New("payment claim was not found or already decided")
+		if err != nil {
+			return Claim{}, err
+		}
+		if claim.State != Rejected || claim.ReviewedBy != actor || claim.ReviewReason != reason {
+			return Claim{}, errors.New("payment claim was already decided with different review details")
+		}
+	} else if err != nil {
+		return Claim{}, err
 	}
-	return claim, err
+	return claim, tx.Commit(ctx)
 }
 
 func (s *PostgresStore) ActiveHold(ctx context.Context, obligationID string, at time.Time) ledger.Money {
+	tx, err := s.beginScoped(ctx)
+	if err != nil {
+		return ledger.Money(1<<63 - 1)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	var total ledger.Money
-	if err := s.pool.QueryRow(ctx, `SELECT COALESCE(SUM(amount_kobo),0) FROM app.payment_claims WHERE obligation_id=$1::uuid AND state='pending' AND hold_expires_at>$2`, obligationID, at).Scan(&total); err != nil {
-		// This interface returns a hold amount, not an error. An unavailable
-		// hold check must block the entire collectible amount, never allow it.
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(amount_kobo),0) FROM app.payment_claims WHERE obligation_id=$1::uuid AND state='pending' AND hold_expires_at>$2`, obligationID, at).Scan(&total); err != nil {
+		return ledger.Money(1<<63 - 1)
+	}
+	if err = tx.Commit(ctx); err != nil {
 		return ledger.Money(1<<63 - 1)
 	}
 	return total
@@ -170,7 +200,11 @@ func (s *PostgresStore) Confirm(ctx context.Context, id, actor, reason string, r
 	if !ok || strings.TrimSpace(actor) == "" || strings.TrimSpace(reason) == "" {
 		return Claim{}, errors.New("reviewer, reason, and transactional payment service are required")
 	}
-	tx, err := s.pool.Begin(ctx)
+	identity, authorized := db.TenantFromContext(ctx)
+	if !authorized || identity.OrganizationID == "" || identity.UserID != actor {
+		return Claim{}, errors.New("authorized supplier reviewer context is required")
+	}
+	tx, err := s.beginScoped(ctx)
 	if err != nil {
 		return Claim{}, err
 	}
@@ -179,8 +213,8 @@ func (s *PostgresStore) Confirm(ctx context.Context, id, actor, reason string, r
 	if err = tx.QueryRow(ctx, claimSelect+` WHERE id=$1::uuid`, id).Scan(claimFields(&claim)...); err != nil {
 		return Claim{}, err
 	}
-	if _, ok := db.TenantFromContext(ctx); !ok {
-		ctx = db.WithTenantContext(ctx, actor, claim.SupplierOrganizationID)
+	if claim.SupplierOrganizationID != identity.OrganizationID {
+		return Claim{}, ErrNotFound
 	}
 	if err = db.SetObligationContext(ctx, tx, claim.ObligationID); err != nil {
 		return Claim{}, err
@@ -219,7 +253,12 @@ func (s *PostgresStore) Confirm(ctx context.Context, id, actor, reason string, r
 }
 
 func (s *PostgresStore) readList(ctx context.Context, where, id string) ([]Claim, error) {
-	rows, err := s.pool.Query(ctx, claimSelect+` WHERE `+where+` ORDER BY created_at DESC`, id)
+	tx, err := s.beginScoped(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, claimSelect+` WHERE `+where+` ORDER BY created_at DESC`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -235,15 +274,16 @@ func (s *PostgresStore) readList(ctx context.Context, where, id string) ([]Claim
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return result, nil
+	rows.Close()
+	return result, tx.Commit(ctx)
 }
 
 func (s *PostgresStore) ReadForBuyer(ctx context.Context, id string) ([]Claim, error) {
-	return s.readList(ctx, `buyer_user_id=$1::uuid`, id)
+	return s.readList(db.WithTenantContext(ctx, id, ""), `buyer_user_id=$1::uuid`, id)
 }
 
 func (s *PostgresStore) ReadForSupplier(ctx context.Context, id string) ([]Claim, error) {
-	return s.readList(ctx, `supplier_organization_id=$1::uuid`, id)
+	return s.readList(db.WithTenantContext(ctx, "", id), `supplier_organization_id=$1::uuid`, id)
 }
 
 func (s *PostgresStore) ReadForObligation(ctx context.Context, id string) ([]Claim, error) {

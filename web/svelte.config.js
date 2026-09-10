@@ -6,7 +6,6 @@ const config = {
 	kit: {
 		adapter: process.env.KREDIT_WEB_ADAPTER === 'node' ? nodeAdapter() : vercelAdapter(),
 		alias: {
-			$features: 'src/lib/features',
 			$components: 'src/lib/components'
 		},
 		// SvelteKit augments these directives with hashes/nonces for framework

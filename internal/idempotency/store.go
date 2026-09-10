@@ -54,6 +54,7 @@ func (s *MemoryStore) Reserve(_ context.Context, scope, key, requestHash string)
 			if existing.RequestHash != requestHash {
 				return Record{}, false, errors.New("idempotency key was reused for a different request")
 			}
+			existing.ResponseBody = append([]byte(nil), existing.ResponseBody...)
 			return existing, true, nil
 		}
 	}

@@ -1,12 +1,15 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/support"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type supportCaseRequest struct {
@@ -45,21 +48,18 @@ func (s *Server) openSupportCase(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusUnprocessableEntity, "support_message_invalid", "Your message is too long. Keep it to 2,000 characters or less.")
 		return
 	}
-	item, err := s.runtime.Support.Open(input.SubjectType, input.SubjectID, user.ID, organizationID, input.BreakGlass)
+	item, events, err := s.runtime.Support.OpenWithNoteEvents(r.Context(), input.SubjectType, input.SubjectID, user.ID, organizationID, input.BreakGlass, note)
 	if err != nil {
-		writeProblem(w, http.StatusUnprocessableEntity, "support_case_invalid", err.Error())
+		if errors.Is(err, support.ErrInvalidInput) {
+			writeProblem(w, http.StatusUnprocessableEntity, "support_case_invalid", err.Error())
+		} else {
+			writeProblem(w, http.StatusServiceUnavailable, "support_case_unavailable", "The support case could not be saved. Please try again.")
+		}
 		return
 	}
-	if note != "" {
-		updated, _, transitionErr := s.runtime.Support.Transition(item.ID, user.ID, support.Open, note)
-		if transitionErr != nil {
-			writeProblem(w, http.StatusServiceUnavailable, "support_case_invalid", "We could not save your message. Please try again.")
-			return
-		}
-		item = updated
-	}
+
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "support.case_opened", ResourceType: "support_case", ResourceID: item.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context())})
-	writeJSON(w, http.StatusCreated, map[string]any{"case": item, "events": s.runtime.Support.Timeline(item.ID)})
+	writeJSON(w, http.StatusCreated, map[string]any{"case": item, "events": events})
 }
 
 func (s *Server) listSupportCases(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +71,12 @@ func (s *Server) listSupportCases(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadAudit); !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"cases": s.runtime.Support.ListForOrganization(organizationID)})
+	items, err := s.runtime.Support.ReadForOrganization(r.Context(), organizationID)
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "support_cases_unavailable", "Support cases could not be loaded. Please try again.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"cases": items})
 }
 
 func (s *Server) transitionSupportCase(w http.ResponseWriter, r *http.Request) {
@@ -89,8 +94,12 @@ func (s *Server) transitionSupportCase(w http.ResponseWriter, r *http.Request) {
 	if !ok || !s.requireCSRF(w, r) {
 		return
 	}
-	item, exists := s.runtime.Support.Get(caseID)
-	if !exists || item.OrganizationID != organizationID {
+	item, _, readErr := s.runtime.Support.Read(r.Context(), caseID)
+	if readErr != nil && !errors.Is(readErr, pgx.ErrNoRows) {
+		writeProblem(w, http.StatusServiceUnavailable, "support_case_unavailable", "The support case could not be loaded. Please try again.")
+		return
+	}
+	if errors.Is(readErr, pgx.ErrNoRows) || item.OrganizationID != organizationID {
 		writeProblem(w, http.StatusNotFound, "support_case_not_found", "We could not find that support case.")
 		return
 	}
@@ -99,9 +108,18 @@ func (s *Server) transitionSupportCase(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	updated, event, err := s.runtime.Support.Transition(caseID, user.ID, support.State(input.State), input.Note)
+	updated, event, err := s.runtime.Support.TransitionContext(r.Context(), caseID, user.ID, support.State(input.State), input.Note)
 	if err != nil {
-		writeProblem(w, http.StatusConflict, "support_case_transition_failed", err.Error())
+		switch {
+		case errors.Is(err, support.ErrInvalidInput):
+			writeProblem(w, http.StatusUnprocessableEntity, "support_case_invalid", err.Error())
+		case errors.Is(err, support.ErrClosed):
+			writeProblem(w, http.StatusConflict, "support_case_closed", "This case is closed. Open a new case if you need more help.")
+		case errors.Is(err, pgx.ErrNoRows):
+			writeProblem(w, http.StatusNotFound, "support_case_not_found", "We could not find that support case.")
+		default:
+			writeProblem(w, http.StatusServiceUnavailable, "support_case_unavailable", "The change could not be confirmed. Check the case before retrying.")
+		}
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "support.case_transitioned", ResourceType: "support_case", ResourceID: caseID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"state": input.State}})

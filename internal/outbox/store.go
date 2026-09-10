@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"kredit/internal/platform/logging"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -46,7 +48,14 @@ func (s *Store) AppendTx(ctx context.Context, tx pgx.Tx, event Event) (string, e
 		INSERT INTO app.outbox_events (aggregate_type, aggregate_id, event_type, payload, idempotency_key)
 		VALUES ($1,$2,$3,$4::jsonb,$5)
 		ON CONFLICT (idempotency_key) DO UPDATE SET id = app.outbox_events.id
+		WHERE app.outbox_events.aggregate_type=EXCLUDED.aggregate_type
+		  AND app.outbox_events.aggregate_id=EXCLUDED.aggregate_id
+		  AND app.outbox_events.event_type=EXCLUDED.event_type
+		  AND app.outbox_events.payload=EXCLUDED.payload
 		RETURNING id::text`, event.AggregateType, event.AggregateID, event.EventType, event.Payload, event.IdempotencyKey).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errors.New("outbox idempotency key was reused for a different event")
+	}
 	if err != nil {
 		return "", fmt.Errorf("append outbox event: %w", err)
 	}
@@ -95,8 +104,10 @@ func (s *Store) Claim(ctx context.Context, limit int) ([]Event, error) {
 		return nil, err
 	}
 	rows.Close()
-	for _, event := range events {
-		if _, err := tx.Exec(ctx, `UPDATE app.outbox_events SET state = 'processing', attempts = attempts + 1, processing_started_at = now() WHERE id = $1::uuid`, event.ID); err != nil {
+	for index := range events {
+		event := &events[index]
+		event.State = "processing"
+		if err := tx.QueryRow(ctx, `UPDATE app.outbox_events SET state = 'processing', attempts = attempts + 1, processing_started_at = now() WHERE id = $1::uuid RETURNING attempts, processing_started_at`, event.ID).Scan(&event.Attempts, &event.ProcessingStartedAt); err != nil {
 			return nil, err
 		}
 	}
@@ -106,18 +117,34 @@ func (s *Store) Claim(ctx context.Context, limit int) ([]Event, error) {
 	return events, nil
 }
 
-func (s *Store) MarkPublished(ctx context.Context, id string) error {
-	if s == nil || s.pool == nil || id == "" {
-		return errors.New("outbox database and id are required")
+// Completion is fenced to the exact claim. A slow publisher must not overwrite
+// an event that another worker reclaimed after its processing lease expired.
+var ErrClaimLost = errors.New("outbox processing claim is no longer current")
+
+func (s *Store) MarkPublished(ctx context.Context, event Event) error {
+	if s == nil || s.pool == nil || event.ID == "" || event.ProcessingStartedAt == nil {
+		return errors.New("outbox database and processing claim are required")
 	}
-	_, err := s.pool.Exec(ctx, `UPDATE app.outbox_events SET state = 'published', published_at = now(), last_error = NULL, processing_started_at = NULL WHERE id = $1::uuid`, id)
-	return err
+	command, err := s.pool.Exec(ctx, `UPDATE app.outbox_events SET state='published',published_at=now(),last_error=NULL,processing_started_at=NULL WHERE id=$1::uuid AND state='processing' AND attempts=$2 AND processing_started_at=$3`, event.ID, event.Attempts, event.ProcessingStartedAt)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() != 1 {
+		return ErrClaimLost
+	}
+	return nil
 }
 
-func (s *Store) MarkFailed(ctx context.Context, id, reason string, retryAt time.Time) error {
-	if s == nil || s.pool == nil || id == "" {
-		return errors.New("outbox database and id are required")
+func (s *Store) MarkFailed(ctx context.Context, event Event, reason string, retryAt time.Time) error {
+	if s == nil || s.pool == nil || event.ID == "" || event.ProcessingStartedAt == nil {
+		return errors.New("outbox database and processing claim are required")
 	}
-	_, err := s.pool.Exec(ctx, `UPDATE app.outbox_events SET state = 'failed', available_at = $2, last_error = $3, processing_started_at = NULL WHERE id = $1::uuid`, id, retryAt, reason)
-	return err
+	command, err := s.pool.Exec(ctx, `UPDATE app.outbox_events SET state='failed',available_at=$2,last_error=$3,processing_started_at=NULL WHERE id=$1::uuid AND state='processing' AND attempts=$4 AND processing_started_at=$5`, event.ID, retryAt, logging.SafeError(errors.New(reason)), event.Attempts, event.ProcessingStartedAt)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() != 1 {
+		return ErrClaimLost
+	}
+	return nil
 }

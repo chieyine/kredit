@@ -1,6 +1,5 @@
 <script lang="ts">
 	import '../app.css';
-	import '../product-ui.css';
 	import { onMount } from 'svelte';
 	import SystemBanner from '$lib/components/SystemBanner.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
@@ -55,7 +54,7 @@
 		dateModified: seo.modified,
 		wordCount: seo.wordCount,
 		articleSection: seo.category,
-		author: seo.type === 'article' ? { '@type': 'Organization', name: 'Kredit Editorial Team' } : undefined
+		author: seo.type === 'article' ? { '@type': 'Organization', name: 'Kredit' } : undefined
 	});
 
 	onMount(() => {
