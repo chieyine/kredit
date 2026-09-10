@@ -1,0 +1,593 @@
+[1A[2K[2m[WebServer] [22m(node:98325) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 162 tests using 1 worker
+
+[1A[2K(node:98390) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:98390) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[1/162] [chromium] › tests/access-control.spec.ts:3:1 › logged-out visitors are redirected before protected account pages render
+[1A[2K[2/162] [chromium] › tests/access-control.spec.ts:14:1 › every account area requires a session while private-token pages remain public
+[1A[2K[2m[WebServer] [22m
+[2m[WebServer] [22m[1;31m[404] GET /supplier/organizations/example/reports[0m
+
+[1A[2K[3/162] [chromium] › tests/access-control.spec.ts:31:1 › an invalid saved session shows only the account check before sign-in
+[1A[2K[4/162] [chromium] › tests/access-control.spec.ts:44:1 › an expired session cannot flash the next page during an account navigation
+[1A[2K[5/162] [chromium] › tests/access-control.spec.ts:66:1 › the secure payment link is public but never shows the seller account
+[1A[2K[6/162] [chromium] › tests/access-control.spec.ts:74:1 › the signed-in payments page prioritizes money and items needing an answer
+[1A[2K[7/162] [chromium] › tests/accessibility.spec.ts:61:2 › login has no serious or critical WCAG violations
+[1A[2K[8/162] [chromium] › tests/accessibility.spec.ts:61:2 › supplier onboarding has no serious or critical WCAG violations
+[1A[2K[9/162] [chromium] › tests/accessibility.spec.ts:61:2 › credit creation has no serious or critical WCAG violations
+[1A[2K[10/162] [chromium] › tests/accessibility.spec.ts:61:2 › buyer acceptance has no serious or critical WCAG violations
+[1A[2K[11/162] [chromium] › tests/accessibility.spec.ts:61:2 › goods release has no serious or critical WCAG violations
+[1A[2K[12/162] [chromium] › tests/accessibility.spec.ts:61:2 › goods receipt and drawdown has no serious or critical WCAG violations
+[1A[2K[13/162] [chromium] › tests/accessibility.spec.ts:61:2 › payments has no serious or critical WCAG violations
+[1A[2K[14/162] [chromium] › tests/accessibility.spec.ts:61:2 › supplier disputes has no serious or critical WCAG violations
+[1A[2K[15/162] [chromium] › tests/accessibility.spec.ts:61:2 › settings has no serious or critical WCAG violations
+[1A[2K[16/162] [chromium] › tests/accessibility.spec.ts:61:2 › account recovery has no serious or critical WCAG violations
+[1A[2K[17/162] [chromium] › tests/accessibility.spec.ts:61:2 › privacy has no serious or critical WCAG violations
+[1A[2K[18/162] [chromium] › tests/accessibility.spec.ts:69:1 › operations command surface has no serious or critical WCAG violations
+[1A[2K[19/162] [chromium] › tests/accessibility.spec.ts:75:1 › keyboard, focus, reflow, reduced motion, and touch-target safeguards remain active
+[1A[2K[20/162] [chromium] › tests/accessibility.spec.ts:99:1 › credit validation focuses a linked error summary
+[1A[2K[21/162] [chromium] › tests/accessibility.spec.ts:112:1 › offline mode is announced and financial actions remain unqueued
+[1A[2K[22/162] [chromium] › tests/admin-section.spec.ts:23:1 › the admin section exposes the main platform work without dead screens
+[1A[2K[23/162] [chromium] › tests/admin-section.spec.ts:106:1 › mobile admin navigation stays small and closes after a page is chosen
+[1A[2K[24/162] [chromium] › tests/admin-section.spec.ts:133:1 › an administrator can find a person and give access without copying an ID
+[1A[2K[25/162] [chromium] › tests/admin-workflows.spec.ts:3:1 › financial operator proposes naira amount and independent reviewer approves exact amount
+[1A[2K[26/162] [chromium] › tests/admin-workflows.spec.ts:17:1 › buyer reviews dates and must explicitly consent before accepting
+[1A[2K[27/162] [chromium] › tests/admin-workflows.spec.ts:22:1 › inbox records ownership and history exposes previous and proposed values
+[1A[2K[28/162] [chromium] › tests/admin-workflows.spec.ts:34:1 › the only administrator approves their own change, with a reason, on the record
+[1A[2K[29/162] [chromium] › tests/article-drafts.spec.ts:9:1 › article slug validation rejects malformed and duplicate slugs
+[1A[2K[30/162] [chromium] › tests/article-drafts.spec.ts:15:1 › first-wave editorial drafts stay out of public routes, sitemap and RSS
+[1A[2K[31/162] [chromium] › tests/audit-completion.spec.ts:26:3 › quick draft storage requires consent, restores only opted-in fields and can be revoked
+[1A[2K[32/162] [chromium] › tests/audit-completion.spec.ts:26:3 › advanced draft storage requires consent, restores only opted-in fields and can be revoked
+[1A[2K[33/162] [chromium] › tests/audit-completion.spec.ts:58:1 › switching business does not transfer draft contents or draft consent
+[1A[2K[34/162] [chromium] › tests/audit-completion.spec.ts:76:1 › legacy default-on drafts are discarded and runtime-only fields are never persisted
+[1A[2K[35/162] [chromium] › tests/audit-completion.spec.ts:87:1 › feedback recovers from a dropped response and success survives unavailable storage
+[1A[2K[36/162] [chromium] › tests/audit-completion.spec.ts:106:1 › guide filters preserve user input and no-match recovery after hydration
+[1A[2K[37/162] [chromium] › tests/audit-completion.spec.ts:130:1 › sale-detail payment retry preserves its key, amount and paid-at timestamp after reload
+[1A[2K[38/162] [chromium] › tests/audit-completion.spec.ts:153:1 › sale-detail failed payment and schedule reads never become empty successful histories
+[1A[2K[39/162] [chromium] › tests/audit-completion.spec.ts:169:1 › sale-detail transfer confirmation cannot bypass the bank-check dialog
+[1A[2K[40/162] [chromium] › tests/audit-fixes.spec.ts:4:1 › draft keeps the same instant when loaded in another timezone
+[1A[2K[41/162] [chromium] › tests/audit-fixes.spec.ts:5:1 › invoice button follows the signed download returned by the API
+[1A[2K[2m[WebServer] [22m
+[2m[WebServer] [22m[1;31m[404] GET /signed-invoice.pdf[0m
+
+[1A[2K[42/162] [chromium] › tests/audit-fixes.spec.ts:6:1 › invitation changes a rejected key but retains an uncertain key
+[1A[2K[43/162] [chromium] › tests/audit-full-form.spec.ts:19:1 › invoice upload retries preserve one operation before sale creation
+[1A[2K[44/162] [chromium] › tests/audit-full-form.spec.ts:43:1 › custom instalments must reconcile exactly before any write
+[1A[2K[45/162] [chromium] › tests/audit-product-journeys.spec.ts:29:1 › unavailable balance, payments and disputes never produce an all-clear
+[1A[2K[46/162] [chromium] › tests/audit-product-journeys.spec.ts:40:1 › switching businesses cannot show an earlier balance under the new name
+[1A[2K[47/162] [chromium] › tests/audit-product-journeys.spec.ts:53:1 › accepting a sale does not automatically grant bank permission or announce release readiness
+[1A[2K[48/162] [chromium] › tests/audit-product-journeys.spec.ts:67:1 › pending hosted permission stays pending after return parameters
+[1A[2K[49/162] [chromium] › tests/audit-product-journeys.spec.ts:78:1 › untrusted hosted permission links are never rendered
+[1A[2K[50/162] [chromium] › tests/audit-product-journeys.spec.ts:87:1 › failed OTP request leaves the form recoverable
+[1A[2K[51/162] [chromium] › tests/audit-product-journeys.spec.ts:97:1 › OTP has an expiry and resend countdown without exposing the full target
+[1A[2K[52/162] [chromium] › tests/audit-product-journeys.spec.ts:107:1 › failed sign-out is not presented as successful logout
+[1A[2K[53/162] [chromium] › tests/audit-product-journeys.spec.ts:117:1 › quick sale uses the server timing preview and exact kobo
+[1A[2K[54/162] [chromium] › tests/audit-product-journeys.spec.ts:137:1 › exact typed pricing supports voluntary and partial repayment examples
+[1A[2K[55/162] [chromium] › tests/audit-product-journeys.spec.ts:147:1 › payment decisions require a bank check and preserve their request identity
+[1A[2K[56/162] [chromium] › tests/audit-product-journeys.spec.ts:162:1 › native account menu traps focus and restores it on Escape
+[1A[2K[57/162] [chromium] › tests/audit-product-journeys.spec.ts:173:2 › visual and accessibility evidence: home
+[1A[2K  1) [chromium] › tests/audit-product-journeys.spec.ts:173:2 › visual and accessibility evidence: home 
+
+    [31mTest timeout of 60000ms exceeded.[39m
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/audit-product-journeys-vis-aadd9-accessibility-evidence-home-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/audit-product-journeys-vis-aadd9-accessibility-evidence-home-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/audit-product-journeys-vis-aadd9-accessibility-evidence-home-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/audit-product-journeys-vis-aadd9-accessibility-evidence-home-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:828) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:828) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[58/162] [chromium] › tests/audit-product-journeys.spec.ts:173:2 › visual and accessibility evidence: pricing
+[1A[2K[59/162] [chromium] › tests/audit-product-journeys.spec.ts:173:2 › visual and accessibility evidence: supplier
+[1A[2K[60/162] [chromium] › tests/audit-product-journeys.spec.ts:173:2 › visual and accessibility evidence: quick-sale
+[1A[2K[61/162] [chromium] › tests/audit-product-journeys.spec.ts:173:2 › visual and accessibility evidence: full-sale
+[1A[2K[62/162] [chromium] › tests/audit-product-journeys.spec.ts:173:2 › visual and accessibility evidence: buyer
+[1A[2K[63/162] [chromium] › tests/audit-product-journeys.spec.ts:189:1 › full sale keeps business identity and server-reviewed timing on the invoice path
+[1A[2K[64/162] [chromium] › tests/audit-product-journeys.spec.ts:212:1 › full sale never presents an unavailable customer list as empty
+[1A[2K[65/162] [chromium] › tests/audit-reliability-unit.spec.ts:30:1 › failed, malformed and missing financial responses stay unavailable, not empty
+[1A[2K[66/162] [chromium] › tests/audit-reliability-unit.spec.ts:42:1 › changing business or unmounting invalidates an older response
+[1A[2K[67/162] [chromium] › tests/audit-reliability-unit.spec.ts:48:1 › lost response reuses exactly one mutation identity even after navigation
+[1A[2K[68/162] [chromium] › tests/audit-reliability-unit.spec.ts:60:1 › changed details cannot silently replace an unresolved payment
+[1A[2K[69/162] [chromium] › tests/audit-reliability-unit.spec.ts:68:1 › unknown identities are never silently expired and replaced
+[1A[2K[70/162] [chromium] › tests/audit-reliability-unit.spec.ts:77:1 › two fast submissions do not send two mutations
+[1A[2K[71/162] [chromium] › tests/audit-reliability-unit.spec.ts:86:1 › offline, malformed saved identity and unavailable storage fail before a write
+[1A[2K[72/162] [chromium] › tests/audit-reliability-unit.spec.ts:98:1 › malformed success and server errors retain the unresolved identity
+[1A[2K[73/162] [chromium] › tests/audit-reliability-unit.spec.ts:107:1 › request storage contains a digest, not personal or financial form fields
+[1A[2K[74/162] [chromium] › tests/audit-reliability-unit.spec.ts:115:1 › drafts are isolated by account and business and expire
+[1A[2K[75/162] [chromium] › tests/audit-reliability-unit.spec.ts:124:1 › drafts reject tampering and discard the legacy unscoped record
+[1A[2K[76/162] [chromium] › tests/audit-reliability-unit.spec.ts:132:80 › normalises Nigerian phone 0803 123 4567
+[1A[2K[77/162] [chromium] › tests/audit-reliability-unit.spec.ts:132:80 › normalises Nigerian phone 2348031234567
+[1A[2K[78/162] [chromium] › tests/audit-reliability-unit.spec.ts:132:80 › normalises Nigerian phone +234 (803) 123-4567
+[1A[2K[79/162] [chromium] › tests/audit-reliability-unit.spec.ts:133:75 › rejects invalid Nigerian phone 123
+[1A[2K[80/162] [chromium] › tests/audit-reliability-unit.spec.ts:133:75 › rejects invalid Nigerian phone +12025551234
+[1A[2K[81/162] [chromium] › tests/audit-reliability-unit.spec.ts:133:75 › rejects invalid Nigerian phone 080312345678
+[1A[2K[82/162] [chromium] › tests/audit-reliability-unit.spec.ts:133:75 › rejects invalid Nigerian phone 80letters
+[1A[2K[83/162] [chromium] › tests/audit-reliability-unit.spec.ts:135:1 › post-login destinations stay on the same origin
+[1A[2K[84/162] [chromium] › tests/audit-reliability-unit.spec.ts:140:1 › hosted permission only links to the approved HTTPS provider origin
+[1A[2K[85/162] [chromium] › tests/audit-reliability-unit.spec.ts:145:1 › acceptance and active bank permission are not treated as the same state
+[1A[2K[86/162] [chromium] › tests/audit-reliability-unit.spec.ts:151:1 › partial disputes never promise a blanket debit stop
+[1A[2K[87/162] [chromium] › tests/audit-reliability-unit.spec.ts:158:1 › prices retain exact kobo, fee floors and caps
+[1A[2K[88/162] [chromium] › tests/audit-reliability-unit.spec.ts:167:1 › financial summaries reject missing, negative and unsafe amounts
+[1A[2K[89/162] [chromium] › tests/audit-reliability-unit.spec.ts:172:1 › the entire attention queue counts disputes before ordinary drafts
+[1A[2K[90/162] [chromium] › tests/audit-reliability-unit.spec.ts:180:1 › date labels reject invalid calendar dates
+[1A[2K[91/162] [chromium] › tests/audit-reliability-unit.spec.ts:186:1 › every sample uses one internally consistent sale, not invented activity
+[1A[2K[92/162] [chromium] › tests/business-settings.spec.ts:8:1 › admin reviews a proposal and a different administrator approves it
+[1A[2K[93/162] [chromium] › tests/business-settings.spec.ts:44:1 › pricing shows verified rates or says why it cannot, never an unchecked number
+[1A[2K[2m[WebServer] [22mAvoid calling `fetch` eagerly during server-side rendering — put your `fetch` calls inside `onMount` or a `load` function instead
+
+[1A[2K[2m[WebServer] [22mAvoid calling `fetch` eagerly during server-side rendering — put your `fetch` calls inside `onMount` or a `load` function instead
+
+[1A[2K[94/162] [chromium] › tests/content-seo.spec.ts:3:1 › guide library exposes individually written guides with search and categories
+[1A[2K[95/162] [chromium] › tests/content-seo.spec.ts:14:1 › guide renders useful content without invented publication or research claims
+[1A[2K[96/162] [chromium] › tests/content-seo.spec.ts:29:1 › topic hubs give every article a crawlable route into its guide cluster
+[1A[2K[97/162] [chromium] › tests/content-seo.spec.ts:40:1 › sitemap and RSS publish the guide library for discovery
+[1A[2K[98/162] [chromium] › tests/content-seo.spec.ts:46:1 › privacy notice gives a complete, readable account of information use and rights
+[1A[2K[99/162] [chromium] › tests/content-seo.spec.ts:58:1 › terms explain the complete sale, payment and complaint journey
+[1A[2K[100/162] [chromium] › tests/content-seo.spec.ts:70:1 › detailed legal content stays readable on a small phone
+[1A[2K[101/162] [chromium] › tests/content-seo.spec.ts:82:1 › approved production details activate both legal documents
+[1A[2K[102/162] [chromium] › tests/content-seo.spec.ts:98:1 › FAQ matches activation fees and conditional collections
+[1A[2K[103/162] [chromium] › tests/financial-completion.spec.ts:3:1 › financial review shows unresolved evidence and closes only after records agree
+[1A[2K[104/162] [chromium] › tests/financial-completion.spec.ts:29:1 › a failed financial read never displays an empty successful payment history
+[1A[2K[105/162] [chromium] › tests/health.spec.ts:3:1 › public homepage renders the product promise
+[1A[2K[106/162] [chromium] › tests/health.spec.ts:13:1 › public product routes expose clear conversion and trust content
+[1A[2K[2m[WebServer] [22mAvoid calling `fetch` eagerly during server-side rendering — put your `fetch` calls inside `onMount` or a `load` function instead
+
+[1A[2K[2m[WebServer] [22mAvoid calling `fetch` eagerly during server-side rendering — put your `fetch` calls inside `onMount` or a `load` function instead
+
+[1A[2K[107/162] [chromium] › tests/health.spec.ts:21:1 › visitor can complete the sample sale without signing in
+[1A[2K[108/162] [chromium] › tests/health.spec.ts:31:1 › mobile homepage remains navigable
+[1A[2K[109/162] [chromium] › tests/health.spec.ts:39:1 › private pages are excluded from indexing
+[1A[2K[110/162] [chromium] › tests/money.spec.ts:4:1 › naira input preserves exact kobo and rejects ambiguous amounts
+[1A[2K[111/162] [chromium] › tests/money.spec.ts:10:1 › financial display preserves large integer amounts and never turns invalid data into zero
+[1A[2K[112/162] [chromium] › tests/money.spec.ts:18:1 › verbalizeNaira produces accurate verbal currency description
+[1A[2K[113/162] [chromium] › tests/product-flows.spec.ts:19:1 › operator previews and safely retries one failed job
+[1A[2K[114/162] [chromium] › tests/product-flows.spec.ts:25:1 › operator replays a failed webhook without changing its identity
+[1A[2K[115/162] [chromium] › tests/product-flows.spec.ts:31:1 › operator resolves an unknown provider submission through protected controls
+[1A[2K  2) [chromium] › tests/product-flows.spec.ts:31:1 › operator resolves an unknown provider submission through protected controls 
+
+    [31mTest timeout of 60000ms exceeded.[39m
+
+    Error: page.goto: net::ERR_ABORTED; maybe frame was detached?
+    Call log:
+    [2m  - navigating to "http://127.0.0.1:5173/admin/controls", waiting until "load"[22m
+
+
+      30 |
+      31 | test('operator resolves an unknown provider submission through protected controls',async({page})=>{
+    > 32 | 	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('resolve_unknown_submission');await page.getByLabel('Target type').fill('collection');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000101');await page.getByLabel('Structured reason').fill('Provider reconciliation confirms final state');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('Safely apply resolve_unknown_submission')).toBeVisible();await page.getByRole('button',{name:'Apply this change'}).click();expect(applied[0]).toMatchObject({command_type:'resolve_unknown_submission'});
+         | 	                                                                                               ^
+      33 | });
+      34 |
+      35 | test('operator previews user suspension and restoration consequences',async({page})=>{
+        at /Users/macbookpro/Documents/Kredit.com/web/tests/product-flows.spec.ts:32:97
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/product-flows-operator-res-41454--through-protected-controls-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/product-flows-operator-res-41454--through-protected-controls-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:2709) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:2709) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[116/162] [chromium] › tests/product-flows.spec.ts:35:1 › operator previews user suspension and restoration consequences
+[1A[2K  3) [chromium] › tests/product-flows.spec.ts:35:1 › operator previews user suspension and restoration consequences 
+
+    [31mTest timeout of 60000ms exceeded.[39m
+
+    Error: page.goto: net::ERR_ABORTED; maybe frame was detached?
+    Call log:
+    [2m  - navigating to "http://127.0.0.1:5173/admin/controls", waiting until "load"[22m
+
+
+      34 |
+      35 | test('operator previews user suspension and restoration consequences',async({page})=>{
+    > 36 | 	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000202');await page.getByLabel('Structured reason').fill('Confirmed account compromise investigation');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply this change'}).click();await page.getByLabel('Action').selectOption('restore_user');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000203');await page.getByLabel('Structured reason').fill('Security investigation completed safely');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply this change'}).click();expect(applied.map(x=>x.command_type)).toEqual(['suspend_user','restore_user']);
+         | 	                                                                                               ^
+      37 | });
+      38 |
+      39 | test('operator places an expiring scoped buyer risk hold',async({page})=>{
+        at /Users/macbookpro/Documents/Kredit.com/web/tests/product-flows.spec.ts:36:97
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/product-flows-operator-pre-40c3b-nd-restoration-consequences-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/product-flows-operator-pre-40c3b-nd-restoration-consequences-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:2946) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:2946) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[117/162] [chromium] › tests/product-flows.spec.ts:39:1 › operator places an expiring scoped buyer risk hold
+[1A[2K[2m[WebServer] [22m5:02:36 PM [vite] (ssr) Error when evaluating SSR module /@fs/Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/@sveltejs+kit@2.70.2_@sveltejs+vite-plugin-svelte@6.0.0_supports-color@10.2.2_svelte@5._2985c45f5a8ab5b46d7bd383c59b6b89/node_modules/@sveltejs/kit/src/runtime/server/index.js: transport invoke timed out after 60000ms (data: {"type":"custom","event":"vite:invoke","data":{"name":"fetchModule","id":"send:Mvff_3uU6jhuuXkbVwkZm","data":["/.svelte-kit/generated/server/internal.js","/Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/@sveltejs+kit@2.70.2_@sveltejs+vite-plugin-svelte@6.0.0_supports-color@10.2.2_svelte@5._2985c45f5a8ab5b46d7bd383c59b6b89/node_modules/@sveltejs/kit/src/runtime/server/index.js",{"cached":true,"startOffset":2}]}})
+[2m[WebServer] [22m      at reviveInvokeError (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:475:14)
+[2m[WebServer] [22m      at Object.invoke (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:549:11)
+[2m[WebServer] [22m      at async SSRCompatModuleRunner.getModuleInformation (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:1086:7)
+[2m[WebServer] [22m      at async request (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:1103:83)
+[2m[WebServer] [22m      at async eval (/Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/@sveltejs+kit@2.70.2_@sveltejs+vite-plugin-svelte@6.0.0_supports-color@10.2.2_svelte@5._2985c45f5a8ab5b46d7bd383c59b6b89/node_modules/@sveltejs/kit/src/runtime/server/index.js:7:1)
+[2m[WebServer] [22m      at async ESModulesEvaluator.runInlinedModule (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:913:3)
+[2m[WebServer] [22m      at async SSRCompatModuleRunner.directRequest (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:1146:59)
+[2m[WebServer] [22m      at async SSRCompatModuleRunner.directRequest (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/chunks/config.js:15184:22)
+
+[1A[2K[2m[WebServer] [22m5:02:36 PM [vite] (ssr) Error when evaluating SSR module /@fs/Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/@sveltejs+kit@2.70.2_@sveltejs+vite-plugin-svelte@6.0.0_supports-color@10.2.2_svelte@5._2985c45f5a8ab5b46d7bd383c59b6b89/node_modules/@sveltejs/kit/src/runtime/server/index.js: transport invoke timed out after 60000ms (data: {"type":"custom","event":"vite:invoke","data":{"name":"fetchModule","id":"send:Mvff_3uU6jhuuXkbVwkZm","data":["/.svelte-kit/generated/server/internal.js","/Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/@sveltejs+kit@2.70.2_@sveltejs+vite-plugin-svelte@6.0.0_supports-color@10.2.2_svelte@5._2985c45f5a8ab5b46d7bd383c59b6b89/node_modules/@sveltejs/kit/src/runtime/server/index.js",{"cached":true,"startOffset":2}]}})
+[2m[WebServer] [22m      at reviveInvokeError (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:475:14)
+[2m[WebServer] [22m      at Object.invoke (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:549:11)
+[2m[WebServer] [22m      at async SSRCompatModuleRunner.getModuleInformation (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:1086:7)
+[2m[WebServer] [22m      at async request (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:1103:83)
+[2m[WebServer] [22m      at async eval (/Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/@sveltejs+kit@2.70.2_@sveltejs+vite-plugin-svelte@6.0.0_supports-color@10.2.2_svelte@5._2985c45f5a8ab5b46d7bd383c59b6b89/node_modules/@sveltejs/kit/src/runtime/server/index.js:7:1)
+[2m[WebServer] [22m      at async ESModulesEvaluator.runInlinedModule (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:913:3)
+[2m[WebServer] [22m      at async SSRCompatModuleRunner.directRequest (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/module-runner.js:1146:59)
+[2m[WebServer] [22m      at async SSRCompatModuleRunner.directRequest (file:///Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/vite@7.3.5/node_modules/vite/dist/node/chunks/config.js:15184:22)
+
+[1A[2K  4) [chromium] › tests/product-flows.spec.ts:39:1 › operator places an expiring scoped buyer risk hold 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m()[22m failed
+
+    Locator:  locator('form[data-ready="true"]')
+    Expected: visible
+    Received: <element(s) not found>
+    Timeout:  30000ms
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 30000ms[22m
+    [2m  - waiting for locator('form[data-ready="true"]')[22m
+
+
+      38 |
+      39 | test('operator places an expiring scoped buyer risk hold',async({page})=>{
+    > 40 | 	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('place_risk_hold');await page.getByLabel('Target type').fill('buyer');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000301');await page.getByLabel('Scope').selectOption('collection');await page.getByLabel('Expires').fill('2026-08-30T12:00');await page.getByLabel('Structured reason').fill('Collection anomaly requires compliance review');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('User notification',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Apply this change'}).click();expect(applied[0]).toMatchObject({command_type:'place_risk_hold',target_type:'buyer',scope:'collection'});
+         | 	                                                                                                                                                                             ^
+      41 | });
+      42 |
+      43 | test('supplier can create exact credit terms with a replay-safe request', async ({ page }) => {
+        at /Users/macbookpro/Documents/Kredit.com/web/tests/product-flows.spec.ts:40:175
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/product-flows-operator-pla-0537b-ring-scoped-buyer-risk-hold-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/product-flows-operator-pla-0537b-ring-scoped-buyer-risk-hold-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/product-flows-operator-pla-0537b-ring-scoped-buyer-risk-hold-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/product-flows-operator-pla-0537b-ring-scoped-buyer-risk-hold-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:3495) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:3495) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[118/162] [chromium] › tests/product-flows.spec.ts:43:1 › supplier can create exact credit terms with a replay-safe request
+[1A[2K  5) [chromium] › tests/product-flows.spec.ts:43:1 › supplier can create exact credit terms with a replay-safe request 
+
+    [31mTest timeout of 60000ms exceeded.[39m
+
+    Error: locator.selectOption: Test timeout of 60000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('combobox', { name: 'Customer', exact: true })[22m
+
+
+      58 | 	await page.route('**/api/v1/organizations/org-1/credit-terms/preview', route => route.fulfill({json:{due_date:'2026-09-30',grace_hours:24,collection_at:'2026-10-02T08:00:00Z',timezone:'Africa/Lagos',cutoff:'23:59',timing_mode:'lagos_explicit'}}));
+      59 | 	await page.goto('/app/credit/new?advanced=1');
+    > 60 | 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
+         | 	                                                                    ^
+      61 | 	await page.getByLabel('Sale amount (₦)').fill('1,200,000');
+      62 | 	await page.getByLabel('What goods are they taking?').fill('Twenty cartons of verified inventory');
+      63 | 	await page.getByLabel('First payment date').fill('2026-09-30');
+        at /Users/macbookpro/Documents/Kredit.com/web/tests/product-flows.spec.ts:60:70
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/product-flows-supplier-can-cc934--with-a-replay-safe-request-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/product-flows-supplier-can-cc934--with-a-replay-safe-request-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/product-flows-supplier-can-cc934--with-a-replay-safe-request-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/product-flows-supplier-can-cc934--with-a-replay-safe-request-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:3837) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:3837) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[119/162] [chromium] › tests/product-flows.spec.ts:73:1 › operations overview presents redacted health counters
+[1A[2K  6) [chromium] › tests/product-flows.spec.ts:73:1 › operations overview presents redacted health counters 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m()[22m failed
+
+    Locator:  getByRole('heading', { name: 'Run the whole platform from one place.' })
+    Expected: visible
+    Received: <element(s) not found>
+    Timeout:  30000ms
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 30000ms[22m
+    [2m  - waiting for getByRole('heading', { name: 'Run the whole platform from one place.' })[22m
+
+
+      76 | 	}));
+      77 | 	await page.goto('/admin');
+    > 78 | 	await expect(page.getByRole('heading', { name: 'Run the whole platform from one place.' })).toBeVisible();
+         | 	                                                                                            ^
+      79 | 	await expect(page.getByText('Work in progress')).toBeVisible();
+      80 | 	await expect(page.getByText('platform admin', { exact: true })).toBeVisible();
+      81 | });
+        at /Users/macbookpro/Documents/Kredit.com/web/tests/product-flows.spec.ts:78:94
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/product-flows-operations-o-f7d45-ts-redacted-health-counters-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/product-flows-operations-o-f7d45-ts-redacted-health-counters-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/product-flows-operations-o-f7d45-ts-redacted-health-counters-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/product-flows-operations-o-f7d45-ts-redacted-health-counters-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:3990) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:3990) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[120/162] [chromium] › tests/product-flows.spec.ts:83:1 › application evidence shows real traction, user clarity, filters, and reconciliation
+[1A[2K  7) [chromium] › tests/product-flows.spec.ts:83:1 › application evidence shows real traction, user clarity, filters, and reconciliation 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m()[22m failed
+
+    Locator:  getByRole('heading', { name: 'Show what Kredit has achieved.' })
+    Expected: visible
+    Received: <element(s) not found>
+    Timeout:  30000ms
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 30000ms[22m
+    [2m  - waiting for getByRole('heading', { name: 'Show what Kredit has achieved.' })[22m
+
+
+       95 | 	}); });
+       96 | 	await page.goto('/admin/analytics');
+    >  97 | 	await expect(page.getByRole('heading', {name:'Show what Kredit has achieved.'})).toBeVisible();
+          | 	                                                                                 ^
+       98 | 	await expect(page.getByText('Trade credit recorded')).toBeVisible();
+       99 | 	await expect(page.getByLabel(/Evidence for/).getByText('₦1,200,000.00')).toBeVisible();
+      100 | 	await expect(page.getByText('80.0%')).toBeVisible();
+        at /Users/macbookpro/Documents/Kredit.com/web/tests/product-flows.spec.ts:97:83
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/product-flows-application--6c0e2--filters-and-reconciliation-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/product-flows-application--6c0e2--filters-and-reconciliation-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/product-flows-application--6c0e2--filters-and-reconciliation-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/product-flows-application--6c0e2--filters-and-reconciliation-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:4075) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:4075) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[121/162] [chromium] › tests/product-flows.spec.ts:110:1 › seller can give one simple product clarity answer
+[1A[2K  8) [chromium] › tests/product-flows.spec.ts:110:1 › seller can give one simple product clarity answer 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m()[22m failed
+
+    Locator:  getByRole('heading', { name: 'Was this page easy to understand?' })
+    Expected: visible
+    Received: <element(s) not found>
+    Timeout:  30000ms
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 30000ms[22m
+    [2m  - waiting for getByRole('heading', { name: 'Was this page easy to understand?' })[22m
+
+
+      120 | 	});
+      121 | 	await page.goto('/app/overview');
+    > 122 | 	await expect(page.getByRole('heading', { name: 'Was this page easy to understand?' })).toBeVisible();
+          | 	                                                                                       ^
+      123 | 	expect(await page.locator('html').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      124 | 	await page.getByRole('button', { name: 'Yes', exact: true }).click();
+      125 | 	await expect(page.getByText('Thank you. Your answer helps us improve Kredit.')).toBeVisible();
+        at /Users/macbookpro/Documents/Kredit.com/web/tests/product-flows.spec.ts:122:89
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/product-flows-seller-can-g-a7fed-mple-product-clarity-answer-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/product-flows-seller-can-g-a7fed-mple-product-clarity-answer-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/product-flows-seller-can-g-a7fed-mple-product-clarity-answer-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/product-flows-seller-can-g-a7fed-mple-product-clarity-answer-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:4262) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:4262) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[122/162] [chromium] › tests/product-flows.spec.ts:129:1 › supplier can amend and cancel a draft before immutable terms are sent
+[1A[2K[123/162] [chromium] › tests/product-flows.spec.ts:147:1 › buyer can decline exact terms without creating an obligation
+[1A[2K[124/162] [chromium] › tests/product-flows.spec.ts:159:1 › buyer payment claim explains and applies a bounded hold
+[1A[2K[125/162] [chromium] › tests/product-flows.spec.ts:174:1 › buyer can cancel an active mandate
+[1A[2K[126/162] [chromium] › tests/product-flows.spec.ts:184:1 › mobile customer navigation keeps important pages below and every other page in one menu
+[1A[2K[127/162] [chromium] › tests/product-flows.spec.ts:204:1 › public receipt renders only the approved projection
+[1A[2K[128/162] [chromium] › tests/product-flows.spec.ts:212:1 › supplier reserves exact drawdown terms and releases only after buyer confirmation
+[1A[2K[129/162] [chromium] › tests/product-flows.spec.ts:240:1 › buyer confirms the exact hash and no-issue receipt activates the drawdown once
+[1A[2K[130/162] [chromium] › tests/product-flows.spec.ts:259:1 › buyer receipt issue opens a case without activating an obligation
+[1A[2K[131/162] [chromium] › tests/product-flows.spec.ts:273:1 › pilot-ready owner reviews mobile readiness and invites a sales user
+[1A[2K[132/162] [chromium] › tests/product-flows.spec.ts:293:1 › incomplete supplier sees precise recovery steps before financial activity
+[1A[2K[133/162] [chromium] › tests/product-flows.spec.ts:307:1 › user changes notification routing, quiet hours, and optional categories
+[1A[2K[134/162] [chromium] › tests/product-flows.spec.ts:326:1 › user can choose a lighter display on this phone
+[1A[2K[135/162] [chromium] › tests/product-flows.spec.ts:334:1 › identity-bound privacy request is submitted and remains trackable
+[1A[2K[136/162] [chromium] › tests/product-flows.spec.ts:356:1 › recovery start is enumeration-safe and explains independent proof
+[1A[2K[137/162] [chromium] › tests/product-flows.spec.ts:367:1 › owner changes a role, suspends access, and restores it from the team interface
+[1A[2K[138/162] [chromium] › tests/product-flows.spec.ts:382:1 › supplier creates a mandate-backed trade line and sees provider validation safely
+[1A[2K[139/162] [chromium] › tests/product-flows.spec.ts:404:1 › buyer attaches evidence to an existing dispute and sees the status timeline
+[1A[2K[140/162] [chromium] › tests/product-quality.spec.ts:9:1 › public navigation is clear, complete and closes after a mobile choice
+[1A[2K[141/162] [chromium] › tests/product-quality.spec.ts:24:1 › homepage trust proof uses verifiable product controls rather than invented social proof
+[1A[2K[142/162] [chromium] › tests/product-quality.spec.ts:36:1 › both sale-creation entry points preserve authentication and the intended destination
+[1A[2K[143/162] [chromium] › tests/product-quality.spec.ts:47:1 › every indexable page has complete, unique search and social metadata
+[1A[2K[144/162] [chromium] › tests/product-quality.spec.ts:75:1 › responsive public pages avoid horizontal overflow and serious accessibility defects
+[1A[2KInternal error: step id not found: fixture@56
+
+[1A[2K  9) [chromium] › tests/product-quality.spec.ts:75:1 › responsive public pages avoid horizontal overflow and serious accessibility defects 
+
+    [31mTest timeout of 300000ms exceeded.[39m
+
+    Error: page.evaluate: Execution context was destroyed, most likely because of a navigation
+     Please check out https://github.com/dequelabs/axe-core-npm/blob/develop/packages/playwright/error-handling.md
+
+      80 | 		const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      81 | 		expect(overflow, `${path} horizontal overflow`).toBeLessThanOrEqual(1);
+    > 82 | 		const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+         | 		                ^
+      83 | 		const blocking = results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical');
+      84 | 		expect(blocking, `${path}: ${blocking.map((item) => item.id).join(', ')}`).toEqual([]);
+      85 | 	}
+        at AxeBuilder.analyze (/Users/macbookpro/Documents/Kredit.com/node_modules/.pnpm/@axe-core+playwright@4.13.0_playwright-core@1.55.1/node_modules/@axe-core/playwright/dist/index.mjs:218:13)
+        at /Users/macbookpro/Documents/Kredit.com/web/tests/product-quality.spec.ts:82:19
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/product-quality-responsive-0e39f-rious-accessibility-defects-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/product-quality-responsive-0e39f-rious-accessibility-defects-chromium/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/product-quality-responsive-0e39f-rious-accessibility-defects-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/product-quality-responsive-0e39f-rious-accessibility-defects-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/product-quality-responsive-0e39f-rious-accessibility-defects-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[1A[2K(node:4669) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:4669) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[145/162] [chromium] › tests/product-quality.spec.ts:88:1 › index boundaries, error recovery, sitemap and install assets are safe and complete
+[1A[2K[2m[WebServer] [22m
+[2m[WebServer] [22m[1;31m[404] GET /this-page-does-not-exist[0m
+
+[1A[2K[146/162] [chromium] › tests/public-security-content.spec.ts:3:1 › public security page uses service language instead of an internal launch checklist
+[1A[2K[147/162] [chromium] › tests/public-security-content.spec.ts:15:1 › public security content remains readable on a small phone
+[1A[2K[148/162] [chromium] › tests/real-stack-financial.spec.ts:29:2 › real-stack financial journeys › supplier browser reads the same real payment records as the API
+[1A[2K[149/162] [chromium] › tests/real-stack-financial.spec.ts:45:2 › real-stack financial journeys › buyer browser opens persisted credit requests through the real API
+[1A[2K[150/162] [chromium] › tests/real-stack-financial.spec.ts:60:2 › real-stack financial journeys › frontend proxy and API readiness agree against the same running stack
+[1A[2K[151/162] [chromium] › tests/sign-in.spec.ts:31:1 › a six-digit code is accepted by the field that asks for six digits
+[1A[2K[152/162] [chromium] › tests/sign-in.spec.ts:69:1 › a code the field should refuse is refused, and the button stays closed
+[1A[2K[153/162] [chromium] › tests/sign-in.spec.ts:82:1 › a wrong code is explained in words a person can act on
+[1A[2K[154/162] [chromium] › tests/sign-in.spec.ts:106:1 › an expired code closes the field and offers a new one
+[1A[2K[155/162] [chromium] › tests/sign-in.spec.ts:131:1 › the sign-in page says a code will never be asked for by support
+[1A[2K[156/162] [chromium] › tests/workspace-audit.spec.ts:9:1 › failed business lookup shows an error and can be retried
+[1A[2K[157/162] [chromium] › tests/workspace-audit.spec.ts:26:1 › switching business resets pagination and ignores a late response
+[1A[2K[158/162] [chromium] › tests/workspace-audit.spec.ts:48:1 › money owed excludes unaccepted sales without an obligation
+[1A[2K[159/162] [chromium] › tests/workspace-audit.spec.ts:59:1 › desktop navigation works before JavaScript loads
+[1A[2K[160/162] [chromium] › tests/workspace-audit.spec.ts:69:1 › customer history and repeat-sale link preserve the selected business
+[1A[2K[161/162] [chromium] › tests/workspace-audit.spec.ts:82:1 › buyer can recover from a dropped connection while opening an obligation
+[1A[2K[162/162] [chromium] › tests/workspace-audit.spec.ts:95:1 › opening a related guide updates the article and structured metadata
+[1A[2K  9 failed
+    [chromium] › tests/audit-product-journeys.spec.ts:173:2 › visual and accessibility evidence: home 
+    [chromium] › tests/product-flows.spec.ts:31:1 › operator resolves an unknown provider submission through protected controls 
+    [chromium] › tests/product-flows.spec.ts:35:1 › operator previews user suspension and restoration consequences 
+    [chromium] › tests/product-flows.spec.ts:39:1 › operator places an expiring scoped buyer risk hold 
+    [chromium] › tests/product-flows.spec.ts:43:1 › supplier can create exact credit terms with a replay-safe request 
+    [chromium] › tests/product-flows.spec.ts:73:1 › operations overview presents redacted health counters 
+    [chromium] › tests/product-flows.spec.ts:83:1 › application evidence shows real traction, user clarity, filters, and reconciliation 
+    [chromium] › tests/product-flows.spec.ts:110:1 › seller can give one simple product clarity answer 
+    [chromium] › tests/product-quality.spec.ts:75:1 › responsive public pages avoid horizontal overflow and serious accessibility defects 
+  3 skipped
+  150 passed (1.5h)

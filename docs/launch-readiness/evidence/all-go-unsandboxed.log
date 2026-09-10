@@ -1,0 +1,56 @@
+?   	kredit/api/generated	[no test files]
+ok  	kredit/cmd/api	0.193s
+?   	kredit/cmd/bootstrap-owner	[no test files]
+ok  	kredit/cmd/configcheck	3.159s
+ok  	kredit/cmd/migrate	0.039s
+ok  	kredit/cmd/provider-simulator	0.182s
+ok  	kredit/cmd/reconcile	0.092s
+ok  	kredit/cmd/seed	0.035s
+ok  	kredit/cmd/worker	0.071s
+?   	kredit/db/generated	[no test files]
+ok  	kredit/internal/access	0.031s
+ok  	kredit/internal/agreementdocs	0.050s
+ok  	kredit/internal/audit	0.053s
+ok  	kredit/internal/auth	0.069s
+ok  	kredit/internal/businesspolicy	0.057s
+ok  	kredit/internal/buyers	0.045s
+ok  	kredit/internal/collections	0.156s
+ok  	kredit/internal/config	0.035s
+ok  	kredit/internal/corrections	0.048s
+ok  	kredit/internal/credit	0.059s
+ok  	kredit/internal/db	0.054s
+ok  	kredit/internal/disputes	0.031s
+ok  	kredit/internal/documents	0.067s
+ok  	kredit/internal/feedback	0.039s
+ok  	kredit/internal/idempotency	0.042s
+ok  	kredit/internal/identifier	0.029s
+ok  	kredit/internal/identity	0.037s
+ok  	kredit/internal/jobs	0.154s
+ok  	kredit/internal/ledger	0.050s
+ok  	kredit/internal/mandates	0.043s
+ok  	kredit/internal/notifications	0.171s
+ok  	kredit/internal/observability	0.066s
+ok  	kredit/internal/onboarding	0.033s
+ok  	kredit/internal/operations	0.105s
+ok  	kredit/internal/organizations	0.037s
+ok  	kredit/internal/outbox	0.067s
+# kredit/internal/platformsettings [kredit/internal/platformsettings.test]
+internal/platformsettings/store_test.go:177:15: no new variables on left side of :=
+ok  	kredit/internal/paymentclaims	0.107s
+ok  	kredit/internal/payments	0.075s
+ok  	kredit/internal/platform/logging	0.046s
+ok  	kredit/internal/platformops	0.069s
+FAIL	kredit/internal/platformsettings [build failed]
+ok  	kredit/internal/providers/mono	0.693s
+ok  	kredit/internal/publictoken	0.029s
+ok  	kredit/internal/readiness	0.033s
+ok  	kredit/internal/relationships	0.035s
+ok  	kredit/internal/reports	0.049s
+ok  	kredit/internal/schedules	0.119s
+ok  	kredit/internal/support	0.094s
+ok  	kredit/internal/tradelines	0.063s
+ok  	kredit/internal/usercontrol	0.048s
+ok  	kredit/internal/web	0.537s
+ok  	kredit/internal/whatsapp	0.130s
+ok  	kredit/tests/contract	0.111s
+FAIL

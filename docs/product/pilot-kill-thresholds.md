@@ -70,11 +70,12 @@ should be zero by construction. The row exists as a tripwire: a non-zero reading
 means something reached that path that you did not expect, and that is worth
 stopping for.
 
-**Row 6 — 30% of fee revenue.** Kredit earns at most 100 basis points. On a
-₦1,250,000 sale that is roughly ₦9,000 of realistic gross fee. Thirty percent of
-that is about ₦2,700 — call it 45 minutes of a Lagos operations associate's
-fully-loaded time. So: *if the average obligation consumes more than about
-three-quarters of an hour of human time, the pricing is wrong at scale.*
+**Row 6 — 30% of fee revenue.** Use the rates recorded on each accepted
+agreement and actual earned collection fees. Admin-configured rates, fee floors
+and caps mean there is no universal 100-basis-point revenue assumption. Divide
+measured handling cost by actual fee revenue for the same cohort; when revenue
+is zero, report the cost and missing revenue separately instead of a percentage.
+The 30% figure remains a draft threshold, not an approved margin target.
 
 Measure it by sampling, not by guessing: for two weeks, whoever handles a
 support case, reconciliation, dispute, correction, recovery or privacy request

@@ -1,5 +1,10 @@
 # README completion-plan traceability
 
+> Historical assessment of an earlier source revision. The September 9 direct
+> audit is still in progress and has found additional code and seed defects.
+> Completion and test claims below do not certify the current working tree.
+> See [the current file ledger](../launch-audit-2026-09-08/FILE-BY-FILE.md).
+
 Review date: 29 August 2026
 
 This matrix traces every repository-owned requirement in

@@ -13,7 +13,7 @@ Legal disclosures remain disabled until approved versions are supplied.
 
 | Context | Heading | Primary action | Supporting text |
 | --- | --- | --- | --- |
-| buyer accepts credit | Review the exact credit terms | `Accept {amount} credit` | By accepting, you confirm the goods, amount, repayment schedule, grace period, fees, and collection authorization shown here. |
+| buyer accepts credit | Review the exact credit terms | `Accept {amount} credit` | By accepting, you confirm the goods, amount, repayment schedule, grace period and fees shown here. Bank-debit permission is a separate step. |
 | buyer confirms drawdown | Confirm this purchase | `Confirm {amount} drawdown` | This reserves part of your approved trade line for the goods and repayment terms shown here. No obligation becomes active until release and receipt are recorded. |
 | supplier releases goods | Confirm goods release | `Release goods worth {amount}` | Confirm only after the described goods have left your control. This action is recorded with your identity, time, and evidence. |
 | buyer confirms receipt | Confirm what you received | `Confirm receipt of {amount} goods` | Choose this only if the goods were received without an issue. Your repayment obligation will become active. |

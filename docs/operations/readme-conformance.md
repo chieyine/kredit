@@ -1,5 +1,10 @@
 # README conformance audit
 
+> Historical assessment of an earlier source revision. The September 9 direct
+> audit is still in progress and has found additional code and seed defects.
+> Completion and test claims below do not certify the current working tree.
+> See [the current file ledger](../launch-audit-2026-09-08/FILE-BY-FILE.md).
+
 Re-audited 29 August 2026 across `internal/`, `cmd/`, `db/`, `infra/`,
 `scripts/`, `api/`, and `web/src/`.
 

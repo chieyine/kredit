@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,7 +29,7 @@ import (
 // credit, payment, schedule, dispute and ledger state; they do not maintain a
 // second balance.
 type Source struct {
-	FeeWaivers    func(string) map[string]ledger.Money
+	FeeWaivers    func(context.Context, string) (map[string]ledger.Money, error)
 	SupplierViews func(string) []credit.View
 	BuyerViews    func(string) []credit.View
 	Payments      func(string) ([]payments.Payment, error)
@@ -55,27 +56,31 @@ type Summary struct {
 type ObligationRow struct {
 	dueTodayKobo, dueWeekKobo, overdueKobo ledger.Money
 	ageingAmounts                          map[string]ledger.Money
-	ObligationID                           string       `json:"obligation_id"`
-	CreditRequestID                        string       `json:"credit_request_id"`
-	BuyerBusinessID                        string       `json:"buyer_business_id"`
-	BuyerName                              string       `json:"buyer_name"`
-	PrincipalKobo                          ledger.Money `json:"principal_kobo"`
-	OutstandingKobo                        ledger.Money `json:"outstanding_kobo"`
-	BaseFeeKobo                            ledger.Money `json:"base_fee_kobo"`
-	DueDate                                string       `json:"due_date"`
-	NextDueAt                              *time.Time   `json:"next_due_at,omitempty"`
-	PaymentStatus                          string       `json:"payment_status"`
-	AgeingBucket                           string       `json:"ageing_bucket"`
-	Overdue                                bool         `json:"overdue"`
-	LatePayment                            bool         `json:"late_payment"`
-	DaysLate                               int64        `json:"days_late"`
-	VoluntaryPaidKobo                      ledger.Money `json:"voluntary_paid_kobo"`
-	CollectedPaidKobo                      ledger.Money `json:"collected_paid_kobo"`
-	CollectionFeesKobo                     ledger.Money `json:"collection_fees_kobo"`
-	OpenDisputeCount                       int64        `json:"open_dispute_count"`
-	MandateIssue                           bool         `json:"mandate_issue"`
-	MandateCancelledWhileOwing             bool         `json:"mandate_cancelled_while_owing"`
-	ActivatedAt                            time.Time    `json:"activated_at"`
+	ObligationID                           string `json:"obligation_id"`
+	CreditRequestID                        string `json:"credit_request_id"`
+	BuyerBusinessID                        string `json:"buyer_business_id"`
+	BuyerName                              string `json:"buyer_name"`
+	// The other side of the trade. A buyer reading their own history needs the
+	// seller's name on each row; BuyerName is their own and tells them nothing.
+	SupplierName               string       `json:"supplier_name"`
+	PrincipalKobo              ledger.Money `json:"principal_kobo"`
+	OutstandingKobo            ledger.Money `json:"outstanding_kobo"`
+	BaseFeeKobo                ledger.Money `json:"base_fee_kobo"`
+	DueDate                    string       `json:"due_date"`
+	NextDueKobo                ledger.Money `json:"next_due_kobo"`
+	NextDueAt                  *time.Time   `json:"next_due_at,omitempty"`
+	PaymentStatus              string       `json:"payment_status"`
+	AgeingBucket               string       `json:"ageing_bucket"`
+	Overdue                    bool         `json:"overdue"`
+	LatePayment                bool         `json:"late_payment"`
+	DaysLate                   int64        `json:"days_late"`
+	VoluntaryPaidKobo          ledger.Money `json:"voluntary_paid_kobo"`
+	CollectedPaidKobo          ledger.Money `json:"collected_paid_kobo"`
+	CollectionFeesKobo         ledger.Money `json:"collection_fees_kobo"`
+	OpenDisputeCount           int64        `json:"open_dispute_count"`
+	MandateIssue               bool         `json:"mandate_issue"`
+	MandateCancelledWhileOwing bool         `json:"mandate_cancelled_while_owing"`
+	ActivatedAt                time.Time    `json:"activated_at"`
 }
 
 type Receivables struct {
@@ -181,7 +186,7 @@ func NewStore(source Source) *Store {
 	}
 	if source.Schedule == nil {
 		source.Schedule = func(string) (schedules.Schedule, []schedules.Item, error) {
-			return schedules.Schedule{}, nil, errors.New("schedule unavailable")
+			return schedules.Schedule{}, nil, nil
 		}
 	}
 	if source.Disputes == nil {
@@ -258,7 +263,10 @@ func (s *Store) FeesForSupplier(ctx context.Context, orgID string) (Fees, error)
 	}
 	waivers := map[string]ledger.Money{}
 	if s.source.FeeWaivers != nil {
-		waivers = s.source.FeeWaivers(orgID)
+		waivers, err = s.source.FeeWaivers(ctx, orgID)
+		if err != nil {
+			return Fees{}, err
+		}
 	}
 	result := Fees{GeneratedAt: s.source.Now(), Currency: "NGN", ByObligation: []ObligationFee{}}
 	for _, row := range rows {
@@ -453,26 +461,36 @@ func (s *Store) TrackContext(ctx context.Context, name, subjectID, purpose strin
 		if err != nil {
 			return AnalyticsEvent{}, err
 		}
-		if err := s.pool.QueryRow(ctx, `INSERT INTO app.analytics_events(id,name,subject_id_hash,purpose,metadata,occurred_at,schema_version,deduplication_key,source) VALUES($1::uuid,$2,$3,$4,$5::jsonb,$6,$7,$8,$9) ON CONFLICT(deduplication_key) DO UPDATE SET deduplication_key=EXCLUDED.deduplication_key RETURNING occurred_at,recorded_at`, e.ID, e.Name, e.SubjectID, e.Purpose, encoded, e.At, e.SchemaVersion, e.DeduplicationKey, e.Source).Scan(&e.At, &e.RecordedAt); err != nil {
+		if err := s.pool.QueryRow(ctx, `INSERT INTO app.analytics_events(id,name,subject_id_hash,purpose,metadata,occurred_at,schema_version,deduplication_key,source) VALUES($1::uuid,$2,$3,$4,$5::jsonb,$6,$7,$8,$9) ON CONFLICT(deduplication_key) DO UPDATE SET deduplication_key=EXCLUDED.deduplication_key RETURNING id::text,purpose,metadata,occurred_at,recorded_at`, e.ID, e.Name, e.SubjectID, e.Purpose, encoded, e.At, e.SchemaVersion, e.DeduplicationKey, e.Source).Scan(&e.ID, &e.Purpose, &encoded, &e.At, &e.RecordedAt); err != nil {
+			return AnalyticsEvent{}, err
+		}
+		if err := json.Unmarshal(encoded, &e.Metadata); err != nil {
 			return AnalyticsEvent{}, err
 		}
 		return e, nil
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.events {
+		if existing.DeduplicationKey == e.DeduplicationKey {
+			existing.Metadata = maps.Clone(existing.Metadata)
+			return existing, nil
+		}
+	}
 	s.events = append(s.events, e)
-	s.mu.Unlock()
+	e.Metadata = maps.Clone(e.Metadata)
 	return e, nil
 }
 
-func (s *Store) ListAnalytics() []AnalyticsEvent {
+func (s *Store) ListAnalytics() ([]AnalyticsEvent, error) {
 	return s.ListAnalyticsContext(context.Background())
 }
 
-func (s *Store) ListAnalyticsContext(ctx context.Context) []AnalyticsEvent {
+func (s *Store) ListAnalyticsContext(ctx context.Context) ([]AnalyticsEvent, error) {
 	if s.pool != nil {
 		rows, err := s.pool.Query(ctx, `SELECT id::text,name,subject_id_hash,purpose,occurred_at,recorded_at,schema_version,deduplication_key,COALESCE(organization_id_hash,''),source,metadata FROM app.analytics_events ORDER BY occurred_at`)
 		if err != nil {
-			return []AnalyticsEvent{}
+			return nil, err
 		}
 		defer rows.Close()
 		out := []AnalyticsEvent{}
@@ -480,21 +498,25 @@ func (s *Store) ListAnalyticsContext(ctx context.Context) []AnalyticsEvent {
 			var event AnalyticsEvent
 			var encoded []byte
 			if err := rows.Scan(&event.ID, &event.Name, &event.SubjectID, &event.Purpose, &event.At, &event.RecordedAt, &event.SchemaVersion, &event.DeduplicationKey, &event.OrganizationIDHash, &event.Source, &encoded); err != nil {
-				return []AnalyticsEvent{}
+				return nil, err
 			}
 			if err := json.Unmarshal(encoded, &event.Metadata); err != nil {
-				return []AnalyticsEvent{}
+				return nil, err
 			}
 			out = append(out, event)
 		}
-		if rows.Err() != nil {
-			return []AnalyticsEvent{}
+		if err := rows.Err(); err != nil {
+			return nil, err
 		}
-		return out
+		return out, nil
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]AnalyticsEvent(nil), s.events...)
+	out := append([]AnalyticsEvent{}, s.events...)
+	for i := range out {
+		out[i].Metadata = maps.Clone(out[i].Metadata)
+	}
+	return out, nil
 }
 
 var forbiddenAnalyticsMetadata = map[string]struct{}{
@@ -557,13 +579,21 @@ func (s *Store) rows(views []credit.View) ([]ObligationRow, error) {
 			continue
 		}
 		o := v.Obligation
-		row := ObligationRow{ObligationID: o.ID, CreditRequestID: o.CreditRequestID, BuyerBusinessID: o.BuyerBusinessID, BuyerName: v.Request.BuyerLegalName, PrincipalKobo: o.PrincipalKobo, OutstandingKobo: o.OutstandingKobo, BaseFeeKobo: o.BaseFeeKobo, DueDate: v.Request.DueDate, PaymentStatus: o.PaymentStatus, ActivatedAt: o.ActivatedAt}
+		supplierName := strings.TrimSpace(v.Request.SupplierTradingName)
+		if supplierName == "" {
+			supplierName = v.Request.SupplierLegalName
+		}
+		row := ObligationRow{ObligationID: o.ID, CreditRequestID: o.CreditRequestID, BuyerBusinessID: o.BuyerBusinessID, BuyerName: v.Request.BuyerLegalName, SupplierName: supplierName, PrincipalKobo: o.PrincipalKobo, OutstandingKobo: o.OutstandingKobo, BaseFeeKobo: o.BaseFeeKobo, DueDate: v.Request.DueDate, PaymentStatus: o.PaymentStatus, ActivatedAt: o.ActivatedAt}
 		var due time.Time
 		var scheduleItems []schedules.Item
-		if _, items, err := s.source.Schedule(o.ID); err == nil {
+		_, items, scheduleErr := s.source.Schedule(o.ID)
+		if scheduleErr != nil {
+			return nil, fmt.Errorf("read repayment schedule: %w", scheduleErr)
+		}
+		if len(items) > 0 {
 			scheduleItems = items
 			for i := range items {
-				if items[i].State != schedules.ItemPaid && items[i].State != schedules.ItemCancelled {
+				if items[i].State != schedules.ItemPaid && items[i].State != schedules.ItemCancelled && items[i].PrincipalDueKobo > items[i].AllocatedKobo {
 					d := items[i].DueAt
 					if due.IsZero() || d.Before(due) {
 						due = d
@@ -571,13 +601,13 @@ func (s *Store) rows(views []credit.View) ([]ObligationRow, error) {
 				}
 			}
 		}
-		if due.IsZero() {
-			due, _ = time.Parse("2006-01-02", v.Request.DueDate)
+		if due.IsZero() && len(scheduleItems) == 0 {
+			due, _ = time.ParseInLocation("2006-01-02", v.Request.DueDate, time.FixedZone("WAT", 60*60))
 			if !due.IsZero() {
 				due = due.UTC()
 			}
 		}
-		if !due.IsZero() {
+		if !due.IsZero() && o.OutstandingKobo > 0 {
 			row.NextDueAt = &due
 		}
 		if err := row.summarizeInstalments(scheduleItems, due, v.Request.GraceHours, now); err != nil {
@@ -760,6 +790,16 @@ func (row *ObligationRow) summarizeInstalments(items []schedules.Item, fallback 
 			continue
 		}
 		remaining -= amount
+		if row.NextDueAt == nil || item.DueAt.Before(*row.NextDueAt) {
+			next := item.DueAt
+			row.NextDueAt = &next
+			row.NextDueKobo = amount
+		} else if item.DueAt.Equal(*row.NextDueAt) {
+			row.NextDueKobo, err = ledger.CheckedAdd(row.NextDueKobo, amount)
+			if err != nil {
+				return err
+			}
+		}
 		deadline := item.CollectionAt
 		if deadline.IsZero() {
 			deadline = item.DueAt.Add(time.Duration(graceHours) * time.Hour)

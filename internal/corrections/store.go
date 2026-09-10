@@ -1,7 +1,9 @@
 package corrections
 
 import (
+	"context"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -51,7 +53,8 @@ type Service interface {
 	StartReview(string, string) (Request, error)
 	Decide(string, string, string, string) (Request, Decision, error)
 	Get(string) (Request, []Decision, error)
-	ListForOrganization(string) []Request
+	ListForOrganization(context.Context, string) ([]Request, error)
+	ReadForBuyer(context.Context, string) ([]ReviewedRequest, error)
 }
 
 var _ Service = (*Store)(nil)
@@ -103,8 +106,7 @@ func (s *Store) Decide(id, reviewerID, outcome, reason string) (Request, Decisio
 	s.next++
 	d := Decision{ID: "correction-decision-" + stringID(s.next), RequestID: id, ReviewerID: reviewerID, Outcome: outcome, Reason: strings.TrimSpace(reason), DecidedAt: now}
 	if outcome == StateApproved {
-		s.next++
-		d.CorrectionID = "correction-event-" + stringID(s.next)
+		d.CorrectionID = d.ID
 	}
 	s.decisions[id] = append(s.decisions[id], d)
 	return clone(*r), d, nil
@@ -119,7 +121,10 @@ func (s *Store) Get(id string) (Request, []Decision, error) {
 	}
 	return clone(*r), append([]Decision(nil), s.decisions[id]...), nil
 }
-func (s *Store) ListForOrganization(orgID string) []Request {
+func (s *Store) ListForOrganization(ctx context.Context, orgID string) ([]Request, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []Request{}
@@ -128,7 +133,13 @@ func (s *Store) ListForOrganization(orgID string) []Request {
 			out = append(out, clone(*r))
 		}
 	}
-	return out
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	return out, nil
 }
 func (s *Store) transition(id, actor, state string) (Request, error) {
 	if actor == "" {

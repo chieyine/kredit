@@ -3,21 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate:api": "pnpm -w exec openapi-typescript api/openapi.yaml -o web/src/lib/api/generated/schema.ts",
-    "predev": "pnpm run generate:api",
     "dev": "vite dev",
-    "prebuild": "pnpm run generate:api",
     "build": "vite build",
     "preview": "vite preview",
-    "precheck": "pnpm run generate:api",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "pretest": "pnpm run generate:api",
     "test": "playwright test",
-    "prelint": "pnpm run generate:api",
     "lint": "svelte-check --tsconfig ./tsconfig.json"
-  },
-  "dependencies": {
-    "openapi-fetch": "0.14.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
@@ -26,6 +17,7 @@
     "@sveltejs/adapter-vercel": "^6.3.4",
     "@sveltejs/kit": "2.70.2",
     "@sveltejs/vite-plugin-svelte": "6.0.0",
+    "@types/node": "^24.13.3",
     "svelte": "5.55.7",
     "svelte-check": "4.3.0",
     "typescript": "5.9.2",

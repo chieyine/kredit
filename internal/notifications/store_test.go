@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -26,6 +27,31 @@ func TestCriticalNotificationFallsBackAndDeduplicates(t *testing.T) {
 	}
 	if len(email.Messages()) != 1 {
 		t.Fatal("duplicate email sent")
+	}
+}
+
+func TestNotificationReplayCannotChangeRecipientOrTerms(t *testing.T) {
+	store := NewStore("secret")
+	provider := NewMockProvider(ChannelEmail)
+	store.RegisterProvider(provider)
+	event := Event{ID: "immutable-event", Type: "PaymentRecorded", RecipientID: "buyer", Email: "buyer@example.test", Priority: PriorityCritical, AmountKobo: 1000, Currency: "NGN", SecurePath: "/buyer/credit/original"}
+	if _, err := store.Emit(context.Background(), event); err != nil {
+		t.Fatal(err)
+	}
+	for _, mutate := range []func(*Event){
+		func(e *Event) { e.RecipientID = "another-buyer" },
+		func(e *Event) { e.AmountKobo++ },
+		func(e *Event) { e.Email = "other@example.test" },
+		func(e *Event) { e.SecurePath = "/buyer/credit/other" },
+	} {
+		changed := event
+		mutate(&changed)
+		if _, err := store.Emit(context.Background(), changed); err == nil {
+			t.Fatal("changed notification intent was accepted")
+		}
+	}
+	if len(provider.Messages()) != 1 {
+		t.Fatal("changed notification caused a second send")
 	}
 }
 
@@ -166,5 +192,24 @@ func TestSupplierReminderConsentIsCheckedBeforeQueueing(t *testing.T) {
 	allowed = true
 	if deliveries, err := s.Emit(context.Background(), event); err != nil || len(deliveries) != 1 {
 		t.Fatalf("granted consent blocked reminder: %+v %v", deliveries, err)
+	}
+}
+
+func TestPrivacyRestrictionBlocksRoutineMessagesButKeepsSecurityMessages(t *testing.T) {
+	s := NewStore("secret")
+	ctx := context.Background()
+	s.SetPreferences("subject", Preferences{PreferredChannel: ChannelEmail, FallbackChannel: ChannelEmail, ProductUpdatesEnabled: true, PaymentRemindersEnabled: true, Timezone: "Africa/Lagos"})
+	s.SetOptionalProcessing(func(context.Context, string) (bool, error) { return false, nil })
+	routine := Event{ID: "privacy-product", Type: "ProductUpdate", RecipientID: "subject", Email: "subject@example.test", Priority: PriorityRoutine}
+	if deliveries, err := s.Emit(ctx, routine); err != nil || len(deliveries) != 0 {
+		t.Fatalf("restricted product message queued: %+v %v", deliveries, err)
+	}
+	s.SetOptionalProcessing(func(context.Context, string) (bool, error) { return false, errors.New("privacy status unavailable") })
+	if _, err := s.Emit(ctx, routine); err == nil {
+		t.Fatal("privacy outage allowed optional processing")
+	}
+	security := Event{ID: "privacy-security", Type: "AccountRecoveryRequested", RecipientID: "subject", Email: "subject@example.test", Priority: PriorityCritical}
+	if deliveries, err := s.Emit(ctx, security); err != nil || len(deliveries) == 0 {
+		t.Fatalf("essential security message blocked: %+v %v", deliveries, err)
 	}
 }

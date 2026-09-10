@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kredit/internal/ledger"
+	"kredit/internal/legalpublication"
 	"kredit/internal/mandates"
 )
 
@@ -16,9 +17,13 @@ func TestTradeLineDrawdownActivationCreatesOneObligationAndLedgerEntry(t *testin
 	store := NewStore(mandates.NewMockProvider(), ledgerStore)
 	now := time.Now().UTC()
 	input := TradeLineActivationInput{DrawdownID: "drawdown-1", TradeLineID: "line-1", SupplierOrganizationID: "org-1", BuyerUserID: "buyer-1", BuyerBusinessID: "business-1", MandateID: "mandate-1", PrincipalKobo: 125000, GoodsDescription: "shop inventory", DueDate: "2026-09-30", GraceHours: 24, CollectionAt: now.Add(24 * time.Hour), TermsVersion: "terms-v1", DrawdownAgreementHash: "accepted-drawdown-hash", BuyerConfirmedAt: now.Add(-2 * time.Hour), ReleaseActorID: "supplier-user", DeliveryMethod: "courier", ReleasedAt: now.Add(-time.Hour), ReceiptActorID: "buyer-1", ReceiptAt: now}
+	input.LegalVersions = &legalpublication.Versions{Terms: "legal-terms-v2", Privacy: "legal-privacy-v4"}
 	view, transaction, err := store.ActivateTradeLineDrawdown(input)
 	if err != nil || transaction == nil || view.Obligation == nil || view.Request.ID != input.DrawdownID || view.Obligation.PrincipalKobo != input.PrincipalKobo {
 		t.Fatalf("activation incomplete: view=%+v transaction=%+v err=%v", view, transaction, err)
+	}
+	if view.Agreement.TermsVersion != input.LegalVersions.Terms || view.Agreement.PrivacyVersion != input.LegalVersions.Privacy {
+		t.Fatal("activation lost reserved legal versions")
 	}
 	replayed, secondTransaction, err := store.ActivateTradeLineDrawdown(input)
 	if err != nil || secondTransaction != nil || replayed.Obligation == nil || replayed.Obligation.ID != view.Obligation.ID {
@@ -28,6 +33,8 @@ func TestTradeLineDrawdownActivationCreatesOneObligationAndLedgerEntry(t *testin
 
 func TestInstalmentTermsArePartOfImmutableAgreement(t *testing.T) {
 	store := NewStore(mandates.NewMockProvider(), ledger.NewStore())
+	versions := legalpublication.Versions{Terms: "legal-terms-v2", Privacy: "legal-privacy-v3"}
+	store.SetLegalReader(func() (legalpublication.Versions, error) { return versions, nil })
 	created, err := store.Create(CreateInput{SupplierOrganizationID: "org", SupplierLegalName: "Supplier", BuyerUserID: "buyer", BuyerBusinessID: "biz", BuyerLegalName: "Buyer", PrincipalKobo: 120000, GoodsDescription: "goods", DueDate: "2026-09-30", CollectionAt: time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC), ScheduleType: "equal", ScheduleCount: 3, ScheduleCadence: "monthly", MonthEndPolicy: "last_day", CreatedBy: "creator"})
 	if err != nil {
 		t.Fatal(err)
@@ -39,6 +46,9 @@ func TestInstalmentTermsArePartOfImmutableAgreement(t *testing.T) {
 	var canonical map[string]any
 	if err := json.Unmarshal(view.Agreement.CanonicalJSON, &canonical); err != nil {
 		t.Fatal(err)
+	}
+	if canonical["terms_version"] != versions.Terms || canonical["privacy_version"] != versions.Privacy {
+		t.Fatal("offer did not pin current publications")
 	}
 	if canonical["schedule_type"] != "equal" || canonical["schedule_cadence"] != "monthly" || canonical["schedule_count"] != float64(3) || canonical["month_end_policy"] != "last_day" {
 		t.Fatalf("schedule terms missing from canonical agreement: %#v", canonical)
@@ -207,6 +217,7 @@ func TestFirstTradeCreditIsNeverActivatedBySilence(t *testing.T) {
 func TestDeemedAcceptanceWaitsTheFullWindowForAKnownBuyer(t *testing.T) {
 	now := time.Now().UTC()
 	store := NewStore(mandates.NewMockProvider(), ledger.NewStore())
+	store.SetDeemedAcceptanceGate(func(context.Context, string) error { return nil })
 	store.now = func() time.Time { return now }
 
 	// The buyer answers their first sale themselves, which is what establishes

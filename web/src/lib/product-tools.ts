@@ -12,9 +12,9 @@ export function readLocal<T>(key: string, fallback: T): T {
 	}
 }
 
-export function writeLocal(key: string, value: unknown) {
-	if (!browser) return;
-	try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage is optional. */ }
+export function writeLocal(key: string, value: unknown): boolean {
+	if (!browser) return false;
+	try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
 }
 
 export function removeLocal(key: string) {

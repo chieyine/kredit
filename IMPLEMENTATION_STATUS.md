@@ -1,6 +1,25 @@
 # Implementation Status
 
-Last updated: 6 September 2026
+Last updated: 9 September 2026
+
+## Current direct audit — in progress
+
+The owner requested every file reviewed and issues fixed before consolidated
+tests. Current coverage and unresolved findings are tracked in the
+[file ledger](docs/launch-audit-2026-09-08/file-by-file-audit.json).
+All source code has been read; the remaining historical audit documents are
+being completed. Reading is not a test pass or proof that all fixes are done.
+
+Supported provider connections and operational settings have owner controls.
+Website/legal publishing, seed reconciliation and recorded cross-file
+follow-ups remain unfinished. New migrations 095–096 are written but not yet
+applied to the isolated audit database. Tests for this continuation are deferred
+until the review and fixes are complete, as requested.
+
+The dated sections below preserve historical work and test outcomes. They are
+not current launch assurance, and their old migration/file counts are not the
+current runtime contract. No live provider, production or remote operation has
+been performed during this continuation.
 
 ## Product and reliability audit implementation (PR #14)
 
@@ -12,7 +31,7 @@ final-commit CI and product-audit workflows before merge. These implementation
 records do not close external approvals, effective branch protection, manual
 accessibility or actual provider certification. Production collections stay disabled.
 
-## Current engineering state (6 September 2026)
+## Historical engineering state (6 September 2026)
 
 Repository-owned engineering work through **Phase 6** is implemented on the reviewed branch. Database migrations run through **086**. Phases 2–5 established tenant isolation, financial-core/real-stack proof, provider-adapter verification tooling and production-assurance controls; Phase 6 closes the remaining repository hardening around fail-closed API linting/tool pinning, request cancellation, script CSP, truthful sitemap evidence, analytics request-context/privacy boundaries and status governance.
 
@@ -26,7 +45,8 @@ See `docs/testing/phase6-hardening.md` for the Phase 6 completion boundary and `
 
 ## Repository code audit (3 September 2026)
 
-Every owned file in the repository was reviewed against this README. Ten defects
+An earlier repository review compared code with this README. Its historical
+coverage does not replace the current direct per-file ledger. Ten defects
 were corrected and locked in with regression tests: an obligation index that made
 activated obligations unreachable to payments, collections and disputes; a
 self-deadlocking auto-activation sweep; an MFA comparison that accepted an empty
@@ -248,7 +268,7 @@ browser mutations, and keeps non-development workers fail-closed until their
 domain handlers are configured. These changes reduce unsafe partial behavior;
 they do not satisfy the remaining durable-repository or external approval gates.
 
-## Current state
+## Historical milestone state
 
 - Pre-milestone — **complete**: source-of-truth documents, ADR/open-question trackers, repository conventions, local configuration contract, and target directory skeleton are present.
 - Milestone 0 — **complete (repository scope)**: executable API/worker/migration/seed/reconciliation processes, PostgreSQL, Goose, River, local stack, generated API artifacts, hardened middleware, transactional outbox dispatch, PWA, production Node build, containers, CI and browser checks are present. External launch evidence remains a release gate.
@@ -435,8 +455,9 @@ protected operations, accessibility and the product-quality gate.
 
 ## Next milestone
 
-No repository-owned README gap remains in the current audit. Complete the
-external pilot gates: manual assistive-technology/device evidence, legal and
+Finish the current file audit, recorded code fixes and admin publication work,
+then run consolidated local verification. Separately, real financial activation
+requires applicable external pilot evidence: manual assistive-technology/device evidence, legal and
 provider approvals, target-environment resilience/security proof, reviewed KPI
 targets, support readiness and launch-owner signatures.
 

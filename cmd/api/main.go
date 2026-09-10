@@ -12,6 +12,7 @@ import (
 	"kredit/internal/config"
 	"kredit/internal/db"
 	"kredit/internal/platform/logging"
+	"kredit/internal/platformsettings"
 	"kredit/internal/web"
 )
 
@@ -42,6 +43,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
+	settings := platformsettings.NewPostgresStore(database.Raw(), platformsettings.NewEncryptor(cfg.SettingsEncryptionKey), nil)
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	cfg, err = config.ApplyStoredConnections(startupCtx, cfg, settings, "", nil)
+	startupCancel()
+	if err != nil {
+		logger.Error("saved connection configuration could not be activated", "error", err)
+		os.Exit(1)
+	}
 	runtime := web.NewRuntimeWithDB(cfg, database)
 	if (cfg.Environment == "production" || cfg.Environment == "staging") && !runtime.DurableDomainReady() {
 		logger.Error("deployment startup blocked: durable domain repositories are not fully wired")
@@ -104,7 +113,9 @@ func runSelfHealthcheckWithClient(client *http.Client) int {
 	if client == nil {
 		return 1
 	}
-	response, err := client.Get(selfHealthcheckURL)
+	probe := *client
+	probe.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := probe.Get(selfHealthcheckURL)
 	if err != nil {
 		return 1
 	}

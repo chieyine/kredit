@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // Tracer owns the process-level OTLP exporter. Development uses a no-op tracer
@@ -24,7 +24,7 @@ type Tracer struct {
 }
 
 func NewNoopTracer() *Tracer {
-	return &Tracer{tracer: otel.Tracer("kredit/noop")}
+	return &Tracer{tracer: noop.NewTracerProvider().Tracer("kredit/noop")}
 }
 
 func NewTracer(ctx context.Context, endpoint, serviceName string) (*Tracer, error) {

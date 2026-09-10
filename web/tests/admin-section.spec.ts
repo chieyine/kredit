@@ -40,6 +40,7 @@ test('the admin section exposes the main platform work without dead screens', as
 				users: [
 					{
 						id: 'user-1',
+                        version: 1,
 						display_name: 'Ada Okafor',
 						identifier: 'ada@example.com',
 						status: 'active',
@@ -119,8 +120,9 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 
 	const more = page.getByRole('dialog', { name: 'Admin account menu' });
 	await expect(more).toBeVisible();
-	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(20);
+	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(21);
 	await expect(more.getByRole('link', { name: 'Platform settings' })).toBeVisible();
+	await expect(more.getByRole('link', { name: 'Website content' })).toBeVisible();
 	await expect(more.getByRole('link', { name: 'Business settings' })).toBeVisible();
 	await expect(more.getByText('Customer support', { exact: true })).toBeVisible();
 	await expect(more.getByText('Access and control', { exact: true })).toBeVisible();
@@ -138,7 +140,7 @@ test('an administrator can find a person and give access without copying an ID',
 	let submitted: Record<string, unknown> | undefined;
 	await page.route('**/api/v1/ops/team/user-1/roles', async (route) => {
 		submitted = route.request().postDataJSON();
-		await route.fulfill(json({ member: { assignment_id: 'role-1' } }));
+		await route.fulfill(json({ member: { assignment_id: 'role-1', user_id: 'user-1', display_name: 'Ada Okafor', identifier: 'ada@example.com', role: submitted!.role } }));
 	});
 
 	await page.goto('/admin/team');

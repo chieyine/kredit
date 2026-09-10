@@ -2,7 +2,7 @@
 
 Plan date: 29 August 2026
 
-Status: repository-owned implementation complete; external release gates remain open.
+Status: historical August 29 implementation assessment. The September 9 direct audit has reopened repository-owned defects and admin publishing work; see [the current ledger](../launch-audit-2026-09-08/FILE-BY-FILE.md). Historical evidence below does not certify current source.
 
 This plan closes every repository-owned item in
 `docs/operations/readme-gap-audit.md` and prepares the evidence required for the

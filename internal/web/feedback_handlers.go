@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 
 	"kredit/internal/audit"
@@ -19,12 +20,16 @@ func (s *Server) submitProductFeedback(w http.ResponseWriter, r *http.Request) {
 	input.UserID = user.ID
 	if input.Area == "seller" {
 		membership, found := s.runtime.Organizations.Membership(input.OrganizationID, user.ID)
-		if !found || membership.Status == "removed" || membership.Status == "suspended" {
+		if !found || membership.Status != "active" {
 			writeProblem(w, http.StatusForbidden, "organization_forbidden", "you do not have access to this business")
 			return
 		}
 	}
 	entry, err := s.runtime.Feedback.Submit(r.Context(), input)
+	if errors.Is(err, feedback.ErrUnavailable) {
+		writeProblem(w, http.StatusServiceUnavailable, "feedback_unavailable", "We could not confirm that your answer was saved. Please try again.")
+		return
+	}
 	if err != nil {
 		writeProblem(w, http.StatusBadRequest, "invalid_feedback", err.Error())
 		return

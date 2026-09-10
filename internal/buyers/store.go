@@ -14,6 +14,8 @@ import (
 	"kredit/internal/identity"
 )
 
+var ErrPortalNotFound = errors.New("buyer portal profile not found")
+
 type Invitation struct {
 	ID                   string    `json:"id"`
 	OrganizationID       string    `json:"organization_id"`
@@ -192,6 +194,7 @@ type Service interface {
 	InvitationTarget(string) (string, string, error)
 	Accept(context.Context, string, string, AcceptInput) (Portal, error)
 	Portal(string) (Portal, error)
+	ReadPortal(context.Context, string) (Portal, error)
 	ListCustomers(string) []Customer
 	AddBankAccountReference(string, string, string, BankAccountReference) (BankAccountReference, error)
 }
@@ -314,6 +317,9 @@ func (s *Store) InvitationTarget(rawToken string) (string, string, error) {
 }
 
 func (s *Store) Accept(ctx context.Context, rawToken, userID string, input AcceptInput) (Portal, error) {
+	if err := ctx.Err(); err != nil {
+		return Portal{}, err
+	}
 	s.acceptMu.Lock()
 	defer s.acceptMu.Unlock()
 	if userID == "" || strings.TrimSpace(input.FullName) == "" {
@@ -417,9 +423,9 @@ func (s *Store) Accept(ctx context.Context, rawToken, userID string, input Accep
 		return Portal{}, errors.New("identity, business, and authority verification must complete before onboarding")
 	}
 	s.mu.Lock()
-	if record.Invitation.Status != "pending" {
+	if record.Invitation.Status != "pending" || !s.now().Before(record.Invitation.ExpiresAt) {
 		s.mu.Unlock()
-		return Portal{}, errors.New("invitation was accepted by another session")
+		return Portal{}, errors.New("invitation was accepted or expired during verification")
 	}
 	record.Invitation.Status = "accepted"
 	record.Invitation.AcceptedAt = s.now()
@@ -444,11 +450,18 @@ func verificationComplete(session identity.VerificationSession) bool {
 }
 
 func (s *Store) Portal(userID string) (Portal, error) {
+	return s.ReadPortal(context.Background(), userID)
+}
+
+func (s *Store) ReadPortal(ctx context.Context, userID string) (Portal, error) {
+	if err := ctx.Err(); err != nil {
+		return Portal{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	portal, ok := s.portalForUserLocked(userID)
 	if !ok {
-		return Portal{}, errors.New("buyer portal profile not found")
+		return Portal{}, ErrPortalNotFound
 	}
 	return portal, nil
 }
@@ -459,6 +472,18 @@ func (s *Store) AddBankAccountReference(userID, ownerType, ownerID string, refer
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	owned := false
+	switch ownerType {
+	case "person":
+		person := s.persons[ownerID]
+		owned = person != nil && person.UserID == userID
+	case "business":
+		business := s.businesses[ownerID]
+		owned = business != nil && business.OwnerUserID == userID
+	}
+	if !owned {
+		return BankAccountReference{}, errors.New("bank account owner is not accessible")
+	}
 	reference.ID = s.newID()
 	reference.OwnerType = ownerType
 	reference.OwnerID = ownerID

@@ -15,7 +15,7 @@
 | consent | consent type/version/timestamp/evidence hash | PostgreSQL | append-only history |
 
 The authoritative per-field register is `docs/compliance/data-inventory.tsv`;
-its catalog check currently covers all 943 persisted production fields.
+its catalog check compares the register with the installed schema. Historical field counts below describe their migration checkpoints, not the current schema.
 Retention and lawful-basis values remain marked pending until legal/compliance
 approval, which keeps the production release gate fail-closed.
 

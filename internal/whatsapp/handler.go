@@ -8,10 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,7 +42,7 @@ type Event struct {
 type Handler struct {
 	mu     sync.Mutex
 	secret []byte
-	seen   map[string]bool
+	seen   map[string]string
 	parser func(string) (Command, error)
 	pool   *pgxpool.Pool
 }
@@ -54,7 +54,7 @@ func NewPostgresHandler(pool *pgxpool.Pool, secret string) *Handler {
 }
 
 func NewHandler(secret string) *Handler {
-	return &Handler{secret: []byte(secret), seen: map[string]bool{}, parser: ParseCommand}
+	return &Handler{secret: []byte(secret), seen: map[string]string{}, parser: ParseCommand}
 }
 func (h *Handler) Sign(event Event) string {
 	payload := event.ID + "|" + event.From + "|" + event.Text
@@ -63,6 +63,9 @@ func (h *Handler) Sign(event Event) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 func (h *Handler) Verify(event Event) bool {
+	if len(h.secret) == 0 || event.ID == "" || event.From == "" || len(event.ID) > 512 || len(event.From) > 64 || len(event.Text) > 4096 || strings.ContainsAny(event.ID+event.From, "|\r\n") {
+		return false
+	}
 	expected := h.Sign(event)
 	return hmac.Equal([]byte(expected), []byte(event.Signature))
 }
@@ -70,58 +73,72 @@ func (h *Handler) Handle(ctx context.Context, event Event) (Command, error) {
 	if !h.Verify(event) {
 		return Command{}, errors.New("invalid WhatsApp webhook signature")
 	}
+	payloadHash := sha256.Sum256([]byte(event.ID + "|" + event.From + "|" + event.Text))
+	fingerprint := hex.EncodeToString(payloadHash[:])
 	if h.pool != nil {
 		senderHash := sha256.Sum256([]byte(event.From))
-		payloadHash := sha256.Sum256([]byte(event.ID + "|" + event.From + "|" + event.Text))
-		var inserted string
-		err := h.pool.QueryRow(ctx, `INSERT INTO app.messaging_events(provider,provider_event_id,sender,payload_hash) VALUES('whatsapp',$1,$2,$3) ON CONFLICT(provider,provider_event_id) DO NOTHING RETURNING id::text`, event.ID, hex.EncodeToString(senderHash[:]), hex.EncodeToString(payloadHash[:])).Scan(&inserted)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Command{}, nil
-		}
-		if err != nil {
-			return Command{}, err
-		}
 		command, parseErr := h.parser(event.Text)
 		commandType := command.Kind
 		if commandType == "" {
 			commandType = CommandUnknown
 		}
-		_, updateErr := h.pool.Exec(ctx, `UPDATE app.messaging_events SET command_type=$2,processed_at=now() WHERE id=$1::uuid`, inserted, commandType)
-		if updateErr != nil {
-			return Command{}, updateErr
+		var inserted string
+		err := h.pool.QueryRow(ctx, `INSERT INTO app.messaging_events(provider,provider_event_id,sender,payload_hash,command_type,processed_at) VALUES('whatsapp',$1,$2,$3,$4,now()) ON CONFLICT(provider,provider_event_id) DO NOTHING RETURNING id::text`, event.ID, hex.EncodeToString(senderHash[:]), fingerprint, commandType).Scan(&inserted)
+		if errors.Is(err, pgx.ErrNoRows) {
+			var original string
+			if err := h.pool.QueryRow(ctx, `SELECT payload_hash FROM app.messaging_events WHERE provider='whatsapp' AND provider_event_id=$1`, event.ID).Scan(&original); err != nil {
+				return Command{}, err
+			}
+			if original != fingerprint {
+				return Command{}, errors.New("WhatsApp event identifier was reused for different content")
+			}
+			return Command{}, nil
+		}
+		if err != nil {
+			return Command{}, err
 		}
 		return command, parseErr
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.seen[event.ID] {
+	if original, exists := h.seen[event.ID]; exists {
+		if original != fingerprint {
+			return Command{}, errors.New("WhatsApp event identifier was reused for different content")
+		}
 		return Command{}, nil
 	}
-	h.seen[event.ID] = true
+	h.seen[event.ID] = fingerprint
 	return h.parser(event.Text)
 }
 
 func ParseCommand(text string) (Command, error) {
+	if len(text) > 4096 {
+		return Command{}, errors.New("command is too long")
+	}
 	normalized := strings.TrimSpace(text)
 	lower := strings.ToLower(normalized)
 	if normalized == "" {
 		return Command{Kind: CommandUnknown}, errors.New("empty command")
 	}
-	if strings.HasPrefix(lower, "create credit") {
+	if lower == "create credit" || strings.HasPrefix(lower, "create credit ") || strings.HasPrefix(lower, "create credit\n") {
 		body := strings.TrimSpace(normalized[len("create credit"):])
 		parts := strings.Split(body, ",")
 		if len(parts) < 3 {
 			return Command{}, errors.New("create credit requires buyer, amount, and due date")
 		}
-		amount, err := parseAmount(parts[1])
+		buyer := strings.TrimSpace(parts[0])
+		if buyer == "" {
+			return Command{}, errors.New("buyer name is required")
+		}
+		amount, err := parseAmount(strings.Join(parts[1:len(parts)-1], ","))
 		if err != nil {
 			return Command{}, err
 		}
-		due := strings.TrimSpace(parts[2])
-		if !regexp.MustCompile(`^\d{1,2} [A-Za-z]+ \d{4}$`).MatchString(due) {
+		due := strings.TrimSpace(parts[len(parts)-1])
+		if _, err := time.Parse("2 January 2006", due); err != nil {
 			return Command{}, errors.New("due date must be like 30 September 2026")
 		}
-		return Command{Kind: CommandCreateCredit, BuyerName: strings.TrimSpace(parts[0]), AmountKobo: amount, DueDate: due, RequiresConfirmation: true}, nil
+		return Command{Kind: CommandCreateCredit, BuyerName: buyer, AmountKobo: amount, DueDate: due, RequiresConfirmation: true}, nil
 	}
 	if strings.Contains(lower, " paid ") {
 		index := strings.Index(lower, " paid ")
@@ -141,6 +158,9 @@ func ParseCommand(text string) (Command, error) {
 	return Command{Kind: CommandUnknown}, errors.New("unsupported command")
 }
 func parseAmount(value string) (int64, error) {
+	if len(value) > 128 {
+		return 0, errors.New("amount is too long")
+	}
 	clean := strings.ToLower(strings.TrimSpace(value))
 	clean = strings.ReplaceAll(clean, "₦", "")
 	clean = strings.ReplaceAll(clean, "ngn", "")

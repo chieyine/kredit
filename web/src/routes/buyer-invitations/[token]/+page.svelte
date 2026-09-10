@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { idempotencyKey } from '$lib/api/client';
+	import { checkedJSON, LatestRequest, record, text, publicError, RequestError } from '$lib/api/reliable';
+	import { MutationIntent } from '$lib/api/mutation';
 
 	type Preview = {
 		invitation: {
@@ -15,57 +16,69 @@
 		supplier: { legal_name: string; trading_name: string };
 	};
 
-	let preview: Preview | null = null;
-	let challengeId = '';
-	let developmentCode = '';
-	let code = '';
-	let fullName = '';
-	let loading = true;
-	let error = '';
-	let acceptanceKey = '';
+	let preview = $state<Preview | null>(null);
+	let challengeId = $state('');
+	let developmentCode = $state('');
+	let code = $state('');
+	let fullName = $state('');
+	let loading = $state(true);
+	let error = $state('');
+	let busy = $state(false);
+	const reads = new LatestRequest();
+	let acceptance = $state<MutationIntent | null>(null);
+	let activeToken = '';
+	const invitationPath = () => `/api/v1/buyer-invitations/${encodeURIComponent(activeToken)}`;
 
 	async function loadPreview() {
-		const response = await fetch(`/api/v1/buyer-invitations/${page.params.token}`);
-		if (!response.ok) {
-			error = 'This invitation has expired, or it is no longer valid. Ask the seller to send you a new link.';
-			return;
-		}
-		preview = await response.json();
+		const request = reads.begin(); loading = true; error = ''; preview = null;
+		try {
+			const result = await checkedJSON(invitationPath(), value => {
+				const row = record(value), invitation = record(row.invitation), supplier = record(row.supplier);
+				for (const key of ['proposed_legal_name','proposed_business_type','proposed_address','proposed_industry','expires_at']) text(invitation[key]);
+				if (!Number.isFinite(Date.parse(String(invitation.expires_at)))) throw new Error('Invalid invitation');
+				text(supplier.legal_name); text(supplier.trading_name);
+				return row as unknown as Preview;
+			}, { signal: request.signal });
+			if (request.current()) preview = result;
+		} catch (cause) {
+			if (request.current()) error = cause instanceof RequestError && [404,410].includes(cause.status)
+				? 'This invitation has expired, or it is no longer valid. Ask the seller to send you a new link.'
+				: publicError(cause, 'this invitation');
+		} finally { if (request.current()) loading = false; }
 	}
-
 	async function requestCode() {
-		error = '';
-		const response = await fetch(`/api/v1/buyer-invitations/${page.params.token}/otp`, { method: 'POST' });
-		const body = await response.json();
-		if (!response.ok) {
-			error = body.detail ?? 'We could not send your six-digit code. Please try again.';
-			return;
-		}
-		challengeId = body.challenge_id;
-		developmentCode = body.development_code ?? '';
+		if (busy || acceptance?.unresolved) return; const token = activeToken; busy = true; error = '';
+		try {
+			const result = await checkedJSON(invitationPath()+'/otp', value => {
+				const row=record(value); const id=text(row.challenge_id); if(!id)throw new Error('Missing challenge');
+				return { id, developmentCode: typeof row.development_code==='string'?row.development_code:'' };
+			}, {method:'POST'});
+			if (token !== activeToken) return;
+			challengeId=result.id; developmentCode=result.developmentCode; code='';
+		} catch(cause) { if (token === activeToken) error=publicError(cause,'code delivery'); }
+		finally { if (token === activeToken) busy=false; }
 	}
-
 	async function accept() {
-		error = '';
-		if (!acceptanceKey) acceptanceKey = idempotencyKey();
-		const response = await fetch(`/api/v1/buyer-invitations/${page.params.token}/accept`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json', 'Idempotency-Key': acceptanceKey },
-			body: JSON.stringify({ challenge_id: challengeId, code, full_name: fullName })
-		});
-		const body = await response.json();
-		if (!response.ok) {
-			if (response.status < 500 && (body.title ?? body.code) !== 'idempotency_in_progress') acceptanceKey = '';
-			error = body.detail ?? 'We could not confirm your details. Check the code and try again.';
-			return;
-		}
-		await goto('/buyer');
+		if(busy||!challengeId||!/^\d{6}$/.test(code)||!fullName.trim())return;
+		const token = activeToken; busy=true;error='';
+		try {
+			acceptance ??= new MutationIntent('accept-buyer-invitation',invitationPath()+'/accept');
+			await acceptance.run({challenge_id:challengeId,code,full_name:fullName.trim()},value=>{
+				const row=record(value);text(record(row.user).id);text(record(row.session).id);record(row.portal);return row;
+			});
+			if (token === activeToken) await goto('/buyer');
+		}catch(cause){if (token === activeToken) error=cause instanceof Error?cause.message:'We could not confirm your details.';}
+		finally{if (token === activeToken) busy=false;}
 	}
-
-	onMount(async () => {
-		await loadPreview();
-		loading = false;
+	$effect(() => {
+		const token = page.params.token ?? '';
+		untrack(() => {
+			activeToken = token; acceptance = null; challengeId = ''; developmentCode = ''; code = ''; fullName = ''; busy = false;
+			void loadPreview();
+		});
+		return () => reads.cancel();
 	});
+
 </script>
 
 <svelte:head>
@@ -87,17 +100,18 @@
 				<div><dt>What you sell</dt><dd>{preview.invitation.proposed_industry}</dd></div>
 			</dl>
 			{#if !challengeId}
-				<button class="primary" on:click={requestCode}>Send me my code</button>
+				<button class="primary" disabled={busy} onclick={requestCode}>{busy ? 'Sending…' : 'Send me my code'}</button>
 			{:else}
-				<label>Full name<input bind:value={fullName} autocomplete="name" /></label>
-				<label>The six-digit code we sent you<input bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
+				<label>Full name<input disabled={busy} bind:value={fullName} autocomplete="name" /></label>
+				<label>The six-digit code we sent you<input disabled={busy} bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
+				<button disabled={busy || !!acceptance?.unresolved} onclick={requestCode}>Send a new code</button>
 				{#if developmentCode}<p class="hint">Development code: {developmentCode}</p>{/if}
-				<button class="primary" on:click={accept}>Yes, this is my business</button>
+				<button class="primary" disabled={busy || !fullName.trim() || !/^\d{6}$/.test(code)} onclick={accept}>{busy ? 'Confirming…' : 'Yes, this is my business'}</button>
 			{/if}
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
 		</section>
 	{:else}
-		<p class="error" role="alert">{error}</p>
+		<p class="error" role="alert">{error}</p><button onclick={loadPreview}>Try again</button>
 	{/if}
 </main>
 

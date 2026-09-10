@@ -160,6 +160,9 @@ func (s *Server) createCreditRequest(w http.ResponseWriter, r *http.Request) {
 	for _, item := range in.CustomScheduleItems {
 		customSchedule = append(customSchedule, credit.ScheduleTerm{AmountKobo: ledger.Money(item.AmountKobo), DueDate: item.DueDate})
 	}
+	if !s.requireSaleRiskClear(w, r, orgID, in.BuyerUserID, "credit") {
+		return
+	}
 	req, err := s.runtime.Credit.Create(credit.CreateInput{CollectionPolicy: in.CollectionPolicy, SupplierOrganizationID: orgID, SupplierLegalName: org.LegalName, SupplierTradingName: org.TradingName, BuyerUserID: in.BuyerUserID, BuyerBusinessID: in.BuyerBusinessID, BuyerLegalName: in.BuyerLegalName, BuyerTradingName: in.BuyerTradingName, PrincipalKobo: creditMoney(in.PrincipalKobo), GoodsDescription: in.GoodsDescription, InvoiceReference: in.InvoiceReference, InvoiceDocumentHash: in.InvoiceDocumentHash, DueDate: in.DueDate, GraceHours: in.GraceHours, CollectionAt: in.CollectionAt, ScheduleType: in.ScheduleType, ScheduleCount: in.ScheduleCount, ScheduleCadence: in.ScheduleCadence, MonthEndPolicy: in.MonthEndPolicy, CustomScheduleItems: customSchedule, CreatedBy: user.ID})
 	if err != nil {
 		writeProblem(w, 422, "credit_request_invalid", err.Error())
@@ -240,8 +243,12 @@ func (s *Server) sendCreditRequest(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCSRF(w, r) {
 		return
 	}
-	if _, err := s.runtime.Credit.GetForSupplier(id, orgID); err != nil {
+	existing, readErr := s.runtime.Credit.GetForSupplier(id, orgID)
+	if readErr != nil {
 		writeProblem(w, http.StatusNotFound, "credit_request_not_found", "credit request was not found")
+		return
+	}
+	if !s.requireSaleRiskClear(w, r, orgID, existing.Request.BuyerUserID, "credit") {
 		return
 	}
 	v, err := s.runtime.Credit.Send(id, user.ID)
@@ -292,8 +299,12 @@ func (s *Server) releaseCreditRequest(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	if _, err := s.runtime.Credit.GetForSupplier(id, orgID); err != nil {
+	existing, readErr := s.runtime.Credit.GetForSupplier(id, orgID)
+	if readErr != nil {
 		writeProblem(w, http.StatusNotFound, "credit_request_not_found", "credit request was not found")
+		return
+	}
+	if !s.requireSaleRiskClear(w, r, orgID, existing.Request.BuyerUserID, "release") {
 		return
 	}
 	v, err := s.runtime.Credit.Release(id, orgID, user.ID, in.DeliveryMethod, in.Notes)
@@ -339,10 +350,15 @@ func (s *Server) getBuyerAgreement(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "credit_request_not_found", err.Error())
 		return
 	}
+	document, err := credit.PrintableAgreement(v)
+	if err != nil {
+		writeProblem(w, http.StatusConflict, "agreement_document_unavailable", "The agreed terms could not be verified. Please try again or contact support.")
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Agreement-Hash", v.Agreement.DocumentHash)
 	w.WriteHeader(200)
-	_, _ = w.Write([]byte(credit.PrintableAgreement(v)))
+	_, _ = w.Write([]byte(document))
 }
 
 func (s *Server) getSupplierAgreementDocument(w http.ResponseWriter, r *http.Request) {
@@ -448,13 +464,21 @@ func (s *Server) acceptCreditRequest(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	if _, err := s.runtime.Credit.GetForBuyer(id, user.ID); err != nil {
+	request, err := s.runtime.Credit.GetForBuyer(id, user.ID)
+	if err != nil {
 		writeProblem(w, http.StatusNotFound, "credit_request_not_found", "credit request was not found")
+		return
+	}
+	if !s.requireSaleRiskClear(w, r, request.Request.SupplierOrganizationID, user.ID, "credit") {
 		return
 	}
 	portal, err := s.runtime.Buyers.Portal(user.ID)
 	if err != nil {
 		writeProblem(w, 403, "buyer_profile_required", err.Error())
+		return
+	}
+	if portal.Business.ID != request.Request.BuyerBusinessID || portal.Representative.BusinessID != request.Request.BuyerBusinessID || portal.Representative.PersonID != portal.Person.ID {
+		writeProblem(w, http.StatusForbidden, "buyer_authority_required", "Verified authority for this buyer business is required.")
 		return
 	}
 	v, err := s.runtime.Credit.Accept(id, user.ID, in.AgreementVersionID, in.AgreementHash, in.MandateProviderID, session.AuthenticationLevel, portal.Person.Status == "verified" && len(portal.VerificationCases) > 0, portal.Representative.AuthorityStatus == "verified")
@@ -608,7 +632,7 @@ func (s *Server) reconcilePayments(w http.ResponseWriter, r *http.Request) {
 		RebuildContext(context.Context, string) (ledger.Money, error)
 	})
 	if !ok {
-		writeProblem(w, 503, "payment_unavailable", "Your payment company cannot cancel a request that has already been sent.")
+		writeProblem(w, 503, "payment_unavailable", "Payment reconciliation is temporarily unavailable. Please try again.")
 		return
 	}
 	rebuilt, err := rebuilder.RebuildContext(r.Context(), v.Obligation.ID)
@@ -665,7 +689,7 @@ func (s *Server) reversePayment(w http.ResponseWriter, r *http.Request) {
 		ReverseContext(context.Context, string, string, string) (payments.Payment, error)
 	})
 	if !ok {
-		writeProblem(w, 503, "payment_unavailable", "Your payment company cannot cancel a request that has already been sent.")
+		writeProblem(w, 503, "payment_unavailable", "Payment reversal is temporarily unavailable. Please try again.")
 		return
 	}
 	p, err := contextPayments.GetContext(r.Context(), paymentID)
@@ -728,7 +752,11 @@ func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 	if financialReadError(w, readErr8) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"view": view, "payments": financialRows6, "schedule_items": items, "disputes": financialRows7, "payment_claims": financialRows8})
+	notices, noticeErr := s.collectionNotices(r.Context(), user.ID, obligationID)
+	if financialReadError(w, noticeErr) {
+		return
+	}
+	writeJSON(w, 200, map[string]any{"view": view, "payments": financialRows6, "schedule_items": items, "disputes": financialRows7, "payment_claims": financialRows8, "collection_notices": notices})
 }
 
 func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request) {
@@ -742,10 +770,9 @@ func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	s.runtime.Schedules.Evaluate(time.Now().UTC())
-	schedule, items, err := s.runtime.Schedules.GetForObligation(v.Obligation.ID)
+	schedule, items, err := s.runtime.Schedules.GetForObligationAt(v.Obligation.ID, time.Now().UTC())
 	if err != nil {
-		writeProblem(w, 404, "schedule_not_found", err.Error())
+		financialReadError(w, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"schedule": schedule, "items": items})
@@ -781,10 +808,9 @@ func (s *Server) getBuyerSchedule(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	s.runtime.Schedules.Evaluate(time.Now().UTC())
-	schedule, items, err := s.runtime.Schedules.GetForObligation(v.Obligation.ID)
+	schedule, items, err := s.runtime.Schedules.GetForObligationAt(v.Obligation.ID, time.Now().UTC())
 	if err != nil {
-		writeProblem(w, 404, "schedule_not_found", err.Error())
+		financialReadError(w, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"schedule": schedule, "items": items})
@@ -806,6 +832,9 @@ func (s *Server) createTradeLine(w http.ResponseWriter, r *http.Request) {
 	var in tradeLineInput
 	if err := decodeJSON(w, r, &in); err != nil {
 		writeProblem(w, 400, "invalid_request", err.Error())
+		return
+	}
+	if !s.requireSaleRiskClear(w, r, orgID, in.BuyerUserID, "credit") {
 		return
 	}
 	resolver, ok := s.runtime.Mandates.(mandates.TradeLineResolver)
@@ -901,6 +930,9 @@ func (s *Server) reserveDrawdown(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "trade_line_not_found", "We could not find that customer limit.")
 		return
 	}
+	if !s.requireSaleRiskClear(w, r, orgID, line.BuyerUserID, "credit") {
+		return
+	}
 	var in drawdownInput
 	if err := decodeJSON(w, r, &in); err != nil {
 		writeProblem(w, 400, "invalid_request", err.Error())
@@ -933,6 +965,17 @@ func (s *Server) confirmDrawdown(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := decodeJSON(w, r, &in); err != nil {
 		writeProblem(w, 400, "invalid_request", err.Error())
+		return
+	}
+	if !s.requireDrawdownScope(w, lineID, drawdownID, user.ID, "") {
+		return
+	}
+	selected, exists := s.runtime.TradeLines.Get(lineID)
+	if !exists {
+		writeProblem(w, 404, "trade_line_not_found", "Customer limit was not found.")
+		return
+	}
+	if !s.requireSaleRiskClear(w, r, selected.SupplierOrganizationID, user.ID, "credit") {
 		return
 	}
 	drawdown, line, err := s.runtime.TradeLines.ConfirmDrawdown(drawdownID, user.ID, in.AgreementHash)
@@ -973,6 +1016,12 @@ func (s *Server) releaseDrawdown(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "trade_line_not_found", "We could not find that customer limit.")
 		return
 	}
+	if !s.requireSaleRiskClear(w, r, orgID, line.BuyerUserID, "release") {
+		return
+	}
+	if !s.requireDrawdownScope(w, lineID, drawdownID, "", orgID) {
+		return
+	}
 	drawdown, updated, err := s.runtime.TradeLines.ReleaseDrawdown(tradelines.ReleaseInput{DrawdownID: drawdownID, SupplierOrganizationID: orgID, ActorID: user.ID, DeliveryMethod: in.DeliveryMethod, Notes: in.Notes, EvidenceReference: in.EvidenceReference})
 	if err != nil {
 		writeProblem(w, 409, "drawdown_release_failed", err.Error())
@@ -1002,6 +1051,9 @@ func (s *Server) receiptDrawdown(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
+	if !s.requireDrawdownScope(w, lineID, drawdownID, user.ID, "") {
+		return
+	}
 	drawdown, line, err := s.runtime.TradeLines.RecordDrawdownReceipt(tradelines.ReceiptInput{DrawdownID: drawdownID, BuyerUserID: user.ID, State: in.State, IssueReason: in.IssueReason})
 	if err != nil || line.ID != lineID {
 		writeProblem(w, 409, "drawdown_receipt_failed", errString(err, "drawdown receipt failed"))
@@ -1020,6 +1072,28 @@ func (s *Server) receiptDrawdown(w http.ResponseWriter, r *http.Request) {
 		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "drawdown-receipt-confirmed:" + drawdown.ID, Type: "TradeLineDrawdownReceiptConfirmed", OrganizationID: line.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(drawdown.PrincipalKobo), Currency: "NGN", Reference: drawdown.ID, NextAction: "The obligation and schedule are now active", SecurePath: "/app/trade-lines/" + line.ID})
 	}
 	writeJSON(w, 200, map[string]any{"drawdown": drawdown, "trade_line": line})
+}
+
+// Validate the route's parent before a command can change a drawdown. Checking
+// the returned line afterwards would report failure after committing the change.
+func (s *Server) requireDrawdownScope(w http.ResponseWriter, lineID, drawdownID, buyerID, organizationID string) bool {
+	line, exists := s.runtime.TradeLines.Get(lineID)
+	if !exists || (buyerID == "" && organizationID == "") || (buyerID != "" && line.BuyerUserID != buyerID) || (organizationID != "" && line.SupplierOrganizationID != organizationID) {
+		writeProblem(w, http.StatusNotFound, "trade_line_not_found", "We could not find that customer limit.")
+		return false
+	}
+	statement, err := s.runtime.TradeLines.Statement(lineID)
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "drawdown_unavailable", "We could not verify that purchase. Please try again.")
+		return false
+	}
+	for _, drawdown := range statement.Drawdowns {
+		if drawdown.ID == drawdownID && drawdown.TradeLineID == lineID {
+			return true
+		}
+	}
+	writeProblem(w, http.StatusNotFound, "drawdown_not_found", "We could not find that purchase under this customer limit.")
+	return false
 }
 
 func (s *Server) cancelDrawdown(w http.ResponseWriter, r *http.Request) {
@@ -1630,7 +1704,12 @@ func (s *Server) listOperationActions(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadAudit); !ok {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"actions": s.runtime.Operations.ListForOrganization(orgID)})
+	actions, err := s.runtime.Operations.ListForOrganization(r.Context(), orgID)
+	if err != nil {
+		writeProblem(w, http.StatusServiceUnavailable, "operation_history_unavailable", "We could not load your business activity. Please try again.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"actions": actions})
 }
 
 func (s *Server) whatsappWebhook(w http.ResponseWriter, r *http.Request) {
@@ -1657,4 +1736,29 @@ func (s *Server) myNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"notifications": s.runtime.Notifications.ListDeliveries(user.ID)})
+}
+
+// Credit and release holds apply to both parties. Reporting payments, declining
+// offers and recording delivery problems remain available while a hold is active.
+func (s *Server) requireSaleRiskClear(w http.ResponseWriter, r *http.Request, organizationID, buyerID, scope string) bool {
+	if s.runtime.PlatformOps == nil {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	for _, target := range []struct{ kind, id string }{{"supplier", organizationID}, {"buyer", buyerID}} {
+		if target.id == "" {
+			continue
+		}
+		blocked, err := s.runtime.PlatformOps.ActiveHold(ctx, target.kind, target.id, scope)
+		if err != nil {
+			writeProblem(w, http.StatusServiceUnavailable, "risk_hold_unavailable", "Risk hold status could not be verified. Try again.")
+			return false
+		}
+		if blocked {
+			writeProblem(w, http.StatusLocked, "risk_hold_active", "This action is blocked by an active risk hold.")
+			return false
+		}
+	}
+	return true
 }

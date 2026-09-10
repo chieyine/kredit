@@ -14,7 +14,7 @@ import (
 )
 
 func TestRenderHTMLIncludesRequiredEvidence(t *testing.T) {
-	canonical := []byte(`{"principal_kobo":120000000}`)
+	canonical := []byte(`{"supplier_legal_name":"ABC Pharmaceuticals Ltd","buyer_legal_name":"Royal Pharmacy Ltd","goods_description":"Inventory","invoice_document_hash":"invoice-sha256","principal_kobo":120000000,"currency":"NGN","due_date":"2026-09-30","terms_version":"terms-v1","privacy_version":"privacy-v1"}`)
 	digest := sha256.Sum256(canonical)
 	now := time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC)
 	view := credit.View{
@@ -30,6 +30,17 @@ func TestRenderHTMLIncludesRequiredEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(body)
+	view.Request.PrincipalKobo = 999999999
+	view.Request.GoodsDescription = "MUTATED GOODS"
+	view.Request.SupplierLegalName = "MUTATED SUPPLIER"
+	changed, err := RenderHTML(DocumentData{View: view})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(changed), "MUTATED") || strings.Contains(string(changed), "9999999.99") || !strings.Contains(string(changed), "NGN 1200000.00") {
+		t.Fatal("printable agreement trusted mutable fields instead of verified canonical terms")
+	}
+
 	for _, expected := range []string{"ABC Pharmaceuticals Ltd", "Royal Pharmacy Ltd", "Inventory", "approved-provider", "invoice-sha256", hex.EncodeToString(digest[:]), "Print or save as PDF"} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("document missing %q", expected)

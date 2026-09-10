@@ -2,6 +2,7 @@ package reports
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -22,16 +23,29 @@ func TestPostgresAnalyticsIsPrivacySafeAndRestartSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	store := NewPostgresStore(pool, Source{})
+	now := time.Now().UTC()
+	store := NewPostgresStore(pool, Source{Now: func() time.Time { return now }})
 	event, err := store.Track("report.viewed", "restricted-subject", "reporting", map[string]string{"surface": "supplier"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM app.analytics_events WHERE id=$1::uuid`, event.ID) }()
+	replayed, err := store.Track("report.viewed", "restricted-subject", "changed purpose", map[string]string{"surface": "buyer"})
+	if err != nil || replayed.ID != event.ID || replayed.Purpose != event.Purpose || replayed.Metadata["surface"] != "supplier" {
+		t.Fatalf("replay did not return the stored event: %+v, %v", replayed, err)
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if events, err := store.ListAnalyticsContext(cancelled); !errors.Is(err, context.Canceled) || events != nil {
+		t.Fatalf("cancelled analytics read hid its failure: %+v, %v", events, err)
+	}
 	if event.SubjectID == "restricted-subject" {
 		t.Fatal("raw subject was retained")
 	}
-	loaded := NewPostgresStore(pool, Source{}).ListAnalytics()
+	loaded, err := NewPostgresStore(pool, Source{}).ListAnalytics()
+	if err != nil {
+		t.Fatal(err)
+	}
 	found := false
 	for _, item := range loaded {
 		if item.ID == event.ID {

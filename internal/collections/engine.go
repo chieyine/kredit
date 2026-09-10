@@ -425,6 +425,16 @@ func (e *Engine) ProcessWebhook(_ context.Context, event Webhook) (Attempt, erro
 		e.mu.Unlock()
 		return out, nil
 	}
+	if attempt.State == AttemptCancelled {
+		if event.SucceededAmountKobo != 0 || event.State == ProviderSucceeded || event.State == ProviderPartial {
+			e.mu.Unlock()
+			return Attempt{}, errors.New("provider outcome conflicts with confirmed cancellation; controlled reconciliation required")
+		}
+		e.events[event.EventID] = true
+		out := cloneAttempt(*attempt)
+		e.mu.Unlock()
+		return out, nil
+	}
 	if attempt.State == AttemptSucceeded || attempt.State == AttemptPartial || attempt.State == AttemptFailed {
 		if (event.State == ProviderSucceeded || event.State == ProviderPartial) && event.SucceededAmountKobo != attempt.SucceededAmountKobo || event.State == ProviderFailed && attempt.SucceededAmountKobo > 0 {
 			e.mu.Unlock()
@@ -615,6 +625,9 @@ func (e *Engine) Cancel(ctx context.Context, attemptID string) (Attempt, error) 
 	}
 	if response.State != ProviderReversed {
 		return Attempt{}, errors.New("provider did not confirm cancellation")
+	}
+	if response.ProviderCollectionID != providerID {
+		return Attempt{}, errors.New("provider cancellation returned a different collection identity")
 	}
 	e.mu.Lock()
 	if attempt.State != AttemptPending && attempt.State != AttemptSubmitted && attempt.State != AttemptUnknown {

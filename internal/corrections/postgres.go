@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"kredit/internal/identifier"
 
@@ -27,7 +28,9 @@ func (s *PostgresStore) Open(organizationID, subjectType, subjectID, sourceEvent
 		return Request{}, err
 	}
 	id := identifier.New()
-	row := s.pool.QueryRow(context.Background(), `INSERT INTO app.correction_requests(id,organization_id,subject_type,subject_id,source_event_id,requested_by,reason,evidence,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,NULLIF($5,''),$6::uuid,$7,$8::jsonb,'OPEN') RETURNING id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at`, id, organizationID, subjectType, subjectID, strings.TrimSpace(sourceEventID), requestedBy, strings.TrimSpace(reason), encodedEvidence)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	row := s.pool.QueryRow(ctx, `INSERT INTO app.correction_requests(id,organization_id,subject_type,subject_id,source_event_id,requested_by,reason,evidence,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,NULLIF($5,''),$6::uuid,$7,$8::jsonb,'OPEN') RETURNING id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at`, id, organizationID, subjectType, subjectID, strings.TrimSpace(sourceEventID), requestedBy, strings.TrimSpace(reason), encodedEvidence)
 	return scanRequest(row)
 }
 
@@ -35,7 +38,9 @@ func (s *PostgresStore) StartReview(id, reviewerID string) (Request, error) {
 	if id == "" || reviewerID == "" {
 		return Request{}, errors.New("correction request and reviewer are required")
 	}
-	row := s.pool.QueryRow(context.Background(), `UPDATE app.correction_requests SET state='UNDER_REVIEW',updated_at=now() WHERE id=$1::uuid AND state='OPEN' RETURNING id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at`, id)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	row := s.pool.QueryRow(ctx, `UPDATE app.correction_requests SET state='UNDER_REVIEW',updated_at=now() WHERE id=$1::uuid AND state='OPEN' RETURNING id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at`, id)
 	request, err := scanRequest(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Request{}, errors.New("correction request cannot enter review")
@@ -50,7 +55,8 @@ func (s *PostgresStore) Decide(id, reviewerID, outcome, reason string) (Request,
 	if outcome != StateApproved && outcome != StateRejected {
 		return Request{}, Decision{}, errors.New("outcome must be approved or rejected")
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Request{}, Decision{}, err
@@ -74,7 +80,7 @@ func (s *PostgresStore) Decide(id, reviewerID, outcome, reason string) (Request,
 	}
 	decision := Decision{ID: identifier.New(), RequestID: id, ReviewerID: reviewerID, Outcome: outcome, Reason: strings.TrimSpace(reason)}
 	if outcome == StateApproved {
-		decision.CorrectionID = "correction-event-" + identifier.New()
+		decision.CorrectionID = decision.ID
 	}
 	if err := tx.QueryRow(ctx, `INSERT INTO app.correction_decisions(id,request_id,reviewer_id,outcome,reason,correction_event_id) VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,NULLIF($6,'')) RETURNING decided_at`, decision.ID, id, reviewerID, outcome, decision.Reason, decision.CorrectionID).Scan(&decision.DecidedAt); err != nil {
 		return Request{}, Decision{}, err
@@ -88,7 +94,9 @@ func (s *PostgresStore) Decide(id, reviewerID, outcome, reason string) (Request,
 }
 
 func (s *PostgresStore) Get(id string) (Request, []Decision, error) {
-	request, err := scanRequest(s.pool.QueryRow(context.Background(), `SELECT id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at FROM app.correction_requests WHERE id=$1::uuid`, id))
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	request, err := scanRequest(s.pool.QueryRow(ctx, `SELECT id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at FROM app.correction_requests WHERE id=$1::uuid`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Request{}, nil, errors.New("correction request not found")
 	}
@@ -99,24 +107,24 @@ func (s *PostgresStore) Get(id string) (Request, []Decision, error) {
 	return request, decisions, err
 }
 
-func (s *PostgresStore) ListForOrganization(organizationID string) []Request {
-	rows, err := s.pool.Query(context.Background(), `SELECT id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at FROM app.correction_requests WHERE organization_id=$1::uuid ORDER BY created_at DESC`, organizationID)
+func (s *PostgresStore) ListForOrganization(ctx context.Context, organizationID string) ([]Request, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at FROM app.correction_requests WHERE organization_id=$1::uuid ORDER BY created_at DESC,id DESC`, organizationID)
 	if err != nil {
-		return []Request{}
+		return nil, err
 	}
 	defer rows.Close()
 	out := []Request{}
 	for rows.Next() {
 		request, scanErr := scanRequest(rows)
 		if scanErr != nil {
-			return []Request{}
+			return nil, scanErr
 		}
 		out = append(out, request)
 	}
-	if rows.Err() != nil {
-		return []Request{}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-	return out
+	return out, nil
 }
 
 type correctionScanner interface{ Scan(...any) error }
@@ -132,7 +140,9 @@ func scanRequest(row correctionScanner) (Request, error) {
 }
 
 func (s *PostgresStore) decisions(id string) ([]Decision, error) {
-	rows, err := s.pool.Query(context.Background(), `SELECT id::text,request_id::text,reviewer_id::text,outcome,reason,COALESCE(correction_event_id,''),decided_at FROM app.correction_decisions WHERE request_id=$1::uuid ORDER BY decided_at`, id)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	rows, err := s.pool.Query(ctx, `SELECT id::text,request_id::text,reviewer_id::text,outcome,reason,COALESCE(correction_event_id,''),decided_at FROM app.correction_decisions WHERE request_id=$1::uuid ORDER BY decided_at`, id)
 	if err != nil {
 		return nil, err
 	}

@@ -175,6 +175,7 @@ test('the entire attention queue counts disputes before ordinary drafts', () => 
   const items = attentionItems('org-a', sales, [], [], [dispute]);
   expect(items).toHaveLength(13); expect(items[0].id).toBe('dispute-dispute-1');
   expect(items[0].href).toContain('organization=org-a');
+  expect(attentionItems('org-a', sales, [], [], [{ ...dispute, state: 'PARTIALLY_RESOLVED' }])[0].id).toBe('dispute-dispute-1');
 });
 
 test('date labels reject invalid calendar dates', () => {
@@ -188,4 +189,18 @@ test('every sample uses one internally consistent sale, not invented activity', 
   expect(DEMO_BALANCE_KOBO).toBe(80000000);
   expect(DEMO_PAID_PERCENT).toBeCloseTo(33.3333333);
   expect(DEMO_SALE.reference).toContain('EXAMPLE');
+});
+
+
+test('confirmed unresolved financial evidence allows a new review attempt after correction', async () => {
+  const storage = new MemoryStorage(), keys: string[] = [];
+  const intent = new MutationIntent('review', '/financial-review', storage);
+  globalThis.fetch = async (_url, init) => {
+    keys.push(new Headers(init?.headers).get('Idempotency-Key')!);
+    return keys.length === 1 ? json({ title: 'financial_difference_unresolved' }, 409) : json({ status: 'applied' });
+  };
+  await expect(intent.run({ action: 'resolve' }, record)).rejects.toMatchObject({ outcome: 'rejected' });
+  expect(intent.unresolved).toBe(false);
+  await expect(intent.run({ action: 'resolve' }, record)).resolves.toEqual({ status: 'applied' });
+  expect(keys[0]).not.toBe(keys[1]);
 });

@@ -7,13 +7,17 @@ test('financial operator proposes naira amount and independent reviewer approves
  await page.route('**/api/v1/ops/admin-changes?*',r=>r.fulfill({json:{changes}}));
  await page.route('**/api/v1/ops/admin-changes',async r=>{const b=r.request().postDataJSON();expect(b.values.amount_kobo).toBe(2000000);expect(b.kind).toBe('write_off');expect(r.request().headers()['idempotency-key']).toBeTruthy();changes=[{...b,proposed_values:b.values,before_values:{outstanding_kobo:50000000},proposed_by:'maker',proposer:'Finance Operator',state:'pending'}];await r.fulfill({status:201,json:{id:b.id}})});
  await page.route('**/api/v1/ops/admin-changes/*/decision',async r=>{expect(r.request().postDataJSON().action).toBe('approve');changes[0].state='applied';changes[0].approver='Independent Reviewer';await r.fulfill({json:{recorded:true}})});
- await page.goto('/admin/approvals');await page.getByLabel('Sale or obligation reference').fill('debt');await page.getByRole('button',{name:'Load the current details'}).click();await page.getByLabel('Amount (₦)').fill('20,000.00');await page.getByLabel('Proposal expires').fill(new Date(Date.now()+86400000).toISOString().slice(0,16));await page.getByLabel('Reason',{exact:true}).fill('Documented adjustment for returned goods');await page.getByRole('button',{name:'Send for a second person to approve'}).click();await expect(page.getByText('₦20,000.00',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Approve exactly this'})).toHaveCount(0);
+ // This test is about the two-administrator regime, so it says so rather than
+ // relying on whatever the page falls back to when governance cannot be read.
+ await page.route('**/api/v1/ops/governance',r=>r.fulfill({json:{governance:{mode:'delegated_team',updated_at:'2026-09-01T10:00:00Z',reason:'Team mode'}}}));
+ await page.goto('/admin/approvals');await expect(page.getByText('Every correction needs a second administrator to approve it.')).toBeVisible();
+ await page.getByLabel('Sale or obligation reference').fill('debt');await page.getByRole('button',{name:'Load the current details'}).click();await page.getByLabel('Amount (₦)').fill('20,000.00');await page.getByLabel('Proposal expires').fill(new Date(Date.now()+86400000).toISOString().slice(0,16));await page.getByLabel('Reason',{exact:true}).fill('Documented adjustment for returned goods');await page.getByRole('button',{name:'Send for approval'}).click();await expect(page.getByText('₦20,000.00',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Approve exactly this'})).toHaveCount(0);
  actor='checker';roles=['approver'];await page.reload();await page.getByLabel('Decision notes').fill('Independently reviewed supporting evidence');await page.getByRole('button',{name:'Approve exactly this'}).click();await expect(page.getByRole('heading',{name:'write off · applied'})).toBeVisible();await expect(page.getByRole('heading',{name:'Propose a change'})).toHaveCount(0);
 });
 test('buyer reviews dates and must explicitly consent before accepting',async({page,context,baseURL})=>{
  await auth(page,context,baseURL);const proposal:any={id:'change',obligation_id:'debt',state:'awaiting_buyer',reason:'Requested payment extension',expires_at:'2027-01-01T10:00:00Z',items:[{id:'item',principal_due_kobo:2000000,allocated_kobo:0,due_at:'2026-12-01T10:00:00Z'}],dates:[{item_id:'item',due_at:'2026-12-15T10:00:00Z'}]};
  await page.route('**/api/v1/buyer/amendments?*',r=>r.fulfill({json:{changes:[proposal]}}));await page.route('**/api/v1/buyer/amendments/change/decision',async r=>{expect(r.request().postDataJSON().action).toBe('accept');proposal.state='applied';await r.fulfill({json:{recorded:true}})});
- await page.goto('/buyer/amendments');await expect(page.getByRole('cell',{name:'₦20,000.00'})).toBeVisible();await expect(page.getByRole('button',{name:'Yes, I accept these dates'})).toBeDisabled();await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Yes, I accept these dates'}).click();await expect(page.getByRole('status')).toContainText('Your new payment days now apply.');await expect(page.getByRole('heading',{name:'applied',exact:true})).toBeVisible();
+ await page.goto('/buyer/amendments');await expect(page.getByRole('cell',{name:'₦20,000.00'})).toBeVisible();await expect(page.getByRole('button',{name:'Yes, I accept these dates'})).toBeDisabled();await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Yes, I accept these dates'}).click();await expect(page.getByRole('status')).toContainText('Your acceptance was confirmed. The new payment days now apply.');await expect(page.getByRole('heading',{name:'applied',exact:true})).toBeVisible();
 });
 test('inbox records ownership and history exposes previous and proposed values',async({page,context,baseURL})=>{
  await auth(page,context,baseURL);let owner:string|null=null;
@@ -21,4 +25,40 @@ test('inbox records ownership and history exposes previous and proposed values',
  await page.route('**/api/v1/ops/review-assignments',async r=>{expect(r.request().postDataJSON().owner_id).toBe('checker');owner='Independent Reviewer';await r.fulfill({json:{saved:true}})});
  await page.goto('/admin/inbox');await page.getByRole('button',{name:'Manage ownership and deadline'}).click();await page.getByLabel('Reason',{exact:true}).fill('Taking ownership of policy review');await page.getByRole('button',{name:'Assign to me and save the deadline'}).click();await expect(page.getByText('Independent Reviewer',{exact:true})).toBeVisible();
  await page.route('**/api/v1/ops/change-history?*',r=>r.fulfill({json:{items:[{id:'policy',kind:'policy',state:'approved',created_at:'2026-09-03T10:00:00Z',reason:'Pricing review',proposer:'Policy Manager',approver:'Independent Reviewer',before_values:{base_fee_bps:50},after_values:{base_fee_bps:25},events:[]}]}}));await page.goto('/admin/history');await page.getByText('Previous and proposed values').click();await expect(page.getByRole('cell',{name:'0.5%',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'0.25%',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'Export this page as CSV'})).toHaveAttribute('href',/format=csv/);
+});
+
+// Kredit runs with one administrator, so self-approval is the path used every
+// day — and it had no test at all. Self-approval is the only route by which a
+// balance changes without a second pair of eyes, so what it must never do is
+// happen quietly: it needs a written reason, and it lands in the record.
+test('the only administrator approves their own change, with a reason, on the record',async({page,context,baseURL})=>{
+ await auth(page,context,baseURL);let changes:any[]=[];const approvals:any[]=[];
+ await page.route('**/api/v1/ops/capabilities',r=>r.fulfill({json:{actor_id:'owner',roles:['finance_operator','platform_owner']}}));
+ await page.route('**/api/v1/ops/governance',r=>r.fulfill({json:{governance:{mode:'solo_owner',updated_at:'2026-09-01T10:00:00Z',reason:'Single administrator'}}}));
+ await page.route('**/api/v1/ops/change-context?*',r=>r.fulfill({json:{obligation_id:'debt',snapshot:{outstanding_kobo:50000000,items:[]}}}));
+ await page.route('**/api/v1/ops/admin-changes?*',r=>r.fulfill({json:{changes}}));
+ await page.route('**/api/v1/ops/admin-changes',async r=>{const b=r.request().postDataJSON();changes=[{...b,proposed_values:b.values,before_values:{outstanding_kobo:50000000},proposed_by:'owner',proposer:'Owner',state:'pending'}];await r.fulfill({status:201,json:{id:b.id}})});
+ await page.route('**/api/v1/ops/solo-owner/approve',async r=>{const b=r.request().postDataJSON();approvals.push(b);changes[0].state='applied';changes[0].approver='Owner';await r.fulfill({json:{approved:true}})});
+
+ await page.goto('/admin/approvals');
+ await expect(page.getByText('You approve your own corrections, with a fresh authenticator code and a written reason.')).toBeVisible();
+ await page.getByLabel('Sale or obligation reference').fill('debt');
+ await page.getByRole('button',{name:'Load the current details'}).click();
+ await page.getByLabel('Amount (₦)').fill('20,000.00');
+ await page.getByLabel('Proposal expires').fill(new Date(Date.now()+86400000).toISOString().slice(0,16));
+ await page.getByLabel('Reason',{exact:true}).fill('Documented adjustment for returned goods');
+ await page.getByRole('button',{name:'Record this proposal'}).click();
+
+ const approve=page.getByRole('button',{name:'Approve my own change'});
+ await expect(approve).toBeVisible();
+ // No reason yet, so approving one's own change is not available.
+ await expect(approve).toBeDisabled();
+ await page.getByLabel('Decision notes').fill('Checked the returned-goods note against the delivery record');
+ await expect(approve).toBeEnabled();
+ await approve.click();
+
+ await expect(page.getByRole('heading',{name:'write off · applied'})).toBeVisible();
+ expect(approvals).toHaveLength(1);
+ expect(approvals[0].reason).toBe('Checked the returned-goods note against the delivery record');
+ expect(approvals[0].confirm).toBe(true);
 });

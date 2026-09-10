@@ -30,6 +30,11 @@ test.describe('real-stack financial journeys', () => {
 		const me = await login(page, 'owner@abc-pharmaceuticals.test');
 		expect(me.organizations.length).toBeGreaterThan(0);
 		const organization = me.organizations[0];
+		for (const [endpoint, key] of [['customers','customers'],['credit-requests','requests'],['collections','collections'],['overdue','overdue'],['disputes','disputes'],['payment-claims','payment_claims']] as const) {
+			const response=await page.request.get(`/api/v1/organizations/${organization.id}/${endpoint}`);
+			expect(response.status(), endpoint).toBe(200);
+			expect(Array.isArray((await response.json())[key]), endpoint).toBe(true);
+		}
 
 		const paymentsResponse = await page.request.get(`/api/v1/organizations/${organization.id}/payments`);
 		expect(paymentsResponse.status()).toBe(200);
@@ -48,12 +53,20 @@ test.describe('real-stack financial journeys', () => {
 
 		const credit = await page.request.get('/api/v1/buyer/credit-requests');
 		expect(credit.status()).toBe(200);
-		const creditBody = await credit.json() as { requests?: unknown[] };
+		const creditBody = await credit.json() as { requests?: Array<{ request: { id: string; state: string; goods_description: string } }> };
 		expect(creditBody.requests).toBeDefined();
 		expect(creditBody.requests!.length).toBeGreaterThan(0);
 
+		const listRead = page.waitForResponse(response => response.url().endsWith('/api/v1/buyer/credit-requests') && response.request().method() === 'GET');
 		await page.goto('/buyer/requests');
-		await expect(page.getByRole('heading', { name: 'Read it before you say yes.' })).toBeVisible();
+		expect((await listRead).status()).toBe(200);
+		await expect(page.getByRole('heading', { name: 'Sales waiting for you', exact: true })).toBeVisible();
+		const waiting = creditBody.requests!.filter(view => ['SENT', 'BUYER_REVIEWING'].includes(view.request.state));
+		if (waiting.length === 0) await expect(page.getByRole('heading', { name: 'No sale is waiting for you' })).toBeVisible();
+		for (const view of waiting.slice(0, 20)) await expect(page.locator(`a[href="/buyer/credit-requests/${view.request.id}"]`)).toBeVisible();
+		const persisted = creditBody.requests![0].request;
+		await page.goto(`/buyer/credit-requests/${persisted.id}`);
+		await expect(page.getByText(persisted.goods_description, { exact: true }).first()).toBeVisible();
 		await expect(page.getByText(/Service unavailable|We could not open/i)).toHaveCount(0);
 	});
 

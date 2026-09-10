@@ -7,7 +7,10 @@ backup_database_url="${BACKUP_DATABASE_URL:-${DATABASE_DIRECT_URL:-${DATABASE_UR
 backup_dir="${BACKUP_DIR:-$PWD/.tmp/backups}"
 mkdir -p "$backup_dir"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-output="$(mktemp "$backup_dir/kredit-$timestamp-XXXXXX.dump")"
+# BSD and GNU mktemp both randomize a template ending in XXXXXX.
+# Keep the archive extension inside a private, uniquely allocated directory.
+archive_dir="$(mktemp -d "$backup_dir/kredit-$timestamp-XXXXXX")"
+output="$archive_dir/backup.dump"
 # Retain object ACLs, especially revoked PUBLIC access on SECURITY DEFINER
 # functions. Restoring an ACL-stripped archive can silently restore defaults.
 # The destination must have the same named roles provisioned before restore.

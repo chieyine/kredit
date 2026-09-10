@@ -119,3 +119,37 @@ func TestAdminCannotDemoteOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRevokedAdministratorCannotChangeTeamAndInvitationCannotBypassAcceptance(t *testing.T) {
+	s := NewStore()
+	org, _, err := s.Create("owner", CreateInput{LegalName: "Authority fixture", BusinessType: "limited_company", BusinessAddress: "Lagos", Industry: "retail"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = s.Invite("owner", org.ID, "admin@example.test", "email", "admin", access.RoleAdministrator); err != nil {
+		t.Fatal(err)
+	}
+	s.ActivateInvitations("admin")
+	if _, _, err = s.Invite("admin", org.ID, "staff@example.test", "email", "staff", access.RoleSales); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ChangeStatus(org.ID, "owner", "staff", "suspended"); err == nil {
+		t.Fatal("pending invitation could be suspended then restored around acceptance")
+	}
+	if _, err = s.ChangeStatus(org.ID, "owner", "staff", "active"); err == nil {
+		t.Fatal("invitation activated without acceptance")
+	}
+	s.ActivateInvitations("staff")
+	if _, err = s.ChangeRole(org.ID, "admin", "staff", access.RoleFinance); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ChangeStatus(org.ID, "owner", "admin", "removed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ChangeRole(org.ID, "admin", "staff", access.RoleSales); err == nil {
+		t.Fatal("revoked administrator changed a role")
+	}
+	if _, _, err = s.Invite("admin", org.ID, "new@example.test", "email", "new", access.RoleSales); err == nil {
+		t.Fatal("revoked administrator invited another user")
+	}
+}

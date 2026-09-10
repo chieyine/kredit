@@ -32,3 +32,21 @@ func TestStoreRejectsUnboundedMetricNames(t *testing.T) {
 		t.Fatal("unbounded metric name was accepted")
 	}
 }
+
+func TestDurationCountersRemainCumulativeWhenSamplesRotate(t *testing.T) {
+	store := NewStore()
+	store.ObserveDuration("worker", 10*time.Second)
+	for range 4096 {
+		store.ObserveDuration("worker", time.Millisecond)
+	}
+	value := store.Snapshot().Durations["worker"]
+	if value.Count != 4097 || value.SumMilliseconds != 14096 || value.MaxMilliseconds != 10000 {
+		t.Fatalf("sample rotation changed cumulative totals: %+v", value)
+	}
+	if value.P95Milliseconds != 1 || len(store.durations["worker"]) > 2048 {
+		t.Fatal("recent percentile samples are not bounded")
+	}
+	if !strings.Contains(store.Prometheus(), "kredit_worker_milliseconds_count 4097") {
+		t.Fatal("Prometheus count must remain cumulative")
+	}
+}

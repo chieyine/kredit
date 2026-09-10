@@ -177,6 +177,13 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 		return Payment{}, Allocation{}, errors.New("payment date cannot be in the future")
 	}
 	payment := &Payment{ID: s.newID(), ObligationID: input.ObligationID, BuyerUserID: snapshot.BuyerUserID, SupplierOrganizationID: snapshot.SupplierOrganizationID, SourceType: input.SourceType, AmountKobo: input.AmountKobo, Currency: defaultCurrency(input.Currency, snapshot.Currency), Provider: strings.TrimSpace(input.Provider), ProviderReference: strings.TrimSpace(input.ProviderReference), State: StateRecognized, PaidAt: paidAt, RecognizedAt: now, RecordedBy: input.RecordedBy}
+	if payment.SourceType == SourceCollected && !paidAt.Before(snapshot.CollectionAt) {
+		fee, err := snapshot.FeeTerms.Collection(payment.AmountKobo)
+		if err != nil {
+			return Payment{}, Allocation{}, err
+		}
+		payment.CollectionFeeKobo = fee
+	}
 	if _, err := s.ledger.PostPayment(payment.ID, payment.AmountKobo, payment.SourceType, paidAt, "payment:"+input.IdempotencyKey); err != nil {
 		return Payment{}, Allocation{}, err
 	}
@@ -194,8 +201,7 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 		}
 	}
 	if payment.SourceType == SourceCollected && !paidAt.Before(snapshot.CollectionAt) {
-		fee, _ := snapshot.FeeTerms.Collection(payment.AmountKobo)
-		payment.CollectionFeeKobo = fee
+		fee := payment.CollectionFeeKobo
 		if fee > 0 {
 			if _, err = s.ledger.PostCollectionFee(payment.ID, fee, paidAt, "collection-fee:"+input.IdempotencyKey); err != nil {
 				if s.reallocate != nil {

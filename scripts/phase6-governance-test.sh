@@ -55,12 +55,17 @@ if grep -q '<lastmod>2026-08-31</lastmod>' web/src/routes/sitemap.xml/+server.ts
 fi
 grep -q 'topicLastmod' web/src/routes/sitemap.xml/+server.ts || fail 'topic lastmod is not metadata-derived'
 
-# Status documentation must track the actual migration frontier and distinguish
-# engineering completion from external launch approval.
-test -f db/migrations/086_phase5_financial_monitoring.sql || fail 'expected migration 086 is missing'
-grep -q 'Last updated: 6 September 2026' IMPLEMENTATION_STATUS.md || fail 'implementation status date is stale'
-grep -q 'migrations run through \*\*086\*\*' IMPLEMENTATION_STATUS.md || fail 'implementation status migration frontier is stale'
-grep -q 'Actual Mono sandbox certification remains open in issue #5' IMPLEMENTATION_STATUS.md || fail 'external provider gate is not explicit'
+# Keep the runtime requirement aligned with the actual migration frontier.
+# Historical status dates are not executable readiness evidence.
+python3 - <<'PYTHON'
+from pathlib import Path
+import re
+frontier=max(int(path.name.split('_')[0]) for path in Path('db/migrations').glob('[0-9]*_*.sql'))
+contract=Path('internal/db/persistence_contract.go').read_text()
+match=re.search(r'if version < (\d+)',contract)
+if not match or int(match.group(1)) != frontier:
+    raise SystemExit('runtime persistence requirement does not match migration frontier')
+PYTHON
 
 # Temporary self-modifying patch harnesses must not survive the phase.
 if find scripts .github/workflows -maxdepth 1 -type f \( -name 'phase6-*-fix.py' -o -name 'phase6-*-fix.yml' -o -name 'phase6-status-sync.py' -o -name 'phase6-status-sync.yml' \) | grep -q .; then

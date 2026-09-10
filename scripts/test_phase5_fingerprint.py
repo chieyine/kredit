@@ -21,7 +21,7 @@ class FingerprintTests(unittest.TestCase):
         self.assertEqual(line.encode('utf-8'), row_bytes(line))
 
     def test_uri_becomes_explicit_libpq_parameters(self):
-        with patch.dict('os.environ', {'PGHOST': 'wrong', 'PGSERVICE': 'wrong', 'PGOPTIONS': 'unsafe'}):
+        with patch.dict('os.environ', {'PGHOST': 'wrong', 'PGSERVICE': 'wrong', 'PGOPTIONS': 'unsafe'}, clear=True):
             env = connection_environment('postgres://test%40user:p%40ss@127.0.0.1:5432/fixture?sslmode=require')
         self.assertEqual('test@user', env['PGUSER'])
         self.assertEqual('p@ss', env['PGPASSWORD'])
@@ -29,7 +29,7 @@ class FingerprintTests(unittest.TestCase):
         self.assertEqual('127.0.0.1', env['PGHOST'])
         self.assertEqual('require', env['PGSSLMODE'])
         self.assertNotIn('PGSERVICE', env)
-        self.assertNotIn('PGOPTIONS', env)
+        self.assertEqual('-c statement_timeout=300000 -c lock_timeout=10000', env['PGOPTIONS'])
 
     def test_ambiguous_or_unsupported_connections_fail(self):
         for raw in ['', 'postgres://localhost/fixture', 'postgres://user@localhost/',

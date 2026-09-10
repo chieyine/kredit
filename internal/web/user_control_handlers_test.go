@@ -35,6 +35,8 @@ func TestNotificationPrivacyAndRecoverySelfService(t *testing.T) {
 				csrf = c.Value
 			}
 		}
+		blockedExport := doJSON(t, client, "/api/v1/me/privacy-requests/00000000-0000-0000-0000-000000000001/export", http.MethodGet, nil, nil, http.StatusForbidden)
+		_ = blockedExport.Body.Close()
 		enroll := doJSON(t, client, "/api/v1/mfa/totp/enroll", http.MethodPost, map[string]string{}, map[string]string{"X-CSRF-Token": csrf}, http.StatusOK)
 		var mfa struct {
 			Secret string `json:"secret"`
@@ -64,6 +66,8 @@ func TestNotificationPrivacyAndRecoverySelfService(t *testing.T) {
 		_ = updated.Body.Close()
 		requiredDenied := doJSON(t, client, "/api/v1/me/notification-preferences", http.MethodPut, map[string]any{"disable_required": true}, map[string]string{"X-CSRF-Token": csrf, "Idempotency-Key": "wave3-required"}, http.StatusConflict)
 		_ = requiredDenied.Body.Close()
+		foreignScope := doJSON(t, client, "/api/v1/me/privacy-requests", http.MethodPost, map[string]string{"request_type": "ACCESS", "organization_id": "00000000-0000-0000-0000-000000000001", "details": "Unrelated business"}, map[string]string{"X-CSRF-Token": csrf, "Idempotency-Key": "privacy-foreign-scope"}, http.StatusForbidden)
+		_ = foreignScope.Body.Close()
 		privacy := doJSON(t, client, "/api/v1/me/privacy-requests", http.MethodPost, map[string]string{"request_type": "PORTABILITY", "details": "Provide my portable account data"}, map[string]string{"X-CSRF-Token": csrf, "Idempotency-Key": "wave3-privacy"}, http.StatusCreated)
 		_ = privacy.Body.Close()
 		listed := doJSON(t, client, "/api/v1/me/privacy-requests", http.MethodGet, nil, nil, http.StatusOK)

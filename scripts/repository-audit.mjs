@@ -46,7 +46,8 @@ function checkMarkdownLinks(file, text) {
 	for (const match of text.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
 		let target = match[1].trim().replace(/^<|>$/g, '').split(/\s+["']/)[0];
 		if (!target || /^(?:[a-z]+:|#|\/)/i.test(target)) continue;
-		target = decodeURIComponent(target.split('#')[0]);
+		try { target = decodeURIComponent(target.split('#')[0]); }
+		catch { fail(file, `malformed URL escape in relative link: ${target}`); continue; }
 		if (target && !existsSync(resolve(directory, target))) fail(file, `broken relative link: ${target}`);
 	}
 }

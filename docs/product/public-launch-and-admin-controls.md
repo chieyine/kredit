@@ -113,8 +113,12 @@ Manage actual legal/business facts and publication in Super Admin. Keep unpublis
 11. Every in-scope operational setting has a discoverable Super Admin control. Search, mobile layout, keyboard use, change previews, effective dates, error recovery and safe secret rotation are tested.
 12. Final completion evidence identifies the exact source revision, environment and tested UI/API/database behavior. Public deployment and collection activation are separately recorded, not inferred from copy or a green workflow.
 
-## Current implementation status
+## Historical implementation status at the initial PR #15 inspection
 
 PR #15 initially changed the public security page and added two regression tests plus this specification. The inspected Admin still requires a second platform administrator for business-policy changes and still excludes provider/credential/live-money settings from its settings screen. `internal/access/roles.go` separates supplier ownership from platform staff but does not yet define the dedicated platform-owner model required above.
 
 This document update resolves the product requirements; it does not implement the owner role, solo approval, runtime settings registry, database migrations, secret-management UI, hidden-feature enforcement or the full public-content sweep. Do not claim the complete Super Admin works until those paths and the acceptance tests above have been implemented and verified. Neither this documentation change nor the earlier security-copy change merges, deploys or activates any financial service.
+
+## September 9 audit status
+
+Owner roles, solo-owner decisions and supported runtime settings now have implementation paths. The initial inspection above is historical. The direct audit remains in progress; use `docs/launch-audit-2026-09-08/file-by-file-audit.json` for unresolved findings. Website content and legal publication metadata are still source-managed and do not yet satisfy the full content-management requirement in this document. No complete-admin or launch sign-off is claimed.

@@ -83,6 +83,9 @@ func NewServer(cfg config.Config, logger *slog.Logger) *Server {
 }
 
 func NewServerWithRuntime(cfg config.Config, logger *slog.Logger, runtime *Runtime) *Server {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	s := &Server{config: cfg, logger: logger, runtime: runtime, startedAt: time.Now().UTC(), mux: http.NewServeMux(), rate: make(map[string]rateWindow)}
 	s.registerRoutes()
 	return s
@@ -159,6 +162,12 @@ func (s *Server) withEnabledAdminSurfaces(next http.Handler) http.Handler {
 // would make a timeout indistinguishable from a failed money operation.
 func (s *Server) withIdempotency(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Provider handlers authenticate every delivery and deduplicate by their
+		// signed event identity. A caller header must not bypass that verification.
+		if isWebhookPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 		if key == "" && requiresIdempotencyKey(r) {
 			writeProblem(w, http.StatusBadRequest, "idempotency_key_required", "Idempotency-Key is required for this operation")
@@ -196,10 +205,20 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 				// Cached responses must not survive a membership or role change.
 				parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 				for i, part := range parts {
-					if part == "organizations" && i+1 < len(parts) {
+					if part == "organizations" && i+1 < len(parts) && strings.HasPrefix(r.URL.Path, "/api/v1/organizations/") {
 						membership, found := s.runtime.Organizations.Membership(parts[i+1], user.ID)
-						if !found {
+						if !found || membership.Status != "active" {
 							writeProblem(w, http.StatusForbidden, "organization_forbidden", "organization access could not be verified")
+							return
+						}
+
+						organization, readErr := s.readOrganization(r.Context(), parts[i+1])
+						if readErr != nil {
+							writeProblem(w, http.StatusServiceUnavailable, "organization_unavailable", "Business access could not be checked")
+							return
+						}
+						if organization.Status == "suspended" {
+							writeProblem(w, http.StatusLocked, "organization_suspended", "Changes are blocked while this business is suspended")
 							return
 						}
 						scope += " membership:" + membership.ID + ":" + string(membership.Role) + ":" + membership.Status
@@ -218,6 +237,15 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 			return
 		}
 		if existing {
+			if sessionTokenFromRequest(r) != "" {
+				session, _, ok := s.requireAuth(w, r)
+				if !ok {
+					return
+				}
+				if (strings.HasPrefix(r.URL.Path, "/api/v1/ops/") || strings.Contains(r.URL.Path, "/onboarding/")) && !s.requireFreshMFA(w, session) {
+					return
+				}
+			}
 			if sessionTokenFromRequest(r) != "" && !s.requireCSRF(w, r) {
 				return
 			}
@@ -235,16 +263,23 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 			return
 		}
 
+		// Persist an already executed outcome even if the client disconnected.
+		// This bounded bookkeeping does not authorize any new domain operation.
+		complete := func(status int, body []byte) error {
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+			defer cancel()
+			return s.runtime.Idempotency.Complete(ctx, scope, key, status, body)
+		}
 		recorder := newIdempotencyRecorder(w)
 		// A panic below unwinds past Complete and leaves the reservation
 		// permanently "in progress", so every retry of a financial write would
-		// receive 409 until the record expires. Record the failure instead and
+		// receive 409 until the outcome is resolved. Record the failure instead and
 		// re-panic so the recovery middleware still renders the error.
 		completed := false
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				if !completed {
-					if err := s.runtime.Idempotency.Complete(r.Context(), scope, key, http.StatusInternalServerError, []byte(`{"code":"internal_error","detail":"an unexpected server error occurred"}`)); err != nil {
+					if err := complete(http.StatusInternalServerError, []byte(`{"code":"internal_error","detail":"an unexpected server error occurred"}`)); err != nil {
 						s.logger.Error("idempotency failure persistence failed", "scope", scope, "error", err)
 					}
 				}
@@ -254,22 +289,30 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 		next.ServeHTTP(recorder, r)
 		completed = true
 		status, response := recorder.status, recorder.body.Bytes()
+		if recorder.oversized {
+			status = http.StatusConflict
+			response = []byte(`{"code":"response_not_replayable","detail":"This request completed, but its full response cannot be replayed. Open the record to check the result."}`)
+		}
 		if oneTimeCredentialResponse(r.URL.Path) && status < 400 {
 			// One-time credentials are delivered once and never copied into the
 			// durable response cache. A retry must not create a second credential.
 			status = http.StatusConflict
 			response = []byte(`{"code":"one_time_response_delivered","detail":"This request has already completed. One-time credentials cannot be replayed."}`)
 		}
-		if err := s.runtime.Idempotency.Complete(r.Context(), scope, key, status, response); err != nil {
+		if err := complete(status, response); err != nil {
 			s.logger.Error("idempotency response persistence failed", "scope", scope, "error", err)
 		}
 	})
 }
 
 func oneTimeCredentialResponse(path string) bool {
-	return strings.HasPrefix(path, "/api/v1/auth/") || strings.HasPrefix(path, "/api/v1/mfa/") ||
+	return (strings.HasPrefix(path, "/api/v1/buyer-invitations/") && (strings.HasSuffix(path, "/accept") || strings.HasSuffix(path, "/otp"))) || strings.HasPrefix(path, "/api/v1/auth/") || strings.HasPrefix(path, "/api/v1/mfa/") ||
 		strings.Contains(path, "/recovery-codes/") ||
 		(strings.HasPrefix(path, "/api/v1/account-recovery/") && strings.HasSuffix(path, "/complete"))
+}
+
+func isWebhookPath(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/webhooks/") || strings.HasPrefix(path, "/webhooks/")
 }
 
 func requiresIdempotencyKey(r *http.Request) bool {
@@ -277,6 +320,9 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		return false
 	}
 	path := r.URL.Path
+	if isWebhookPath(path) {
+		return false
+	}
 	if path == "/api/v1/ops/business-policies/preview" || path == "/api/v1/ops/commands/preview" {
 		return false
 	}
@@ -284,7 +330,7 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		return true
 	}
 	for _, suffix := range []string{
-		"/credit-requests/", "/payments", "/reverse", "/collection", "/retry", "/reconcile", "/disputes", "/decide", "/write-off", "/fee-waiver", "/drawdowns", "/activate", "/suspend", "/resume", "/exports", "/trade-lines/",
+		"/credit-requests/", "/payments", "/reverse", "/collection", "/retry", "/reconcile", "/disputes", "/decide", "/write-off", "/fee-waiver", "/drawdowns", "/activate", "/suspend", "/resume", "/exports", "/trade-lines",
 		// These routes mutate financial state or create durable authority and
 		// therefore must be safe to replay after a client timeout.
 		"/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
@@ -303,6 +349,7 @@ type idempotencyRecorder struct {
 	status      int
 	wroteHeader bool
 	body        bytes.Buffer
+	oversized   bool
 }
 
 func newIdempotencyRecorder(writer http.ResponseWriter) *idempotencyRecorder {
@@ -322,7 +369,14 @@ func (r *idempotencyRecorder) Write(body []byte) (int, error) {
 	if !r.wroteHeader {
 		r.WriteHeader(http.StatusOK)
 	}
-	_, _ = r.body.Write(body)
+	if !r.oversized {
+		if len(body) > 4<<20-r.body.Len() {
+			r.oversized = true
+			r.body.Reset()
+		} else {
+			_, _ = r.body.Write(body)
+		}
+	}
 	return r.ResponseWriter.Write(body)
 }
 
@@ -457,6 +511,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /webhooks/mono", s.monoWebhook)
 	s.mux.HandleFunc("POST /api/v1/webhooks/mono", s.monoWebhook)
 	s.mux.HandleFunc("POST /api/v1/buyer/businesses/{businessID}/repayment-customer", s.createRepaymentCustomer)
+	s.mux.HandleFunc("GET /api/v1/ops/customer-registrations", s.listCustomerRegistrations)
+	s.mux.HandleFunc("POST /api/v1/ops/customer-registrations/{attemptID}", s.resolveCustomerRegistration)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/disputes", s.openDispute)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/disputes", s.listDisputes)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/disputes/{disputeID}", s.getDispute)
@@ -482,12 +538,15 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/platform/capabilities", s.platformCapabilities)
 	s.mux.HandleFunc("GET /api/v1/ops/platform-settings", s.listPlatformSettings)
 	s.mux.HandleFunc("POST /api/v1/ops/platform-settings", s.updatePlatformSetting)
-	s.mux.HandleFunc("POST /api/v1/ops/platform-settings/secret", s.rotatePlatformSecret)
 	s.mux.HandleFunc("GET /api/v1/ops/platform-settings/history", s.platformSettingsHistory)
 	s.mux.HandleFunc("GET /api/v1/ops/governance", s.getPlatformGovernance)
 	s.mux.HandleFunc("POST /api/v1/ops/governance", s.setPlatformGovernance)
 	s.mux.HandleFunc("POST /api/v1/ops/solo-owner/approve", s.soloOwnerApprove)
 	s.mux.HandleFunc("POST /api/v1/ops/ownership/transfer", s.transferOwnership)
+	s.mux.HandleFunc("GET /api/v1/website-guides", s.publishedGuides)
+	s.mux.HandleFunc("GET /api/v1/website/{page}", s.websiteContent)
+	s.mux.HandleFunc("GET /api/v1/ops/website/{page}", s.websiteContent)
+	s.mux.HandleFunc("POST /api/v1/ops/website/{page}", s.changeWebsiteContent)
 	s.mux.HandleFunc("GET /api/v1/ops/capabilities", s.adminCapabilities)
 	s.mux.HandleFunc("GET /api/v1/ops/approval-inbox", s.adminInbox)
 	s.mux.HandleFunc("POST /api/v1/ops/review-assignments", s.assignAdminReview)
@@ -539,6 +598,12 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	if len(s.runtime.ProviderFailures) > 0 {
+		// Configured adapters that failed construction cannot serve traffic.
+		// Keep provider diagnostics private; operations has the detailed status.
+		writeProblem(w, http.StatusServiceUnavailable, "provider_initialization_failed", "A configured service could not be initialized.")
+		return
+	}
 	if s.config.Environment == "production" || s.config.Environment == "staging" {
 		if s.runtime.Database == nil {
 			writeProblem(w, http.StatusServiceUnavailable, "database_unavailable", "database connection is not configured")
@@ -704,12 +769,12 @@ func clientIP(r *http.Request) string {
 	if isPrivateOrLoopback(remote) {
 		if realIP := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); realIP != "" {
 			if parsed := net.ParseIP(realIP); parsed != nil {
-				return realIP
+				return parsed.String()
 			}
 		}
 		if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
 			if parsed := net.ParseIP(realIP); parsed != nil {
-				return realIP
+				return parsed.String()
 			}
 		}
 		if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
@@ -718,13 +783,13 @@ func clientIP(r *http.Request) string {
 			for i := len(parts) - 1; i >= 0; i-- {
 				candidate := strings.TrimSpace(parts[i])
 				if parsed := net.ParseIP(candidate); parsed != nil && !isPrivateOrLoopback(candidate) {
-					return candidate
+					return parsed.String()
 				}
 			}
 			for _, candidate := range parts {
 				candidate = strings.TrimSpace(candidate)
 				if parsed := net.ParseIP(candidate); parsed != nil {
-					return candidate
+					return parsed.String()
 				}
 			}
 		}

@@ -4,10 +4,11 @@ package auth
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestPostgresAbandonedTOTPEnrollmentCanRestart(t *testing.T) {
@@ -25,7 +26,10 @@ func TestPostgresAbandonedTOTPEnrollmentCanRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Exec(ctx, `DELETE FROM app.mfa_methods WHERE user_id=$1::uuid;DELETE FROM app.users WHERE id=$1::uuid`, u.ID)
+	defer func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM app.mfa_methods WHERE user_id=$1::uuid`, u.ID)
+		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id=$1::uuid`, u.ID)
+	}()
 	runtimeCfg, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
 	if err != nil {
 		t.Fatal(err)
@@ -56,5 +60,54 @@ func TestPostgresAbandonedTOTPEnrollmentCanRestart(t *testing.T) {
 	}
 	if _, err = s.BeginTOTPEnrollment(u.ID); err == nil {
 		t.Fatal("verified authenticator was replaced")
+	}
+}
+
+func TestPostgresStepUpRejectsInactiveAccount(t *testing.T) {
+	if os.Getenv("KREDIT_INTEGRATION") != "1" {
+		t.Skip("integration database required")
+	}
+	pool, err := pgxpool.New(t.Context(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	s := NewPostgresStore(pool, "audit-inactive-totp")
+	challenge, code, err := s.RequestOTP("audit-inactive-"+time.Now().Format("150405.000000000")+"@example.test", "email", "login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, _, token, err := s.VerifyOTP(challenge.ID, code, "audit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for _, table := range []string{"app.sessions", "app.mfa_methods"} {
+			_, _ = pool.Exec(context.Background(), "DELETE FROM "+table+" WHERE user_id=$1::uuid", user.ID)
+		}
+		_, _ = pool.Exec(context.Background(), "DELETE FROM app.users WHERE id=$1::uuid", user.ID)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM app.otp_challenges WHERE id=$1::uuid", challenge.ID)
+	}()
+	method, err := s.BeginTOTPEnrollment(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), "UPDATE app.users SET status='suspended' WHERE id=$1::uuid", user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BeginTOTPEnrollment(user.ID); err == nil {
+		t.Fatal("suspended account replaced MFA enrollment")
+	}
+	if err := s.VerifyTOTP(user.ID, TOTPCode(method.Secret, s.now())); err == nil {
+		t.Fatal("suspended account verified MFA enrollment")
+	}
+	if _, _, err := s.StepUpSession(token, TOTPCode(method.Secret, s.now())); err == nil {
+		t.Fatal("suspended account obtained elevated session")
+	}
+	if _, err := pool.Exec(t.Context(), "UPDATE app.users SET status='active' WHERE id=$1::uuid", user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.StepUpSession(token, TOTPCode(method.Secret, s.now())); err != nil {
+		t.Fatalf("active account could not verify: %v", err)
 	}
 }

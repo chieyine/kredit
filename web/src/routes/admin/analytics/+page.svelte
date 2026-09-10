@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { checkedJSON, publicError, record, rows, text, LatestRequest } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
 	let scorecard: any = null;
 	let error = '';
@@ -6,35 +7,64 @@
 	let to = new Date().toISOString().slice(0, 10);
 	let from = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 	let organization = '';
+	const reads = new LatestRequest();
+	function decodeScorecard(value: unknown) {
+		const card = record(record(value).scorecard);
+		for (const key of ['generated_at', 'from', 'to']) {
+			if (!Number.isFinite(Date.parse(text(card[key])))) throw new Error('Invalid scorecard date');
+		}
+		text(card.refresh_mode);
+		if (typeof card.reconciliation_ok !== 'boolean') throw new Error('Missing reconciliation result');
+		for (const group of ['kpis', 'drivers', 'guardrails']) rows(group, value => {
+			const metric = record(value);
+			for (const key of ['key', 'label', 'unit', 'definition', 'source']) text(metric[key]);
+			if (typeof metric.value !== 'number' || !Number.isFinite(metric.value)) throw new Error('Invalid metric');
+			return metric;
+		})(card);
+		const feedback = record(card.feedback);
+		for (const key of ['total', 'yes', 'partly', 'no', 'seller', 'buyer', 'clear_percent']) {
+			if (typeof feedback[key] !== 'number' || !Number.isFinite(feedback[key]) || feedback[key] < 0) throw new Error('Invalid feedback');
+		}
+		rows('reconciliation', value => {
+			const row = record(value); text(row.event); text(row.status);
+			for (const key of ['source_count', 'event_count']) {
+				if (typeof row[key] !== 'number' || !Number.isFinite(row[key])) throw new Error('Invalid reconciliation count');
+			}
+			return row;
+		})(card);
+		return card;
+	}
 	const format = (metric: any) => metric.unit === 'percent' ? `${metric.value.toFixed(1)}%` : metric.unit === 'kobo' ? new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(metric.value/100) : metric.unit === 'cases_per_100_active_suppliers' ? `${metric.value.toFixed(1)} per 100` : `${metric.value.toFixed(metric.unit === 'hours' || metric.unit === 'days' ? 1 : 0)} ${metric.unit}`;
 	const findMetric = (key: string) => [...(scorecard?.kpis ?? []), ...(scorecard?.drivers ?? []), ...(scorecard?.guardrails ?? [])].find((item: any) => item.key === key);
 	const showMetric = (key: string) => { const item = findMetric(key); return item ? format(item) : 'Not measured yet'; };
 	const feedbackValue = () => scorecard?.feedback?.total ? `${scorecard.feedback.clear_percent.toFixed(1)}%` : 'No answers yet';
 	async function load() {
+		const request = reads.begin();
 		loading = true; error = '';
 		const params = new URLSearchParams({from,to});
 		if (organization.trim()) params.set('organization_id', organization.trim());
-		const response = await fetch(`/api/v1/ops/analytics/scorecard?${params}`, {credentials:'include'});
-		const body = await response.json().catch(()=>({}));
-		if (!response.ok) error = body.detail ?? 'The scorecard could not be loaded. Try again.';
-		else scorecard = body.scorecard;
-		loading = false;
+        try {
+			const result = await checkedJSON(`/api/v1/ops/analytics/scorecard?${params}`, decodeScorecard, { signal: request.signal });
+			if (request.current()) scorecard = result;
+		}
+        catch (cause) { if (request.current()) error = publicError(cause, 'the scorecard'); }
+        finally { if (request.current()) loading = false; }
 	}
-	onMount(load);
+	onMount(() => { void load(); return () => reads.cancel(); });
 </script>
 
 <svelte:head><title>Application evidence — Kredit</title></svelte:head>
 <main class="shell workspace analytics">
 	<p class="eyebrow">Operations / Application evidence</p>
 	<h1>Show what Kredit has achieved.</h1>
-	<p class="lede">Use real numbers when you apply for funding or talk to investors. Every money and trade figure below comes straight from Kredit records. Nothing here is estimated.</p>
+	<p class="lede">Review figures calculated from Kredit records for the selected period. Check each measure’s definition and reconciliation status before sharing it.</p>
 	<form onsubmit={(event)=>{event.preventDefault();load()}} aria-label="Scorecard filters">
 		<label>From<input type="date" bind:value={from} required /></label>
 		<label>To<input type="date" bind:value={to} required /></label>
 		<label>Supplier organisation UUID (optional)<input bind:value={organization} autocomplete="off" /></label>
 		<button disabled={loading}>{loading?'Refreshing…':'Apply filters'}</button>
 	</form>
-	{#if error}<p class="error" role="alert">{error}</p>{:else if loading}<p role="status">Calculating the live scorecard…</p>{:else if scorecard}
+	{#if error}<section role="alert"><p class="error">{error}</p><button type="button" onclick={load}>Try again</button></section>{:else if loading}<p role="status">Calculating the live scorecard…</p>{:else if scorecard}
 		<div class="status" class:healthy={scorecard.reconciliation_ok}><strong>{scorecard.reconciliation_ok?'Reconciled':'Review required'}</strong><span>{scorecard.refresh_mode} · generated {new Date(scorecard.generated_at).toLocaleString()}</span></div>
 		<section class="application-snapshot" aria-labelledby="application-title">
 			<header><div><p class="eyebrow">Application snapshot</p><h2 id="application-title">Evidence for {new Date(scorecard.from).toLocaleDateString()} to {new Date(scorecard.to).toLocaleDateString()}</h2></div><button type="button" onclick={() => window.print()}>Print or save as PDF</button></header>
@@ -63,5 +93,5 @@
 </main>
 
 <style>
-	.analytics{padding-bottom:4rem}.analytics>h1{max-width:12ch;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3rem,7vw,5.5rem);font-weight:500;line-height:.92;letter-spacing:-.055em}.analytics form{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:1rem;align-items:end;margin:2rem 0;padding:1rem;border:1px solid var(--color-border);border-radius:0}.analytics label{display:grid;gap:.4rem;font-weight:700}.analytics input,.analytics button{min-height:2.75rem;border:1px solid var(--color-border);border-radius:0;padding:.6rem}.analytics button{background:#2738d6;color:white;font-weight:800}.status{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:1rem;border-left:.35rem solid #ad641b;background:#fff4e6}.status.healthy{border-color:#267054;background:#eaf7f1}.status span{color:var(--color-muted)}.application-snapshot{margin:1.5rem 0;border:3px solid #17181b;background:#fffdf8;box-shadow:10px 10px 0 #ded8cc}.application-snapshot>header{display:flex;align-items:end;justify-content:space-between;gap:1rem;padding:1.5rem;border-bottom:3px solid #17181b}.application-snapshot h2{max-width:22ch;margin:.25rem 0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(1.8rem,4vw,3rem);font-weight:500}.proof-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.proof-grid article{display:grid;gap:.5rem;padding:1.25rem;border-right:1px solid var(--color-border);border-bottom:1px solid var(--color-border)}.proof-grid span{font-weight:750}.proof-grid strong{font-family:Georgia,'Times New Roman',serif;font-size:clamp(1.6rem,3vw,2.4rem);font-weight:500;color:#2738d6}.proof-grid small{color:var(--color-muted)}.evidence-note{margin:0;padding:1.25rem;background:#f1ede5}.feedback-breakdown{display:grid;grid-template-columns:1.5fr 1fr;gap:2rem;margin:3rem 0;padding:clamp(1.5rem,4vw,2.5rem);color:#fff;background:#17181b}.feedback-breakdown h2{font-family:Georgia,'Times New Roman',serif;font-size:2.25rem;font-weight:500}.feedback-breakdown p{color:#c8c8c5}.feedback-breakdown dl{display:grid;grid-template-columns:repeat(3,1fr);margin:0}.feedback-breakdown dl div{display:grid;align-content:center;padding:1rem;border:1px solid #55565b;text-align:center}.feedback-breakdown dt{color:#c8c8c5}.feedback-breakdown dd{margin:.35rem 0;font-family:Georgia,'Times New Roman',serif;font-size:2.4rem}.full-scorecard{margin-top:2rem;border-top:3px solid #17181b}.full-scorecard summary{padding:1.2rem 0;font-size:1.1rem;font-weight:800;cursor:pointer}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;margin-bottom:2rem}.metrics article{border:1px solid var(--color-border);border-radius:0;padding:1.15rem;background:white}.metrics article>strong{font-size:1.55rem;color:#2738d6}.metrics h3{margin:.45rem 0}.metrics p{min-height:3.8rem}.metrics small{color:var(--color-muted)}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;background:white}caption{text-align:left;padding:.75rem 0}th,td{text-align:left;padding:.75rem;border-bottom:1px solid var(--color-border)}td span{color:#9b351f;font-weight:800}.ok{color:#267054}@media(max-width:48rem){.proof-grid{grid-template-columns:1fr 1fr}.feedback-breakdown{grid-template-columns:1fr}.application-snapshot>header{align-items:start;flex-direction:column}}@media(max-width:40rem){.proof-grid{grid-template-columns:1fr}.metrics p{min-height:0}}@media print{.analytics>form,.analytics>.status,.application-snapshot button,.feedback-breakdown,.full-scorecard{display:none}.application-snapshot{box-shadow:none}.analytics{padding:0}.application-snapshot{margin:0}}
+	.analytics{padding-bottom:4rem}.analytics>h1{max-width:12ch;font-family:var(--font-serif);font-size:clamp(3rem,7vw,5.5rem);font-weight:500;line-height:.92;letter-spacing:-.055em}.analytics form{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:1rem;align-items:end;margin:2rem 0;padding:1rem;border:1px solid var(--color-border);border-radius:0}.analytics label{display:grid;gap:.4rem;font-weight:700}.analytics input,.analytics button{min-height:2.75rem;border:1px solid var(--color-border);border-radius:0;padding:.6rem}.analytics button{background:#2738d6;color:white;font-weight:800}.status{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:1rem;border-left:.35rem solid #ad641b;background:#fff4e6}.status.healthy{border-color:#267054;background:#eaf7f1}.status span{color:var(--color-muted)}.application-snapshot{margin:1.5rem 0;border:3px solid #17181b;background:#fffdf8;box-shadow:10px 10px 0 #ded8cc}.application-snapshot>header{display:flex;align-items:end;justify-content:space-between;gap:1rem;padding:1.5rem;border-bottom:3px solid #17181b}.application-snapshot h2{max-width:22ch;margin:.25rem 0;font-family:var(--font-serif);font-size:clamp(1.8rem,4vw,3rem);font-weight:500}.proof-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.proof-grid article{display:grid;gap:.5rem;padding:1.25rem;border-right:1px solid var(--color-border);border-bottom:1px solid var(--color-border)}.proof-grid span{font-weight:750}.proof-grid strong{font-family:var(--font-serif);font-size:clamp(1.6rem,3vw,2.4rem);font-weight:500;color:#2738d6}.proof-grid small{color:var(--color-muted)}.evidence-note{margin:0;padding:1.25rem;background:#f1ede5}.feedback-breakdown{display:grid;grid-template-columns:1.5fr 1fr;gap:2rem;margin:3rem 0;padding:clamp(1.5rem,4vw,2.5rem);color:#fff;background:#17181b}.feedback-breakdown h2{font-family:var(--font-serif);font-size:2.25rem;font-weight:500}.feedback-breakdown p{color:#c8c8c5}.feedback-breakdown dl{display:grid;grid-template-columns:repeat(3,1fr);margin:0}.feedback-breakdown dl div{display:grid;align-content:center;padding:1rem;border:1px solid #55565b;text-align:center}.feedback-breakdown dt{color:#c8c8c5}.feedback-breakdown dd{margin:.35rem 0;font-family:var(--font-serif);font-size:2.4rem}.full-scorecard{margin-top:2rem;border-top:3px solid #17181b}.full-scorecard summary{padding:1.2rem 0;font-size:1.1rem;font-weight:800;cursor:pointer}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;margin-bottom:2rem}.metrics article{border:1px solid var(--color-border);border-radius:0;padding:1.15rem;background:white}.metrics article>strong{font-size:1.55rem;color:#2738d6}.metrics h3{margin:.45rem 0}.metrics p{min-height:3.8rem}.metrics small{color:var(--color-muted)}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;background:white}caption{text-align:left;padding:.75rem 0}th,td{text-align:left;padding:.75rem;border-bottom:1px solid var(--color-border)}td span{color:#9b351f;font-weight:800}.ok{color:#267054}@media(max-width:48rem){.proof-grid{grid-template-columns:1fr 1fr}.feedback-breakdown{grid-template-columns:1fr}.application-snapshot>header{align-items:start;flex-direction:column}}@media(max-width:40rem){.proof-grid{grid-template-columns:1fr}.metrics p{min-height:0}}@media print{.analytics>form,.analytics>.status,.application-snapshot button,.feedback-breakdown,.full-scorecard{display:none}.application-snapshot{box-shadow:none}.analytics{padding:0}.application-snapshot{margin:0}}
 </style>

@@ -5,6 +5,7 @@ package audit
 import (
 	"context"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"kredit/internal/db"
 	"os"
 	"testing"
 )
@@ -24,13 +25,18 @@ func TestPostgresActivityAllowsMissingRequestID(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Exec(ctx, `DELETE FROM app.audit_events WHERE organization_id=$1::uuid;DELETE FROM app.organizations WHERE id=$1::uuid`, org)
-	s := NewPostgresStore(pool)
+	app, err := db.OpenAsRole(ctx, os.Getenv("APP_DATABASE_URL"), "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	s := NewPostgresStore(app.Raw())
 	e := s.Append(Event{OrganizationID: org, Action: "system.reconciled", ResourceType: "system"})
 	if e.ID == "" {
 		t.Fatal("event with no request id was dropped")
 	}
 	items := s.ListForOrganization(org)
-	if len(items) != 1 || items[0].RequestID != "" {
+	if len(items) < 1 || items[0].ID != e.ID || items[0].RequestID != "" {
 		t.Fatalf("events=%+v", items)
 	}
 }

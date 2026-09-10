@@ -13,7 +13,7 @@
 	.skeleton { display: grid; gap: 0.75rem; }
 	.skeleton span {
 		height: 3.25rem;
-		border-radius: var(--radius-md);
+		border-radius: var(--radius);
 		background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-border) 45%, var(--color-surface-muted) 65%);
 		background-size: 200% 100%;
 		animation: shimmer 1.4s ease-in-out infinite;

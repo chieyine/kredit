@@ -1,6 +1,3856 @@
-# Canonical OpenAPI source: ../../api/openapi.yaml
-#
-# The generated contract lives under api/ to match the repository structure in
-# README.md. Update that file first; this path exists for the required living
-# documentation index and must not become a second source of truth.
+openapi: 3.1.0
+info:
+  title: Kredit API
+  version: 0.1.0
+  description: Contract-first API for Kredit production v1.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /ops/customer-registrations:
+    get:
+      operationId: listCustomerRegistrations
+      summary: List uncertain registrations for provider operators with elevated identity
+      responses:
+        '200':
+          description: Pending attempt identifiers, business identifiers and creation timestamps; no identity numbers
+        '403':
+          description: Provider operations permission and elevated identity required
+  /ops/customer-registrations/{attemptID}:
+    post:
+      operationId: resolveCustomerRegistration
+      summary: Verify an existing provider reference or record confirmed non-creation to permit retry
+      parameters:
+        - name: attemptID
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, reason]
+              properties:
+                action: {type: string, enum: [link, not_created]}
+                provider_reference: {type: string, maxLength: 128}
+                reason: {type: string, minLength: 20, maxLength: 2000}
+      responses:
+        '200':
+          description: Resolution saved; linking requires provider identity to match original intent
+        '409':
+          description: Attempt still running, identity mismatch, ownership change or conflicting resolution
+        '503':
+          description: Provider lookup or durable completion unavailable; preserve the original attempt
+  /website-guides:
+    get:
+      operationId: getPublishedGuides
+      summary: Read published guide copy without drafts or credentials
+      security: []
+      responses:
+        '200':
+          description: Published guides keyed by existing guide slug
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publications]
+                properties:
+                  publications:
+                    type: object
+                    additionalProperties: { $ref: '#/components/schemas/WebsitePublication' }
+        '503': { description: Publication store unavailable }
+  /website/{page}:
+    parameters:
+      - { name: page, in: path, required: true, schema: { type: string, pattern: "^(home|faq|pricing|terms|privacy|complaints|contact|guide-[a-z0-9-]+)$" } }
+    get:
+      operationId: getPublishedWebsiteCopy
+      summary: Read published website copy without exposing drafts or owner history
+      security: []
+      responses:
+        '200':
+          description: Published copy, or null when the initial release copy applies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publication]
+                properties:
+                  publication:
+                    oneOf:
+                      - { $ref: '#/components/schemas/WebsitePublication' }
+                      - { type: 'null' }
+        '404': { description: Unsupported page }
+        '503': { description: Publication store unavailable }
+  /ops/website/{page}:
+    parameters:
+      - { name: page, in: path, required: true, schema: { type: string, pattern: "^(home|faq|pricing|terms|privacy|complaints|contact|guide-[a-z0-9-]+)$" } }
+    get:
+      operationId: getWebsiteDraft
+      summary: Open the owner website editor with fresh MFA
+      responses:
+        '200':
+          description: Current edit version and draft/publication state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebsiteEditorRecord' }
+        '401': { description: Sign-in required }
+        '403': { description: Owner role and fresh MFA required }
+        '404': { description: Unsupported page }
+        '503': { description: Editor unavailable }
+    post:
+      operationId: changeWebsiteCopy
+      summary: Save a draft, publish reviewed copy or restore the current publication as a draft
+      description: Requires owner role, fresh MFA and CSRF. Publication must exactly match the saved draft and expected version. History remains immutable. Earlier history can be loaded and saved as a new draft.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, expected_version, copy, reason]
+              properties:
+                action: { type: string, enum: [save, publish, restore] }
+                expected_version: { type: integer, minimum: 0 }
+                copy: { $ref: '#/components/schemas/WebsiteCopy' }
+                reason: { type: string, minLength: 4, maxLength: 500 }
+      responses:
+        '200':
+          description: Saved version and current editor state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebsiteEditorRecord' }
+        '400': { description: Invalid action or edit version }
+        '401': { description: Sign-in required }
+        '403': { description: Owner role, fresh MFA and CSRF required }
+        '404': { description: Unsupported page }
+        '409': { description: Saved copy changed or publishing unsaved content }
+        '422': { description: Invalid copy or missing saved publication }
+        '503': { description: Editor unavailable }
+  /organizations/{organizationID}/credit-terms/preview:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    post:
+      operationId: previewCreditTerms
+      summary: Preview server-calculated Nigerian payment timing without creating a sale
+      description: Requires organization access and CSRF. Does not move money or change existing agreements.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [due_date, grace_hours]
+              properties:
+                due_date: {type: string, format: date}
+                grace_hours: {type: integer, minimum: 0, maximum: 720}
+                collection_local: {type: string, description: Optional Nigerian local datetime in YYYY-MM-DDTHH:mm format.}
+      responses:
+        '200':
+          description: Canonical timing for review before creating a sale.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [due_date, grace_hours, collection_at, timezone, cutoff, timing_mode]
+                properties:
+                  due_date: {type: string, format: date}
+                  grace_hours: {type: integer}
+                  collection_at: {type: string, format: date-time}
+                  timezone: {type: string, const: Africa/Lagos}
+                  cutoff: {type: string, const: '23:59'}
+                  timing_mode: {type: string, enum: [lagos_end_of_day, lagos_explicit]}
+        '400': {description: Invalid input.}
+        '401': {description: Sign-in required.}
+        '403': {description: Organization access or CSRF check failed.}
+        '422': {description: Invalid date or grace period.}
+        '503': {description: Service unavailable.}
+  /platform/capabilities:
+    get:
+      security: []
+      operationId: getPlatformCapabilities
+      summary: Retrieve public enabled feature flags
+      responses:
+        '200':
+          description: Enabled platform capability flags
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid request" }
+        '503': { description: "Service unavailable" }
+  /ops/capabilities:
+    get:
+      operationId: adminCapabilities
+      summary: List effective administrator permissions
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/platform-settings:
+    get:
+      operationId: getPlatformSettings
+      summary: List all database-backed platform settings and categories
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Platform settings registry entries with masked secrets
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+    post:
+      operationId: updatePlatformSetting
+      summary: Propose or apply an updated platform setting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [key, expected_version, reason], properties: { key: { type: string }, expected_version: { type: integer, minimum: 0 }, reason: { type: string, minLength: 4 } }, additionalProperties: true }
+      responses:
+        '200':
+          description: Setting updated or proposal created
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '409': { description: "Setting changed since it was reviewed" }
+        '400': { description: "Invalid setting key, type, or value" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/platform-settings/history:
+    get:
+      operationId: getPlatformSettingsHistory
+      summary: Retrieve audit history of platform setting changes
+      parameters:
+        - { name: key, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Setting change history
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/governance:
+    get:
+      operationId: getPlatformGovernance
+      summary: Get platform governance mode
+      responses:
+        '200':
+          description: Governance mode and state
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+    post:
+      operationId: setPlatformGovernance
+      summary: Transition platform governance mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Governance mode updated
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid governance transition or reason" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/solo-owner/approve:
+    post:
+      operationId: soloOwnerSelfApprove
+      summary: Self-approve an authored proposal in solo-owner mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Proposal self-approved with audit trail
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid proposal target or decision" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Solo-owner mode and platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/ownership/transfer:
+    post:
+      operationId: transferPlatformOwnership
+      summary: Transfer platform owner role to another active user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Ownership transferred successfully
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: "Invalid target user, reason, or confirmation" }
+        '401': { description: "Sign-in required" }
+        '403': { description: "Platform owner role required" }
+        '503': { description: "Service unavailable" }
+  /ops/approval-inbox:
+    get:
+      operationId: adminApprovalInbox
+      summary: List open reviews allowed by the actor role
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 2000 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/review-assignments:
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: assignAdminReview
+      summary: Record review ownership, deadline and reason
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminReviewAssignment'
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/admin-changes:
+    get:
+      operationId: listAdminChanges
+      summary: List immutable financial proposals
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 2000 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: proposeAdminChange
+      summary: Propose a correction or repayment-date amendment
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminChangeProposal'
+      responses:
+        '201':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/admin-changes/{changeID}/decision:
+    post:
+      operationId: decideAdminChange
+      summary: Independently approve, reject or cancel an exact proposal
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - { name: changeID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminChangeDecision'
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/change-context:
+    get:
+      operationId: adminChangeContext
+      summary: Load current balances and instalments using an obligation or credit reference
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 2000 } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/change-history:
+    get:
+      operationId: adminChangeHistory
+      summary: Search retained change history and export a page as CSV
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 2000 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+        - { name: kind, in: query, schema: { type: string } }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv], default: json } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/business-policies/preview:
+    post:
+      operationId: previewBusinessPolicy
+      summary: Estimate policy impact using current persisted records
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessPolicyPreviewInput'
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/attention:
+    get:
+      operationId: adminAttention
+      summary: Count role-authorized work needing attention
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /ops/attention/details:
+    get:
+      operationId: adminAttentionDetails
+      summary: List up to 100 failed notices, uncertain debits and expiring mandates
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /buyer/amendments:
+    get:
+      operationId: buyerScheduleAmendments
+      summary: List repayment-date proposals and outcomes for the authenticated buyer
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /buyer/amendments/{changeID}/decision:
+    post:
+      operationId: decideBuyerAmendment
+      summary: Accept or reject exact independently approved repayment dates
+      description: Mutations require recent MFA and CSRF. Financial mutations require an Idempotency-Key. Policy preview is read-only.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - { name: changeID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminChangeDecision'
+      responses:
+        '200':
+          description: Successful role-scoped result; list pages include one additional row to indicate more results.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '403': { description: "Role, buyer identity, or recent verification required" }
+        '409': { description: "Stale, expired, conflicted, or invalid proposal" }
+        '503': { description: "Persistence unavailable" }
+  /healthz:
+    get:
+      security: []
+      operationId: health
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /readyz:
+    get:
+      security: []
+      operationId: readiness
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Service is ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is not ready.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /meta:
+    get:
+      security: []
+      operationId: metadata
+      summary: Runtime metadata
+      responses:
+        '200':
+          description: Runtime metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaResponse'
+  /auth/otp/challenges:
+    post:
+      security: []
+      operationId: requestOTP
+      summary: Request a passwordless OTP challenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPRequest'
+      responses:
+        '202':
+          description: Challenge accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OTPChallengeResponse'
+        '429':
+          description: Rate limited or resend cooldown active.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /auth/otp/verify:
+    post:
+      security: []
+      operationId: verifyOTP
+      summary: Verify an OTP and create a browser session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPVerifyRequest'
+      responses:
+        '200':
+          description: Authenticated session created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid or expired OTP.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current browser session
+      responses:
+        '204':
+          description: Session revoked.
+  /secure-link:
+    get:
+      security: []
+      operationId: resolveSecureLink
+      summary: Verify a signed, expiring in-product link
+      parameters:
+        - {name: path, in: query, required: true, schema: {type: string}}
+        - {name: exp, in: query, required: true, schema: {type: integer, format: int64}}
+        - {name: sig, in: query, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Link verified and safe internal destination returned.
+        '410':
+          description: Link is invalid or expired.
+  /me:
+    get:
+      operationId: getCurrentUser
+      summary: Get the current user and memberships
+      responses:
+        '200':
+          description: Current authenticated context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /mfa/totp/enroll:
+    post:
+      operationId: enrollTOTP
+      summary: Start TOTP enrollment for the current user
+      responses:
+        '200':
+          description: TOTP secret and provisioning URI.
+  /mfa/totp/verify:
+    post:
+      operationId: verifyTOTP
+      summary: Verify TOTP and elevate the current session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPVerifyRequest'
+      responses:
+        '200':
+          description: Session elevated to AAL2.
+  /organizations:
+    get:
+      operationId: listOrganizations
+      summary: List organizations for the current user
+      responses:
+        '200':
+          description: Organizations.
+    post:
+      operationId: createOrganization
+      summary: Create a supplier organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationRequest'
+      responses:
+        '201':
+          description: Organization and owner membership created.
+  /organizations/{organizationID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: getOrganization
+      summary: Get an organization in the current tenant context
+      responses:
+        '200':
+          description: Organization and current membership.
+  /organizations/{organizationID}/members:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listMembers
+      summary: List organization memberships
+      responses:
+        '200':
+          description: Organization members.
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: inviteMember
+      summary: Invite a non-owner organization member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberInvitationRequest'
+      responses:
+        '202':
+          description: Invitation created.
+  /organizations/{organizationID}/members/{userID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/UserID'
+    patch:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: changeMemberRole
+      summary: Change a non-owner member role or access status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRoleRequest'
+      responses:
+        '200':
+          description: Membership updated.
+  /organizations/{organizationID}/audit-events:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listAuditEvents
+      summary: List organization audit events
+      responses:
+        '200':
+          description: Audit events.
+  /organizations/{organizationID}/onboarding:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: getSupplierOnboarding
+      summary: Get the server-derived supplier onboarding and readiness summary
+      responses:
+        '200':
+          description: Permission-filtered profile, current versions, and readiness requirements.
+  /organizations/{organizationID}/onboarding/contacts/challenges:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    post:
+      operationId: requestSupplierContactVerification
+      summary: Send an OTP for an owner email or phone after recent MFA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OnboardingContactRequest' }
+      responses: { '202': { description: Verification challenge created. } }
+  /organizations/{organizationID}/onboarding/contacts/verify:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    post:
+      operationId: verifySupplierContact
+      summary: Verify and attach an owner contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OnboardingContactVerifyRequest' }
+      responses: { '200': { description: Contact evidence and readiness updated. } }
+  /organizations/{organizationID}/onboarding/representative:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    patch:
+      operationId: updateSupplierRepresentative
+      summary: Save the authorised representative after recent MFA
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OnboardingRepresentativeRequest' } } } }
+      responses: { '200': { description: Representative saved. } }
+  /organizations/{organizationID}/onboarding/kyb:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    post:
+      operationId: submitSupplierKYB
+      summary: Submit a provider-hosted KYB reference after recent MFA
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProviderReferenceRequest' } } } }
+      responses: { '200': { description: Provider review state recorded. } }
+  /organizations/{organizationID}/onboarding/kyb/reconcile:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    post:
+      operationId: reconcileSupplierKYB
+      summary: Poll the identity provider and apply its authoritative KYB state after recent MFA
+      responses:
+        '200': { description: "Provider status reconciled idempotently." }
+        '409': { description: "KYB has not been submitted or the provider state is unsupported." }
+        '503': { description: "Provider lookup is temporarily unavailable." }
+  /organizations/{organizationID}/onboarding/settlement:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    put:
+      operationId: updateSupplierSettlement
+      summary: Save a provider reference and masked settlement destination after recent MFA
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SettlementRequest' } } } }
+      responses: { '200': { description: Settlement verification state recorded without full bank details. } }
+  /organizations/{organizationID}/onboarding/billing:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    put:
+      operationId: updateSupplierBilling
+      summary: Configure the supplier billing method after recent MFA
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BillingRequest' } } } }
+      responses: { '200': { description: Billing instruction recorded. } }
+  /organizations/{organizationID}/onboarding/credit-policy:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    put:
+      operationId: updateSupplierDefaultCreditPolicy
+      summary: Configure safe defaults for new supplier credit
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DefaultCreditPolicyRequest' } } } }
+      responses: { '200': { description: Default policy recorded. } }
+  /organizations/{organizationID}/onboarding/consents:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    post:
+      operationId: acceptSupplierOnboardingConsents
+      summary: Accept the current supplier terms and privacy versions as owner
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SupplierConsentRequest' } } } }
+      responses: { '200': { description: Versioned consent evidence recorded. } }
+  /organizations/{organizationID}/documents:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: uploadDocument
+      summary: Upload an invoice or evidence document for scanning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, file_name, content_type, retention_class, content_base64]
+              properties:
+                purpose: {type: string}
+                file_name: {type: string}
+                content_type: {type: string, enum: [application/pdf, image/jpeg, image/png]}
+                retention_class: {type: string}
+                content_base64: {type: string}
+      responses:
+        '202': {description: "Document accepted for scanning"}
+  /organizations/{organizationID}/documents/upload-slot:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: createDocumentUploadSlot
+      summary: Create quarantined document metadata and a short-lived direct-upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, file_name, content_type, retention_class, size_bytes]
+              properties:
+                purpose: {type: string}
+                file_name: {type: string}
+                content_type: {type: string, enum: [application/pdf, image/jpeg, image/png]}
+                retention_class: {type: string}
+                size_bytes: {type: integer, format: int64, minimum: 1, maximum: 26214400}
+      responses:
+        '201': {description: "Upload slot created"}
+  /organizations/{organizationID}/documents/{documentID}/complete:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - name: documentID
+        in: path
+        required: true
+        schema: {type: string}
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: completeDocumentUpload
+      summary: Verify a direct upload and enqueue it for malware scanning
+      responses:
+        '202': {description: "Upload verified and awaiting scan"}
+  /organizations/{organizationID}/documents/{documentID}/download:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - name: documentID
+        in: path
+        required: true
+        schema: {type: string}
+    get:
+      operationId: documentDownload
+      summary: Get a short-lived signed document URL
+      responses:
+        '200': {description: "Signed document URL"}
+  /organizations/{organizationID}/support-cases:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listSupportCases
+      summary: List support cases for an organisation
+      responses:
+        '200': {description: "Support cases"}
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: openSupportCase
+      summary: Open a support case tied to a subject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject_type, subject_id]
+              properties:
+                subject_type: {type: string}
+                subject_id: {type: string}
+                message: {type: string, maxLength: 2000}
+                break_glass: {type: boolean}
+      responses:
+        '201': {description: "Support case opened"}
+  /organizations/{organizationID}/support-cases/{caseID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - name: caseID
+        in: path
+        required: true
+        schema: {type: string}
+    patch:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: transitionSupportCase
+      summary: Transition a support case and append an event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state: {type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED]}
+                note: {type: string}
+      responses:
+        '200': {description: "Support case updated"}
+  /buyer/relationships/consents:
+    get:
+      operationId: listBuyerConsents
+      summary: List the authenticated buyer's relationship consents and known suppliers
+      responses:
+        '200':
+          description: Buyer consent history and supplier display names, including limits before sale activation and previous consent relationships
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [consents, suppliers]
+                properties:
+                  consents:
+                    type: array
+                    items: {type: object}
+                  suppliers:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, legal_name, trading_name]
+                      properties:
+                        id: {type: string, format: uuid}
+                        legal_name: {type: string}
+                        trading_name: {type: string}
+        '503': {description: Consent history or supplier directory could not be verified}
+    post:
+      operationId: recordBuyerConsent
+      summary: Record a versioned buyer relationship consent decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [supplier_organization_id, consent_type, version, evidence_hash, granted]
+              properties:
+                supplier_organization_id: {type: string}
+                consent_type: {type: string}
+                version: {type: string}
+                evidence_hash: {type: string}
+                granted: {type: boolean}
+      responses:
+        '201': {description: "Consent recorded"}
+  /organizations/{organizationID}/buyer-invitations:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      operationId: createBuyerInvitation
+      summary: Create a secure buyer onboarding invitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyerInvitationRequest'
+      responses:
+        '202':
+          description: Buyer invitation created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerInvitationCreatedResponse'
+  /buyer-invitations/{token}:
+    parameters:
+      - $ref: '#/components/parameters/InvitationToken'
+    get:
+      security: []
+      operationId: previewBuyerInvitation
+      summary: Preview a secure buyer invitation
+      responses:
+        '200':
+          description: Safe invitation preview.
+        '404':
+          description: Invalid or expired invitation.
+  /buyer-invitations/{token}/otp:
+    parameters:
+      - $ref: '#/components/parameters/InvitationToken'
+    post:
+      security: []
+      operationId: requestBuyerInvitationOTP
+      summary: Request OTP for the intended buyer contact
+      responses:
+        '202':
+          description: Buyer verification challenge created.
+  /buyer-invitations/{token}/accept:
+    parameters:
+      - $ref: '#/components/parameters/InvitationToken'
+    post:
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      security: []
+      operationId: acceptBuyerInvitation
+      summary: Verify the buyer and create the buyer portal account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyerInvitationAcceptRequest'
+      responses:
+        '201':
+          description: Buyer portal account created and verified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerPortalResponse'
+  /buyer/me:
+    get:
+      operationId: getBuyerPortal
+      summary: Get the current buyer portal profile
+      responses:
+        '200':
+          description: Buyer person, business, authority, verification, and consent state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerPortalResponse'
+  /buyer/credit-requests:
+    get:
+      operationId: listBuyerCreditRequests
+      summary: List credit requests and obligations belonging to the current buyer
+      responses:
+        '200':
+          description: Buyer-visible credit requests.
+  /organizations/{organizationID}/credit-requests:
+    post:
+      operationId: createCreditRequest
+      summary: Create a one-time credit request
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRequestInput'
+      responses:
+        '201':
+          description: Credit request created.
+    get:
+      operationId: listCreditRequests
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200':
+          description: Credit requests.
+  /organizations/{organizationID}/credit-requests/{requestID}:
+    get:
+      operationId: getSupplierCreditRequest
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Complete supplier-visible credit request and evidence timeline.
+    patch:
+      operationId: updateDraftCreditRequest
+      summary: Amend a draft before an immutable agreement version is created
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditDraftUpdate'
+      responses:
+        '200':
+          description: Draft terms updated with optimistic version checking.
+  /organizations/{organizationID}/credit-requests/{requestID}/send:
+    post:
+      operationId: sendCreditRequest
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Agreement version created and request sent.
+  /organizations/{organizationID}/credit-requests/{requestID}/cancel:
+    post:
+      operationId: cancelCreditRequest
+      summary: Cancel an unaccepted credit request
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Request cancelled without deleting its history.
+  /organizations/{organizationID}/credit-requests/{requestID}/release:
+    post:
+      operationId: releaseGoods
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Goods release evidence recorded.
+  /buyer/credit-requests/{requestID}:
+    get:
+      operationId: getBuyerCreditRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Buyer credit review.
+  /buyer/credit-requests/{requestID}/agreement:
+    get:
+      operationId: getBuyerAgreement
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Immutable agreement version presented to the buyer.
+  /buyer/credit-requests/{requestID}/agreement-document:
+    get:
+      operationId: getBuyerAgreementDocument
+      summary: Render the activated agreement as a printable document
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Printable immutable agreement and activation evidence.
+          content:
+            text/html:
+              schema: {type: string}
+        '409':
+          description: Agreement has not activated or its evidence is incomplete.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /buyer/credit-requests/{requestID}/mandate:
+    post:
+      operationId: authorizeCreditMandate
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount_ceiling_kobo: {type: integer, format: int64, minimum: 1}
+      responses:
+        '200':
+          description: Existing suitable mandate or pending hosted authorization. The mandate is active only after provider confirmation.
+  /buyer/credit-requests/{requestID}/accept:
+    post:
+      operationId: acceptCreditRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditAcceptRequest'
+      responses:
+        '200':
+          description: Credit agreement accepted.
+  /buyer/credit-requests/{requestID}/decline:
+    post:
+      operationId: declineCreditRequest
+      summary: Decline a credit request before acceptance
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Request declined and retained as factual history.
+  /buyer/credit-requests/{requestID}/receipt:
+    post:
+      operationId: recordReceipt
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Receipt confirmation recorded; confirmed receipts activate the obligation.
+  /organizations/{organizationID}/credit-requests/{requestID}/payments:
+    post:
+      operationId: recordPayment
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInput'
+      responses:
+        '201':
+          description: Payment recognized and allocated.
+    get:
+      operationId: listPayments
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Payment history and authoritative cached outstanding amount.
+  /organizations/{organizationID}/credit-requests/{requestID}/payments/{paymentID}/reverse:
+    post:
+      operationId: reversePayment
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/PaymentID'
+      responses:
+        '200':
+          description: Reversal event recorded.
+  /organizations/{organizationID}/credit-requests/{requestID}/reconciliation:
+    get:
+      operationId: reconcilePayments
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Rebuilt outstanding balance and related ledger transactions.
+  /organizations/{organizationID}/credit-requests/{requestID}/agreement-document:
+    get:
+      operationId: getSupplierAgreementDocument
+      summary: Render the activated agreement as a printable document
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Printable immutable agreement and activation evidence.
+          content:
+            text/html:
+              schema: {type: string}
+        '409':
+          description: Agreement has not activated or its evidence is incomplete.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /buyer/credit-requests/{requestID}/payments:
+    get:
+      operationId: listBuyerPayments
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Buyer-visible factual payment history.
+  /buyer/obligations/{obligationID}:
+    get:
+      operationId: getBuyerObligation
+      summary: Get the complete buyer-visible obligation statement projection
+      parameters:
+        - name: obligationID
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: "Obligation, schedule, payments, disputes, and payment claims."}
+        '404': {description: "Obligation not found for the current buyer."}
+  /buyer/credit-requests/{requestID}/payment-claims:
+    post:
+      operationId: createBuyerPaymentClaim
+      summary: Claim an off-platform payment and create a bounded collection hold
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentClaimInput'
+      responses:
+        '201':
+          description: Payment claim opened for supplier review.
+        '409':
+          description: Feature disabled, invalid amount, or ineligible obligation.
+  /buyer/mandates/{mandateID}/cancel:
+    post:
+      operationId: cancelBuyerMandate
+      summary: Cancel a mandate and suspend dependent collection authority
+      parameters:
+        - name: mandateID
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200': {description: "Mandate cancelled and dependent resources suspended."}
+  /buyer/mandates/{mandateID}/restore:
+    post:
+      operationId: restoreBuyerMandate
+      summary: Start a fresh authorization for an inactive mandate
+      parameters:
+        - name: mandateID
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201': {description: "Fresh mandate authorization created and attached."}
+  /buyer/payment-claims:
+    get:
+      operationId: listBuyerPaymentClaims
+      summary: List the current buyer's payment claims
+      responses:
+        '200':
+          description: Buyer-visible payment claims.
+  /organizations/{organizationID}/credit-requests/{requestID}/payment-claims:
+    get:
+      operationId: listPaymentClaims
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Supplier-visible claims for the obligation.
+  /organizations/{organizationID}/payment-claims:
+    get:
+      operationId: listOrganizationPaymentClaims
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200':
+          description: All payment claims awaiting or retaining supplier decisions.
+  /organizations/{organizationID}/payment-claims/{claimID}/decide:
+    post:
+      operationId: decidePaymentClaim
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - name: claimID
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentClaimDecisionInput'
+      responses:
+        '200':
+          description: Claim confirmed and recognized as a payment, or rejected.
+  /public/receipts/{token}:
+    get:
+      security: []
+      operationId: getPublicReceipt
+      summary: Resolve a signed privacy-safe payment receipt
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Minimal public receipt projection.
+        '410':
+          description: Receipt token is invalid or expired.
+  /buyer/credit-requests/{requestID}/payment-link:
+    post:
+      operationId: createPaymentLink
+      summary: Create a signed short-lived exact-balance payment link
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201': {description: "Short-lived payment URL created."}
+  /public/payment-intents/{token}:
+    get:
+      security: []
+      operationId: getPublicPaymentIntent
+      summary: Resolve the privacy-minimized exact payment projection
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: "Exact outstanding amount and approved next action."}
+        '410': {description: "Payment token is invalid or expired."}
+  /organizations/{organizationID}/credit-requests/{requestID}/schedule:
+    post:
+      operationId: createRepaymentSchedule
+      deprecated: true
+      description: Accepted repayment schedules are immutable. Date changes require the separate admin proposal and buyer-accepted amendment workflow; this endpoint cannot replace accepted schedules.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleInput'
+      responses:
+        '409':
+          description: accepted_schedule_locked; existing accepted terms cannot be replaced.
+    get:
+      operationId: getRepaymentSchedule
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Schedule and item states.
+  /buyer/credit-requests/{requestID}/schedule:
+    get:
+      operationId: getBuyerRepaymentSchedule
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Buyer-visible repayment schedule.
+  /organizations/{organizationID}/trade-lines:
+    post:
+      operationId: createTradeLine
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeLineInput'
+      responses:
+        '201':
+          description: Trade line created.
+    get:
+      operationId: listTradeLines
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200':
+          description: Supplier trade lines.
+  /organizations/{organizationID}/trade-lines/{lineID}:
+    get:
+      operationId: getTradeLine
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+      responses:
+        '200':
+          description: Trade-line limit, exposure, mandate state, and drawdowns.
+    patch:
+      operationId: reduceTradeLineLimit
+      summary: Reduce unused trade-line limit with optimistic concurrency
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_version, approved_limit_kobo]
+              properties:
+                expected_version: {type: integer, format: int64, minimum: 1}
+                approved_limit_kobo: {type: integer, format: int64, minimum: 1}
+      responses:
+        '200': {description: "Unused limit reduced without changing active obligations."}
+        '409': {description: "Version conflict, exposure floor, or increase requiring fresh acceptance."}
+  /organizations/{organizationID}/trade-lines/{lineID}/drawdowns:
+    post:
+      operationId: reserveDrawdown
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DrawdownInput'
+      responses:
+        '201':
+          description: Drawdown reservation created.
+  /buyer/trade-lines/{lineID}/drawdowns/{drawdownID}/confirm:
+    post:
+      operationId: confirmTradeLineDrawdown
+      parameters:
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/DrawdownID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agreement_hash]
+              properties:
+                agreement_hash: {type: string, minLength: 64, maxLength: 64}
+      responses:
+        '200':
+          description: Buyer confirmed the immutable specific drawdown terms.
+  /organizations/{organizationID}/trade-lines/{lineID}/drawdowns/{drawdownID}/release:
+    post:
+      operationId: releaseTradeLineDrawdownGoods
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/DrawdownID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [delivery_method, evidence_reference]
+              properties:
+                delivery_method: {type: string}
+                notes: {type: string}
+                evidence_reference: {type: string}
+      responses:
+        '200':
+          description: Confirmed drawdown records supplier release evidence.
+  /organizations/{organizationID}/trade-lines/{lineID}/drawdowns/{drawdownID}/cancel:
+    post:
+      operationId: cancelTradeLineDrawdown
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/DrawdownID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': {description: "Pending drawdown cancelled and reserved capacity released."}
+  /buyer/trade-lines/{lineID}/drawdowns/{drawdownID}/receipt:
+    post:
+      operationId: recordTradeLineDrawdownReceipt
+      parameters:
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/DrawdownID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state: {type: string, enum: [no_issue, issue_reported]}
+                issue_reason: {type: string}
+      responses:
+        '200': {description: "Receipt recorded; no-issue creates the obligation internally, while an issue blocks activation."}
+  /buyer/trade-lines/{lineID}/drawdowns/{drawdownID}/cancel:
+    post:
+      operationId: cancelBuyerDrawdown
+      summary: Cancel a buyer-owned pending drawdown and release its capacity
+      parameters:
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/DrawdownID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': {description: "Pending reservation cancelled safely."}
+  /buyer/trade-lines/{lineID}/statement:
+    get:
+      operationId: getBuyerTradeLineStatement
+      parameters:
+        - $ref: '#/components/parameters/LineID'
+      responses:
+        '200': {description: "Buyer-owned trade line with immutable drawdown terms and evidence."}
+  /buyer/trade-lines/{lineID}/drawdowns/{drawdownID}/agreement-document:
+    get:
+      operationId: getBuyerDrawdownAgreementDocument
+      summary: Render a hash-verified trade-line drawdown agreement
+      parameters:
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/DrawdownID'
+      responses:
+        '200':
+          description: Printable drawdown terms verified against their canonical hash.
+          content:
+            text/html:
+              schema: {type: string}
+        '409': {description: "Stored terms no longer match the agreement hash."}
+  /organizations/{organizationID}/trade-lines/{lineID}/drawdowns/{drawdownID}/agreement-document:
+    get:
+      operationId: getSupplierDrawdownAgreementDocument
+      summary: Render a hash-verified trade-line drawdown agreement
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+        - $ref: '#/components/parameters/DrawdownID'
+      responses:
+        '200':
+          description: Printable drawdown terms verified against their canonical hash.
+          content:
+            text/html:
+              schema: {type: string}
+        '409': {description: "Stored terms no longer match the agreement hash."}
+  /organizations/{organizationID}/trade-lines/{lineID}/suspend:
+    post:
+      operationId: suspendTradeLine
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+      responses:
+        '200':
+          description: Trade line suspended.
+  /organizations/{organizationID}/trade-lines/{lineID}/resume:
+    post:
+      operationId: resumeTradeLine
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+      responses:
+        '200':
+          description: Trade line resumed.
+  /organizations/{organizationID}/trade-lines/{lineID}/statement:
+    get:
+      operationId: getTradeLineStatement
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/LineID'
+      responses:
+        '200':
+          description: Recurring trade-line statement with exposure and drawdowns.
+  /organizations/{organizationID}/credit-requests/{requestID}/collection/eligibility:
+    get:
+      operationId: collectionEligibility
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Collection eligibility and explicit reason codes.
+  /organizations/{organizationID}/credit-requests/{requestID}/collection:
+    post:
+      operationId: startCollection
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionStartInput'
+      responses:
+        '202':
+          description: Collection provider submission started.
+  /organizations/{organizationID}/credit-requests/{requestID}/collections:
+    get:
+      operationId: listCollections
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Collection attempt history.
+  /organizations/{organizationID}/collections/{attemptID}/retry:
+    post:
+      operationId: retryCollection
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/AttemptID'
+      responses:
+        '202':
+          description: Retry submitted.
+  /organizations/{organizationID}/collections/{attemptID}/reconcile:
+    post:
+      operationId: reconcileCollection
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/AttemptID'
+      responses:
+        '200':
+          description: Provider state reconciled.
+  /webhooks/mono:
+    post:
+      operationId: receiveMonoWebhook
+      security: []
+      description: Authenticate the Mono shared-secret header, discard sensitive fields, and durably enqueue reconciliation. Also available at /webhooks/mono outside the API prefix.
+      parameters:
+        - name: mono-webhook-secret
+          in: header
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '200': {description: "Receipt saved for asynchronous processing."}
+        '401': {description: "Invalid authentication or payload."}
+        '503': {description: "Disabled or unavailable; retry delivery."}
+  /buyer/businesses/{businessID}/repayment-customer:
+    post:
+      operationId: createRepaymentCustomer
+      description: Register the business owner's repayment customer with consent. Requires recent MFA, CSRF, and an idempotency key. BVN is sent directly to the provider and is never persisted or returned. Registration is not verification or trade-credit acceptance.
+      parameters:
+        - name: businessID
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, email, phone, address, bvn, consent_version]
+              properties:
+                first_name: {type: string}
+                last_name: {type: string}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string, maxLength: 100}
+                bvn: {type: string, pattern: '^[0-9]{11}$', writeOnly: true}
+                consent_version: {type: string}
+      responses:
+        '201': {description: "Registered; only registration status returned."}
+        '200': {description: "Already registered."}
+        '403': {description: "Recent MFA or CSRF required."}
+        '404': {description: "Business not owned by the authenticated user."}
+        '409': {description: "Provider registration not confirmed."}
+        '503': {description: "Mono sandbox not configured."}
+  /webhooks/collection/{provider}:
+    post:
+      security: []
+      operationId: collectionWebhook
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionWebhook'
+      responses:
+        '202':
+          description: Callback authenticated as a reconciliation signal; no financial state is accepted from callback fields.
+  /buyer/schedule-items/{itemID}/collection-notice/acknowledge:
+    post:
+      operationId: acknowledgeCollectionNotice
+      summary: Record an authenticated buyer acknowledgement of a delivered pre-debit notice
+      parameters:
+        - name: itemID
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notification_id]
+              properties:
+                notification_id: {type: string, format: uuid, description: Delivered notification shown for the current payment date and amount.}
+      responses:
+        '204': {description: "Notice acknowledged idempotently."}
+        '400': {description: "A valid notification ID is required."}
+        '409': {description: "Notice is no longer current, delivered, or eligible for acknowledgement. Refresh the sale."}
+        '503': {description: "Acknowledgement could not be saved."}
+        '404': {description: "Schedule item is not owned by the authenticated buyer."}
+  /organizations/{organizationID}/credit-requests/{requestID}/disputes:
+    post:
+      operationId: openDispute
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisputeInput'
+      responses:
+        '201':
+          description: Dispute opened.
+  /buyer/credit-requests/{requestID}/disputes:
+    post:
+      operationId: openBuyerDispute
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisputeInput'
+      responses:
+        '201':
+          description: Buyer dispute opened.
+  /organizations/{organizationID}/disputes:
+    get:
+      operationId: listDisputes
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200':
+          description: Supplier dispute queue.
+  /organizations/{organizationID}/disputes/{disputeID}:
+    get:
+      operationId: getDispute
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/DisputeID'
+      responses:
+        '200':
+          description: Dispute, evidence, and decision timeline.
+  /organizations/{organizationID}/disputes/{disputeID}/evidence:
+    post:
+      operationId: addDisputeEvidence
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/DisputeID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceInput'
+      responses:
+        '201':
+          description: Evidence appended.
+  /organizations/{organizationID}/disputes/{disputeID}/decide:
+    post:
+      operationId: decideDispute
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/DisputeID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionInput'
+      responses:
+        '200':
+          description: Dispute decision and append-only decision record.
+  /organizations/{organizationID}/credit-requests/{requestID}/write-off:
+    post:
+      operationId: writeOffObligation
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationInput'
+      responses:
+        '200':
+          description: Audited write-off action.
+  /organizations/{organizationID}/credit-requests/{requestID}/fee-waiver:
+    post:
+      operationId: waiveObligationFee
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationInput'
+      responses:
+        '200':
+          description: Audited fee-waiver action.
+  /organizations/{organizationID}/operations:
+    get:
+      operationId: listOperationActions
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200':
+          description: Audited operational action history.
+  /webhooks/notifications/{channel}:
+    post:
+      security: []
+      operationId: notificationDeliveryReceipt
+      summary: Record authenticated delivery evidence from the configured notification connector
+      description: X-Notification-Signature is the hex HMAC-SHA256 of the exact request body using the channel connector token. Receipt IDs deduplicate per channel. A send acknowledgment is not delivery evidence. Connectors retry 409 when a sent message is not yet committed.
+      parameters:
+        - name: channel
+          in: path
+          required: true
+          schema: { type: string, enum: [email, sms, whatsapp] }
+        - name: X-Notification-Signature
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id, notification_event_id, message_id, delivered_at]
+              properties:
+                event_id: { type: string, maxLength: 200 }
+                notification_event_id: { type: string }
+                message_id: { type: string }
+                delivered_at: { type: string, format: date-time }
+      responses:
+        '200': { description: "Delivery receipt recorded or exact replay acknowledged" }
+        '401': { description: "Missing or invalid connector signature" }
+        '409': { description: "Conflicting receipt or matching sent message unavailable" }
+  /pricing:
+    get:
+      operationId: publicPricing
+      security: []
+      summary: Current supplier fee rates for new offers; existing offers retain their recorded rates
+      responses:
+        '200':
+          description: Current rates; response must not be cached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeeTerms'
+        '503': { description: "Pricing unavailable" }
+  /ops/business-policies:
+    get:
+      operationId: businessPolicies
+      summary: Current settings, field definitions, last 100 changes and immutable decision history
+      responses:
+        '200': { description: "Current revision, catalog, deployment boundaries and history; no secrets" }
+        '403': { description: "Platform administrator role and MFA required" }
+        '503': { description: "Policy persistence unavailable" }
+    post:
+      operationId: proposeBusinessPolicy
+      summary: Propose a complete policy snapshot for independent approval
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, base_revision, values, reason, effective_at]
+              properties:
+                id: { type: string, format: uuid }
+                base_revision: { type: integer, format: int64, minimum: 0 }
+                values: { $ref: '#/components/schemas/BusinessPolicyValues' }
+                reason: { type: string, minLength: 8, maxLength: 2000 }
+                effective_at: { type: string, format: date-time }
+      responses:
+        '201': { description: "Proposal recorded without changing active settings" }
+        '403': { description: "Platform administrator role, fresh MFA and CSRF required" }
+        '409': { description: "Invalid values, conflicting identifier, stale revision or outstanding change" }
+  /ops/business-policies/{changeID}/decision:
+    post:
+      operationId: decideBusinessPolicy
+      parameters:
+        - name: changeID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, reason]
+              properties:
+                action: { type: string, enum: [approve, reject, cancel] }
+                reason: { type: string, minLength: 8, maxLength: 2000 }
+      responses:
+        '200': { description: "Decision recorded; approved policy becomes effective at its scheduled time" }
+        '403': { description: "Platform administrator role, fresh MFA and CSRF required" }
+        '409': { description: "Self approval, outdated proposal, expired date or invalid transition" }
+  /ops/financial-reconciliation:
+    get:
+      operationId: financialReviews
+      summary: Open financial differences with ownership and immutable review history
+      responses:
+        '200': { description: "Open reconciliation cases, with monetary values as decimal kobo strings" }
+        '403': { description: "Provider operations permission and MFA required" }
+        '503': { description: "Financial records unavailable" }
+  /ops/financial-reconciliation/{caseID}/decision:
+    post:
+      operationId: decideFinancialReview
+      parameters:
+        - name: caseID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, reason]
+              properties:
+                action: { type: string, enum: [claim, resolve] }
+                reason: { type: string, minLength: 8, maxLength: 2000 }
+      responses:
+        '200': { description: "Review claimed or resolved with immutable evidence" }
+        '403': { description: "Provider operations permission, MFA and CSRF required" }
+        '409': { description: "Ownership conflict or financial records still disagree" }
+  /webhooks/messaging/whatsapp:
+    post:
+      security: []
+      operationId: whatsappWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsAppWebhook'
+      responses:
+        '200':
+          description: Structured command parsed; financial actions require secure confirmation.
+  /me/notifications:
+    get:
+      operationId: myNotifications
+      responses:
+        '200':
+          description: Current user's notification delivery history.
 
+  /organizations/{organizationID}/reports/receivables:
+    get:
+      operationId: reportReceivables
+      summary: Reconciled receivables summary and rows
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200': { description: "Receivables report" }
+  /organizations/{organizationID}/provider-status:
+    get:
+      operationId: providerStatus
+      summary: Show provider capabilities and current feature-gate state
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200': { description: "Provider capability status" }
+  /organizations/{organizationID}/readiness:
+    get:
+      operationId: readinessStatus
+      summary: Show production-readiness gates and pilot limits
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200':
+          description: Readiness report; evidence references are not exposed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessReport'
+  /ops/metrics:
+    get:
+      operationId: metricsStatus
+      summary: Read authenticated service metrics snapshot
+      responses:
+        '200': { description: "Metrics snapshot" }
+  /ops/metrics/prometheus:
+    get:
+      operationId: metricsPrometheus
+      summary: Read authenticated Prometheus service metrics
+      responses:
+        '200':
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema:
+                type: string
+  /ops/overview:
+    get:
+      operationId: operationsOverview
+      summary: Read platform operations health counters
+      responses:
+        '200': { description: "Privacy-safe operations overview" }
+        '403': { description: "Platform role or step-up authentication required" }
+  /ops/analytics/scorecard:
+    get:
+      operationId: operationsAnalyticsScorecard
+      summary: Read the live, reconciled pilot KPI scorecard
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - name: organization_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: "KPI definitions, values, freshness, funnel and source reconciliation" }
+        '400': { description: "Invalid date window or organization filter" }
+        '403': { description: "Compliance review role and step-up authentication required" }
+  /me/product-feedback:
+    post:
+      operationId: submitProductFeedback
+      summary: Record one privacy-safe product clarity answer
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [area, screen, answer]
+              properties:
+                organization_id: { type: string, format: uuid }
+                area: { type: string, enum: [seller, buyer] }
+                screen: { type: string, enum: [overview] }
+                answer: { type: string, enum: [yes, partly, no] }
+      responses:
+        '201': { description: "Feedback answer recorded" }
+        '400': { description: "Invalid feedback answer" }
+        '401': { description: "Authentication required" }
+        '403': { description: "CSRF or supplier organisation access failed" }
+  /ops/jobs:
+    get:
+      operationId: operationsJobs
+      summary: List privacy-safe durable job activity
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: "Job activity without encoded payloads" }
+        '403': { description: "Provider operations role required" }
+  /ops/provider-events:
+    get:
+      operationId: operationsProviderEvents
+      summary: List provider webhook processing states
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: "Provider events without raw payloads" }
+        '403': { description: "Provider operations role required" }
+  /ops/commands/preview:
+    post:
+      operationId: previewOperationsCommand
+      summary: Preview the scoped effect of a protected operations command
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationsCommandInput' }
+      responses:
+        '200': { description: "Current target version and non-mutating impact preview" }
+        '403': { description: "Platform permission and step-up authentication required" }
+        '422': { description: "Target or command is invalid" }
+  /ops/commands:
+    post:
+      operationId: executeOperationsCommand
+      summary: Apply a versioned, idempotent, audited operations command
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationsCommandInput' }
+      responses:
+        '200': { description: "Immutable applied command and provider-safe result" }
+        '409': { description: "Version conflict or unsafe provider transition" }
+        '403': { description: "Permission, CSRF, or recent MFA required" }
+  /ops/diagnostics:
+    get:
+      operationId: operationsDiagnostics
+      summary: Read redacted provider, queue, reconciliation, and integrity diagnostics
+      parameters:
+        - name: window_minutes
+          in: query
+          schema: { type: integer, minimum: 5, maximum: 1440, default: 60 }
+      responses:
+        '200': { description: "Redacted operational diagnostics for the selected window" }
+        '403': { description: "Provider operations role required" }
+  /ops/search:
+    get:
+      operationId: operationsSearch
+      summary: Find an exact public or internal reference
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 4, maxLength: 128 }
+      responses:
+        '200': { description: "Permission-scoped reference matches" }
+        '400': { description: "Search reference is invalid" }
+        '403': { description: "Support search role required" }
+  /ops/users:
+    get:
+      operationId: operationsUsers
+      summary: List or find platform users for audited administration
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: "User directory with account state and organization count" }
+        '403': { description: "Support search role required" }
+  /ops/organizations:
+    get:
+      operationId: operationsOrganizations
+      summary: List or find businesses for audited administration
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: "Business directory with status and outstanding balance" }
+        '403': { description: "Support search role required" }
+  /ops/money:
+    get:
+      operationId: operationsMoney
+      summary: Review platform-wide payment and collection totals
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: "Reconciled money summary and recent activity" }
+        '403': { description: "Compliance review role required" }
+  /ops/cases:
+    get:
+      operationId: operationsCases
+      summary: List support cases across the platform
+      parameters:
+        - name: state
+          in: query
+          schema: { type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED] }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: "Support case queue" }
+        '403': { description: "Case management role required" }
+  /ops/audit:
+    get:
+      operationId: operationsAudit
+      summary: Review platform or organization audit history
+      parameters:
+        - name: organization_id
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: "Privacy-filtered audit events" }
+        '403': { description: "Compliance review role required" }
+  /ops/cases/{caseID}:
+    get:
+      operationId: operationsCase
+      summary: Review a support case and its append-only timeline
+      parameters:
+        - name: caseID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: "Support case and timeline" }
+        '403': { description: "Case management role required" }
+        '404': { description: "Support case not found" }
+    patch:
+      operationId: transitionOperationsCase
+      summary: Move a platform support case to its next state
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - name: caseID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state, note]
+              properties:
+                state: { type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED] }
+                note: { type: string, minLength: 4, maxLength: 2000 }
+      responses:
+        '200': { description: "Updated case and appended timeline event" }
+        '403': { description: "Recent MFA, CSRF, and case management role required" }
+  /ops/disputes:
+    get:
+      operationId: operationsDisputes
+      summary: List disputes across the platform
+      parameters:
+        - name: state
+          in: query
+          schema: { type: string, enum: [OPEN, UNDER_REVIEW, PARTIALLY_RESOLVED, RESOLVED, WITHDRAWN] }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: "Dispute review queue" }
+        '403': { description: "Dispute review role required" }
+  /ops/disputes/{disputeID}:
+    get:
+      operationId: operationsDispute
+      summary: Review a dispute, evidence, and decisions
+      parameters:
+        - name: disputeID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: "Dispute review record" }
+        '403': { description: "Dispute review role required" }
+        '404': { description: "Dispute not found" }
+  /ops/disputes/{disputeID}/decide:
+    post:
+      operationId: decideOperationsDispute
+      summary: Record an audited platform dispute decision
+      parameters:
+        - name: disputeID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome, valid_principal_kobo, adjustment_kobo, remaining_disputed_kobo, reason]
+              properties:
+                outcome: { type: string, enum: [FULL_ADJUSTMENT, PARTIAL_ADJUSTMENT, REJECTED] }
+                valid_principal_kobo: { type: integer, format: int64, minimum: 0 }
+                adjustment_kobo: { type: integer, format: int64, minimum: 0 }
+                remaining_disputed_kobo: { type: integer, format: int64, minimum: 0 }
+                reason: { type: string, minLength: 8, maxLength: 2000 }
+      responses:
+        '200': { description: "Updated dispute and decision" }
+        '403': { description: "Recent MFA, CSRF, and dispute review role required" }
+  /ops/team:
+    get:
+      operationId: operationsTeam
+      summary: List active platform role assignments
+      responses:
+        '200': { description: "Active admin team and access expiry" }
+        '403': { description: "Platform administrator role required" }
+  /ops/team/{userID}/roles:
+    post:
+      operationId: grantOperationsRole
+      summary: Grant or refresh an audited platform role
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role, reason]
+              properties:
+                role: { type: string, enum: [support_agent, compliance_reviewer, dispute_reviewer, platform_admin, finance_operator, policy_manager, approver, access_administrator] }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+                expires_at: { type: string, format: date-time }
+      responses:
+        '200': { description: "Active platform role assignment" }
+        '403': { description: "Recent MFA, CSRF, and platform administrator role required" }
+  /ops/team/roles/{assignmentID}:
+    delete:
+      operationId: revokeOperationsRole
+      summary: Revoke an audited platform role
+      parameters:
+        - name: assignmentID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: "Platform role revoked" }
+        '409': { description: "Last administrator cannot remove their own access" }
+  /organizations/{organizationID}/reports/ageing:
+    get:
+      operationId: reportAgeing
+      summary: Receivables ageing buckets
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200': { description: "Ageing report" }
+  /organizations/{organizationID}/reports/fees:
+    get:
+      operationId: reportFees
+      summary: Base and collection fee summary
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200':
+          description: Base and collection fees, waived_fees_kobo, and total_fees_kobo net of waivers; negative net totals represent a credit. by_obligation contains the same breakdown.
+        '503': {description: "Fee balances could not be loaded reliably."}
+  /organizations/{organizationID}/reports/exports:
+    post:
+      operationId: exportReceivables
+      summary: Export a reconciled receivables report as CSV
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200': { description: "CSV export" }
+  /buyer/history:
+    get:
+      operationId: buyerHistory
+      summary: Buyer's factual, interpretable repayment history
+      responses:
+        '200':
+          description: Factual history; score is never returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [completed_obligations, active_obligations, obligations, score]
+                properties:
+                  generated_at: {type: string, format: date-time}
+                  verified_since: {type: [string, 'null'], format: date-time, description: Omitted until an authoritative identity-verification date is available; agreement activation is not verification.}
+                  active_obligations: {type: integer}
+                  completed_obligations: {type: integer}
+                  total_completed_principal_kobo: {type: integer}
+                  current_active_principal_kobo: {type: integer}
+                  largest_completed_amount_kobo: {type: integer}
+                  on_time_count: {type: integer}
+                  on_time_percentage: {type: number}
+                  late_payment_count: {type: integer}
+                  average_days_late: {type: number}
+                  unresolved_overdue_obligations: {type: integer}
+                  dispute_count: {type: integer}
+                  mandate_cancellations_while_owing: {type: integer}
+                  obligations: {type: array, items: {type: object, additionalProperties: true}}
+                  shareable: {type: boolean}
+                  score: {type: [number, 'null']}
+  /organizations/{organizationID}/customers/{buyerUserID}/history:
+    get:
+      operationId: supplierCustomerHistory
+      summary: Supplier-scoped factual history for one buyer relationship
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - name: buyerUserID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: "Supplier-scoped factual history" }
+  /organizations/{organizationID}/customers/{buyerUserID}/statement:
+    get:
+      operationId: supplierCustomerStatement
+      summary: Supplier customer ledger statement
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - name: buyerUserID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: "Customer statement" }
+  /buyer/history/corrections:
+    post:
+      operationId: openHistoryCorrection
+      summary: Request correction of an inaccurate fact
+      responses:
+        '201': { description: "Correction request" }
+  /organizations/{organizationID}/corrections:
+    get:
+      operationId: listCorrections
+      summary: List correction requests for an organisation
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200': { description: "Correction requests" }
+  /organizations/{organizationID}/corrections/{correctionID}/decide:
+    post:
+      operationId: decideCorrection
+      summary: Review or decide a correction request
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+        - $ref: '#/components/parameters/OrganizationID'
+        - name: correctionID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: "Correction decision" }
+
+  /organizations/{organizationID}/payments:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listOrganizationPayments
+      summary: List payments across an organisation's obligations
+      responses:
+        '200': { description: "Organisation payments" }
+  /organizations/{organizationID}/collections:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listOrganizationCollections
+      summary: List collection attempts across an organisation
+      responses:
+        '200': { description: "Organisation collection attempts" }
+  /organizations/{organizationID}/overdue:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listOrganizationOverdue
+      summary: List overdue repayment obligations
+      responses:
+        '200': { description: "Overdue obligations" }
+  /organizations/{organizationID}/customers:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listOrganizationCustomers
+      summary: List customers with current exposure
+      responses:
+        '200': { description: "Organisation customers" }
+  /buyer/mandates:
+    get:
+      operationId: listBuyerMandates
+      summary: List the authenticated buyer's payment mandates
+      responses:
+        '200': { description: "Buyer mandates" }
+  /buyer/trade-lines:
+    get:
+      operationId: listBuyerTradeLines
+      summary: List the authenticated buyer's trade lines
+      responses:
+        '200': { description: "Buyer trade lines" }
+  /buyer/disputes:
+    get:
+      operationId: listBuyerDisputes
+      summary: List the authenticated buyer's disputes
+      responses:
+        '200': { description: "Buyer disputes" }
+  /buyer/disputes/{disputeID}:
+    parameters:
+      - $ref: '#/components/parameters/DisputeID'
+    get:
+      operationId: getBuyerDispute
+      summary: Read an authenticated buyer's dispute, evidence, and decisions
+      responses:
+        '200': { description: "Buyer dispute timeline" }
+        '404': { description: "Dispute is absent or belongs to another buyer" }
+  /buyer/disputes/{disputeID}/evidence:
+    parameters:
+      - $ref: '#/components/parameters/DisputeID'
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+    post:
+      operationId: addBuyerDisputeEvidence
+      summary: Append evidence to an authenticated buyer's dispute
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceInput'
+      responses:
+        '201': { description: "Evidence appended" }
+        '404': { description: "Dispute is absent or belongs to another buyer" }
+
+  /me/notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      summary: Read the authenticated user's required and optional communication choices
+      responses:
+        '200': { description: "Notification preferences" }
+    put:
+      operationId: updateNotificationPreferences
+      summary: Update future optional-message routing and quiet hours
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preferred_channel, fallback_channel, payment_reminders_enabled, product_updates_enabled, quiet_start_hour, quiet_end_hour, timezone, expected_version]
+              properties:
+                preferred_channel: { type: string, enum: [email, sms, whatsapp] }
+                fallback_channel: { type: string, enum: [email, sms, whatsapp] }
+                payment_reminders_enabled: { type: boolean }
+                product_updates_enabled: { type: boolean }
+                quiet_start_hour: { type: integer, minimum: 0, maximum: 23 }
+                quiet_end_hour: { type: integer, minimum: 0, maximum: 23 }
+                timezone: { type: string, const: Africa/Lagos }
+                expected_version: { type: integer, minimum: 1 }
+                disable_required: { type: boolean, description: Always rejected when true. }
+      responses:
+        '200': { description: "Preferences updated" }
+        '409': { description: "Required messages cannot be disabled or the version is stale" }
+  /me/recovery-codes/regenerate:
+    post:
+      operationId: regenerateRecoveryCodes
+      summary: Revoke old recovery codes and display a new one-time set
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '200': { description: "Recovery codes shown once" }
+  /account-recovery/requests:
+    post:
+      security: []
+      operationId: requestAccountRecovery
+      summary: Start enumeration-safe account recovery
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, channel]
+              properties:
+                identifier: { type: string }
+                channel: { type: string, enum: [email, phone] }
+      responses:
+        '202': { description: "The same response is returned whether or not an account exists" }
+  /account-recovery/requests/{requestID}/evidence:
+    post:
+      security: []
+      operationId: addAccountRecoveryEvidence
+      summary: Add independently verified evidence to a recovery request
+      parameters:
+        - { name: requestID, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '200': { description: "Evidence accepted" }
+  /account-recovery/requests/{requestID}/complete:
+    post:
+      security: []
+      operationId: completeAccountRecovery
+      summary: Complete an approved recovery after cooling-off
+      parameters:
+        - { name: requestID, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '200': { description: "Recovery completed and existing sessions revoked" }
+  /me/privacy-requests:
+    get:
+      operationId: listMyPrivacyRequests
+      summary: List the authenticated user's privacy requests
+      responses:
+        '200': { description: "Privacy requests" }
+    post:
+      operationId: createPrivacyRequest
+      summary: Submit an identity-bound privacy-rights request
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '201': { description: "Privacy request received" }
+  /me/privacy-requests/{requestID}/export:
+    get:
+      operationId: downloadPrivacyExport
+      summary: Download an unexpired privacy-filtered export belonging to the user after fresh MFA
+      parameters:
+        - { name: requestID, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: "Protected authoritative JSON export" }
+        '404': { description: "Export missing, expired, or belongs to another user" }
+        '403': { description: Fresh MFA required }
+        '503': { description: Export persistence unavailable }
+  /me/account-recovery/{requestID}/cancel:
+    post:
+      operationId: cancelAccountRecovery
+      summary: Cancel an active recovery from a genuine signed-in session
+      parameters:
+        - { name: requestID, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '204': { description: "Recovery cancelled" }
+  /ops/account-recovery:
+    get:
+      operationId: listRecoveryReviews
+      summary: List recovery cases for authorized independent review
+      responses:
+        '200': { description: "Recovery review queue" }
+  /ops/account-recovery/{requestID}/review:
+    post:
+      operationId: reviewAccountRecovery
+      summary: Independently approve with cooling-off or reject a verified recovery
+      parameters:
+        - { name: requestID, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '200': { description: "Recovery review recorded" }
+  /ops/privacy-requests:
+    get:
+      operationId: listPrivacyReviews
+      summary: List privacy requests for authorized compliance review
+      responses:
+        '200': { description: "Privacy review queue" }
+  /ops/privacy-requests/{requestID}/decide:
+    post:
+      operationId: decidePrivacyRequest
+      summary: Record a reasoned retention-aware privacy decision
+      parameters:
+        - { name: requestID, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '200': { description: "Privacy decision recorded" }
+  /ops/privacy-requests/{requestID}/complete:
+    post:
+      operationId: completePrivacyRequest
+      summary: Complete approved privacy work under current owner or delegated governance
+      description: Fresh MFA and CSRF are required. The current owner in solo-owner mode may complete their own approval with a recorded reason. Delegated governance requires a different reviewer. Neither mode allows completing one’s own personal request.
+      parameters:
+        - { name: requestID, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision_reviewer_id, expected_version]
+              properties:
+                decision_reviewer_id: { type: string, format: uuid }
+                expected_version: { type: integer, minimum: 1 }
+                reason: { type: string, minLength: 8, maxLength: 2000, description: Required for solo-owner completion. }
+      responses:
+        '200': { description: "Privacy request completed" }
+        '403': { description: Authorized reviewer and fresh MFA required }
+        '409': { description: Review version or governance does not permit completion }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: kredit_session
+  parameters:
+    RequiredIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Reuse this key to safely retry a mutating request; a different payload returns IDEMPOTENCY_CONFLICT.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 100
+    OrganizationID:
+      name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    UserID:
+      name: userID
+      in: path
+      required: true
+      schema:
+        type: string
+    RequestID:
+      name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+    PaymentID:
+      name: paymentID
+      in: path
+      required: true
+      schema:
+        type: string
+    LineID:
+      name: lineID
+      in: path
+      required: true
+      schema:
+        type: string
+    DrawdownID:
+      name: drawdownID
+      in: path
+      required: true
+      schema:
+        type: string
+    AttemptID:
+      name: attemptID
+      in: path
+      required: true
+      schema:
+        type: string
+    DisputeID:
+      name: disputeID
+      in: path
+      required: true
+      schema:
+        type: string
+    InvitationToken:
+      name: token
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 64
+  schemas:
+    WebsiteCopy:
+      type: object
+      additionalProperties: false
+      required: [title, accent, introduction, sections]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        accent: { type: string, maxLength: 160 }
+        introduction: { type: string, minLength: 1, maxLength: 2000 }
+        sections:
+          type: array
+          maxItems: 40
+          description: Sections for FAQ, legal documents and guides. Introductions and contact pages use an empty array.
+          items:
+            type: object
+            additionalProperties: false
+            required: [heading, body]
+            properties:
+              heading: { type: string, minLength: 1, maxLength: 200 }
+              body: { type: string, minLength: 1, maxLength: 6000 }
+              points: { type: array, maxItems: 40, items: { type: string, minLength: 1, maxLength: 2000 } }
+        guide:
+          type: object
+          required: [description, category, keyphrase, faq, sources, related]
+          properties:
+            description: { type: string, minLength: 1, maxLength: 2000 }
+            category: { type: string }
+            keyphrase: { type: string, minLength: 1, maxLength: 200 }
+            faq: { type: array, maxItems: 40, items: { type: object, required: [heading, body], properties: { heading: { type: string }, body: { type: string } } } }
+            sources: { type: array, maxItems: 40, items: { type: object, required: [name, url, note], properties: { name: { type: string }, url: { type: string, format: uri }, note: { type: string } } } }
+            related: { type: array, maxItems: 12, uniqueItems: true, items: { type: string } }
+        contact:
+          type: object
+          required: [support_email, privacy_email, phone, address]
+          properties:
+            support_email: { type: string, format: email, maxLength: 254 }
+            privacy_email: { type: string, format: email, maxLength: 254 }
+            phone: { type: string, maxLength: 40 }
+            address: { type: string, minLength: 1, maxLength: 2000 }
+    WebsitePublication:
+      type: object
+      required: [copy, version, published_at, content_hash]
+      properties:
+        copy: { $ref: '#/components/schemas/WebsiteCopy' }
+        version: { type: integer, minimum: 1 }
+        published_at: { type: string, format: date-time }
+        content_hash: { type: string, pattern: '^[a-f0-9]{64}$' }
+    WebsiteEditorRecord:
+      type: object
+      required: [version, content]
+      properties:
+        version: { type: integer, minimum: 0 }
+        content:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [draft]
+              properties:
+                draft: { $ref: '#/components/schemas/WebsiteCopy' }
+                published: { $ref: '#/components/schemas/WebsitePublication' }
+    AdminChangeProposal:
+      type: object
+      additionalProperties: false
+      required: [id, obligation_id, kind, reason, values, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        obligation_id: { type: string, format: uuid }
+        kind: { type: string, enum: [write_off, fee_waiver, schedule_amendment] }
+        reason: { type: string, minLength: 8, maxLength: 2000 }
+        expires_at: { type: string, format: date-time, description: Within 30 days of submission. }
+        values:
+          type: object
+          additionalProperties: false
+          required: [amount_kobo, dates]
+          properties:
+            amount_kobo: { type: integer, format: int64, minimum: 0 }
+            dates:
+              type: array
+              maxItems: 60
+              items:
+                type: object
+                additionalProperties: false
+                required: [item_id, due_at]
+                properties:
+                  item_id: { type: string, format: uuid }
+                  due_at: { type: string, format: date-time }
+    AdminChangeDecision:
+      type: object
+      additionalProperties: false
+      required: [action, reason]
+      properties:
+        action: { type: string, enum: [approve, reject, cancel, accept] }
+        reason: { type: string, minLength: 8, maxLength: 2000 }
+    AdminReviewAssignment:
+      type: object
+      additionalProperties: false
+      required: [kind, id, owner_id, due_at, reason]
+      properties:
+        kind: { type: string, enum: [policy, financial_change, financial_review, dispute, recovery, privacy, support] }
+        id: { type: string, format: uuid }
+        owner_id: { type: string, description: Active authorized reviewer UUID or empty to unassign. }
+        due_at: { type: string, format: date-time }
+        reason: { type: string, minLength: 8, maxLength: 2000 }
+    BusinessPolicyPreviewInput:
+      type: object
+      additionalProperties: false
+      required: [base_revision, values]
+      properties:
+        base_revision: { type: integer, format: int64, minimum: 0 }
+        values: { $ref: '#/components/schemas/BusinessPolicyValues' }
+    FeeTerms:
+      type: object
+      required: [policy_revision, base_bps, collection_bps]
+      properties:
+        policy_revision: { type: integer, format: int64 }
+        base_bps: { type: integer, minimum: 0, maximum: 1000 }
+        collection_bps: { type: integer, minimum: 0, maximum: 1000 }
+    BusinessPolicyValues:
+      type: object
+      additionalProperties: false
+      required: [collections_enabled, automatic_collection, automatic_retry, payment_claims, notice_hours, max_retries, max_suppliers, max_buyers, max_principal_kobo, max_exposure_kobo, max_drawdowns_per_day, enhanced_review_kobo, correction_threshold_kobo, base_fee_bps, collection_fee_bps, allowed_industries, upcoming_notice_days, mandate_notice_days]
+      properties:
+        collections_enabled: { type: boolean }
+        automatic_collection: { type: boolean }
+        automatic_retry: { type: boolean }
+        payment_claims: { type: boolean }
+        notice_hours: { type: integer, minimum: 1, maximum: 720 }
+        max_retries: { type: integer, minimum: 1, maximum: 10 }
+        max_suppliers: { type: integer, minimum: 0, maximum: 1000000000 }
+        max_buyers: { type: integer, minimum: 0, maximum: 1000000000 }
+        max_principal_kobo: { type: integer, format: int64, minimum: 0, maximum: 9000000000000000 }
+        max_exposure_kobo: { type: integer, format: int64, minimum: 0, maximum: 9000000000000000 }
+        max_drawdowns_per_day: { type: integer, minimum: 0, maximum: 1000000 }
+        enhanced_review_kobo: { type: integer, format: int64, minimum: 0, maximum: 9000000000000000 }
+        correction_threshold_kobo: { type: integer, minimum: 1, maximum: 1000000 }
+        base_fee_bps: { type: integer, minimum: 0, maximum: 1000 }
+        collection_fee_bps: { type: integer, minimum: 0, maximum: 1000 }
+        allowed_industries: { type: string, maxLength: 2000 }
+        upcoming_notice_days: { type: integer, minimum: 1, maximum: 30 }
+        mandate_notice_days: { type: integer, minimum: 1, maximum: 90 }
+    OperationsCommandInput:
+      type: object
+      required: [command_type, target_type, target_id, reason, expected_version]
+      properties:
+        command_type:
+          type: string
+          enum: [retry_job, retry_webhook, retry_document_scan, suspend_user, restore_user, suspend_organization, restore_organization, place_risk_hold, lift_risk_hold, request_reconciliation, resolve_unknown_submission, retry_collection, cancel_collection]
+        target_type: { type: string, minLength: 1, maxLength: 64 }
+        target_id: { type: string, minLength: 1, maxLength: 256 }
+        organization_id: { type: string, format: uuid }
+        reason: { type: string, minLength: 8, maxLength: 1000 }
+        expected_version: { type: integer, format: int64, minimum: 1 }
+        scope:
+          type: string
+          enum: [credit, release, collection, settlement, all_sensitive]
+        expires_at: { type: string, format: date-time }
+        resolution: { type: string, maxLength: 2000 }
+    OnboardingContactRequest:
+      type: object
+      required: [identifier, channel]
+      properties:
+        identifier: { type: string }
+        channel: { type: string, enum: [email, phone] }
+    OnboardingContactVerifyRequest:
+      allOf:
+        - $ref: '#/components/schemas/OnboardingContactRequest'
+        - type: object
+          required: [challenge_id, code]
+          properties:
+            challenge_id: { type: string }
+            code: { type: string, pattern: '^[0-9]{6}$' }
+    OnboardingRepresentativeRequest:
+      type: object
+      required: [expected_version, name, title]
+      properties:
+        expected_version: { type: integer, format: int64, minimum: 1 }
+        name: { type: string, minLength: 2 }
+        title: { type: string, minLength: 2 }
+    ProviderReferenceRequest:
+      type: object
+      required: [expected_version]
+      properties:
+        expected_version: { type: integer, format: int64, minimum: 1 }
+    SettlementRequest:
+      type: object
+      required: [expected_version, provider, provider_reference, bank_name, account_name, account_last4]
+      properties:
+        expected_version: { type: integer, format: int64, minimum: 1 }
+        provider: { type: string }
+        provider_reference: { type: string }
+        bank_name: { type: string }
+        account_name: { type: string }
+        account_last4: { type: string, pattern: '^[0-9]{4}$' }
+    BillingRequest:
+      type: object
+      required: [expected_version, method, provider_reference, cycle]
+      properties:
+        expected_version: { type: integer, format: int64, minimum: 1 }
+        method: { type: string, enum: [split_settlement, authorized_debit, consolidated_invoice] }
+        provider_reference: { type: string }
+        cycle: { type: string }
+    DefaultCreditPolicyRequest:
+      type: object
+      required: [expected_version, credit_limit_kobo, payment_days, grace_hours]
+      properties:
+        expected_version: { type: integer, format: int64, minimum: 1 }
+        credit_limit_kobo: { type: integer, format: int64, minimum: 1 }
+        payment_days: { type: integer, minimum: 1, maximum: 365 }
+        grace_hours: { type: integer, minimum: 0, maximum: 720 }
+    SupplierConsentRequest:
+      type: object
+      required: [expected_version, terms_version, privacy_version]
+      properties:
+        expected_version: { type: integer, format: int64, minimum: 1 }
+        terms_version: { type: string }
+        privacy_version: { type: string }
+    CreditRequestInput:
+      type: object
+      required: [buyer_user_id, buyer_business_id, buyer_legal_name, principal_kobo, goods_description, due_date, collection_at]
+      properties:
+        timing_mode: {type: string, enum: [lagos_end_of_day, lagos_explicit], description: Server-validated Nigerian collection timing.}
+        collection_local: {type: string, description: Nigerian local datetime for lagos_explicit mode.}
+        collection_policy: {type: string, enum: [STANDARD, GRACE, IMMEDIATE]}
+        buyer_user_id: {type: string}
+        buyer_business_id: {type: string}
+        buyer_legal_name: {type: string}
+        buyer_trading_name: {type: string}
+        principal_kobo: {type: integer, format: int64, minimum: 1}
+        goods_description: {type: string}
+        invoice_reference: {type: string}
+        invoice_document_hash: {type: string}
+        due_date: {type: string, format: date}
+        grace_hours: {type: integer, minimum: 0, maximum: 720}
+        collection_at: {type: string, format: date-time}
+        schedule_type: {type: string, enum: [one_time, equal, custom], default: one_time}
+        schedule_count: {type: integer, minimum: 1, maximum: 60, description: One for a one-time sale; at least two for instalments.}
+        schedule_cadence: {type: string, enum: [weekly, fortnightly, monthly, custom]}
+        month_end_policy: {type: string, enum: [last_day, cap]}
+        custom_schedule_items:
+          type: array
+          minItems: 2
+          maxItems: 60
+          items:
+            type: object
+            required: [amount_kobo, due_date]
+            properties:
+              amount_kobo: {type: integer, format: int64, minimum: 1}
+              due_date: {type: string, format: date}
+    CreditAcceptRequest:
+      type: object
+      required: [agreement_version_id, agreement_hash]
+      properties:
+        agreement_version_id: {type: string}
+        agreement_hash: {type: string}
+        mandate_provider_id: {type: string}
+    CreditDraftUpdate:
+      type: object
+      required: [expected_version, principal_kobo, goods_description, due_date, collection_at]
+      properties:
+        collection_policy: {type: string, enum: [STANDARD, GRACE, IMMEDIATE]}
+        expected_version: {type: integer, format: int64, minimum: 1}
+        principal_kobo: {type: integer, format: int64, minimum: 1}
+        goods_description: {type: string}
+        invoice_reference: {type: string}
+        invoice_document_hash: {type: string}
+        due_date: {type: string, format: date}
+        grace_hours: {type: integer, minimum: 0, maximum: 720}
+        collection_at: {type: string, format: date-time}
+        schedule_type: {type: string, enum: [one_time, equal, custom]}
+        schedule_count: {type: integer, minimum: 1, maximum: 60, description: One for a one-time sale; at least two for instalments.}
+        schedule_cadence: {type: string, enum: [weekly, fortnightly, monthly, custom]}
+        month_end_policy: {type: string, enum: [last_day, cap]}
+        custom_schedule_items:
+          type: array
+          minItems: 2
+          maxItems: 60
+          items:
+            type: object
+            required: [amount_kobo, due_date]
+            properties:
+              amount_kobo: {type: integer, format: int64, minimum: 1}
+              due_date: {type: string, format: date}
+    PaymentInput:
+      type: object
+      required: [amount_kobo]
+      properties:
+        source_type: {type: string, enum: [integrated_voluntary, supplier_recorded_transfer, buyer_payment_claim, cash_recorded, adjustment], description: kredit_collection is reserved for verified provider processing and rejected on this endpoint.}
+        amount_kobo: {type: integer, format: int64, minimum: 1}
+        currency: {type: string, enum: [NGN]}
+        provider: {type: string}
+        provider_reference: {type: string}
+        paid_at: {type: string, format: date-time}
+        idempotency_key: {type: string}
+    PaymentClaimInput:
+      type: object
+      required: [amount_kobo, paid_at, transfer_reference]
+      properties:
+        amount_kobo: {type: integer, format: int64, minimum: 1}
+        paid_at: {type: string, format: date-time}
+        source_account_masked: {type: string, maxLength: 64}
+        transfer_reference: {type: string, minLength: 1, maxLength: 200}
+        evidence_document_id: {type: string, format: uuid}
+    PaymentClaimDecisionInput:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: {type: string, enum: [confirmed, rejected]}
+        reason: {type: string, minLength: 1, maxLength: 500}
+    ScheduleInput:
+      type: object
+      required: [schedule_type, start_date, timezone, grace_hours, cadence]
+      properties:
+        schedule_type: {type: string, enum: [equal, custom]}
+        count: {type: integer, minimum: 1, maximum: 60}
+        instalment_amount_kobo: {type: integer, format: int64, minimum: 1}
+        start_date: {type: string, format: date-time}
+        due_hour: {type: integer, minimum: 0, maximum: 23}
+        due_minute: {type: integer, minimum: 0, maximum: 59}
+        timezone: {type: string}
+        grace_hours: {type: integer, minimum: 0, maximum: 720}
+        cadence: {type: string, enum: [weekly, fortnightly, monthly, custom]}
+        month_end_policy: {type: string, enum: [last_day, cap]}
+        allocation_policy: {type: string}
+        custom_items:
+          type: array
+          items:
+            type: object
+            required: [amount_kobo, due_date]
+            properties:
+              amount_kobo: {type: integer, format: int64, minimum: 1}
+              due_date: {type: string, format: date-time}
+    TradeLineInput:
+      type: object
+      required: [buyer_user_id, buyer_business_id, approved_limit_kobo, start_at, end_at, mandate_id]
+      properties:
+        buyer_user_id: {type: string}
+        buyer_business_id: {type: string}
+        approved_limit_kobo: {type: integer, format: int64, minimum: 1}
+        cadence: {type: string}
+        default_grace_hours: {type: integer, minimum: 0, maximum: 720}
+        start_at: {type: string, format: date-time}
+        end_at: {type: string, format: date-time}
+        mandate_id: {type: string}
+        terms_version: {type: string}
+    DrawdownInput:
+      type: object
+      required: [principal_kobo, goods_description, due_date, collection_at]
+      properties:
+        principal_kobo: {type: integer, format: int64, minimum: 1}
+        goods_description: {type: string}
+        invoice_reference: {type: string}
+        invoice_document_hash: {type: string}
+        due_date: {type: string, format: date}
+        collection_at: {type: string, format: date-time}
+        idempotency_key: {type: string}
+        expires_at: {type: string, format: date-time}
+    CollectionStartInput:
+      type: object
+      description: The Idempotency-Key header supplies the request identity when the body key is omitted.
+      properties:
+        idempotency_key: {type: string}
+    CollectionWebhook:
+      type: object
+      required: [event_id, external_reference, state, succeeded_amount_kobo, signature]
+      properties:
+        event_id: {type: string}
+        external_reference: {type: string}
+        state: {type: string, enum: [succeeded, partial, failed, pending]}
+        provider_collection_id: {type: string}
+        succeeded_amount_kobo: {type: integer, format: int64, minimum: 0}
+        failure_code: {type: string}
+        retryable: {type: boolean}
+        settlement_state: {type: string, enum: [settled, settlement_pending, reversed]}
+        settlement_reference: {type: string}
+        signature: {type: string}
+    ProviderStatus:
+      type: object
+      required: [name, feature_enabled, capabilities, health]
+      properties:
+        name: {type: string}
+        feature_enabled: {type: boolean}
+        capabilities:
+          type: object
+          additionalProperties: {type: boolean}
+        health:
+          type: object
+          required: [state, healthy, consecutive_failures]
+          properties:
+            state: {type: string, enum: [closed, open, half_open]}
+            healthy: {type: boolean}
+            consecutive_failures: {type: integer, minimum: 0}
+            last_error: {type: string}
+            last_failure_at: {type: string, format: date-time}
+            open_until: {type: string, format: date-time}
+    ReadinessReport:
+      type: object
+      required: [generated_at, environment, ready, gates, missing, pilot_limits]
+      properties:
+        generated_at: {type: string, format: date-time}
+        environment: {type: string}
+        ready: {type: boolean}
+        gates:
+          type: array
+          items:
+            type: object
+            required: [name, passed, detail]
+            properties:
+              name: {type: string}
+              passed: {type: boolean}
+              detail: {type: string}
+        missing: {type: array, items: {type: string}}
+        pilot_limits: {type: object, additionalProperties: true}
+    DisputeInput:
+      type: object
+      required: [disputed_amount_kobo, reason]
+      properties:
+        disputed_amount_kobo: {type: integer, format: int64, minimum: 1}
+        reason: {type: string}
+        explanation: {type: string}
+        collection_effect: {type: string, const: CONTESTED_ONLY, description: New disputes always hold the contested amount. Legacy effect values cannot change that behavior.}
+    EvidenceInput:
+      type: object
+      properties:
+        document_id: {type: string}
+        statement: {type: string}
+    DecisionInput:
+      type: object
+      required: [outcome, reason]
+      properties:
+        outcome: {type: string, enum: [upheld, rejected, partial, withdrawn]}
+        valid_principal_kobo: {type: integer, format: int64, minimum: 0}
+        adjustment_kobo: {type: integer, format: int64, minimum: 0}
+        remaining_disputed_kobo: {type: integer, format: int64, minimum: 0}
+        reason: {type: string}
+    OperationInput:
+      description: Individual and cumulative corrections must stay below the effective correction threshold (at most 1000000 kobo). Larger corrections use the separate durable admin-change approval workflow.
+      type: object
+      required: [amount_kobo, reason]
+      properties:
+        amount_kobo: {type: integer, format: int64, minimum: 1, maximum: 999999}
+        reason: {type: string}
+        approved_by: {type: string, const: "", deprecated: true, description: Caller-asserted approval is rejected. Use the separate admin-change workflow for verified approval.}
+    WhatsAppWebhook:
+      type: object
+      required: [id, from, text, signature]
+      properties:
+        id: {type: string}
+        from: {type: string}
+        text: {type: string}
+        signature: {type: string}
+    HealthResponse:
+      type: object
+      required: [status, service, version]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+        version:
+          type: string
+    MetaResponse:
+      type: object
+      required: [service, version, environment, timezone, currency, money_unit]
+      properties:
+        service:
+          type: string
+        version:
+          type: string
+        environment:
+          type: string
+        timezone:
+          type: string
+        currency:
+          type: string
+        money_unit:
+          type: string
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        request_id:
+          type: string
+    OTPRequest:
+      type: object
+      required: [identifier, channel]
+      properties:
+        identifier:
+          type: string
+        channel:
+          type: string
+          enum: [phone, email]
+        purpose:
+          type: string
+          default: login
+    OTPChallengeResponse:
+      type: object
+      required: [challenge_id, expires_at, channel, message]
+      properties:
+        challenge_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        channel:
+          type: string
+        message:
+          type: string
+        development_code:
+          type: string
+          description: Development-only value; never returned in production.
+    OTPVerifyRequest:
+      type: object
+      required: [challenge_id, code]
+      properties:
+        challenge_id:
+          type: string
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+        device_label:
+          type: string
+    TOTPVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+    User:
+      type: object
+      required: [id, status, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        display_name:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    Session:
+      type: object
+      required: [id, user_id, authentication_level, created_at, expires_at]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        authentication_level:
+          type: string
+          enum: [AAL0, AAL1, AAL2, AAL3]
+        device_label:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    Organization:
+      type: object
+      required: [id, legal_name, business_type, business_address, industry, status, default_timezone, default_currency]
+      properties:
+        id:
+          type: string
+        legal_name:
+          type: string
+        trading_name:
+          type: string
+        business_type:
+          type: string
+        registration_info:
+          type: string
+        business_address:
+          type: string
+        industry:
+          type: string
+        status:
+          type: string
+        default_timezone:
+          type: string
+        default_currency:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    Membership:
+      type: object
+      required: [id, organization_id, user_id, role, status, created_at]
+      properties:
+        id:
+          type: string
+        organization_id:
+          type: string
+        user_id:
+          type: string
+        role:
+          type: string
+          enum: [owner, administrator, finance, sales, collections, viewer]
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    OrganizationRequest:
+      type: object
+      required: [legal_name, business_type, business_address, industry]
+      properties:
+        legal_name:
+          type: string
+        trading_name:
+          type: string
+        business_type:
+          type: string
+        registration_info:
+          type: string
+        business_address:
+          type: string
+        industry:
+          type: string
+        timezone:
+          type: string
+        currency:
+          type: string
+          enum: [NGN]
+    MemberInvitationRequest:
+      type: object
+      required: [target, channel, role]
+      properties:
+        target:
+          type: string
+        channel:
+          type: string
+          enum: [phone, email]
+        role:
+          type: string
+          enum: [administrator, finance, sales, collections, viewer]
+    MemberRoleRequest:
+      type: object
+      minProperties: 1
+      maxProperties: 1
+      properties:
+        role:
+          type: string
+          enum: [administrator, finance, sales, collections, viewer]
+        status:
+          type: string
+          enum: [active, suspended, removed]
+    AuthResponse:
+      type: object
+      required: [user, session]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        session:
+          $ref: '#/components/schemas/Session'
+    MeResponse:
+      type: object
+      required: [user, session, mfa_enrolled, organizations]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        session:
+          $ref: '#/components/schemas/Session'
+        mfa_enrolled:
+          type: boolean
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+    BuyerInvitationRequest:
+      type: object
+      required: [target, target_type, legal_name, business_type, business_address, industry]
+      properties:
+        target:
+          type: string
+        target_type:
+          type: string
+          enum: [phone, email]
+        legal_name:
+          type: string
+        trading_name:
+          type: string
+        business_type:
+          type: string
+        business_address:
+          type: string
+        industry:
+          type: string
+    BuyerInvitationCreatedResponse:
+      type: object
+      required: [invitation, invitation_url]
+      properties:
+        invitation:
+          $ref: '#/components/schemas/BuyerInvitation'
+        invitation_url:
+          type: string
+          format: uri
+    BuyerInvitation:
+      type: object
+      required: [id, organization_id, target_type, proposed_legal_name, proposed_business_type, proposed_address, proposed_industry, status, expires_at, created_at]
+      properties:
+        id:
+          type: string
+        organization_id:
+          type: string
+        target_type:
+          type: string
+        proposed_legal_name:
+          type: string
+        proposed_trading_name:
+          type: string
+        proposed_business_type:
+          type: string
+        proposed_address:
+          type: string
+        proposed_industry:
+          type: string
+        status:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    BuyerInvitationAcceptRequest:
+      type: object
+      required: [challenge_id, code, full_name]
+      properties:
+        challenge_id:
+          type: string
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+        device_label:
+          type: string
+        full_name:
+          type: string
+        legal_name:
+          type: string
+        trading_name:
+          type: string
+        business_type:
+          type: string
+        business_address:
+          type: string
+        industry:
+          type: string
+    BuyerPerson:
+      type: object
+      required: [id, user_id, full_name, status, created_at]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        full_name:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    BuyerBusiness:
+      type: object
+      required: [id, owner_user_id, legal_name, business_type, business_address, industry, status, created_at]
+      properties:
+        id:
+          type: string
+        owner_user_id:
+          type: string
+        legal_name:
+          type: string
+        trading_name:
+          type: string
+        business_type:
+          type: string
+        business_address:
+          type: string
+        industry:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    BuyerRepresentative:
+      type: object
+      required: [id, business_id, person_id, role_title, authority_type, authority_status, created_at]
+      properties:
+        id:
+          type: string
+        business_id:
+          type: string
+        person_id:
+          type: string
+        role_title:
+          type: string
+        authority_type:
+          type: string
+        authority_status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    VerificationCase:
+      type: object
+      required: [id, subject_type, subject_id, provider, provider_reference, verification_level, state, started_at]
+      properties:
+        id:
+          type: string
+        subject_type:
+          type: string
+        subject_id:
+          type: string
+        provider:
+          type: string
+        provider_reference:
+          type: string
+        verification_level:
+          type: integer
+        state:
+          type: string
+        safe_result:
+          type: object
+          additionalProperties:
+            type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    BuyerConsent:
+      type: object
+      required: [id, user_id, consent_type, version, accepted_at]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        consent_type:
+          type: string
+        version:
+          type: string
+        accepted_at:
+          type: string
+          format: date-time
+    BuyerPortal:
+      type: object
+      required: [person, business, representative, verification_cases, consents, bank_accounts]
+      properties:
+        person:
+          $ref: '#/components/schemas/BuyerPerson'
+        business:
+          $ref: '#/components/schemas/BuyerBusiness'
+        representative:
+          $ref: '#/components/schemas/BuyerRepresentative'
+        verification_cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationCase'
+        consents:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuyerConsent'
+        bank_accounts:
+          type: array
+          items:
+            type: object
+    BuyerPortalResponse:
+      type: object
+      required: [portal]
+      properties:
+        portal:
+          $ref: '#/components/schemas/BuyerPortal'

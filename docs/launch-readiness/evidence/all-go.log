@@ -1,0 +1,105 @@
+# kredit/cmd/api
+cmd/api/main.go:15:2: open /Users/macbookpro/Library/Caches/go-build/50/50f3683ccd86358e6c3a25e0ebe9e7868ec76a10edd2186fc6767a9deeffb9aa-d: operation not permitted
+FAIL	kredit/cmd/api [setup failed]
+# kredit/cmd/worker
+cmd/api/main.go:15:2: open /Users/macbookpro/Library/Caches/go-build/50/50f3683ccd86358e6c3a25e0ebe9e7868ec76a10edd2186fc6767a9deeffb9aa-d: operation not permitted
+FAIL	kredit/cmd/worker [setup failed]
+# ./...
+pattern ./...: open /Users/macbookpro/Library/Caches/go-build/cb/cbc6f77030759d0b60979478a97d0564624eee62294ad48c19bed46baf4691a1-a: operation not permitted
+FAIL	./... [setup failed]
+?   	kredit/api/generated	[no test files]
+?   	kredit/cmd/bootstrap-owner	[no test files]
+ok  	kredit/cmd/configcheck	1.471s
+ok  	kredit/cmd/migrate	0.026s
+--- FAIL: TestSimulatorHealthcheckUsesConfiguredAddress (0.00s)
+panic: httptest: failed to listen on a port: listen tcp6 [::1]:0: bind: operation not permitted [recovered, repanicked]
+
+goroutine 34 [running]:
+testing.tRunner.func1.2({0x5c956e0, 0x34b1c3642650})
+	/usr/local/Cellar/go/1.27.1/libexec/src/testing/testing.go:2123 +0x232
+testing.tRunner.func1()
+	/usr/local/Cellar/go/1.27.1/libexec/src/testing/testing.go:2126 +0x329
+panic({0x5c956e0?, 0x34b1c3642650?})
+	/usr/local/Cellar/go/1.27.1/libexec/src/runtime/panic.go:859 +0x125
+net/http/httptest.newLocalListener()
+	/usr/local/Cellar/go/1.27.1/libexec/src/net/http/httptest/server.go:226 +0xd9
+net/http/httptest.NewUnstartedServer(...)
+	/usr/local/Cellar/go/1.27.1/libexec/src/net/http/httptest/server.go:284
+net/http/httptest.NewServer({0x5ce6b30, 0x34b1c3642610})
+	/usr/local/Cellar/go/1.27.1/libexec/src/net/http/httptest/server.go:267 +0x25
+kredit/cmd/provider-simulator.TestSimulatorHealthcheckUsesConfiguredAddress(0x34b1c37ac908)
+	/Users/macbookpro/Documents/Kredit.com/cmd/provider-simulator/main_test.go:98 +0x73
+testing.tRunner(0x34b1c37ac908, 0x5ceae50)
+	/usr/local/Cellar/go/1.27.1/libexec/src/testing/testing.go:2193 +0xea
+created by testing.(*T).Run in goroutine 1
+	/usr/local/Cellar/go/1.27.1/libexec/src/testing/testing.go:2258 +0x4d4
+FAIL	kredit/cmd/provider-simulator	0.058s
+ok  	kredit/cmd/reconcile	0.052s
+ok  	kredit/cmd/seed	0.020s
+?   	kredit/db/generated	[no test files]
+ok  	kredit/internal/access	0.017s
+ok  	kredit/internal/agreementdocs	0.035s
+ok  	kredit/internal/audit	0.038s
+ok  	kredit/internal/auth	0.060s
+ok  	kredit/internal/businesspolicy	0.071s
+ok  	kredit/internal/buyers	0.031s
+ok  	kredit/internal/collections	0.125s
+ok  	kredit/internal/config	0.075s
+ok  	kredit/internal/corrections	0.094s
+ok  	kredit/internal/credit	0.047s
+ok  	kredit/internal/db	0.036s
+ok  	kredit/internal/disputes	0.030s
+ok  	kredit/internal/documents	0.032s
+ok  	kredit/internal/feedback	0.024s
+ok  	kredit/internal/idempotency	0.026s
+ok  	kredit/internal/identifier	0.021s
+ok  	kredit/internal/identity	0.023s
+ok  	kredit/internal/jobs	0.076s
+ok  	kredit/internal/ledger	0.025s
+ok  	kredit/internal/mandates	0.039s
+ok  	kredit/internal/notifications	0.034s
+ok  	kredit/internal/observability	0.052s
+ok  	kredit/internal/onboarding	0.035s
+ok  	kredit/internal/operations	0.075s
+ok  	kredit/internal/organizations	0.034s
+ok  	kredit/internal/outbox	0.042s
+ok  	kredit/internal/paymentclaims	0.060s
+ok  	kredit/internal/payments	0.062s
+ok  	kredit/internal/platform/logging	0.028s
+ok  	kredit/internal/platformops	0.104s
+--- FAIL: TestVariableSweepAuthorizationIsPending (0.00s)
+panic: httptest: failed to listen on a port: listen tcp6 [::1]:0: bind: operation not permitted [recovered, repanicked]
+
+goroutine 4 [running]:
+testing.tRunner.func1.2({0x106d94e8, 0xeb63aa2680})
+	/usr/local/Cellar/go/1.27.1/libexec/src/testing/testing.go:2123 +0x232
+testing.tRunner.func1()
+	/usr/local/Cellar/go/1.27.1/libexec/src/testing/testing.go:2126 +0x329
+panic({0x106d94e8?, 0xeb63aa2680?})
+	/usr/local/Cellar/go/1.27.1/libexec/src/runtime/panic.go:859 +0x125
+net/http/httptest.newLocalListener()
+	/usr/local/Cellar/go/1.27.1/libexec/src/net/http/httptest/server.go:226 +0xd9
+net/http/httptest.NewUnstartedServer(...)
+	/usr/local/Cellar/go/1.27.1/libexec/src/net/http/httptest/server.go:284
+net/http/httptest.NewTLSServer({0x10737f08, 0xeb63aa2640})
+	/usr/local/Cellar/go/1.27.1/libexec/src/net/http/httptest/server.go:459 +0x25
+kredit/internal/providers/mono.testClient(0xeb63b8a6c8, 0xeb63aa2640)
+	/Users/macbookpro/Documents/Kredit.com/internal/providers/mono/mono_test.go:17 +0x3d
+kredit/internal/providers/mono.TestVariableSweepAuthorizationIsPending(0xeb63b8a6c8)
+	/Users/macbookpro/Documents/Kredit.com/internal/providers/mono/mono_test.go:27 +0x77
+testing.tRunner(0xeb63b8a6c8, 0x1073d4a8)
+	/usr/local/Cellar/go/1.27.1/libexec/src/testing/testing.go:2193 +0xea
+created by testing.(*T).Run in goroutine 1
+	/usr/local/Cellar/go/1.27.1/libexec/src/testing/testing.go:2258 +0x4d4
+FAIL	kredit/internal/providers/mono	0.103s
+ok  	kredit/internal/publictoken	0.039s
+ok  	kredit/internal/readiness	0.034s
+ok  	kredit/internal/relationships	0.056s
+ok  	kredit/internal/reports	0.245s
+ok  	kredit/internal/schedules	0.176s
+ok  	kredit/internal/support	0.175s
+ok  	kredit/internal/tradelines	0.093s
+ok  	kredit/internal/usercontrol	0.058s
+ok  	kredit/internal/whatsapp	0.070s
+ok  	kredit/tests/contract	0.047s
+FAIL

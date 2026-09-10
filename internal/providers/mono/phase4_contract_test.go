@@ -43,14 +43,14 @@ func TestPhase4DebitOutcomeMatrix(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out := debitResponse(tc.data, "mmc_fixture", "kredit-fixture", 100000)
+			out := debitResponse(tc.data, "mmc_fixture", "kredit-fixture", 100000, false)
 			if out.State != tc.state || out.SucceededAmountKobo != tc.amount || out.Retryable {
 				t.Fatalf("outcome=%+v, want state=%s amount=%d and no automatic retry", out, tc.state, tc.amount)
 			}
 		})
 	}
 	for _, requested := range []ledger.Money{0, -1} {
-		out := debitResponse(debitData{Status: "successful", Amount: 100000}, "mmc_fixture", "kredit-fixture", requested)
+		out := debitResponse(debitData{Status: "successful", Amount: 100000}, "mmc_fixture", "kredit-fixture", requested, false)
 		if out.State != collections.ProviderPending || out.SucceededAmountKobo != 0 {
 			t.Fatalf("invalid persisted amount produced money: %+v", out)
 		}

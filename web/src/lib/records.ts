@@ -15,14 +15,14 @@ export function customer(value: unknown): Customer {
   return { buyer_user_id: text(row.buyer_user_id), buyer_business_id: text(row.buyer_business_id), legal_name: text(row.legal_name), trading_name: optionalText(row.trading_name), state: optionalText(row.state ?? row.status), overdue: row.has_overdue_obligations === true || (typeof row.overdue_count === 'number' && row.overdue_count > 0) || row.has_network_overdue === true };
 }
 export interface SaleRequest {
-  id: string; state: string; supplier_legal_name: string; buyer_legal_name: string; buyer_user_id: string; buyer_business_id: string;
+  system_acceptance_id?: string; id: string; state: string; supplier_legal_name: string; buyer_legal_name: string; buyer_user_id: string; buyer_business_id: string;
   principal_kobo: KoboValue; goods_description: string; due_date: string; collection_at: string; grace_hours: number;
   schedule_type: string; schedule_count: number; schedule_cadence: string; fee_terms: FeeTerms | null;
   custom_schedule_items: { amount_kobo: KoboValue; due_date: string }[];
 }
 export interface SaleView {
   request: SaleRequest;
-  agreement: { id: string; document_hash: string } | null;
+  agreement: { id: string; document_hash: string; terms_version: string; privacy_version: string } | null;
   mandate: { id: string; provider_id: string; provider: string; status: string; authorization_url: string } | null;
   obligation: { id: string; outstanding_kobo: KoboValue } | null;
 }
@@ -33,12 +33,12 @@ export function saleView(value: unknown): SaleView {
   const obligation = view.obligation ? record(view.obligation) : null;
   return {
     request: {
-      id: text(row.id), state: text(row.state), supplier_legal_name: optionalText(row.supplier_legal_name), buyer_legal_name: text(row.buyer_legal_name), buyer_user_id: optionalText(row.buyer_user_id), buyer_business_id: optionalText(row.buyer_business_id),
+      system_acceptance_id: optionalText(row.system_acceptance_id), id: text(row.id), state: text(row.state), supplier_legal_name: optionalText(row.supplier_legal_name), buyer_legal_name: text(row.buyer_legal_name), buyer_user_id: optionalText(row.buyer_user_id), buyer_business_id: optionalText(row.buyer_business_id),
       principal_kobo: kobo(row.principal_kobo), goods_description: optionalText(row.goods_description), due_date: text(row.due_date), collection_at: optionalText(row.collection_at), grace_hours: typeof row.grace_hours === 'number' ? row.grace_hours : 0,
       schedule_type: optionalText(row.schedule_type), schedule_count: typeof row.schedule_count === 'number' ? row.schedule_count : 1, schedule_cadence: optionalText(row.schedule_cadence), fee_terms: validFeeTerms(row.fee_terms) ? row.fee_terms : null,
       custom_schedule_items: Array.isArray(row.custom_schedule_items) ? row.custom_schedule_items.map(value => { const item = record(value); return { amount_kobo: kobo(item.amount_kobo), due_date: text(item.due_date) }; }) : []
     },
-    agreement: agreement ? { id: text(agreement.id), document_hash: text(agreement.document_hash) } : null,
+    agreement: agreement ? { id: text(agreement.id), document_hash: text(agreement.document_hash), terms_version: optionalText(agreement.terms_version), privacy_version: optionalText(agreement.privacy_version) } : null,
     mandate: mandate ? { id: optionalText(mandate.id), provider_id: text(mandate.provider_id), provider: optionalText(mandate.provider), status: text(mandate.status), authorization_url: optionalText(mandate.authorization_url) } : null,
     obligation: obligation ? { id: text(obligation.id), outstanding_kobo: kobo(obligation.outstanding_kobo) } : null
   };

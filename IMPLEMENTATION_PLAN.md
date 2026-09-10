@@ -1,8 +1,8 @@
 # Kredit Production V1 Implementation Plan
 
-Status: proposed  
+Status: historical implementation plan; current audit in progress
 Source of truth: `README.md` (baseline verified 16 August 2026)  
-Starting point: specification-only repository; implementation begins at Milestone 0.
+Original starting point: specification-only repository. The codebase is now implemented and under direct review. Generator requirements below describe the original plan; [ADR 0005](docs/adr/0005-hand-written-http-and-sql.md) records the current contract approach.
 
 ## 1. Outcome
 
@@ -24,7 +24,7 @@ The product must remain supplier-funded. Do not introduce lending capital, walle
 - **Financial correctness first:** store money as integer kobo; use PostgreSQL transactions, constraints, row locks, idempotency keys, and a rebuildable double-entry ledger for all material money actions.
 - **Consent and evidence before release:** the buyer accepts the exact immutable agreement version, authorises the mandate, and the supplier records release before principal becomes active.
 - **Authoritative state:** PostgreSQL is the domain source of truth; the ledger is authoritative for money-derived balances; provider systems are authoritative for their own mandate/debit/settlement states; browser state and WhatsApp messages are never authoritative.
-- **Contract-first delivery:** update `docs/api/openapi.yaml` before changing API behaviour; generate Go and TypeScript clients; fail CI on generated-code drift.
+- **Contract-first delivery:** update `api/openapi.yaml` before changing API behaviour; generate Go and TypeScript clients; fail CI on generated-code drift.
 - **Vertical slices:** complete one coherent workflow end to end before expanding breadth. Keep domain rules in Go modules, not HTTP handlers or Svelte components.
 - **Provider neutrality:** use capability-based interfaces and deterministic simulators for KYC/KYB, mandates, collections, notifications, and storage scanning. Keep real integrations behind feature flags until approved.
 - **Operational traceability:** every feature includes audit events, permissions, jobs, notifications, docs, normal-path tests, and failure-path tests.

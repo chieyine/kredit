@@ -58,7 +58,7 @@ The DPIA packet must include the existing data inventory/map, purposes and lawfu
 
 ## Monitoring and migration rollout
 
-Apply migration 086 before deploying the new metrics reader, then apply `infra/postgres/roles.sql`. The helper returns fourteen fixed **aggregate gauges**, not customer records. It is SECURITY DEFINER with fixed search path, no caller-supplied SQL and no PUBLIC execute grant. `row_security=off` makes insufficient owner visibility fail visibly rather than silently filtering the counts. It does not grant table-wide runtime access or weaken financial RLS.
+Migration 086 introduced the metrics reader. For the current application, apply every current migration (through 096 at this audit checkpoint), then apply `infra/postgres/roles.sql`. The helper returns fourteen fixed **aggregate gauges**, not customer records. It is SECURITY DEFINER with fixed search path, no caller-supplied SQL and no PUBLIC execute grant. `row_security=off` makes insufficient owner visibility fail visibly rather than silently filtering the counts. It does not grant table-wide runtime access or weaken financial RLS.
 
 The isolated integration test checks that the unscoped app role sees zero obligation rows while monitoring counts the seeded active portfolio correctly. It also verifies missing database handling, complete gauge output and the helper's PUBLIC restriction. Keep the existing authenticated/secret-protected Prometheus endpoint; do not expose metrics publicly.
 

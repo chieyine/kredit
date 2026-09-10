@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -9,6 +10,8 @@ import (
 	"kredit/internal/businesspolicy"
 	"kredit/internal/db"
 	"kredit/internal/operations"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Server) adminChangeContext(w http.ResponseWriter, r *http.Request) {
@@ -28,9 +31,13 @@ func (s *Server) adminChangeContext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id, supplierOrgID string
-	err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT o.id::text, o.supplier_organization_id::text FROM app.obligations o JOIN app.credit_aggregate_snapshots s ON s.credit_request_id=o.credit_request_id::text WHERE o.id::text=$1 OR s.credit_request_id=$1 LIMIT 1`, q).Scan(&id, &supplierOrgID)
+	err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT o.id::text, o.supplier_organization_id::text FROM app.obligations o WHERE o.id::text=$1 OR o.credit_request_id::text=$1 LIMIT 1`, q).Scan(&id, &supplierOrgID)
 	if err != nil {
-		writeProblem(w, 404, "reference_not_found", "No active obligation was found for that reference")
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeProblem(w, 404, "reference_not_found", "No obligation was found for that reference")
+		} else {
+			writeProblem(w, 503, "workflow_unavailable", "Financial details could not be loaded. Try again.")
+		}
 		return
 	}
 	reqCtx := r.Context()
@@ -47,6 +54,10 @@ func (s *Server) adminChangeContext(w http.ResponseWriter, r *http.Request) {
 func (s *Server) previewBusinessPolicy(w http.ResponseWriter, r *http.Request) {
 	_, _, _, ok := s.requirePlatformAccess(w, r, access.PermissionManagePolicies)
 	if !ok {
+		return
+	}
+	if s.runtime.BusinessPolicies == nil {
+		writeProblem(w, 503, "policy_unavailable", "Business settings are unavailable. Try again.")
 		return
 	}
 	var in struct {

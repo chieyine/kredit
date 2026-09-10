@@ -70,7 +70,7 @@ func (s *PostgresStore) PostActivation(obligationID string, principal Money, eff
 	if err != nil {
 		return Transaction{}, err
 	}
-	return s.post(Transaction{EventType: "principal_activated", ReferenceType: "obligation", ReferenceID: obligationID, IdempotencyKey: key, EffectiveAt: effectiveAt, Postings: []Posting{{Account: AccountTradeReceivable, Debit: principal}, {Account: AccountPrincipalOriginated, Credit: principal}, {Account: AccountSupplierFeeReceivable, Debit: baseFee}, {Account: AccountPlatformServiceRevenue, Credit: baseFee}}})
+	return s.PostActivationWithFee(obligationID, principal, baseFee, effectiveAt, key)
 }
 
 // PostActivationTx writes activation postings and their outbox event inside a
@@ -80,7 +80,7 @@ func (s *PostgresStore) PostActivationTx(ctx context.Context, tx pgx.Tx, obligat
 	if err != nil {
 		return Transaction{}, err
 	}
-	return s.postTx(ctx, tx, Transaction{EventType: "principal_activated", ReferenceType: "obligation", ReferenceID: obligationID, IdempotencyKey: key, EffectiveAt: effectiveAt, Postings: []Posting{{Account: AccountTradeReceivable, Debit: principal}, {Account: AccountPrincipalOriginated, Credit: principal}, {Account: AccountSupplierFeeReceivable, Debit: baseFee}, {Account: AccountPlatformServiceRevenue, Credit: baseFee}}})
+	return s.PostActivationWithFeeTx(ctx, tx, obligationID, principal, baseFee, effectiveAt, key)
 }
 
 func settlementAccount(source string) (string, error) {
@@ -225,7 +225,7 @@ func (s *PostgresStore) GetByReference(referenceID string) ([]Transaction, error
 		SELECT id::text, event_type, reference_type, reference_id, idempotency_key, effective_at, recorded_at
 		FROM ledger.transactions
 		WHERE reference_id = $1
-		ORDER BY effective_at, recorded_at`, referenceID)
+		ORDER BY effective_at, recorded_at, id`, referenceID)
 	if err != nil {
 		return nil, err
 	}

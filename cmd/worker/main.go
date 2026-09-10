@@ -15,12 +15,13 @@ import (
 	"kredit/internal/jobs"
 	"kredit/internal/outbox"
 	"kredit/internal/platform/logging"
+	"kredit/internal/platformsettings"
 	"kredit/internal/web"
 )
 
 // healthServer exposes a minimal liveness/readiness endpoint so Kubernetes can
 // detect a wedged worker. It binds only inside the pod network.
-func startHealthServer(addr string, ready func() error) *http.Server {
+func startHealthServer(addr string, ready func() error) (*http.Server, <-chan error) {
 	mux := healthHandler(ready)
 	server := &http.Server{
 		Addr:              addr,
@@ -31,10 +32,11 @@ func startHealthServer(addr string, ready func() error) *http.Server {
 		IdleTimeout:       30 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 	}
+	failures := make(chan error, 1)
 	go func() {
-		_ = server.ListenAndServe()
+		failures <- server.ListenAndServe()
 	}()
-	return server
+	return server, failures
 }
 
 func healthHandler(ready func() error) http.Handler {
@@ -82,13 +84,36 @@ func main() {
 		logger.Error("worker persistence contract check failed", "error", err)
 		os.Exit(1)
 	}
+	settings := platformsettings.NewPostgresStore(database.Raw(), platformsettings.NewEncryptor(cfg.SettingsEncryptionKey), nil)
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	cfg, err = config.ApplyStoredConnections(startupCtx, cfg, settings, "", nil)
+	startupCancel()
+	if err != nil {
+		logger.Error("saved connection configuration could not be activated", "error", err)
+		os.Exit(1)
+	}
 	runtime := web.NewRuntimeWithDB(cfg, database)
+	if len(runtime.ProviderFailures) > 0 {
+		logger.Error("worker startup blocked: a configured provider could not initialize")
+		os.Exit(1)
+	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = runtime.Tracer.Shutdown(shutdownCtx)
 	}()
 	jobClient, err := jobs.NewClientWithHandlers(database.Raw(), logger, jobs.Handlers{
+		CleanupDocuments: runtime.Documents.CleanupOrphans,
+		MaturedCredit: func(ctx context.Context) error {
+			store, ok := runtime.Credit.(interface {
+				AutoActivateMatured(context.Context, time.Time) ([]string, error)
+			})
+			if !ok {
+				return errors.New("durable credit activation unavailable")
+			}
+			_, err := store.AutoActivateMatured(ctx, time.Now())
+			return err
+		},
 		ProviderWebhook: runtime.HandleProviderNotice,
 		Tracer:          runtime.Tracer,
 		Metrics:         runtime.Metrics,
@@ -119,7 +144,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	healthServer := startHealthServer(envOr("WORKER_HEALTH_ADDR", ":8081"), func() error {
+	healthServer, healthErrors := startHealthServer(envOr("WORKER_HEALTH_ADDR", ":8081"), func() error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -203,11 +228,21 @@ func main() {
 			}
 		}
 	}()
-	<-ctx.Done()
+	var healthFailed bool
+	select {
+	case <-ctx.Done():
+	case err := <-healthErrors:
+		healthFailed = true
+		logger.Error("worker health server stopped unexpectedly", "error", err)
+		stop()
+	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := jobClient.Stop(shutdownCtx); err != nil {
 		logger.Error("worker shutdown failed", "error", err)
+		os.Exit(1)
+	}
+	if healthFailed {
 		os.Exit(1)
 	}
 	logger.Info("worker stopped")
@@ -247,7 +282,7 @@ func runSelfHealthcheck() int {
 	if strings.HasPrefix(host, ":") {
 		host = "127.0.0.1" + host
 	}
-	client := &http.Client{Timeout: 3 * time.Second}
+	client := &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Get("http://" + host + "/readyz")
 	if err != nil {
 		return 1

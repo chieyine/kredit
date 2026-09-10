@@ -31,6 +31,21 @@ export function formatKobo(value: KoboValue, currency = 'NGN'): string {
  } catch { return 'Amount unavailable'; }
 }
 
+/**
+ * Exact kobo to the naira string a money input expects: "120000.00".
+ * Kobo are integers, so this divides with BigInt rather than dividing by 100 in
+ * a float, and an amount that could not be verified returns an empty string so
+ * the field stays blank instead of pre-filling a wrong number the user might
+ * then submit.
+ */
+export function nairaInput(value: KoboValue): string {
+ const amount = exactKobo(value);
+ if (amount === null) return '';
+ const negative = amount < 0n;
+ const absolute = negative ? -amount : amount;
+ return `${negative ? '-' : ''}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, '0')}`;
+}
+
 const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
 

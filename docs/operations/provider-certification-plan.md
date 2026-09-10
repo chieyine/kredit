@@ -15,6 +15,16 @@ institutions can plausibly do the same thing; several simply do not document it
 publicly, which makes discovery slow rather than impossible. The next section
 explains why that distinction changes what to do about it.
 
+## Current implementation boundary
+
+This is a planning document, not provider certification or an approved legal
+interpretation. Provider selection remains undecided by the owner. A second real
+adapter is proposed below, not already implemented. Existing obligations can
+retain voluntary-payment recording when collections are paused, but a new sale
+still needs the implemented sign-in, verification, acceptance and mandate
+requirements; disabling collections does not bypass those steps. Supported
+connections can be configured through admin once deployment bootstrap is ready.
+
 ## Critical path
 
 1. **Start certification before the code is finished.** Sandbox certification

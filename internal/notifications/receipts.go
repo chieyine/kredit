@@ -6,10 +6,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 )
+
+var ErrInvalidDeliveryReceipt = errors.New("invalid delivery receipt")
+var ErrDeliveryReceiptConflict = errors.New("delivery receipt identity conflicts with previous evidence")
+var ErrDeliveryReceiptPending = errors.New("matching sent notification is not yet available")
 
 type DeliveryReceipt struct {
 	EventID             string    `json:"event_id"`
@@ -24,8 +29,8 @@ func (s *Store) RecordDeliveryReceipt(ctx context.Context, channel string, recei
 	if s.pool == nil {
 		return errors.New("delivery receipt persistence is required")
 	}
-	if receipt.EventID == "" || len(receipt.EventID) > 200 || receipt.NotificationEventID == "" || receipt.MessageID == "" || receipt.DeliveredAt.IsZero() || receipt.DeliveredAt.After(time.Now().Add(time.Minute)) {
-		return errors.New("invalid delivery receipt")
+	if receipt.EventID == "" || len(receipt.EventID) > 200 || receipt.NotificationEventID == "" || len(receipt.NotificationEventID) > 512 || receipt.MessageID == "" || len(receipt.MessageID) > 512 || receipt.DeliveredAt.IsZero() || receipt.DeliveredAt.After(time.Now().Add(time.Minute)) {
+		return ErrInvalidDeliveryReceipt
 	}
 	payload, _ := json.Marshal(receipt)
 	digest := sha256.Sum256(payload)
@@ -42,7 +47,7 @@ func (s *Store) RecordDeliveryReceipt(ctx context.Context, channel string, recei
 	err = tx.QueryRow(ctx, `SELECT payload_hash FROM app.notification_delivery_receipts WHERE channel=$1 AND event_id=$2`, channel, receipt.EventID).Scan(&existing)
 	if err == nil {
 		if existing != hash {
-			return errors.New("delivery receipt identity conflicts with previous evidence")
+			return ErrDeliveryReceiptConflict
 		}
 		return tx.Commit(ctx)
 	}
@@ -51,7 +56,10 @@ func (s *Store) RecordDeliveryReceipt(ctx context.Context, channel string, recei
 	}
 	var id string
 	if err = tx.QueryRow(ctx, `SELECT id::text FROM app.notifications WHERE channel=$1 AND event_reference=$2 AND provider_message_id=$3 AND state IN ('sent','delivered','read') FOR UPDATE`, channel, receipt.NotificationEventID, receipt.MessageID).Scan(&id); err != nil {
-		return errors.New("matching sent notification is not yet available")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrDeliveryReceiptPending
+		}
+		return fmt.Errorf("read sent notification: %w", err)
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO app.notification_delivery_receipts(channel,event_id,payload_hash,notification_id) VALUES($1,$2,$3,$4::uuid)`, channel, receipt.EventID, hash, id); err != nil {
 		return err

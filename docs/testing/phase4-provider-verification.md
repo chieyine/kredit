@@ -54,12 +54,15 @@ All 21 real scenarios in [Mono Sweep acceptance evidence](mono-sweep-evidence.md
 
 Record the exact adapter commit, run date, expected and actual assertions, provider references and reviewer in restricted evidence storage. The [pending manifest template](phase4-provider-evidence.template.json) intentionally contains no passes. Copy it outside the repository; do not commit a completed pack with private references, authorization links, BVNs, account inventories or credentials.
 
+Set `REVIEWED_ADAPTER_COMMIT` to the exact reviewed 40-character commit before running:
+
 ```sh
 python3 scripts/verify_provider_evidence.py /restricted/phase4/manifest.json \
-  --evidence-dir /restricted/phase4
+  --evidence-dir /restricted/phase4 \
+  --adapter-commit "$REVIEWED_ADAPTER_COMMIT"
 ```
 
-This validator checks completeness, required confirmations and SHA-256 consistency of local evidence files. It cannot authenticate provenance or distinguish a forged assertion from an actual provider observation; a human reviewer must inspect the evidence and provider confirmation. A valid manifest does not enable features or constitute production approval. A pending, missing, incomplete, synthetic-labelled or hash-mismatched pack exits unsuccessfully.
+This validator binds the pack to the selected adapter commit and checks completeness, required confirmations and SHA-256 consistency of local evidence files. It cannot authenticate provenance or distinguish a forged assertion from an actual provider observation; a human reviewer must inspect the evidence and provider confirmation. A valid manifest does not enable features or constitute production approval. A pending, missing, incomplete, synthetic-labelled or hash-mismatched pack exits unsuccessfully.
 
 Resolve the singular/plural retrieve-debit URL discrepancy, final partial-result fields, reference identity, mandate validity/date formats and cancellation semantics with actual sandbox/provider evidence. Never add an alternate debit-submission retry or guess that a callback is proof of settlement. Pilot approval also requires the independent legal/security/operational gates.
 

@@ -147,12 +147,7 @@ func (s *Store) PostActivation(obligationID string, principal Money, effectiveAt
 	if err != nil {
 		return Transaction{}, err
 	}
-	return s.post(Transaction{EventType: "principal_activated", ReferenceType: "obligation", ReferenceID: obligationID, IdempotencyKey: idempotencyKey, EffectiveAt: effectiveAt, Postings: []Posting{
-		{Account: AccountTradeReceivable, Debit: principal},
-		{Account: AccountPrincipalOriginated, Credit: principal},
-		{Account: AccountSupplierFeeReceivable, Debit: baseFee},
-		{Account: AccountPlatformServiceRevenue, Credit: baseFee},
-	}})
+	return s.PostActivationWithFee(obligationID, principal, baseFee, effectiveAt, idempotencyKey)
 }
 
 func (s *Store) post(transaction Transaction) (Transaction, error) {
@@ -273,21 +268,22 @@ func newIdentifier() string {
 	return "ledger-" + hex.EncodeToString(value[:])
 }
 
-// VerifyChain computes a deterministic SHA-256 hash-chain digest across a slice
-// of chronological ledger transactions. If any transaction or posting is tampered
-// with, the resulting chain digest diverges.
+// VerifyChain computes a deterministic SHA-256 digest of ordered transactions.
+// Length prefixes prevent adjacent fields from producing ambiguous input.
 func VerifyChain(transactions []Transaction) string {
 	h := sha256.New()
+	write := func(value string) { _, _ = fmt.Fprintf(h, "%d:%s", len(value), value) }
+	write("kredit-ledger-digest-v2")
+	write(fmt.Sprint(len(transactions)))
 	for _, t := range transactions {
-		h.Write([]byte(t.ID))
-		h.Write([]byte(t.EventType))
-		h.Write([]byte(t.ReferenceType))
-		h.Write([]byte(t.ReferenceID))
-		h.Write([]byte(t.IdempotencyKey))
-		_, _ = fmt.Fprintf(h, "%d", t.EffectiveAt.UnixNano())
+		for _, value := range []string{t.ID, t.EventType, t.ReferenceType, t.ReferenceID, t.IdempotencyKey, t.EffectiveAt.UTC().Format(time.RFC3339Nano), t.RecordedAt.UTC().Format(time.RFC3339Nano)} {
+			write(value)
+		}
+		write(fmt.Sprint(len(t.Postings)))
 		for _, p := range t.Postings {
-			h.Write([]byte(p.Account))
-			_, _ = fmt.Fprintf(h, "%d:%d", p.Debit, p.Credit)
+			write(p.Account)
+			write(fmt.Sprint(p.Debit))
+			write(fmt.Sprint(p.Credit))
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil))

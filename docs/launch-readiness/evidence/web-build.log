@@ -1,0 +1,907 @@
+$ pnpm run generate:api
+$ pnpm -w exec openapi-typescript api/openapi.yaml -o web/src/lib/api/generated/schema.ts
+✨ openapi-typescript 7.9.1
+ ⚠  Info object should contain `license` field. at #/info
+ ⚠  Paths should resolve unambiguously. Found two ambiguous paths: `/ops/team/{userID}/roles` and `/ops/team/roles/{assignmentID}`. at #/paths/~1ops~1team~1roles~1{assignmentID}
+ ⚠  Operation object should contain `description` field. at #/paths/~1platform~1capabilities/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1capabilities/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1platform-settings/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1platform-settings/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1platform-settings~1secret/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1platform-settings~1history/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1governance/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1governance/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1solo-owner~1approve/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1ownership~1transfer/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1approval-inbox/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1admin-changes/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1change-context/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1change-history/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1attention/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1attention~1details/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1amendments/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1healthz/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1healthz/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1readyz/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1readyz/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1meta/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1meta/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1auth~1otp~1challenges/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1auth~1otp~1verify/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1auth~1logout/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1auth~1logout/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1secure-link/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1mfa~1totp~1enroll/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1mfa~1totp~1enroll/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1mfa~1totp~1verify/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1mfa~1totp~1verify/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1members/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1members/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1members/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1members/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1members~1{userID}/patch/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1members~1{userID}/patch/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1audit-events/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1audit-events/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1contacts~1challenges/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1contacts~1challenges/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1contacts~1verify/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1contacts~1verify/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1representative/patch/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1representative/patch/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1kyb/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1kyb/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1kyb~1reconcile/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1settlement/put/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1settlement/put/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1billing/put/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1billing/put/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1credit-policy/put/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1credit-policy/put/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1onboarding~1consents/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1onboarding~1consents/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1documents/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1documents/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1documents~1upload-slot/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1documents~1upload-slot/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1documents~1{documentID}~1complete/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1documents~1{documentID}~1complete/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1documents~1{documentID}~1download/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1documents~1{documentID}~1download/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1support-cases/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1support-cases/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1support-cases/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1support-cases/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1support-cases~1{caseID}/patch/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1support-cases~1{caseID}/patch/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1relationships~1consents/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1relationships~1consents/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1relationships~1consents/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1relationships~1consents/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1buyer-invitations/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1buyer-invitations/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer-invitations~1{token}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer-invitations~1{token}~1otp/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer-invitations~1{token}~1otp/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer-invitations~1{token}~1accept/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer-invitations~1{token}~1accept/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1me/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1me/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/patch/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}/patch/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1send/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1send/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1send/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1cancel/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1release/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1release/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1release/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1agreement/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1agreement/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1agreement/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1agreement-document/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1mandate/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1mandate/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1mandate/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1accept/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1accept/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1accept/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1decline/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1decline/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1receipt/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1receipt/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1receipt/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments~1{paymentID}~1reverse/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments~1{paymentID}~1reverse/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payments~1{paymentID}~1reverse/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1reconciliation/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1reconciliation/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1reconciliation/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1agreement-document/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1payments/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1payments/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1payments/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1obligations~1{obligationID}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1payment-claims/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1mandates~1{mandateID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1mandates~1{mandateID}~1cancel/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1mandates~1{mandateID}~1restore/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1mandates~1{mandateID}~1restore/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1payment-claims/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1payment-claims/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payment-claims/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payment-claims/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1payment-claims/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1payment-claims/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1payment-claims/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1payment-claims/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1payment-claims~1{claimID}~1decide/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1payment-claims~1{claimID}~1decide/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1payment-claims~1{claimID}~1decide/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1public~1receipts~1{token}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1payment-link/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1payment-link/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1public~1payment-intents~1{token}/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/post/summary
+ ⚠  Operation must have at least one `2XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1schedule/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1schedule/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1schedule/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1schedule/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}/patch/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1confirm/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1confirm/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1confirm/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1release/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1release/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1release/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1receipt/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1receipt/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1receipt/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1cancel/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1statement/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1statement/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines~1{lineID}~1statement/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1agreement-document/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1drawdowns~1{drawdownID}~1agreement-document/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1suspend/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1suspend/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1suspend/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1resume/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1resume/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1resume/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1statement/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1statement/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1trade-lines~1{lineID}~1statement/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection~1eligibility/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection~1eligibility/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection~1eligibility/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collection/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collections/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collections/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1collections/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1retry/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1retry/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1retry/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1reconcile/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1reconcile/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1collections~1{attemptID}~1reconcile/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1webhooks~1mono/post/summary
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1businesses~1{businessID}~1repayment-customer/post/summary
+ ⚠  Operation object should contain `summary` field. at #/paths/~1webhooks~1collection~1{provider}/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1webhooks~1collection~1{provider}/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1webhooks~1collection~1{provider}/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1schedule-items~1{itemID}~1collection-notice~1acknowledge/post/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1disputes/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1disputes/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1disputes/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1disputes/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1credit-requests~1{requestID}~1disputes/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1credit-requests~1{requestID}~1disputes/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1disputes/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1disputes/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1disputes/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}/get/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1evidence/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1evidence/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1evidence/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1decide/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1decide/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1disputes~1{disputeID}~1decide/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1write-off/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1write-off/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1write-off/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1fee-waiver/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1fee-waiver/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1credit-requests~1{requestID}~1fee-waiver/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1organizations~1{organizationID}~1operations/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1operations/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1operations/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1pricing/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1pricing/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1business-policies/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1business-policies/post/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1ops~1business-policies~1{changeID}~1decision/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1business-policies~1{changeID}~1decision/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1financial-reconciliation/get/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1ops~1financial-reconciliation~1{caseID}~1decision/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1financial-reconciliation~1{caseID}~1decision/post/description
+ ⚠  Operation object should contain `summary` field. at #/paths/~1webhooks~1messaging~1whatsapp/post/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1webhooks~1messaging~1whatsapp/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1webhooks~1messaging~1whatsapp/post/responses
+ ⚠  Operation object should contain `summary` field. at #/paths/~1me~1notifications/get/summary
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1notifications/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1notifications/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1reports~1receivables/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1reports~1receivables/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1provider-status/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1provider-status/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1readiness/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1readiness/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1metrics/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1metrics/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1metrics~1prometheus/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1metrics~1prometheus/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1overview/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1analytics~1scorecard/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1product-feedback/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1jobs/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1provider-events/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1commands~1preview/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1commands/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1diagnostics/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1search/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1users/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1organizations/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1money/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1cases/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1audit/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1cases~1{caseID}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1cases~1{caseID}/patch/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1disputes/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1disputes~1{disputeID}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1disputes~1{disputeID}~1decide/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1team/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1team~1{userID}~1roles/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1team~1roles~1{assignmentID}/delete/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1reports~1ageing/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1reports~1ageing/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1reports~1fees/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1reports~1fees/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1reports~1exports/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1reports~1exports/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1history/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1history/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1customers~1{buyerUserID}~1history/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1customers~1{buyerUserID}~1history/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1customers~1{buyerUserID}~1statement/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1customers~1{buyerUserID}~1statement/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1history~1corrections/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1history~1corrections/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1corrections/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1corrections/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1corrections~1{correctionID}~1decide/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1corrections~1{correctionID}~1decide/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1payments/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1payments/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1collections/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1collections/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1overdue/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1overdue/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1organizations~1{organizationID}~1customers/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1organizations~1{organizationID}~1customers/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1mandates/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1mandates/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1trade-lines/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1trade-lines/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1disputes/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1buyer~1disputes/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1disputes~1{disputeID}/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1buyer~1disputes~1{disputeID}~1evidence/post/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1notification-preferences/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1notification-preferences/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1notification-preferences/put/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1recovery-codes~1regenerate/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1recovery-codes~1regenerate/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1account-recovery~1requests/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1account-recovery~1requests/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1account-recovery~1requests~1{requestID}~1evidence/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1account-recovery~1requests~1{requestID}~1evidence/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1account-recovery~1requests~1{requestID}~1complete/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1account-recovery~1requests~1{requestID}~1complete/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1privacy-requests/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1privacy-requests/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1privacy-requests/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1privacy-requests/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1privacy-requests~1{requestID}~1export/get/description
+ ⚠  Operation object should contain `description` field. at #/paths/~1me~1account-recovery~1{requestID}~1cancel/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1me~1account-recovery~1{requestID}~1cancel/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1account-recovery/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1account-recovery/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1account-recovery~1{requestID}~1review/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1account-recovery~1{requestID}~1review/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1privacy-requests/get/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1privacy-requests/get/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1privacy-requests~1{requestID}~1decide/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1privacy-requests~1{requestID}~1decide/post/responses
+ ⚠  Operation object should contain `description` field. at #/paths/~1ops~1privacy-requests~1{requestID}~1complete/post/description
+ ⚠  Operation must have at least one `4XX` response. at #/paths/~1ops~1privacy-requests~1{requestID}~1complete/post/responses
+ ⚠  Component: "ProviderStatus" is never used. at #/components/schemas/ProviderStatus
+ ⚠  Component: "Membership" is never used. at #/components/schemas/Membership
+🚀 api/openapi.yaml → web/src/lib/api/generated/schema.ts [3.8s]
+$ vite build
+vite v7.3.5 building ssr environment for production...
+transforming...
+✓ 417 modules transformed.
+rendering chunks...
+vite v7.3.5 building client environment for production...
+transforming...
+✓ 506 modules transformed.
+rendering chunks...
+computing gzip size...
+.svelte-kit/output/client/_app/version.json                                          0.03 kB │ gzip:  0.05 kB
+.svelte-kit/output/client/.vite/manifest.json                                       75.43 kB │ gzip:  6.58 kB
+.svelte-kit/output/client/_app/immutable/assets/3.BVF8Vz5l.css                       0.12 kB │ gzip:  0.12 kB
+.svelte-kit/output/client/_app/immutable/assets/14.CDR7oDho.css                      0.13 kB │ gzip:  0.13 kB
+.svelte-kit/output/client/_app/immutable/assets/VerifyIdentity.Ch0DlWM4.css          0.22 kB │ gzip:  0.15 kB
+.svelte-kit/output/client/_app/immutable/assets/2.PuzTl2Lb.css                       0.22 kB │ gzip:  0.16 kB
+.svelte-kit/output/client/_app/immutable/assets/19.l3YKuVpn.css                      0.31 kB │ gzip:  0.19 kB
+.svelte-kit/output/client/_app/immutable/assets/72.AR2lSFPf.css                      0.34 kB │ gzip:  0.19 kB
+.svelte-kit/output/client/_app/immutable/assets/18.C1lsrkmD.css                      0.38 kB │ gzip:  0.19 kB
+.svelte-kit/output/client/_app/immutable/assets/AdminAttention.CH-DU9jU.css          0.38 kB │ gzip:  0.25 kB
+.svelte-kit/output/client/_app/immutable/assets/31.28n7sxiK.css                      0.39 kB │ gzip:  0.21 kB
+.svelte-kit/output/client/_app/immutable/assets/30.BgLfZhl4.css                      0.44 kB │ gzip:  0.23 kB
+.svelte-kit/output/client/_app/immutable/assets/23.BzHuuVwo.css                      0.44 kB │ gzip:  0.24 kB
+.svelte-kit/output/client/_app/immutable/assets/24.CD3leTKI.css                      0.47 kB │ gzip:  0.25 kB
+.svelte-kit/output/client/_app/immutable/assets/13.DIBsdFrS.css                      0.51 kB │ gzip:  0.26 kB
+.svelte-kit/output/client/_app/immutable/assets/4.CCM-MfHN.css                       0.58 kB │ gzip:  0.27 kB
+.svelte-kit/output/client/_app/immutable/assets/32.B3desCZN.css                      0.59 kB │ gzip:  0.28 kB
+.svelte-kit/output/client/_app/immutable/assets/22.6UPISL1b.css                      0.60 kB │ gzip:  0.29 kB
+.svelte-kit/output/client/_app/immutable/assets/29.DcXVmDQG.css                      0.60 kB │ gzip:  0.28 kB
+.svelte-kit/output/client/_app/immutable/assets/Skeleton.DMIklH1a.css                0.62 kB │ gzip:  0.30 kB
+.svelte-kit/output/client/_app/immutable/assets/ResourceNotice.CvdUATbS.css          0.63 kB │ gzip:  0.33 kB
+.svelte-kit/output/client/_app/immutable/assets/60.PRteVEBL.css                      0.63 kB │ gzip:  0.26 kB
+.svelte-kit/output/client/_app/immutable/assets/77.PMS_DjE9.css                      0.67 kB │ gzip:  0.30 kB
+.svelte-kit/output/client/_app/immutable/assets/33.Dn4PVqr1.css                      0.68 kB │ gzip:  0.33 kB
+.svelte-kit/output/client/_app/immutable/assets/81.6ugHftM_.css                      0.73 kB │ gzip:  0.30 kB
+.svelte-kit/output/client/_app/immutable/assets/59.BCeHOul3.css                      0.74 kB │ gzip:  0.31 kB
+.svelte-kit/output/client/_app/immutable/assets/80.CVAngB_i.css                      0.76 kB │ gzip:  0.33 kB
+.svelte-kit/output/client/_app/immutable/assets/5.Cgc3v9n5.css                       0.77 kB │ gzip:  0.39 kB
+.svelte-kit/output/client/_app/immutable/assets/99.DzMovU9z.css                      0.83 kB │ gzip:  0.38 kB
+.svelte-kit/output/client/_app/immutable/assets/ShareActions.BowlzzGQ.css            0.84 kB │ gzip:  0.35 kB
+.svelte-kit/output/client/_app/immutable/assets/97.CNvxD2mh.css                      0.87 kB │ gzip:  0.38 kB
+.svelte-kit/output/client/_app/immutable/assets/62.Cj6rJriR.css                      0.91 kB │ gzip:  0.37 kB
+.svelte-kit/output/client/_app/immutable/assets/58.DczhXn1Z.css                      0.93 kB │ gzip:  0.36 kB
+.svelte-kit/output/client/_app/immutable/assets/46.DXSYcj1p.css                      0.94 kB │ gzip:  0.38 kB
+.svelte-kit/output/client/_app/immutable/assets/100.Tcn_aW-o.css                     0.97 kB │ gzip:  0.37 kB
+.svelte-kit/output/client/_app/immutable/assets/61.D7fmD33h.css                      0.97 kB │ gzip:  0.41 kB
+.svelte-kit/output/client/_app/immutable/assets/1.DDKoBP25.css                       0.98 kB │ gzip:  0.44 kB
+.svelte-kit/output/client/_app/immutable/assets/64.cRdBHDAe.css                      0.98 kB │ gzip:  0.39 kB
+.svelte-kit/output/client/_app/immutable/assets/49.F6acCjwc.css                      1.00 kB │ gzip:  0.44 kB
+.svelte-kit/output/client/_app/immutable/assets/86.DC63imQN.css                      1.07 kB │ gzip:  0.46 kB
+.svelte-kit/output/client/_app/immutable/assets/82.DRhIRMxI.css                      1.09 kB │ gzip:  0.38 kB
+.svelte-kit/output/client/_app/immutable/assets/PaymentReview.CDJdrD3D.css           1.12 kB │ gzip:  0.53 kB
+.svelte-kit/output/client/_app/immutable/assets/FeedbackPrompt.CZZOURca.css          1.28 kB │ gzip:  0.52 kB
+.svelte-kit/output/client/_app/immutable/assets/DisputeDetail.CB-tTi3Y.css           1.34 kB │ gzip:  0.45 kB
+.svelte-kit/output/client/_app/immutable/assets/34.deGiSGiO.css                      1.35 kB │ gzip:  0.52 kB
+.svelte-kit/output/client/_app/immutable/assets/17.DRDHM2lT.css                      1.49 kB │ gzip:  0.50 kB
+.svelte-kit/output/client/_app/immutable/assets/66.CS9Fg10g.css                      1.53 kB │ gzip:  0.51 kB
+.svelte-kit/output/client/_app/immutable/assets/25.8SXjd1eU.css                      1.55 kB │ gzip:  0.53 kB
+.svelte-kit/output/client/_app/immutable/assets/ProtectedActionDialog.Dke4Yeg_.css   1.56 kB │ gzip:  0.57 kB
+.svelte-kit/output/client/_app/immutable/assets/21.D1kcWFzk.css                      1.57 kB │ gzip:  0.49 kB
+.svelte-kit/output/client/_app/immutable/assets/45.DuKzi--m.css                      1.91 kB │ gzip:  0.58 kB
+.svelte-kit/output/client/_app/immutable/assets/20.B-3AfD4S.css                      1.95 kB │ gzip:  0.57 kB
+.svelte-kit/output/client/_app/immutable/assets/76.it9irdZx.css                      1.97 kB │ gzip:  0.63 kB
+.svelte-kit/output/client/_app/immutable/assets/85.DUL00DXE.css                      1.97 kB │ gzip:  0.57 kB
+.svelte-kit/output/client/_app/immutable/assets/36.DPeUp-uZ.css                      1.98 kB │ gzip:  0.70 kB
+.svelte-kit/output/client/_app/immutable/assets/65.DqHScHQD.css                      1.98 kB │ gzip:  0.63 kB
+.svelte-kit/output/client/_app/immutable/assets/38.BFVs8Wvw.css                      2.13 kB │ gzip:  0.58 kB
+.svelte-kit/output/client/_app/immutable/assets/16.nLFYpA-u.css                      2.21 kB │ gzip:  0.59 kB
+.svelte-kit/output/client/_app/immutable/assets/67.vxDo27C-.css                      2.31 kB │ gzip:  0.61 kB
+.svelte-kit/output/client/_app/immutable/assets/56.BnkH-jbo.css                      2.31 kB │ gzip:  0.73 kB
+.svelte-kit/output/client/_app/immutable/assets/40.CxKvHHza.css                      2.31 kB │ gzip:  0.69 kB
+.svelte-kit/output/client/_app/immutable/assets/37.D6lLo5jD.css                      2.32 kB │ gzip:  0.79 kB
+.svelte-kit/output/client/_app/immutable/assets/27.Dli63CUk.css                      2.55 kB │ gzip:  0.80 kB
+.svelte-kit/output/client/_app/immutable/assets/26.CxU1N3De.css                      2.65 kB │ gzip:  0.79 kB
+.svelte-kit/output/client/_app/immutable/assets/92.dXlkPWc1.css                      2.73 kB │ gzip:  0.80 kB
+.svelte-kit/output/client/_app/immutable/assets/71.QFqZeV2W.css                      2.80 kB │ gzip:  0.84 kB
+.svelte-kit/output/client/_app/immutable/assets/11.DwBzmlMA.css                      2.87 kB │ gzip:  0.79 kB
+.svelte-kit/output/client/_app/immutable/assets/DocumentLayout.BFMlzGpE.css          3.18 kB │ gzip:  0.97 kB
+.svelte-kit/output/client/_app/immutable/assets/NotificationHistory.C1sg45RL.css     3.18 kB │ gzip:  0.94 kB
+.svelte-kit/output/client/_app/immutable/assets/70.C_PokBUH.css                      3.20 kB │ gzip:  0.86 kB
+.svelte-kit/output/client/_app/immutable/assets/51.DQBvCZsL.css                      3.56 kB │ gzip:  0.98 kB
+.svelte-kit/output/client/_app/immutable/assets/WorkspacePage.jD0GceLR.css           3.67 kB │ gzip:  1.02 kB
+.svelte-kit/output/client/_app/immutable/assets/41.D5vvVYOe.css                      3.72 kB │ gzip:  0.96 kB
+.svelte-kit/output/client/_app/immutable/assets/43.D1r0C2J4.css                      4.03 kB │ gzip:  1.08 kB
+.svelte-kit/output/client/_app/immutable/assets/35.BeE1rlYs.css                      4.04 kB │ gzip:  0.95 kB
+.svelte-kit/output/client/_app/immutable/assets/42.C89ldoBj.css                      4.30 kB │ gzip:  1.16 kB
+.svelte-kit/output/client/_app/immutable/assets/73.BNi2dIZ7.css                      4.79 kB │ gzip:  1.24 kB
+.svelte-kit/output/client/_app/immutable/assets/102.CT1ZtR8s.css                     4.84 kB │ gzip:  1.08 kB
+.svelte-kit/output/client/_app/immutable/assets/55.B_acmn2c.css                      4.86 kB │ gzip:  1.08 kB
+.svelte-kit/output/client/_app/immutable/assets/91.MVeZA70c.css                      5.08 kB │ gzip:  1.14 kB
+.svelte-kit/output/client/_app/immutable/assets/12.BledoSGw.css                      5.10 kB │ gzip:  1.20 kB
+.svelte-kit/output/client/_app/immutable/assets/53.D5lHtpbQ.css                      5.12 kB │ gzip:  1.18 kB
+.svelte-kit/output/client/_app/immutable/assets/98.ORnRWR3N.css                      5.61 kB │ gzip:  1.30 kB
+.svelte-kit/output/client/_app/immutable/assets/90.CE7-tGGQ.css                      5.68 kB │ gzip:  1.18 kB
+.svelte-kit/output/client/_app/immutable/assets/69.CYxu4olP.css                      6.31 kB │ gzip:  1.34 kB
+.svelte-kit/output/client/_app/immutable/assets/93.Dt5dGfJh.css                      6.51 kB │ gzip:  1.38 kB
+.svelte-kit/output/client/_app/immutable/assets/68.Bvwo7TT-.css                      6.61 kB │ gzip:  1.54 kB
+.svelte-kit/output/client/_app/immutable/assets/28.CI8rqWcD.css                      7.24 kB │ gzip:  1.78 kB
+.svelte-kit/output/client/_app/immutable/assets/54.BFv0I_dK.css                      8.94 kB │ gzip:  1.67 kB
+.svelte-kit/output/client/_app/immutable/assets/88.BIna9Hdk.css                     14.01 kB │ gzip:  2.78 kB
+.svelte-kit/output/client/_app/immutable/assets/ConnectivityBanner.DWdI6zc5.css     16.94 kB │ gzip:  3.32 kB
+.svelte-kit/output/client/_app/immutable/assets/10.DmyB0QN7.css                     19.89 kB │ gzip:  3.98 kB
+.svelte-kit/output/client/_app/immutable/assets/0.Bs2Ba29i.css                      21.30 kB │ gzip:  5.16 kB
+.svelte-kit/output/client/_app/immutable/chunks/BBaYYMhy.js                          0.04 kB │ gzip:  0.06 kB
+.svelte-kit/output/client/_app/immutable/chunks/CaqoCJv5.js                          0.04 kB │ gzip:  0.06 kB
+.svelte-kit/output/client/_app/immutable/chunks/DsnmJJEf.js                          0.07 kB │ gzip:  0.08 kB
+.svelte-kit/output/client/_app/immutable/entry/start.BLv_oLS0.js                     0.08 kB │ gzip:  0.09 kB
+.svelte-kit/output/client/_app/immutable/chunks/B0hI5iWL.js                          0.14 kB │ gzip:  0.12 kB
+.svelte-kit/output/client/_app/immutable/chunks/CtdIE99H.js                          0.19 kB │ gzip:  0.17 kB
+.svelte-kit/output/client/_app/immutable/chunks/F9wyft6p.js                          0.25 kB │ gzip:  0.21 kB
+.svelte-kit/output/client/_app/immutable/chunks/fp3Y9q77.js                          0.26 kB │ gzip:  0.22 kB
+.svelte-kit/output/client/_app/immutable/chunks/D7R7iFRS.js                          0.26 kB │ gzip:  0.21 kB
+.svelte-kit/output/client/_app/immutable/nodes/6.BKql7HHw.js                         0.28 kB │ gzip:  0.22 kB
+.svelte-kit/output/client/_app/immutable/nodes/7.BKql7HHw.js                         0.28 kB │ gzip:  0.22 kB
+.svelte-kit/output/client/_app/immutable/nodes/8.BKql7HHw.js                         0.28 kB │ gzip:  0.22 kB
+.svelte-kit/output/client/_app/immutable/nodes/9.BKql7HHw.js                         0.28 kB │ gzip:  0.22 kB
+.svelte-kit/output/client/_app/immutable/nodes/4.CfMGHfML.js                         0.29 kB │ gzip:  0.23 kB
+.svelte-kit/output/client/_app/immutable/nodes/78.DoQNFXX7.js                        0.30 kB │ gzip:  0.22 kB
+.svelte-kit/output/client/_app/immutable/nodes/50.Cniy4AVX.js                        0.30 kB │ gzip:  0.22 kB
+.svelte-kit/output/client/_app/immutable/chunks/DmpphUPK.js                          0.31 kB │ gzip:  0.18 kB
+.svelte-kit/output/client/_app/immutable/chunks/BmRbaOyK.js                          0.39 kB │ gzip:  0.29 kB
+.svelte-kit/output/client/_app/immutable/chunks/BdX5iLN2.js                          0.40 kB │ gzip:  0.29 kB
+.svelte-kit/output/client/_app/immutable/chunks/B5Te37Q_.js                          0.43 kB │ gzip:  0.28 kB
+.svelte-kit/output/client/_app/immutable/nodes/15.DbTpVaqI.js                        0.47 kB │ gzip:  0.33 kB
+.svelte-kit/output/client/_app/immutable/nodes/79.BZTw_39e.js                        0.51 kB │ gzip:  0.35 kB
+.svelte-kit/output/client/_app/immutable/chunks/CLm7WH_P.js                          0.52 kB │ gzip:  0.33 kB
+.svelte-kit/output/client/_app/immutable/nodes/74.ELUQesDo.js                        0.53 kB │ gzip:  0.35 kB
+.svelte-kit/output/client/_app/immutable/nodes/47.CSbyAsiO.js                        0.53 kB │ gzip:  0.34 kB
+.svelte-kit/output/client/_app/immutable/chunks/Y1rQ-Df6.js                          0.54 kB │ gzip:  0.37 kB
+.svelte-kit/output/client/_app/immutable/nodes/83.D9TY1taF.js                        0.54 kB │ gzip:  0.35 kB
+.svelte-kit/output/client/_app/immutable/nodes/52.DetHB44s.js                        0.55 kB │ gzip:  0.37 kB
+.svelte-kit/output/client/_app/immutable/chunks/CGF0VP2d.js                          0.58 kB │ gzip:  0.39 kB
+.svelte-kit/output/client/_app/immutable/nodes/39.397qVm34.js                        0.61 kB │ gzip:  0.39 kB
+.svelte-kit/output/client/_app/immutable/nodes/44.Ch6_fSLB.js                        0.64 kB │ gzip:  0.39 kB
+.svelte-kit/output/client/_app/immutable/chunks/OA8UcISh.js                          0.64 kB │ gzip:  0.39 kB
+.svelte-kit/output/client/_app/immutable/chunks/BCcoryUA.js                          0.68 kB │ gzip:  0.41 kB
+.svelte-kit/output/client/_app/immutable/chunks/DBwj2NeX.js                          0.69 kB │ gzip:  0.46 kB
+.svelte-kit/output/client/_app/immutable/chunks/DJDHTl8U.js                          0.74 kB │ gzip:  0.48 kB
+.svelte-kit/output/client/_app/immutable/nodes/75.CBuZqvuP.js                        0.74 kB │ gzip:  0.46 kB
+.svelte-kit/output/client/_app/immutable/chunks/Dn1TqWNp.js                          0.81 kB │ gzip:  0.47 kB
+.svelte-kit/output/client/_app/immutable/nodes/48.B_Gwh5M8.js                        0.99 kB │ gzip:  0.62 kB
+.svelte-kit/output/client/_app/immutable/chunks/B0uIMHgl.js                          0.99 kB │ gzip:  0.58 kB
+.svelte-kit/output/client/_app/immutable/chunks/BBKiKhyq.js                          1.01 kB │ gzip:  0.60 kB
+.svelte-kit/output/client/_app/immutable/chunks/BTPMPfj1.js                          1.02 kB │ gzip:  0.58 kB
+.svelte-kit/output/client/_app/immutable/chunks/B06Tv8NK.js                          1.10 kB │ gzip:  0.59 kB
+.svelte-kit/output/client/_app/immutable/chunks/CeLddOjX.js                          1.10 kB │ gzip:  0.54 kB
+.svelte-kit/output/client/_app/immutable/nodes/87.BGffj3fR.js                        1.12 kB │ gzip:  0.67 kB
+.svelte-kit/output/client/_app/immutable/chunks/Bab5ZY_4.js                          1.15 kB │ gzip:  0.66 kB
+.svelte-kit/output/client/_app/immutable/chunks/KSHN3Mre.js                          1.23 kB │ gzip:  0.74 kB
+.svelte-kit/output/client/_app/immutable/chunks/BqMDb-jK.js                          1.26 kB │ gzip:  0.71 kB
+.svelte-kit/output/client/_app/immutable/chunks/SFpP-Uwo.js                          1.28 kB │ gzip:  0.75 kB
+.svelte-kit/output/client/_app/immutable/chunks/wbPk3Yxo.js                          1.37 kB │ gzip:  0.66 kB
+.svelte-kit/output/client/_app/immutable/nodes/84.C2MJPP8e.js                        1.39 kB │ gzip:  0.69 kB
+.svelte-kit/output/client/_app/immutable/chunks/Buv3buhL.js                          1.49 kB │ gzip:  0.66 kB
+.svelte-kit/output/client/_app/immutable/chunks/CuN__SYc.js                          1.49 kB │ gzip:  0.88 kB
+.svelte-kit/output/client/_app/immutable/nodes/101.Ct0HYGuv.js                       1.54 kB │ gzip:  0.89 kB
+.svelte-kit/output/client/_app/immutable/nodes/1.BcHKXfqX.js                         1.57 kB │ gzip:  0.89 kB
+.svelte-kit/output/client/_app/immutable/chunks/Cr-LhHBI.js                          1.75 kB │ gzip:  0.88 kB
+.svelte-kit/output/client/_app/immutable/chunks/C9YaWZSl.js                          1.93 kB │ gzip:  0.98 kB
+.svelte-kit/output/client/_app/immutable/nodes/57.CWbBFv4n.js                        2.05 kB │ gzip:  0.82 kB
+.svelte-kit/output/client/_app/immutable/nodes/60.C4QeEmPk.js                        2.08 kB │ gzip:  1.10 kB
+.svelte-kit/output/client/_app/immutable/chunks/DRj1hU_s.js                          2.09 kB │ gzip:  1.08 kB
+.svelte-kit/output/client/_app/immutable/chunks/C20BSSaR.js                          2.13 kB │ gzip:  1.17 kB
+.svelte-kit/output/client/_app/immutable/chunks/DwANftyb.js                          2.21 kB │ gzip:  1.12 kB
+.svelte-kit/output/client/_app/immutable/nodes/99.BQ79BusW.js                        2.28 kB │ gzip:  1.17 kB
+.svelte-kit/output/client/_app/immutable/nodes/97.DpeaKHhR.js                        2.41 kB │ gzip:  1.22 kB
+.svelte-kit/output/client/_app/immutable/chunks/DawKmT9o.js                          2.66 kB │ gzip:  1.37 kB
+.svelte-kit/output/client/_app/immutable/nodes/19.CXgCtbeA.js                        2.67 kB │ gzip:  1.34 kB
+.svelte-kit/output/client/_app/immutable/nodes/33.qamTqL6h.js                        2.73 kB │ gzip:  1.41 kB
+.svelte-kit/output/client/_app/immutable/chunks/DBk0HVq7.js                          2.73 kB │ gzip:  1.40 kB
+.svelte-kit/output/client/_app/immutable/nodes/92.PEwZMyfN.js                        2.95 kB │ gzip:  1.49 kB
+.svelte-kit/output/client/_app/immutable/nodes/14.DdYEFK9s.js                        3.05 kB │ gzip:  1.36 kB
+.svelte-kit/output/client/_app/immutable/nodes/89.CoJ3hzhx.js                        3.05 kB │ gzip:  1.56 kB
+.svelte-kit/output/client/_app/immutable/nodes/16.BfQnxgzT.js                        3.11 kB │ gzip:  1.51 kB
+.svelte-kit/output/client/_app/immutable/nodes/77.CB4RPvgT.js                        3.13 kB │ gzip:  1.58 kB
+.svelte-kit/output/client/_app/immutable/nodes/3.BeLAJM57.js                         3.14 kB │ gzip:  1.25 kB
+.svelte-kit/output/client/_app/immutable/nodes/81.DF6-ZaEr.js                        3.16 kB │ gzip:  1.53 kB
+.svelte-kit/output/client/_app/immutable/nodes/59.EO5Ebyap.js                        3.29 kB │ gzip:  1.62 kB
+.svelte-kit/output/client/_app/immutable/nodes/2.CKL9V6MD.js                         3.32 kB │ gzip:  1.16 kB
+.svelte-kit/output/client/_app/immutable/chunks/DGoPhhVw.js                          3.34 kB │ gzip:  1.24 kB
+.svelte-kit/output/client/_app/immutable/nodes/20.CofYeDzi.js                        3.35 kB │ gzip:  1.59 kB
+.svelte-kit/output/client/_app/immutable/nodes/94.BtHiVZo9.js                        3.37 kB │ gzip:  1.61 kB
+.svelte-kit/output/client/_app/immutable/nodes/32.DFXbgZTt.js                        3.40 kB │ gzip:  1.73 kB
+.svelte-kit/output/client/_app/immutable/nodes/30.mMhjkIdg.js                        3.43 kB │ gzip:  1.69 kB
+.svelte-kit/output/client/_app/immutable/nodes/24.pS3l-mTn.js                        3.45 kB │ gzip:  1.74 kB
+.svelte-kit/output/client/_app/immutable/chunks/BOm1hEMr.js                          3.63 kB │ gzip:  1.67 kB
+.svelte-kit/output/client/_app/immutable/nodes/5.yAaqHiMe.js                         3.63 kB │ gzip:  1.62 kB
+.svelte-kit/output/client/_app/immutable/nodes/36.B8kBAWsU.js                        3.66 kB │ gzip:  1.74 kB
+.svelte-kit/output/client/_app/immutable/chunks/D0gPfdUf.js                          3.77 kB │ gzip:  1.66 kB
+.svelte-kit/output/client/_app/immutable/nodes/70.CdWuM15U.js                        3.78 kB │ gzip:  1.67 kB
+.svelte-kit/output/client/_app/immutable/chunks/BOnrngB5.js                          3.79 kB │ gzip:  1.75 kB
+.svelte-kit/output/client/_app/immutable/nodes/82.CGulB42Y.js                        3.89 kB │ gzip:  1.87 kB
+.svelte-kit/output/client/_app/immutable/nodes/25.DV0ryqBY.js                        3.99 kB │ gzip:  1.63 kB
+.svelte-kit/output/client/_app/immutable/nodes/29.CYttIFN3.js                        3.99 kB │ gzip:  1.94 kB
+.svelte-kit/output/client/_app/immutable/nodes/11.DPSg94e6.js                        3.99 kB │ gzip:  1.89 kB
+.svelte-kit/output/client/_app/immutable/nodes/72.BWpZtWEu.js                        4.11 kB │ gzip:  1.84 kB
+.svelte-kit/output/client/_app/immutable/nodes/27.D4TBOnNa.js                        4.13 kB │ gzip:  1.84 kB
+.svelte-kit/output/client/_app/immutable/nodes/58.Do1Eil-n.js                        4.18 kB │ gzip:  2.01 kB
+.svelte-kit/output/client/_app/immutable/chunks/DUbaXfxM.js                          4.26 kB │ gzip:  2.00 kB
+.svelte-kit/output/client/_app/immutable/nodes/90.BTNddZnU.js                        4.30 kB │ gzip:  1.74 kB
+.svelte-kit/output/client/_app/immutable/nodes/91.qw18Wqn7.js                        4.32 kB │ gzip:  1.73 kB
+.svelte-kit/output/client/_app/immutable/nodes/64.Chdsxfck.js                        4.38 kB │ gzip:  1.97 kB
+.svelte-kit/output/client/_app/immutable/nodes/31.CcOIpu00.js                        4.43 kB │ gzip:  2.14 kB
+.svelte-kit/output/client/_app/immutable/nodes/86.BcVlwegP.js                        4.49 kB │ gzip:  1.91 kB
+.svelte-kit/output/client/_app/immutable/nodes/102.5g0VIThG.js                       4.51 kB │ gzip:  1.80 kB
+.svelte-kit/output/client/_app/immutable/nodes/17.Bro3vLDm.js                        4.56 kB │ gzip:  2.02 kB
+.svelte-kit/output/client/_app/immutable/nodes/62.ChptCcn1.js                        4.59 kB │ gzip:  2.17 kB
+.svelte-kit/output/client/_app/immutable/nodes/23.DtXwyMz3.js                        4.69 kB │ gzip:  2.04 kB
+.svelte-kit/output/client/_app/immutable/nodes/61.BAoJ_29r.js                        4.74 kB │ gzip:  1.91 kB
+.svelte-kit/output/client/_app/immutable/nodes/26.9BXXcZfj.js                        4.87 kB │ gzip:  2.15 kB
+.svelte-kit/output/client/_app/immutable/nodes/63.CosbfqMW.js                        4.89 kB │ gzip:  2.09 kB
+.svelte-kit/output/client/_app/immutable/nodes/49.BEDOYCQ6.js                        5.16 kB │ gzip:  2.32 kB
+.svelte-kit/output/client/_app/immutable/nodes/80.0jQgYyU8.js                        5.61 kB │ gzip:  2.37 kB
+.svelte-kit/output/client/_app/immutable/nodes/76.B0YCVVdH.js                        5.63 kB │ gzip:  2.46 kB
+.svelte-kit/output/client/_app/immutable/nodes/46.EmhO24y1.js                        5.64 kB │ gzip:  2.51 kB
+.svelte-kit/output/client/_app/immutable/nodes/68.Bz_psP91.js                        5.79 kB │ gzip:  2.47 kB
+.svelte-kit/output/client/_app/immutable/nodes/45.CB89KcO2.js                        5.85 kB │ gzip:  2.49 kB
+.svelte-kit/output/client/_app/immutable/nodes/93.n29k6KRM.js                        5.90 kB │ gzip:  2.25 kB
+.svelte-kit/output/client/_app/immutable/nodes/18.BlUEJE1t.js                        5.96 kB │ gzip:  2.47 kB
+.svelte-kit/output/client/_app/immutable/nodes/40.CgLEHZIz.js                        5.97 kB │ gzip:  2.64 kB
+.svelte-kit/output/client/_app/immutable/nodes/22.DlE4ljLo.js                        6.11 kB │ gzip:  2.53 kB
+.svelte-kit/output/client/_app/immutable/nodes/71._ddnDj9x.js                        6.36 kB │ gzip:  2.64 kB
+.svelte-kit/output/client/_app/immutable/nodes/21.xLkC20Ld.js                        6.37 kB │ gzip:  2.66 kB
+.svelte-kit/output/client/_app/immutable/nodes/100.D8Oa2m16.js                       6.46 kB │ gzip:  2.61 kB
+.svelte-kit/output/client/_app/immutable/chunks/pGTxUhMr.js                          6.51 kB │ gzip:  2.71 kB
+.svelte-kit/output/client/_app/immutable/chunks/CB1ubRBq.js                          6.57 kB │ gzip:  2.98 kB
+.svelte-kit/output/client/_app/immutable/nodes/56.D5q1uNYg.js                        6.69 kB │ gzip:  2.35 kB
+.svelte-kit/output/client/_app/immutable/nodes/37.Ci0FkueN.js                        7.03 kB │ gzip:  3.10 kB
+.svelte-kit/output/client/_app/immutable/chunks/ByDDCMdz.js                          7.10 kB │ gzip:  3.11 kB
+.svelte-kit/output/client/_app/immutable/nodes/69.w6ZLNGrL.js                        7.23 kB │ gzip:  2.68 kB
+.svelte-kit/output/client/_app/immutable/nodes/65.CR4NpxLx.js                        7.30 kB │ gzip:  2.84 kB
+.svelte-kit/output/client/_app/immutable/nodes/38.B1ahM3-r.js                        7.46 kB │ gzip:  3.08 kB
+.svelte-kit/output/client/_app/immutable/nodes/85.DIKieNaw.js                        7.89 kB │ gzip:  3.25 kB
+.svelte-kit/output/client/_app/immutable/chunks/DxEYVRxd.js                          7.92 kB │ gzip:  3.25 kB
+.svelte-kit/output/client/_app/immutable/nodes/66.B_Ty-JKw.js                        8.07 kB │ gzip:  3.30 kB
+.svelte-kit/output/client/_app/immutable/chunks/ChE16SSu.js                          8.08 kB │ gzip:  3.15 kB
+.svelte-kit/output/client/_app/immutable/nodes/98.DHuozL9r.js                        8.10 kB │ gzip:  3.08 kB
+.svelte-kit/output/client/_app/immutable/nodes/35.N4kRTl4-.js                        8.21 kB │ gzip:  3.21 kB
+.svelte-kit/output/client/_app/immutable/nodes/55.D0p-CH6X.js                        8.93 kB │ gzip:  3.55 kB
+.svelte-kit/output/client/_app/immutable/nodes/12.BzXo_50a.js                       10.40 kB │ gzip:  3.63 kB
+.svelte-kit/output/client/_app/immutable/nodes/13.D5hupySm.js                       10.82 kB │ gzip:  4.11 kB
+.svelte-kit/output/client/_app/immutable/nodes/51.CU9i9VE5.js                       11.37 kB │ gzip:  4.43 kB
+.svelte-kit/output/client/_app/immutable/nodes/67.DmgX7OdV.js                       11.48 kB │ gzip:  4.30 kB
+.svelte-kit/output/client/_app/immutable/nodes/0.9aZKAZB6.js                        12.24 kB │ gzip:  4.72 kB
+.svelte-kit/output/client/_app/immutable/nodes/88.BHLP_O6n.js                       12.38 kB │ gzip:  4.17 kB
+.svelte-kit/output/client/_app/immutable/nodes/54.82tLV4JI.js                       12.70 kB │ gzip:  4.64 kB
+.svelte-kit/output/client/_app/immutable/nodes/53.DDO2swEs.js                       13.71 kB │ gzip:  5.24 kB
+.svelte-kit/output/client/_app/immutable/nodes/43.M74L1365.js                       14.11 kB │ gzip:  5.50 kB
+.svelte-kit/output/client/_app/immutable/chunks/Bfo5rwJk.js                         14.24 kB │ gzip:  5.41 kB
+.svelte-kit/output/client/_app/immutable/nodes/95.Db7PdSYT.js                       14.55 kB │ gzip:  5.38 kB
+.svelte-kit/output/client/_app/immutable/nodes/10.Dz4cPWYi.js                       15.37 kB │ gzip:  4.62 kB
+.svelte-kit/output/client/_app/immutable/nodes/34.977ZdTyE.js                       15.73 kB │ gzip:  6.05 kB
+.svelte-kit/output/client/_app/immutable/nodes/96.Da3H9nGF.js                       16.85 kB │ gzip:  6.27 kB
+.svelte-kit/output/client/_app/immutable/nodes/73.D6mf83wb.js                       19.83 kB │ gzip:  7.07 kB
+.svelte-kit/output/client/_app/immutable/nodes/42.SSuINPgk.js                       20.13 kB │ gzip:  7.87 kB
+.svelte-kit/output/client/_app/immutable/nodes/28.BPE60fRg.js                       20.81 kB │ gzip:  6.51 kB
+.svelte-kit/output/client/_app/immutable/chunks/Da_3uego.js                         27.48 kB │ gzip: 10.70 kB
+.svelte-kit/output/client/_app/immutable/entry/app.BYtCkmTg.js                      27.91 kB │ gzip:  7.97 kB
+.svelte-kit/output/client/_app/immutable/nodes/41.CHk3L5FW.js                       28.43 kB │ gzip:  9.79 kB
+.svelte-kit/output/client/_app/immutable/chunks/opV57aLO.js                         35.36 kB │ gzip: 13.56 kB
+.svelte-kit/output/client/_app/immutable/chunks/K4uspd1e.js                         53.68 kB │ gzip: 17.42 kB
+✓ built in 36.10s
+vite v7.3.5 building client environment for production...
+transforming...
+✓ 2 modules transformed.
+rendering chunks...
+computing gzip size...
+.svelte-kit/output/client/service-worker.mjs  11.45 kB │ gzip: 3.20 kB
+✓ built in 110ms
+.svelte-kit/output/server/.vite/manifest.json                                               51.26 kB
+.svelte-kit/output/server/_app/immutable/assets/_layout.BVF8Vz5l.css                         0.12 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CDR7oDho.css                           0.13 kB
+.svelte-kit/output/server/_app/immutable/assets/VerifyIdentity.Ch0DlWM4.css                  0.22 kB
+.svelte-kit/output/server/_app/immutable/assets/_layout.PuzTl2Lb.css                         0.22 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.l3YKuVpn.css                           0.31 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.AR2lSFPf.css                           0.34 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.C1lsrkmD.css                           0.38 kB
+.svelte-kit/output/server/_app/immutable/assets/AdminAttention.CH-DU9jU.css                  0.38 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.28n7sxiK.css                           0.39 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BgLfZhl4.css                           0.44 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BzHuuVwo.css                           0.44 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CD3leTKI.css                           0.47 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DIBsdFrS.css                           0.51 kB
+.svelte-kit/output/server/_app/immutable/assets/_layout.CCM-MfHN.css                         0.58 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.B3desCZN.css                           0.59 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.6UPISL1b.css                           0.60 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DcXVmDQG.css                           0.60 kB
+.svelte-kit/output/server/_app/immutable/assets/Skeleton.DMIklH1a.css                        0.62 kB
+.svelte-kit/output/server/_app/immutable/assets/ResourceNotice.CvdUATbS.css                  0.63 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.PRteVEBL.css                           0.63 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.PMS_DjE9.css                           0.67 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.Dn4PVqr1.css                           0.68 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.6ugHftM_.css                           0.73 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BCeHOul3.css                           0.74 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CVAngB_i.css                           0.76 kB
+.svelte-kit/output/server/_app/immutable/assets/_layout.Cgc3v9n5.css                         0.77 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DzMovU9z.css                           0.83 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CNvxD2mh.css                           0.87 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.Cj6rJriR.css                           0.91 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DczhXn1Z.css                           0.93 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DXSYcj1p.css                           0.94 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.Tcn_aW-o.css                           0.97 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.D7fmD33h.css                           0.97 kB
+.svelte-kit/output/server/_app/immutable/assets/_error.DDKoBP25.css                          0.98 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.cRdBHDAe.css                           0.98 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.F6acCjwc.css                           1.00 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DC63imQN.css                           1.07 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DRhIRMxI.css                           1.09 kB
+.svelte-kit/output/server/_app/immutable/assets/FeedbackPrompt.CZZOURca.css                  1.28 kB
+.svelte-kit/output/server/_app/immutable/assets/DisputeDetail.CB-tTi3Y.css                   1.34 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.deGiSGiO.css                           1.35 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DRDHM2lT.css                           1.49 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CS9Fg10g.css                           1.53 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.8SXjd1eU.css                           1.55 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.D1kcWFzk.css                           1.57 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DuKzi--m.css                           1.91 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.B-3AfD4S.css                           1.95 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.it9irdZx.css                           1.97 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DUL00DXE.css                           1.97 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DPeUp-uZ.css                           1.98 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DqHScHQD.css                           1.98 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BFVs8Wvw.css                           2.13 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.nLFYpA-u.css                           2.21 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.vxDo27C-.css                           2.31 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BnkH-jbo.css                           2.31 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CxKvHHza.css                           2.31 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.D6lLo5jD.css                           2.32 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.Dli63CUk.css                           2.55 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CxU1N3De.css                           2.65 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.dXlkPWc1.css                           2.73 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.QFqZeV2W.css                           2.80 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DwBzmlMA.css                           2.87 kB
+.svelte-kit/output/server/_app/immutable/assets/DocumentLayout.BFMlzGpE.css                  3.18 kB
+.svelte-kit/output/server/_app/immutable/assets/NotificationHistory.C1sg45RL.css             3.18 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.C_PokBUH.css                           3.20 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DQBvCZsL.css                           3.56 kB
+.svelte-kit/output/server/_app/immutable/assets/WorkspacePage.jD0GceLR.css                   3.67 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.D5vvVYOe.css                           3.72 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.D1r0C2J4.css                           4.03 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BeE1rlYs.css                           4.04 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.C89ldoBj.css                           4.30 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BNi2dIZ7.css                           4.79 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CT1ZtR8s.css                           4.84 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.B_acmn2c.css                           4.86 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.MVeZA70c.css                           5.08 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BledoSGw.css                           5.10 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.D5lHtpbQ.css                           5.12 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.ORnRWR3N.css                           5.61 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CE7-tGGQ.css                           5.68 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CYxu4olP.css                           6.31 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.Dt5dGfJh.css                           6.51 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.Bvwo7TT-.css                           6.61 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.CI8rqWcD.css                           7.24 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BFv0I_dK.css                           8.94 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.BIna9Hdk.css                          14.01 kB
+.svelte-kit/output/server/_app/immutable/assets/ConnectivityBanner.CZBtxTjI.css             16.91 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.DmyB0QN7.css                          19.89 kB
+.svelte-kit/output/server/_app/immutable/assets/_layout.xylE9_MI.css                        21.23 kB
+.svelte-kit/output/server/chunks/ProtectedActionDialog.svelte_svelte_type_style_lang.js      0.00 kB
+.svelte-kit/output/server/chunks/PaymentReview.svelte_svelte_type_style_lang.js              0.00 kB
+.svelte-kit/output/server/chunks/ShareActions.svelte_svelte_type_style_lang.js               0.00 kB
+.svelte-kit/output/server/chunks/account-context.js                                          0.08 kB
+.svelte-kit/output/server/entries/pages/app/_page.server.ts.js                               0.11 kB
+.svelte-kit/output/server/chunks/html.js                                                     0.14 kB
+.svelte-kit/output/server/entries/pages/legal/privacy/_page.server.ts.js                     0.15 kB
+.svelte-kit/output/server/entries/pages/legal/terms/_page.server.ts.js                       0.15 kB
+.svelte-kit/output/server/entries/pages/c/_token_/_page.ts.js                                0.17 kB
+.svelte-kit/output/server/chunks/admin-client.js                                             0.22 kB
+.svelte-kit/output/server/entries/pages/buyer-invitations/_layout.svelte.js                  0.22 kB
+.svelte-kit/output/server/entries/pages/c/_layout.svelte.js                                  0.22 kB
+.svelte-kit/output/server/entries/pages/pay/_layout.svelte.js                                0.22 kB
+.svelte-kit/output/server/entries/pages/receipt/_layout.svelte.js                            0.22 kB
+.svelte-kit/output/server/env.js                                                             0.23 kB
+.svelte-kit/output/server/entries/pages/blog/_layout.svelte.js                               0.24 kB
+.svelte-kit/output/server/entries/pages/blog/_slug_/_page.ts.js                              0.27 kB
+.svelte-kit/output/server/chunks/shared-server.js                                            0.28 kB
+.svelte-kit/output/server/entries/pages/app/credit/new/_page.ts.js                           0.34 kB
+.svelte-kit/output/server/internal.js                                                        0.41 kB
+.svelte-kit/output/server/chunks/index3.js                                                   0.41 kB
+.svelte-kit/output/server/entries/pages/buyer/notifications/_page.svelte.js                  0.42 kB
+.svelte-kit/output/server/entries/pages/app/notifications/_page.svelte.js                    0.42 kB
+.svelte-kit/output/server/chunks/state.svelte.js                                             0.44 kB
+.svelte-kit/output/server/chunks/demo-sale.js                                                0.44 kB
+.svelte-kit/output/server/chunks/DisputeDetail.js                                            0.48 kB
+.svelte-kit/output/server/entries/pages/pricing/_page.server.ts.js                           0.52 kB
+.svelte-kit/output/server/chunks/client2.js                                                  0.54 kB
+.svelte-kit/output/server/entries/pages/admin/audit/_page.svelte.js                          0.57 kB
+.svelte-kit/output/server/entries/pages/blog/topic/_topic_/_page.ts.js                       0.60 kB
+.svelte-kit/output/server/entries/pages/buyer/obligations/_page.svelte.js                    0.61 kB
+.svelte-kit/output/server/chunks/internal.js                                                 0.62 kB
+.svelte-kit/output/server/entries/pages/buyer/disputes/_page.svelte.js                       0.63 kB
+.svelte-kit/output/server/entries/pages/pay/_token_/_page.svelte.js                          0.64 kB
+.svelte-kit/output/server/entries/pages/receipt/_public_token_/_page.svelte.js               0.64 kB
+.svelte-kit/output/server/entries/pages/app/disputes/_page.svelte.js                         0.64 kB
+.svelte-kit/output/server/entries/pages/buyer/requests/_page.svelte.js                       0.64 kB
+.svelte-kit/output/server/chunks/Skeleton.js                                                 0.64 kB
+.svelte-kit/output/server/entries/pages/app/overdue/_page.svelte.js                          0.65 kB
+.svelte-kit/output/server/entries/pages/buyer/obligations/_id_/_page.svelte.js               0.68 kB
+.svelte-kit/output/server/entries/pages/app/collections/_page.svelte.js                      0.71 kB
+.svelte-kit/output/server/entries/pages/app/trade-lines/_id_/_page.svelte.js                 0.74 kB
+.svelte-kit/output/server/entries/endpoints/robots.txt/_server.ts.js                         0.75 kB
+.svelte-kit/output/server/chunks/NotificationHistory.js                                      0.76 kB
+.svelte-kit/output/server/entries/pages/app/customers/_page.svelte.js                        0.76 kB
+.svelte-kit/output/server/entries/pages/buyer/_page.svelte.js                                0.77 kB
+.svelte-kit/output/server/chunks/Money.js                                                    0.80 kB
+.svelte-kit/output/server/entries/pages/buyer/disputes/_id_/_page.svelte.js                  0.81 kB
+.svelte-kit/output/server/entries/pages/c/_token_/_page.svelte.js                            0.82 kB
+.svelte-kit/output/server/entries/pages/buyer/payments/_page.svelte.js                       0.84 kB
+.svelte-kit/output/server/entries/pages/secure/_page.svelte.js                               0.85 kB
+.svelte-kit/output/server/entries/pages/admin/cases/_id_/_page.svelte.js                     0.86 kB
+.svelte-kit/output/server/entries/pages/admin/diagnostics/_page.svelte.js                    0.86 kB
+.svelte-kit/output/server/entries/pages/buyer/history/_page.svelte.js                        0.87 kB
+.svelte-kit/output/server/entries/pages/admin/money/_page.svelte.js                          0.89 kB
+.svelte-kit/output/server/entries/pages/buyer-invitations/_token_/_page.svelte.js            0.89 kB
+.svelte-kit/output/server/chunks/client.js                                                   0.91 kB
+.svelte-kit/output/server/chunks/VerifyIdentity.js                                           0.92 kB
+.svelte-kit/output/server/entries/pages/app/customers/_id_/_page.svelte.js                   0.93 kB
+.svelte-kit/output/server/entries/pages/admin/disputes/_id_/_page.svelte.js                  0.95 kB
+.svelte-kit/output/server/entries/pages/admin/_page.svelte.js                                1.03 kB
+.svelte-kit/output/server/chunks/ResourceNotice.js                                           1.06 kB
+.svelte-kit/output/server/entries/pages/admin/mono/_page.svelte.js                           1.06 kB
+.svelte-kit/output/server/entries/pages/buyer/permissions/_page.svelte.js                    1.08 kB
+.svelte-kit/output/server/chunks/utils2.js                                                   1.09 kB
+.svelte-kit/output/server/chunks/financial-copy.js                                           1.11 kB
+.svelte-kit/output/server/entries/pages/admin/users/_page.svelte.js                          1.13 kB
+.svelte-kit/output/server/entries/pages/admin/organizations/_page.svelte.js                  1.15 kB
+.svelte-kit/output/server/entries/pages/app/onboarding/_page.svelte.js                       1.23 kB
+.svelte-kit/output/server/entries/pages/app/disputes/_id_/_page.svelte.js                    1.25 kB
+.svelte-kit/output/server/chunks/legal-config.js                                             1.36 kB
+.svelte-kit/output/server/entries/pages/admin/provider-events/_page.svelte.js                1.40 kB
+.svelte-kit/output/server/entries/pages/app/credit/_id_/_page.svelte.js                      1.40 kB
+.svelte-kit/output/server/entries/pages/buyer/settings/_page.svelte.js                       1.41 kB
+.svelte-kit/output/server/entries/pages/admin/privacy/_page.svelte.js                        1.42 kB
+.svelte-kit/output/server/entries/pages/admin/jobs/_page.svelte.js                           1.42 kB
+.svelte-kit/output/server/chunks/index.js                                                    1.44 kB
+.svelte-kit/output/server/entries/pages/admin/recovery/_page.svelte.js                       1.45 kB
+.svelte-kit/output/server/entries/pages/admin/settings/_page.svelte.js                       1.53 kB
+.svelte-kit/output/server/entries/endpoints/sitemap.xml/_server.ts.js                        1.57 kB
+.svelte-kit/output/server/entries/pages/_error.svelte.js                                     1.57 kB
+.svelte-kit/output/server/entries/pages/app/settings/data/_page.svelte.js                    1.57 kB
+.svelte-kit/output/server/entries/endpoints/blog/rss.xml/_server.ts.js                       1.57 kB
+.svelte-kit/output/server/entries/pages/admin/attention/_page.svelte.js                      1.70 kB
+.svelte-kit/output/server/entries/pages/admin/analytics/_page.svelte.js                      1.70 kB
+.svelte-kit/output/server/chunks/fee-terms.js                                                1.82 kB
+.svelte-kit/output/server/entries/pages/recover/_page.svelte.js                              1.86 kB
+.svelte-kit/output/server/chunks/DocumentLayout.js                                           1.88 kB
+.svelte-kit/output/server/entries/pages/app/settings/credit-policy/_page.svelte.js           1.95 kB
+.svelte-kit/output/server/entries/pages/app/search/_page.svelte.js                           2.03 kB
+.svelte-kit/output/server/entries/pages/app/activity/_page.svelte.js                         2.06 kB
+.svelte-kit/output/server/entries/pages/app/settings/_page.svelte.js                         2.07 kB
+.svelte-kit/output/server/entries/pages/app/reports/_page.svelte.js                          2.12 kB
+.svelte-kit/output/server/entries/pages/app/settings/security/_page.svelte.js                2.13 kB
+.svelte-kit/output/server/entries/pages/admin/search/_page.svelte.js                         2.30 kB
+.svelte-kit/output/server/chunks/product-language.js                                         2.51 kB
+.svelte-kit/output/server/entries/pages/buyer/mandates/_page.svelte.js                       2.72 kB
+.svelte-kit/output/server/entries/pages/admin/team/_page.svelte.js                           2.78 kB
+.svelte-kit/output/server/entries/pages/app/team/_page.svelte.js                             2.85 kB
+.svelte-kit/output/server/entries/pages/admin/inbox/_page.svelte.js                          2.88 kB
+.svelte-kit/output/server/entries/pages/app/_page.svelte.js                                  3.12 kB
+.svelte-kit/output/server/chunks/money2.js                                                   3.14 kB
+.svelte-kit/output/server/entries/pages/glossary/_page.svelte.js                             3.35 kB
+.svelte-kit/output/server/entries/pages/app/settings/settlement/_page.svelte.js              3.42 kB
+.svelte-kit/output/server/entries/pages/app/settings/notifications/_page.svelte.js           3.49 kB
+.svelte-kit/output/server/entries/pages/faq/_page.svelte.js                                  3.49 kB
+.svelte-kit/output/server/entries/pages/buyer/amendments/_page.svelte.js                     3.51 kB
+.svelte-kit/output/server/entries/pages/legal/complaints/_page.svelte.js                     3.52 kB
+.svelte-kit/output/server/entries/pages/app/settings/billing/_page.svelte.js                 3.53 kB
+.svelte-kit/output/server/entries/pages/admin/reconciliation/_page.svelte.js                 3.65 kB
+.svelte-kit/output/server/entries/hooks.server.js                                            3.66 kB
+.svelte-kit/output/server/entries/pages/admin/cases/_page.svelte.js                          3.68 kB
+.svelte-kit/output/server/chunks/internal2.js                                                3.70 kB
+.svelte-kit/output/server/entries/pages/blog/topic/_topic_/_page.svelte.js                   3.74 kB
+.svelte-kit/output/server/entries/pages/admin/disputes/_page.svelte.js                       4.07 kB
+.svelte-kit/output/server/entries/pages/admin/platform-settings/_page.svelte.js              4.09 kB
+.svelte-kit/output/server/entries/pages/app/help/_page.svelte.js                             4.23 kB
+.svelte-kit/output/server/entries/pages/buyer/_layout.svelte.js                              4.25 kB
+.svelte-kit/output/server/entries/pages/app/settings/privacy/_page.svelte.js                 4.46 kB
+.svelte-kit/output/server/entries/pages/for-buyers/_page.svelte.js                           4.49 kB
+.svelte-kit/output/server/chunks/reliable.js                                                 4.50 kB
+.svelte-kit/output/server/entries/pages/for-suppliers/_page.svelte.js                        4.52 kB
+.svelte-kit/output/server/chunks/seo.js                                                      4.61 kB
+.svelte-kit/output/server/entries/pages/app/_layout.svelte.js                                4.63 kB
+.svelte-kit/output/server/entries/pages/app/customers/new/_page.svelte.js                    4.65 kB
+.svelte-kit/output/server/entries/pages/security/_page.svelte.js                             4.68 kB
+.svelte-kit/output/server/entries/pages/admin/_layout.svelte.js                              4.85 kB
+.svelte-kit/output/server/chunks/records.js                                                  5.05 kB
+.svelte-kit/output/server/entries/pages/admin/controls/_page.svelte.js                       5.37 kB
+.svelte-kit/output/server/chunks/exports.js                                                  5.59 kB
+.svelte-kit/output/server/entries/pages/how-it-works/_page.svelte.js                         6.40 kB
+.svelte-kit/output/server/entries/pages/blog/_page.svelte.js                                 6.52 kB
+.svelte-kit/output/server/entries/pages/admin/history/_page.svelte.js                        6.97 kB
+.svelte-kit/output/server/entries/pages/admin/approvals/_page.svelte.js                      7.06 kB
+.svelte-kit/output/server/entries/pages/buyer/trade-lines/_page.svelte.js                    7.45 kB
+.svelte-kit/output/server/entries/pages/app/credit/_page.svelte.js                           7.53 kB
+.svelte-kit/output/server/entries/pages/pricing/_page.svelte.js                              8.00 kB
+.svelte-kit/output/server/chunks/ConnectivityBanner.js                                       8.69 kB
+.svelte-kit/output/server/entries/pages/blog/_slug_/_page.svelte.js                          8.79 kB
+.svelte-kit/output/server/entries/pages/demo/_page.svelte.js                                 8.91 kB
+.svelte-kit/output/server/entries/pages/app/trade-lines/_page.svelte.js                      9.05 kB
+.svelte-kit/output/server/chunks/WorkspacePage.js                                            9.69 kB
+.svelte-kit/output/server/entries/pages/app/payments/_page.svelte.js                        12.08 kB
+.svelte-kit/output/server/entries/pages/_layout.svelte.js                                   12.35 kB
+.svelte-kit/output/server/entries/pages/_page.svelte.js                                     13.31 kB
+.svelte-kit/output/server/entries/pages/app/credit/new/_page.svelte.js                      13.78 kB
+.svelte-kit/output/server/entries/pages/legal/privacy/_page.svelte.js                       15.08 kB
+.svelte-kit/output/server/entries/pages/app/credit/quick/_page.svelte.js                    17.11 kB
+.svelte-kit/output/server/entries/pages/legal/terms/_page.svelte.js                         17.41 kB
+.svelte-kit/output/server/chunks/uneval.js                                                  17.62 kB
+.svelte-kit/output/server/entries/pages/app/overview/_page.svelte.js                        17.91 kB
+.svelte-kit/output/server/entries/pages/buyer/credit-requests/_requestID_/_page.svelte.js   19.17 kB
+.svelte-kit/output/server/remote-entry.js                                                   36.79 kB
+.svelte-kit/output/server/chunks/index2.js                                                  39.58 kB
+.svelte-kit/output/server/chunks/utils.js                                                   58.82 kB
+.svelte-kit/output/server/chunks/articles.js                                                63.06 kB
+.svelte-kit/output/server/chunks/root.js                                                    87.73 kB
+.svelte-kit/output/server/index.js                                                         135.99 kB
+✓ built in 2m 29s
+
+Run npm run preview to preview your production build locally.
+
+> Using @sveltejs/adapter-node
+Generated an empty chunk: "chunks/ProtectedActionDialog.svelte_svelte_type_style_lang.js".
+Generated an empty chunk: "chunks/PaymentReview.svelte_svelte_type_style_lang.js".
+Generated an empty chunk: "chunks/ShareActions.svelte_svelte_type_style_lang.js".
+  ✔ done

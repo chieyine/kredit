@@ -48,16 +48,16 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, limit int) (int, error) {
 	for _, event := range events {
 		if err := d.publisher.Publish(ctx, event); err != nil {
 			if event.Attempts >= 10 {
-				markErr := d.store.MarkFailed(ctx, event.ID, fmt.Sprintf("dead_letter: max retries reached: %v", err), d.now().Add(24*time.Hour))
-				dispatchErr = errors.Join(dispatchErr, fmt.Errorf("outbox event %s reached max retries: %w", event.ID, err), markErr)
+				markErr := d.store.MarkFailed(ctx, event, fmt.Sprintf("extended retry delay after repeated failures: %v", err), d.now().Add(24*time.Hour))
+				dispatchErr = errors.Join(dispatchErr, fmt.Errorf("outbox event %s entered extended retry delay: %w", event.ID, err), markErr)
 				continue
 			}
-			delay := retryDelay(event.Attempts + 1)
-			markErr := d.store.MarkFailed(ctx, event.ID, err.Error(), d.now().Add(delay))
+			delay := retryDelay(event.Attempts)
+			markErr := d.store.MarkFailed(ctx, event, err.Error(), d.now().Add(delay))
 			dispatchErr = errors.Join(dispatchErr, fmt.Errorf("publish outbox event %s: %w", event.ID, err), markErr)
 			continue
 		}
-		if err := d.store.MarkPublished(ctx, event.ID); err != nil {
+		if err := d.store.MarkPublished(ctx, event); err != nil {
 			dispatchErr = errors.Join(dispatchErr, fmt.Errorf("mark outbox event %s published: %w", event.ID, err))
 			continue
 		}

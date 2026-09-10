@@ -32,15 +32,15 @@ type Store struct {
 // same contract so production cannot accidentally depend on process memory.
 type Service interface {
 	AllowsReminders(context.Context, string, string) (bool, error)
-	Record(string, string, string, string, string, bool) (Consent, error)
-	List(string) []Consent
+	Record(context.Context, string, string, string, string, string, bool) (Consent, error)
+	List(context.Context, string) ([]Consent, error)
 }
 
 var _ Service = (*Store)(nil)
 
 func NewStore() *Store { return &Store{} }
 
-func (s *Store) Record(buyerUserID, supplierOrgID, consentType, version, evidenceHash string, granted bool) (Consent, error) {
+func (s *Store) Record(_ context.Context, buyerUserID, supplierOrgID, consentType, version, evidenceHash string, granted bool) (Consent, error) {
 	if strings.TrimSpace(buyerUserID) == "" || strings.TrimSpace(supplierOrgID) == "" || strings.TrimSpace(consentType) == "" || strings.TrimSpace(version) == "" || strings.TrimSpace(evidenceHash) == "" {
 		return Consent{}, errors.New("consent identity, version, and evidence are required")
 	}
@@ -52,7 +52,7 @@ func (s *Store) Record(buyerUserID, supplierOrgID, consentType, version, evidenc
 	return item, nil
 }
 
-func (s *Store) List(buyerUserID string) []Consent {
+func (s *Store) List(_ context.Context, buyerUserID string) ([]Consent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]Consent, 0)
@@ -61,7 +61,7 @@ func (s *Store) List(buyerUserID string) []Consent {
 			result = append(result, item)
 		}
 	}
-	return result
+	return result, nil
 }
 
 // PostgresStore persists consent evidence in the tenant-scoped relationship
@@ -78,14 +78,13 @@ func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
 	return &PostgresStore{pool: pool}
 }
 
-func (s *PostgresStore) Record(buyerUserID, supplierOrgID, consentType, version, evidenceHash string, granted bool) (Consent, error) {
+func (s *PostgresStore) Record(ctx context.Context, buyerUserID, supplierOrgID, consentType, version, evidenceHash string, granted bool) (Consent, error) {
 	if strings.TrimSpace(buyerUserID) == "" || strings.TrimSpace(supplierOrgID) == "" || strings.TrimSpace(consentType) == "" || strings.TrimSpace(version) == "" || strings.TrimSpace(evidenceHash) == "" {
 		return Consent{}, errors.New("consent identity, version, and evidence are required")
 	}
 	if s == nil || s.pool == nil {
 		return Consent{}, errors.New("relationship database is not configured")
 	}
-	ctx := context.Background()
 	var item Consent
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -104,12 +103,19 @@ func (s *PostgresStore) Record(buyerUserID, supplierOrgID, consentType, version,
 			WHERE relationship.supplier_organization_id = $2::uuid
 			  AND business.owner_user_id = $1::uuid
 			  AND relationship.status IN ('invited', 'active')
-		)`, buyerUserID, supplierOrgID).Scan(&related); err != nil {
+  ) OR EXISTS(SELECT 1 FROM app.trade_lines WHERE buyer_user_id=$1::uuid AND supplier_organization_id=$2::uuid)
+    OR EXISTS(SELECT 1 FROM app.credit_requests WHERE buyer_user_id=$1::uuid AND supplier_organization_id=$2::uuid)`, buyerUserID, supplierOrgID).Scan(&related); err != nil {
 		return Consent{}, err
+	}
+	if !related && !granted {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.relationship_consents WHERE buyer_user_id=$1::uuid AND supplier_organization_id=$2::uuid AND consent_type=$3)`, buyerUserID, supplierOrgID, consentType).Scan(&related); err != nil {
+			return Consent{}, err
+		}
 	}
 	if !related {
 		return Consent{}, errors.New("buyer has no active relationship with this supplier")
 	}
+
 	if err := tx.QueryRow(ctx, `
 			INSERT INTO app.relationship_consents
 				(buyer_user_id, supplier_organization_id, consent_type, version, evidence_hash, granted)
@@ -126,41 +132,40 @@ func (s *PostgresStore) Record(buyerUserID, supplierOrgID, consentType, version,
 	return item, nil
 }
 
-func (s *PostgresStore) List(buyerUserID string) []Consent {
+func (s *PostgresStore) List(ctx context.Context, buyerUserID string) ([]Consent, error) {
 	if s == nil || s.pool == nil || strings.TrimSpace(buyerUserID) == "" {
-		return []Consent{}
+		return nil, errors.New("relationship database and buyer identity are required")
 	}
-	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return []Consent{}
+		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id', $1, true)`, buyerUserID); err != nil {
-		return []Consent{}
+		return nil, err
 	}
 	rows, err := tx.Query(ctx, `
 		SELECT id::text, buyer_user_id::text, supplier_organization_id::text,
 			consent_type, version, evidence_hash, granted, created_at
 		FROM app.relationship_consents
 		WHERE buyer_user_id = $1::uuid
-		ORDER BY created_at DESC`, buyerUserID)
+		ORDER BY created_at DESC,id DESC`, buyerUserID)
 	if err != nil {
-		return []Consent{}
+		return nil, err
 	}
 	defer rows.Close()
 	result := make([]Consent, 0)
 	for rows.Next() {
 		var item Consent
 		if err := rows.Scan(&item.ID, &item.BuyerUserID, &item.SupplierOrgID, &item.ConsentType, &item.Version, &item.EvidenceHash, &item.Granted, &item.CreatedAt); err != nil {
-			return []Consent{}
+			return nil, err
 		}
 		result = append(result, item)
 	}
-	if rows.Err() != nil {
-		return []Consent{}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-	return result
+	return result, nil
 }
 
 func (s *Store) AllowsReminders(_ context.Context, buyer, org string) (bool, error) {

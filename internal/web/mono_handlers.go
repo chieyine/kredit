@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"kredit/internal/audit"
 	"kredit/internal/collections"
@@ -18,7 +19,7 @@ import (
 
 func (s *Server) monoWebhook(w http.ResponseWriter, r *http.Request) {
 	if s.runtime.Mono == nil || s.runtime.WebhookJobs == nil {
-		writeProblem(w, 503, "provider_unavailable", "Mono sandbox is not configured")
+		writeProblem(w, 503, "provider_unavailable", "The bank collection connection is not configured.")
 		return
 	}
 	raw, err := io.ReadAll(io.LimitReader(r.Body, (1<<20)+1))
@@ -99,18 +100,18 @@ func (r *Runtime) HandleProviderNotice(ctx context.Context, args jobs.ProviderWe
 			}
 		}
 	}
-	if notice.BlockStatus != "" || mandate.Status == mandates.Cancelled || mandate.Status == mandates.Failed || mandate.Status == mandates.Expired {
-		if r.TradeLines != nil {
-			for _, line := range r.TradeLines.ListForBuyer(mandate.UserID) {
-				if line.MandateID != mandate.ID {
-					continue
-				}
-				if _, err := r.TradeLines.Suspend(line.ID, "mandate_revoked_or_blocked"); err != nil {
-					return err
-				}
-				if _, err := r.TradeLines.SetMandateState(line.ID, mandate.ID, false); err != nil {
-					return err
-				}
+	if r.TradeLines != nil {
+		lines, err := r.readTradeLinesForBuyer(mandate.UserID)
+		if err != nil {
+			return err
+		}
+		active := mandate.Status == mandates.Active
+		for _, line := range lines {
+			if line.MandateID != mandate.ID || line.MandateActive == active {
+				continue
+			}
+			if _, err := r.TradeLines.SetMandateState(line.ID, mandate.ID, active); err != nil {
+				return err
 			}
 		}
 	}
@@ -124,7 +125,7 @@ func (s *Server) createRepaymentCustomer(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if s.runtime.Mono == nil || s.runtime.Database == nil {
-		writeProblem(w, 503, "provider_unavailable", "Mono sandbox is not configured")
+		writeProblem(w, 503, "provider_unavailable", "The bank collection connection is not configured.")
 		return
 	}
 	businessID, _ := pathID(r, "businessID")
@@ -161,16 +162,63 @@ func (s *Server) createRepaymentCustomer(w http.ResponseWriter, r *http.Request)
 		writeProblem(w, 400, "invalid_customer", "customer details could not be read")
 		return
 	}
-	reference, err := s.runtime.Mono.CreateCustomer(r.Context(), in)
+	in, err = mono.ValidateCustomerInput(in)
 	if err != nil {
-		writeProblem(w, 409, "registration_failed", err.Error())
+		writeProblem(w, 400, "invalid_customer", "Complete customer details and consent are required.")
 		return
 	}
-	if _, err = tx.Exec(r.Context(), `INSERT INTO app.provider_customer_bindings(provider,buyer_user_id,buyer_business_id,provider_customer_reference,consent_version) VALUES('mono-sweep',$1::uuid,$2::uuid,$3,$4)`, user.ID, businessID, reference, in.ConsentVersion); err != nil {
-		writeProblem(w, 503, "registration_unconfirmed", "customer registration needs reconciliation")
+	var pending bool
+	if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM app.customer_registration_attempts WHERE business_id=$1 AND state='PENDING')`, businessID).Scan(&pending); err != nil {
+		writeProblem(w, 503, "registration_unavailable", "Registration could not be checked.")
+		return
+	}
+	if pending {
+		writeProblem(w, 503, "registration_unconfirmed", "An earlier registration needs review in the admin bank connection panel before another attempt.")
+		return
+	}
+	var attemptID string
+	if err = tx.QueryRow(r.Context(), `INSERT INTO app.customer_registration_attempts(business_id,user_id,identity_fingerprint,consent_version) VALUES($1,$2,$3,$4) RETURNING id::text`, businessID, user.ID, s.registrationFingerprint(in.BVN), in.ConsentVersion).Scan(&attemptID); err != nil {
+		writeProblem(w, 503, "registration_unavailable", "Registration intent could not be saved.")
 		return
 	}
 	if err = tx.Commit(r.Context()); err != nil {
+		writeProblem(w, 503, "registration_unconfirmed", "Registration intent needs review before retrying.")
+		return
+	}
+	providerCtx, providerCancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer providerCancel()
+	reference, err := s.runtime.Mono.CreateCustomer(providerCtx, in)
+	if err != nil {
+		writeProblem(w, 503, "registration_unconfirmed", "The provider result is unconfirmed. Review this attempt in the admin bank connection panel before retrying.")
+		return
+	}
+	completionCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
+	defer cancel()
+	tx, err = s.runtime.Database.Raw().Begin(completionCtx)
+	if err != nil {
+		writeProblem(w, 503, "registration_unconfirmed", "Registration needs reconciliation.")
+		return
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err = tx.Exec(completionCtx, `SELECT set_config('app.current_user_id',$1,true)`, user.ID); err != nil {
+		writeProblem(w, 503, "registration_unconfirmed", "Registration needs reconciliation.")
+		return
+	}
+	var owner string
+	if err = tx.QueryRow(completionCtx, `SELECT owner_user_id::text FROM app.businesses WHERE id=$1 FOR SHARE`, businessID).Scan(&owner); err != nil || owner != user.ID {
+		writeProblem(w, 503, "registration_unconfirmed", "Business ownership must be reconciled before registration can be attached.")
+		return
+	}
+	if _, err = tx.Exec(completionCtx, `INSERT INTO app.provider_customer_bindings(provider,buyer_user_id,buyer_business_id,provider_customer_reference,consent_version) VALUES('mono-sweep',$1::uuid,$2::uuid,$3,$4)`, user.ID, businessID, reference, in.ConsentVersion); err != nil {
+		writeProblem(w, 503, "registration_unconfirmed", "customer registration needs reconciliation")
+		return
+	}
+	var completedID string
+	if err = tx.QueryRow(completionCtx, `UPDATE app.customer_registration_attempts SET state='CONFIRMED',provider_reference=$2,resolved_at=now() WHERE id=$1 AND state='PENDING' RETURNING id::text`, attemptID, reference).Scan(&completedID); err != nil {
+		writeProblem(w, 503, "registration_unconfirmed", "Registration needs reconciliation.")
+		return
+	}
+	if err = tx.Commit(completionCtx); err != nil {
 		writeProblem(w, 503, "registration_unconfirmed", "customer registration needs reconciliation")
 		return
 	}

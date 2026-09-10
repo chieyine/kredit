@@ -22,13 +22,13 @@ type WebhookProvider struct {
 
 func NewWebhookProvider(name, endpoint, token string) (*WebhookProvider, error) {
 	parsed, err := url.Parse(endpoint)
-	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, errors.New("valid mandate connector endpoint is required")
 	}
 	if name == "" || strings.Contains(strings.ToLower(name), "mock") || token == "" {
 		return nil, errors.New("certified mandate provider and token are required")
 	}
-	return &WebhookProvider{name: name, endpoint: strings.TrimRight(endpoint, "/"), token: token, client: &http.Client{Timeout: 20 * time.Second}}, nil
+	return &WebhookProvider{name: name, endpoint: strings.TrimRight(endpoint, "/"), token: token, client: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func (p *WebhookProvider) Name() string { return p.name }
 func (p *WebhookProvider) CreateAuthorizationSession(ctx context.Context, input AuthorizationInput) (Mandate, error) {
@@ -39,6 +39,9 @@ func (p *WebhookProvider) CreateAuthorizationSession(ctx context.Context, input 
 	}
 	result.Provider = p.name
 	result.Status = Status(strings.ToUpper(string(result.Status)))
+	if err == nil {
+		err = validateConnectorMandate(result, "")
+	}
 	return result, err
 }
 func (p *WebhookProvider) GetMandate(ctx context.Context, id string) (Mandate, error) {
@@ -49,6 +52,9 @@ func (p *WebhookProvider) GetMandate(ctx context.Context, id string) (Mandate, e
 	err := p.request(ctx, http.MethodGet, "/mandates/"+url.PathEscape(id), nil, &result)
 	result.Provider = p.name
 	result.Status = Status(strings.ToUpper(string(result.Status)))
+	if err == nil {
+		err = validateConnectorMandate(result, id)
+	}
 	return result, err
 }
 func (p *WebhookProvider) CancelMandate(ctx context.Context, id, reason string) (Mandate, error) {
@@ -59,6 +65,12 @@ func (p *WebhookProvider) CancelMandate(ctx context.Context, id, reason string) 
 	err := p.request(ctx, http.MethodPost, "/mandates/"+url.PathEscape(id)+"/cancel", map[string]string{"reason": reason}, &result)
 	result.Provider = p.name
 	result.Status = Status(strings.ToUpper(string(result.Status)))
+	if err == nil {
+		err = validateConnectorMandate(result, id)
+		if err == nil && result.Status != Cancelled {
+			err = errors.New("mandate connector did not confirm cancellation")
+		}
+	}
 	return result, err
 }
 func (p *WebhookProvider) RestoreAuthorization(ctx context.Context, id string) (Mandate, error) {
@@ -69,7 +81,22 @@ func (p *WebhookProvider) RestoreAuthorization(ctx context.Context, id string) (
 	err := p.request(ctx, http.MethodPost, "/mandates/"+url.PathEscape(id)+"/restore", map[string]string{}, &result)
 	result.Provider = p.name
 	result.Status = Status(strings.ToUpper(string(result.Status)))
+	if err == nil {
+		err = validateConnectorMandate(result, "")
+	}
 	return result, err
+}
+
+func validateConnectorMandate(result Mandate, expectedID string) error {
+	if strings.TrimSpace(result.ProviderID) == "" || (expectedID != "" && result.ProviderID != expectedID) {
+		return errors.New("mandate connector returned a mismatched mandate")
+	}
+	switch result.Status {
+	case NotStarted, Pending, Active, Paused, Cancelled, Expired, Failed:
+		return nil
+	default:
+		return errors.New("mandate connector returned an invalid status")
+	}
 }
 func (p *WebhookProvider) request(ctx context.Context, method, path string, input, output any) error {
 	var body io.Reader

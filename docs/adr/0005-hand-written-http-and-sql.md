@@ -31,8 +31,8 @@ Two things are worth keeping, and are unaffected:
 - `api/openapi.yaml` is real and enforced. `scripts/product-contract-sync.mjs`
   verifies that its 190 operations and the 191 backend routes agree, and
   `scripts/frontend-api-coverage.mjs` checks the frontend against the same list.
-- The TypeScript client types in `web/src/lib/api/generated/schema.d.ts` are
-  generated from that document and are used by the SvelteKit application.
+- Frontend pages define the response shapes they consume and validate received data.
+  The unused generated TypeScript client has also been retired.
 
 ## Decision
 
@@ -41,8 +41,8 @@ The Go HTTP layer and the Go persistence layer stay hand-written.
 1. `api/openapi.yaml` remains the canonical transport contract. It is enforced by
    the contract-sync and coverage gates rather than by generating Go server
    interfaces from it.
-2. TypeScript client types continue to be generated from that document by
-   `scripts/openapi-generate.sh`.
+2. Frontend response types are maintained alongside their consumers; the
+   OpenAPI document remains the contract checked against frontend API usage.
 3. Go type generation from OpenAPI, and `sqlc`, are removed along with their
    orphaned output and their CI gate.
 4. Financial SQL stays explicit and visible, which is what README section 9.2
@@ -72,3 +72,10 @@ justified by the benefit at this stage.
 **Leave both in place and document the drift.** Rejected: it keeps the
 maintenance cost and the CI gate while leaving the README describing an
 architecture the code does not have.
+
+## September 9 audit follow-through
+
+The orphaned Go output, SQL query templates and `sqlc.yaml` remained despite
+this decision. Their complete source review confirmed zero runtime imports
+and substantial schema drift. They are now removed. Database migrations and
+the handwritten persistence code remain the active implementation.

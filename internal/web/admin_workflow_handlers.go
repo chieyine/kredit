@@ -147,6 +147,15 @@ func (s *Server) assignAdminReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
+	permission := map[string]access.Permission{"support": access.PermissionManageCases, "policy": access.PermissionManagePolicies, "financial_change": access.PermissionAdminFinancial, "dispute": access.PermissionReviewDisputes, "financial_review": access.PermissionProviderOperations, "recovery": access.PermissionRecoverAccounts, "privacy": access.PermissionReviewPrivacy}[in.Kind]
+	if err = access.LockPlatformAuthority(r.Context(), tx, user.ID, permission); err != nil {
+		policyFailure(w, err)
+		return
+	}
+	if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,645))`, in.Kind+in.ID); err != nil {
+		policyFailure(w, err)
+		return
+	}
 	var exists bool
 	if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM app.admin_review_queue WHERE kind=$1 AND id=$2::uuid)`, in.Kind, in.ID).Scan(&exists); err != nil || !exists {
 		writeProblem(w, 409, "review_closed", "This review is no longer open")
@@ -154,14 +163,11 @@ func (s *Server) assignAdminReview(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.OwnerID != "" {
 		roles := map[string][]string{"support": {"platform_admin", "support_agent"}, "policy": {"platform_admin", "policy_manager", "approver"}, "financial_change": {"platform_admin", "finance_operator", "approver"}, "dispute": {"platform_admin", "dispute_reviewer"}, "financial_review": {"platform_admin", "compliance_reviewer"}, "recovery": {"platform_admin", "compliance_reviewer"}, "privacy": {"platform_admin", "compliance_reviewer"}}[in.Kind]
+		roles = append(roles, "platform_owner")
 		if err = tx.QueryRow(r.Context(), `SELECT app.has_admin_role($1::uuid,$2::text[])`, in.OwnerID, roles).Scan(&exists); err != nil || !exists {
 			writeProblem(w, 409, "invalid_owner", "The owner needs active access to this review")
 			return
 		}
-	}
-	if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,645))`, in.Kind+in.ID); err != nil {
-		policyFailure(w, err)
-		return
 	}
 	var before []byte
 	if err = tx.QueryRow(r.Context(), `SELECT COALESCE((SELECT to_jsonb(a) FROM app.admin_review_assignments a WHERE kind=$1 AND resource_id=$2::uuid),'{}'::jsonb)`, in.Kind, in.ID).Scan(&before); err != nil {
@@ -196,7 +202,10 @@ func (s *Server) proposeAdminChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var supplierOrgID string
-	_ = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT supplier_organization_id::text FROM app.obligations WHERE id=$1::uuid`, in.ObligationID).Scan(&supplierOrgID)
+	if err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT supplier_organization_id::text FROM app.obligations WHERE id=$1::uuid`, in.ObligationID).Scan(&supplierOrgID); err != nil {
+		policyFailure(w, err)
+		return
+	}
 	reqCtx := r.Context()
 	if supplierOrgID != "" {
 		reqCtx = db.WithTenantContext(reqCtx, user.ID, supplierOrgID)

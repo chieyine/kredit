@@ -1,0 +1,56 @@
+Listening on http://127.0.0.1:3000
+
+[1;31m[500] GET /about/accountability[0m
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/macbookpro/Documents/Kredit.com/web/build/server/chunks/nodes/1.js-CuUljeNC.js' imported from /Users/macbookpro/Documents/Kredit.com/web/build/server/chunks/manifest.js-DFlm8ZS0.js
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:757:20)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:734:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:317:38)
+    at onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:685:36)
+    at TracingChannel.tracePromise (node:diagnostics_channel:350:14)
+    at ModuleLoader.import (node:internal/modules/esm/loader:684:21)
+    at defaultImportModuleDynamicallyForModule (node:internal/modules/esm/utils:229:31)
+
+[1;31m[500] GET /favicon.ico[0m
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/macbookpro/Documents/Kredit.com/web/build/server/chunks/nodes/1.js-CuUljeNC.js' imported from /Users/macbookpro/Documents/Kredit.com/web/build/server/chunks/manifest.js-DFlm8ZS0.js
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:757:20)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:734:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:317:38)
+    at onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:685:36)
+    at TracingChannel.tracePromise (node:diagnostics_channel:350:14)
+    at ModuleLoader.import (node:internal/modules/esm/loader:684:21)
+    at defaultImportModuleDynamicallyForModule (node:internal/modules/esm/utils:229:31)
+
+[1;31m[500] GET /about/accountability[0m
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/macbookpro/Documents/Kredit.com/web/build/server/chunks/nodes/1.js-CuUljeNC.js' imported from /Users/macbookpro/Documents/Kredit.com/web/build/server/chunks/manifest.js-DFlm8ZS0.js
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:757:20)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:734:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:317:38)
+    at onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:685:36)
+    at TracingChannel.tracePromise (node:diagnostics_channel:350:14)
+    at ModuleLoader.import (node:internal/modules/esm/loader:684:21)
+    at defaultImportModuleDynamicallyForModule (node:internal/modules/esm/utils:229:31)
+node:events:486
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: ENOENT: no such file or directory, open '/Users/macbookpro/Documents/Kredit.com/web/build/client/_app/immutable/assets/0.Bs2Ba29i.css.gz'
+Emitted 'error' event on ReadStream instance at:
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/Users/macbookpro/Documents/Kredit.com/web/build/client/_app/immutable/assets/0.Bs2Ba29i.css.gz'
+}
+
+Node.js v24.11.0

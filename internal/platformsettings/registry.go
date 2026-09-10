@@ -4,45 +4,35 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
 
 const (
-	CategoryLaunch        = "launch"
-	CategoryFeatures      = "features"
-	CategoryIntegrations  = "integrations"
-	CategorySecurity      = "security"
-	CategoryKYC           = "kyc"
-	CategoryFees          = "fees"
-	CategoryNotifications = "notifications"
-	CategoryGovernance    = "governance"
+	CategoryFeatures   = "features"
+	CategoryGovernance = "governance"
 
 	GovernanceSoloOwner     = "solo_owner"
 	GovernanceDelegatedTeam = "delegated_team"
-
-	LaunchModePreLaunch     = "pre_launch"
-	LaunchModePrivateLaunch = "private_launch"
-	LaunchModePublicLaunch  = "public_launch"
-
-	IntegrationStatusUnconfigured = "unconfigured"
-	IntegrationStatusConfigured   = "configured"
-	IntegrationStatusVerified     = "verified"
-	IntegrationStatusDegraded     = "degraded"
-	IntegrationStatusDisabled     = "disabled"
 )
 
 type Setting struct {
-	Key               string          `json:"key"`
-	Category          string          `json:"category"`
-	Value             json.RawMessage `json:"value"`
-	IsSecret          bool            `json:"is_secret"`
-	SecretFingerprint string          `json:"secret_fingerprint,omitempty"`
-	Description       string          `json:"description"`
-	Version           int             `json:"version"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-	UpdatedBy         string          `json:"updated_by,omitempty"`
-	Reason            string          `json:"reason,omitempty"`
+	ConnectionFields  []ConnectionField `json:"connection_fields,omitempty"`
+	ConnectionValues  map[string]any    `json:"connection_values,omitempty"`
+	RequiresRestart   bool              `json:"requires_restart,omitempty"`
+	AppliedVersion    int               `json:"applied_version,omitempty"`
+	ConnectionState   string            `json:"connection_state,omitempty"`
+	Key               string            `json:"key"`
+	Category          string            `json:"category"`
+	Value             json.RawMessage   `json:"value"`
+	IsSecret          bool              `json:"is_secret"`
+	SecretFingerprint string            `json:"secret_fingerprint,omitempty"`
+	Description       string            `json:"description"`
+	Version           int               `json:"version"`
+	UpdatedAt         time.Time         `json:"updated_at"`
+	UpdatedBy         string            `json:"updated_by,omitempty"`
+	Reason            string            `json:"reason,omitempty"`
 }
 
 type SettingHistory struct {
@@ -72,252 +62,38 @@ type SettingMeta struct {
 }
 
 var KnownSettings = map[string]SettingMeta{
-	// Launch
-	"launch.mode": {
-		Category:    CategoryLaunch,
-		Description: "Operational launch phase: pre_launch, private_launch, public_launch",
-		Validate: func(raw json.RawMessage) error {
-			var s string
-			if err := json.Unmarshal(raw, &s); err != nil {
-				return errors.New("must be a valid string")
-			}
-			switch s {
-			case LaunchModePreLaunch, LaunchModePrivateLaunch, LaunchModePublicLaunch:
-				return nil
-			default:
-				return fmt.Errorf("invalid launch mode %q (must be pre_launch, private_launch, or public_launch)", s)
-			}
-		},
-	},
-	"launch.banner_enabled": {
-		Category:    CategoryLaunch,
-		Description: "Enable announcement banner",
-		Validate:    validateBool,
-	},
-	"launch.banner_text": {
-		Category:    CategoryLaunch,
-		Description: "Banner display text",
-		Validate:    validateString,
-	},
-	"launch.waitlist_enabled": {
-		Category:    CategoryLaunch,
-		Description: "Enable customer waitlist signup",
-		Validate:    validateBool,
-	},
-
-	// Features
+	"features.system_acceptance": {Category: CategoryFeatures, Description: "Recognize eligible delivered sales after the waiting period using separate system evidence. First-time buyers and delivery issues still require a response.", Validate: validateBool},
+	"automation.system_acceptance_hours": {Category: CategoryFeatures, Description: "Minimum hours after confirmed delivery of the goods notice (72–720). Applies to the next recognition attempt.", Validate: func(raw json.RawMessage) error {
+		var hours int64
+		if err := json.Unmarshal(raw, &hours); err != nil || hours < 72 || hours > 720 {
+			return errors.New("waiting period must be a whole number between 72 and 720 hours")
+		}
+		return nil
+	}},
+	// Every key here has a consumer, and the consumer is named beside it. A
+	// switch that writes a row and changes no behaviour is worse than no switch:
+	// it tells the owner something is off when it is on. Keys for adapters that
+	// do not exist, launch banners, penalty fees and session limits that nothing
+	// read were removed rather than left as decoration, and so were the four
+	// feature flags whose features were never built.
+	//
+	// internal/web/credit_handlers.go, listTradeLines
 	"features.trade_lines": {
 		Category:    CategoryFeatures,
-		Description: "Enable trade line accounts and revolving facilities",
+		Description: "Customer limits: let a customer draw against an agreed limit instead of one sale at a time",
 		Validate:    validateBool,
 	},
+	// internal/web/credit_handlers.go, requestDrawdown
 	"features.drawdowns": {
 		Category:    CategoryFeatures,
-		Description: "Enable drawdown requests on active facilities",
+		Description: "Let a customer request goods against their limit",
 		Validate:    validateBool,
 	},
-	"features.repayment_extensions": {
-		Category:    CategoryFeatures,
-		Description: "Enable buyer requested repayment extensions",
-		Validate:    validateBool,
-	},
+	// internal/web/credit_handlers.go, openDispute and addEvidence
 	"features.disputes": {
 		Category:    CategoryFeatures,
-		Description: "Enable buyer dispute workflows",
+		Description: "Let a customer report a problem with a sale",
 		Validate:    validateBool,
-	},
-	"features.early_settlement_discounts": {
-		Category:    CategoryFeatures,
-		Description: "Enable early settlement discounts",
-		Validate:    validateBool,
-	},
-	"features.notifications_whatsapp": {
-		Category:    CategoryFeatures,
-		Description: "Enable WhatsApp message delivery",
-		Validate:    validateBool,
-	},
-	"features.mono_direct_debit": {
-		Category:    CategoryFeatures,
-		Description: "Enable Mono direct debit mandate sweeps",
-		Validate:    validateBool,
-	},
-
-	// Integrations - Mono
-	"integrations.mono.enabled": {
-		Category:    CategoryIntegrations,
-		Description: "Enable Mono Open Banking integration",
-		Validate:    validateBool,
-	},
-	"integrations.mono.app_id": {
-		Category:    CategoryIntegrations,
-		Description: "Mono App ID",
-		Validate:    validateString,
-	},
-	"integrations.mono.secret_key": {
-		Category:    CategoryIntegrations,
-		IsSecret:    true,
-		Description: "Mono Secret Key (encrypted)",
-		Validate:    validateString,
-	},
-	"integrations.mono.public_key": {
-		Category:    CategoryIntegrations,
-		Description: "Mono Public Key",
-		Validate:    validateString,
-	},
-	"integrations.mono.status": {
-		Category:    CategoryIntegrations,
-		Description: "Mono verification status",
-		Validate:    validateIntegrationStatus,
-	},
-
-	// Integrations - Paystack
-	"integrations.paystack.enabled": {
-		Category:    CategoryIntegrations,
-		Description: "Enable Paystack payment integration",
-		Validate:    validateBool,
-	},
-	"integrations.paystack.secret_key": {
-		Category:    CategoryIntegrations,
-		IsSecret:    true,
-		Description: "Paystack Secret Key (encrypted)",
-		Validate:    validateString,
-	},
-	"integrations.paystack.public_key": {
-		Category:    CategoryIntegrations,
-		Description: "Paystack Public Key",
-		Validate:    validateString,
-	},
-	"integrations.paystack.status": {
-		Category:    CategoryIntegrations,
-		Description: "Paystack verification status",
-		Validate:    validateIntegrationStatus,
-	},
-
-	// Integrations - Termii
-	"integrations.termii.enabled": {
-		Category:    CategoryIntegrations,
-		Description: "Enable Termii SMS integration",
-		Validate:    validateBool,
-	},
-	"integrations.termii.api_key": {
-		Category:    CategoryIntegrations,
-		IsSecret:    true,
-		Description: "Termii API Key (encrypted)",
-		Validate:    validateString,
-	},
-	"integrations.termii.sender_id": {
-		Category:    CategoryIntegrations,
-		Description: "Termii Sender ID",
-		Validate:    validateString,
-	},
-	"integrations.termii.status": {
-		Category:    CategoryIntegrations,
-		Description: "Termii verification status",
-		Validate:    validateIntegrationStatus,
-	},
-
-	// Integrations - Resend
-	"integrations.resend.enabled": {
-		Category:    CategoryIntegrations,
-		Description: "Enable Resend transactional email integration",
-		Validate:    validateBool,
-	},
-	"integrations.resend.api_key": {
-		Category:    CategoryIntegrations,
-		IsSecret:    true,
-		Description: "Resend API Key (encrypted)",
-		Validate:    validateString,
-	},
-	"integrations.resend.from_email": {
-		Category:    CategoryIntegrations,
-		Description: "Resend From Address",
-		Validate:    validateString,
-	},
-	"integrations.resend.status": {
-		Category:    CategoryIntegrations,
-		Description: "Resend verification status",
-		Validate:    validateIntegrationStatus,
-	},
-
-	// Security
-	"security.mfa_enforced": {
-		Category:    CategorySecurity,
-		Description: "Enforce MFA for platform administrators and financial operations",
-		Validate:    validateBool,
-	},
-	"security.session_idle_minutes": {
-		Category:    CategorySecurity,
-		Description: "Session idle timeout before re-authentication is required (minutes)",
-		Validate:    validateIntRange(5, 1440),
-	},
-	"security.max_login_attempts": {
-		Category:    CategorySecurity,
-		Description: "Maximum failed login attempts before throttle",
-		Validate:    validateIntRange(1, 20),
-	},
-	"security.ip_allowlist_enabled": {
-		Category:    CategorySecurity,
-		Description: "Enable IP allowlist for super admin console",
-		Validate:    validateBool,
-	},
-
-	// KYC
-	"kyc.tier1_max_kobo": {
-		Category:    CategoryKYC,
-		Description: "Tier 1 single obligation limit in kobo",
-		Validate:    validateIntRange(0, 100000000000),
-	},
-	"kyc.tier2_bvn_required": {
-		Category:    CategoryKYC,
-		Description: "Require verified BVN for Tier 2 limits",
-		Validate:    validateBool,
-	},
-	"kyc.tier3_cac_required": {
-		Category:    CategoryKYC,
-		Description: "Require verified CAC corporate registration for Tier 3",
-		Validate:    validateBool,
-	},
-
-	// Fees
-	"fees.supplier_rate_bps": {
-		Category:    CategoryFees,
-		Description: "Default platform supplier fee rate in basis points (350 = 3.5%)",
-		Validate:    validateIntRange(0, 5000),
-	},
-	"fees.late_fee_rate_bps": {
-		Category:    CategoryFees,
-		Description: "Default late penalty fee rate in basis points (100 = 1.0%)",
-		Validate:    validateIntRange(0, 5000),
-	},
-	"fees.grace_period_days": {
-		Category:    CategoryFees,
-		Description: "Grace period days before late penalty applies",
-		Validate:    validateIntRange(0, 90),
-	},
-
-	// Notifications
-	"notifications.channels": {
-		Category:    CategoryNotifications,
-		Description: "Active notification delivery channels",
-		Validate: func(raw json.RawMessage) error {
-			var channels []string
-			if err := json.Unmarshal(raw, &channels); err != nil {
-				return errors.New("must be an array of strings")
-			}
-			for _, ch := range channels {
-				switch ch {
-				case "in_app", "email", "sms", "whatsapp":
-				default:
-					return fmt.Errorf("unknown notification channel %q", ch)
-				}
-			}
-			return nil
-		},
-	},
-	"notifications.pre_debit_reminder_days": {
-		Category:    CategoryNotifications,
-		Description: "Days prior to due date to send pre-debit notice",
-		Validate:    validateIntRange(1, 14),
 	},
 }
 
@@ -329,55 +105,13 @@ func validateBool(raw json.RawMessage) error {
 	return nil
 }
 
-func validateString(raw json.RawMessage) error {
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return errors.New("value must be a string")
-	}
-	return nil
-}
-
-func validateIntegrationStatus(raw json.RawMessage) error {
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return errors.New("status must be a string")
-	}
-	switch s {
-	case IntegrationStatusUnconfigured, IntegrationStatusConfigured, IntegrationStatusVerified, IntegrationStatusDegraded, IntegrationStatusDisabled:
-		return nil
-	default:
-		return fmt.Errorf("invalid integration status %q", s)
-	}
-}
-
-func validateIntRange(minVal, maxVal int64) func(raw json.RawMessage) error {
-	return func(raw json.RawMessage) error {
-		var n int64
-		if err := json.Unmarshal(raw, &n); err != nil {
-			return errors.New("value must be an integer")
-		}
-		if n < minVal || n > maxVal {
-			return fmt.Errorf("value must be between %d and %d", minVal, maxVal)
-		}
-		return nil
-	}
-}
-
 func ValidateKeyAndValue(key string, raw json.RawMessage) (SettingMeta, error) {
 	meta, ok := KnownSettings[key]
 	if !ok {
-		// If key not statically in map, check category prefix
-		parts := strings.SplitN(key, ".", 2)
-		if len(parts) < 2 {
-			return SettingMeta{}, fmt.Errorf("invalid setting key format %q (expected category.name)", key)
-		}
-		category := parts[0]
-		switch category {
-		case CategoryLaunch, CategoryFeatures, CategoryIntegrations, CategorySecurity, CategoryKYC, CategoryFees, CategoryNotifications, CategoryGovernance:
-		default:
-			return SettingMeta{}, fmt.Errorf("unknown setting category %q", category)
-		}
-		meta = SettingMeta{Category: category, Description: key}
+		return SettingMeta{}, fmt.Errorf("unknown setting key %q", key)
+	}
+	if strings.TrimSpace(string(raw)) == "null" {
+		return meta, errors.New("setting value cannot be null")
 	}
 	if meta.Validate != nil {
 		if err := meta.Validate(raw); err != nil {
@@ -385,4 +119,59 @@ func ValidateKeyAndValue(key string, raw json.RawMessage) (SettingMeta, error) {
 		}
 	}
 	return meta, nil
+}
+
+// NotificationConnector is stored as one encrypted setting so endpoint and token
+// changes become visible atomically to every API and worker process.
+type NotificationConnector struct {
+	Enabled  bool   `json:"enabled"`
+	Endpoint string `json:"endpoint"`
+	Token    string `json:"token"`
+}
+
+func init() {
+	for _, channel := range []string{"email", "sms", "whatsapp"} {
+		KnownSettings["integrations.notifications."+channel] = SettingMeta{
+			Category: "integrations", IsSecret: true,
+			Description: channel + " delivery connector (takes effect on the next delivery)",
+			Validate:    validateNotificationConnector,
+		}
+	}
+}
+
+func validateNotificationConnector(raw json.RawMessage) error {
+	var encoded string
+	if json.Unmarshal(raw, &encoded) != nil {
+		return errors.New("connector must be an encoded configuration")
+	}
+	var config NotificationConnector
+	if json.Unmarshal([]byte(encoded), &config) != nil {
+		return errors.New("invalid connector configuration")
+	}
+	if !config.Enabled {
+		return nil
+	}
+	endpoint, err := url.Parse(config.Endpoint)
+	if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || endpoint.RawQuery != "" || endpoint.ForceQuery {
+		return errors.New("connector endpoint must be an HTTPS URL without embedded credentials, query parameters or a fragment")
+	}
+	if strings.TrimSpace(config.Token) == "" || strings.ContainsAny(config.Token, "\r\n") {
+		return errors.New("connector token is required and must be a single line")
+	}
+	return nil
+}
+
+func setConnectionState(item *Setting, plaintext string) {
+	if !strings.HasPrefix(item.Key, "integrations.notifications.") {
+		return
+	}
+	item.ConnectionState = "unavailable"
+	var config NotificationConnector
+	if json.Unmarshal([]byte(plaintext), &config) != nil {
+		return
+	}
+	item.ConnectionState = "disabled"
+	if config.Enabled {
+		item.ConnectionState = "enabled_unverified"
+	}
 }

@@ -118,3 +118,24 @@ func TestPaymentRejectsChangedIntentForIdempotencyKey(t *testing.T) {
 		t.Fatal("expected changed payment amount to be rejected")
 	}
 }
+
+func TestInvalidCollectionFeeFailsBeforeAnyMoneyMutation(t *testing.T) {
+	book := ObligationSnapshot{ID: "obl", PrincipalKobo: 1000, OutstandingKobo: 1000, Currency: "NGN", FeeTerms: &ledger.FeeTerms{CollectionBPS: -1}}
+	mutations := 0
+	journal := ledger.NewStore()
+	store := NewStore(journal, func(string) (ObligationSnapshot, error) { return book, nil }, func(string, ledger.Money) error { mutations++; return nil })
+	if _, _, err := store.Record(RecordInput{ObligationID: "obl", SourceType: SourceCollected, AmountKobo: 100, RecordedBy: CollectionRecorder, IdempotencyKey: CollectionKeyPrefix + "invalid-fee", Provider: "fixture", ProviderReference: "reference"}); err == nil {
+		t.Fatal("invalid fee terms accepted")
+	}
+	if mutations != 0 || len(store.payments) != 0 {
+		t.Fatal("invalid fee changed payment state")
+	}
+	// A corrected retry must be able to create exactly one valid payment.
+	book.FeeTerms.CollectionBPS = 50
+	if _, _, err := store.Record(RecordInput{ObligationID: "obl", SourceType: SourceCollected, AmountKobo: 100, RecordedBy: CollectionRecorder, IdempotencyKey: CollectionKeyPrefix + "invalid-fee", Provider: "fixture", ProviderReference: "reference"}); err != nil {
+		t.Fatal(err)
+	}
+	if mutations != 1 || len(store.payments) != 1 {
+		t.Fatal("corrected retry did not produce one payment")
+	}
+}

@@ -58,6 +58,7 @@ func TestFinancialMutationsRequireIdempotencyKey(t *testing.T) {
 
 func TestFinancialMutationRouteMatrixRequiresIdempotencyKey(t *testing.T) {
 	cases := []string{
+		"/api/v1/organizations/org-1/trade-lines",
 		"/api/v1/credit-requests/req-1/accept",
 		"/api/v1/obligations/obl-1/release",
 		"/api/v1/obligations/obl-1/receipt",
@@ -122,5 +123,39 @@ func TestDocumentJSONCanCarryAFullTwoMiBFile(t *testing.T) {
 	server.Handler().ServeHTTP(response, req)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("full-size document JSON rejected: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestWebhookDeliveriesAlwaysReachProviderAuthentication(t *testing.T) {
+	s := NewServer(config.Config{Environment: "development", CollectionProvider: "mock"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	calls := 0
+	handler := s.withIdempotency(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Header.Get("X-Test-Provider-Signature") != "valid" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	for _, path := range []string{"/api/v1/webhooks/collection/provider", "/api/v1/webhooks/mono", "/webhooks/mono", "/api/v1/webhooks/notifications/email"} {
+		if requiresIdempotencyKey(httptest.NewRequest("POST", path, nil)) {
+			t.Fatalf("provider callback requires client key: %s", path)
+		}
+		for _, item := range []struct {
+			key, signature string
+			status         int
+		}{{"", "valid", 202}, {"provider-header", "valid", 202}, {"provider-header", "invalid", 401}} {
+			request := httptest.NewRequest("POST", path, strings.NewReader(`{}`))
+			request.Header.Set("Idempotency-Key", item.key)
+			request.Header.Set("X-Test-Provider-Signature", item.signature)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != item.status {
+				t.Fatalf("callback %s: got %d, want %d", path, response.Code, item.status)
+			}
+		}
+	}
+	if calls != 12 {
+		t.Fatalf("callback authentication bypassed: %d calls", calls)
 	}
 }

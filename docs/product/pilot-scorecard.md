@@ -47,12 +47,11 @@ accessibility defects. Metric cards display their exact definition and source.
   answering, which is a risk signal long before it becomes a dispute.
 
 - **Manual touches per activated obligation** is the cost-to-serve signal.
-  Kredit earns at most one hundred basis points on activated principal, and the
-  operating model carries an approval inbox, reconciliation, dispute review,
-  account recovery, privacy requests, corrections and support. On a ₦2,000,000
-  sale, gross revenue is ₦20,000: one reconciliation case plus one support call
-  consumes it. Minutes per touch is not invented in code — it is sampled during
-  the pilot and applied to this ratio.
+  Compare measured handling time and cost with the actual fees earned on the
+  same cohort. Use each agreement's recorded rates, floors and caps, plus actual
+  collection fees. Current admin settings do not rewrite historical earnings.
+  Minutes per touch are sampled during the pilot; no universal revenue or
+  staffing-cost assumption is built into this metric.
 
 The snapshot also shows direct clarity feedback from authenticated sellers and
 customers: total Yes, Partly and No answers, split by seller and customer. No

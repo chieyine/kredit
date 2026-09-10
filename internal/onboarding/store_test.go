@@ -1,9 +1,12 @@
 package onboarding
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"kredit/internal/legalpublication"
 )
 
 func TestReadinessIsDerivedAndProviderExpiryRevokesIt(t *testing.T) {
@@ -130,5 +133,38 @@ func TestFinanceMFAChangesPreserveOwnerVerification(t *testing.T) {
 	p, _, err = s.SyncSecurity("org", "owner", false, true)
 	if err != nil || !p.OwnerMFAVerifiedAt.IsZero() {
 		t.Fatal("owner revocation was ignored")
+	}
+}
+
+func TestLegalPublicationRequiresNewConsentWithoutRewritingEvidence(t *testing.T) {
+	s := NewStore()
+	p, err := s.Ensure("legal-org", "owner", true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _, err = s.AcceptConsents(p.OrganizationID, "owner", p.Version, CurrentTermsVersion, CurrentPrivacyVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := legalpublication.Versions{Terms: "legal-terms-v2", Privacy: CurrentPrivacyVersion}
+	s.SetLegalReader(func() (legalpublication.Versions, error) { return current, nil })
+	got, summary, err := s.Get(p.OrganizationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TermsVersion != CurrentTermsVersion || summary.CurrentTermsVersion != current.Terms {
+		t.Fatal("publication rewrote consent evidence or hid the new version")
+	}
+	if _, _, err = s.AcceptConsents(p.OrganizationID, "owner", p.Version, CurrentTermsVersion, CurrentPrivacyVersion); err == nil {
+		t.Fatal("outdated consent accepted")
+	}
+	if _, _, err = s.AcceptConsents(p.OrganizationID, "owner", p.Version, current.Terms, current.Privacy); err != nil {
+		t.Fatal(err)
+	}
+	s.SetLegalReader(func() (legalpublication.Versions, error) {
+		return legalpublication.Versions{}, errors.New("unavailable")
+	})
+	if _, _, err := s.Get(p.OrganizationID); err == nil {
+		t.Fatal("unavailable publication silently fell back")
 	}
 }

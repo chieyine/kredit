@@ -195,8 +195,10 @@ func (s *Store) VerifyAndAttachIdentifier(userID, challengeID, code, channel, id
 	}
 	switch channel {
 	case "email":
+		delete(s.usersByTarget, targetKey(channel, user.Email))
 		user.Email = identifier
 	case "phone":
+		delete(s.usersByTarget, targetKey(channel, user.Phone))
 		user.Phone = identifier
 	default:
 		return errors.New("contact channel must be email or phone")
@@ -239,6 +241,9 @@ func (s *Store) verifyOTP(challengeID, code, deviceLabel, expectedChannel, expec
 		s.usersByTarget[targetKey(challenge.TargetType, identifier)] = userID
 	}
 	user := s.users[userID]
+	if user.Status != "active" {
+		return User{}, Session{}, "", errors.New("user is inactive")
+	}
 	user.LastAuthenticatedAt = now
 	token, err := randomToken()
 	if err != nil {
@@ -397,6 +402,9 @@ func (s *Store) StepUpSession(token, code string) (Session, string, error) {
 	if !now.Before(oldSession.ExpiresAt) || now.Sub(lastSeen) >= sessionIdleTimeout {
 		return Session{}, "", errors.New("session not found")
 	}
+	if user := s.users[oldSession.UserID]; user == nil || user.Status != "active" {
+		return Session{}, "", errors.New("user is inactive")
+	}
 	method := s.mfaMethods[oldSession.UserID]
 	if method == nil || !method.RevokedAt.IsZero() {
 		return Session{}, "", errors.New("mfa method is not enrolled")
@@ -426,23 +434,6 @@ func (s *Store) StepUpSession(token, code string) (Session, string, error) {
 	s.sessions[newSession.ID] = &newSession
 	s.sessionTokens[s.hashToken(newToken)] = newSession.ID
 	return cloneSession(newSession), newToken, nil
-}
-
-func (s *Store) ElevateSession(token string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	sessionID := s.sessionTokens[s.hashToken(token)]
-	session, ok := s.sessions[sessionID]
-	if !ok {
-		return errors.New("session not found")
-	}
-	method, ok := s.mfaMethods[session.UserID]
-	if !ok || method.VerifiedAt.IsZero() || !method.RevokedAt.IsZero() {
-		return errors.New("verified mfa is required")
-	}
-	session.AuthenticationLevel = AAL2
-	session.MFAVerifiedAt = s.now()
-	return nil
 }
 
 func (s *Store) IsMFAEnrolled(userID string) bool {
@@ -591,7 +582,7 @@ func TOTPCode(secret string, at time.Time) string {
 
 func totp(secret string, counter int64) string {
 	decoded, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(secret))
-	if err != nil {
+	if err != nil || len(decoded) == 0 {
 		return ""
 	}
 	message := make([]byte, 8)

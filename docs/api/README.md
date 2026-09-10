@@ -2,5 +2,5 @@
 
 [`../../api/openapi.yaml`](../../api/openapi.yaml) is the canonical REST
 contract. The adjacent `openapi.yaml` file is an index pointer only. Update the
-canonical contract before API behaviour, then regenerate Go and TypeScript
-artifacts. Generated files must never be edited by hand.
+canonical contract before API behaviour, then run the route-contract and frontend-coverage checks. Go handlers and SQL
+are handwritten; see ADR 0005. Frontend consumers validate their response shapes.

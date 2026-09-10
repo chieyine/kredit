@@ -102,7 +102,21 @@ func (s *Store) Read(ctx context.Context) (Snapshot, error) {
 	return ReadTx(ctx, s.pool)
 }
 func (s *Store) History(ctx context.Context) ([]Change, []Event, error) {
-	rows, err := s.pool.Query(ctx, `SELECT c.id::text,c.revision,c.base_revision,c.values,c.proposed_by::text,c.reason,c.effective_at,c.created_at,c.state,c.decided_by::text,c.decided_at,COALESCE((SELECT values FROM app.business_policy_changes b WHERE b.revision=c.base_revision),(SELECT values FROM app.business_policy_defaults WHERE singleton)) FROM app.business_policy_changes c ORDER BY revision DESC LIMIT 100`)
+	var tx pgx.Tx
+	var err error
+	if starter, ok := s.pool.(interface {
+		BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+	}); ok {
+		tx, err = starter.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	} else {
+		// Nested transactions inherit the caller's isolation level.
+		tx, err = s.pool.Begin(ctx)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.revision,c.base_revision,c.values,c.proposed_by::text,c.reason,c.effective_at,c.created_at,c.state,c.decided_by::text,c.decided_at,COALESCE((SELECT values FROM app.business_policy_changes b WHERE b.revision=c.base_revision),(SELECT values FROM app.business_policy_defaults WHERE singleton)) FROM app.business_policy_changes c ORDER BY revision DESC LIMIT 100`)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -129,7 +143,7 @@ func (s *Store) History(ctx context.Context) ([]Change, []Event, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err = s.pool.Query(ctx, `SELECT change_id::text,actor_id::text,action,reason,occurred_at FROM app.business_policy_events WHERE change_id IN(SELECT id FROM app.business_policy_changes ORDER BY revision DESC LIMIT 100) ORDER BY occurred_at DESC`)
+	rows, err = tx.Query(ctx, `SELECT change_id::text,actor_id::text,action,reason,occurred_at FROM app.business_policy_events WHERE change_id IN(SELECT id FROM app.business_policy_changes ORDER BY revision DESC LIMIT 100) ORDER BY occurred_at DESC`)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -142,7 +156,12 @@ func (s *Store) History(ctx context.Context) ([]Change, []Event, error) {
 		}
 		events = append(events, e)
 	}
-	return changes, events, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+	return changes, events, tx.Commit(ctx)
 }
 func admin(ctx context.Context, tx pgx.Tx, actor string) error {
 	var allowed bool
@@ -164,6 +183,10 @@ func (s *Store) lock(ctx context.Context) (pgx.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(746219830045::bigint)`); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
 	_, err = tx.Exec(ctx, `SELECT singleton FROM app.business_policy_defaults WHERE singleton FOR UPDATE`)
 	if err != nil {
 		_ = tx.Rollback(ctx)
@@ -172,6 +195,8 @@ func (s *Store) lock(ctx context.Context) (pgx.Tx, error) {
 	return tx, nil
 }
 func (s *Store) Propose(ctx context.Context, actor string, in Proposal) (string, error) {
+	// Match the timestamp PostgreSQL persists so exact retries remain identical.
+	in.EffectiveAt = in.EffectiveAt.Truncate(time.Microsecond)
 	if _, err := uuid.Parse(in.ID); err != nil {
 		return "", errors.New("a unique change identifier is required")
 	}

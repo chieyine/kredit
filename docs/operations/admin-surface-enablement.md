@@ -40,16 +40,16 @@ sound:
    surface nobody has been trained on, and it can be added the day it is first
    required.
 
-A defensible starting point for a pilot, to be reviewed rather than copied:
+The example deployment enables the complete admin application:
 
 ```
-ADMIN_SURFACES=overview,attention,capabilities,approval-inbox,cases,disputes,money,search,users,organizations,jobs,provider-events,audit,analytics,account-recovery,privacy-requests,admin-changes,review-assignments,change-context,change-history,financial-reconciliation,team,metrics,diagnostics
+ADMIN_SURFACES=all
 ```
 
-Surfaces most often deferred past a first pilot are `business-policies` and
-`commands`: policy proposal workflows and the operations command path both
-assume an operating scale a first pilot does not have, and the command path in
-particular is the highest-privilege surface in the product.
+This includes `platform-settings`, `business-policies`, `commands` and owner
+controls. Their role checks, recent MFA and audit requirements remain active.
+If you use a restricted list, include every surface needed by your admin
+workflows; an omitted surface returns 404 even to the owner.
 
 ## Reviewing it
 

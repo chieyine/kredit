@@ -1,0 +1,28 @@
+=== RUN   TestOwnerLifecycleDatabaseInvariant
+=== RUN   TestOwnerLifecycleDatabaseInvariant/suspension
+    owner_lifecycle_integration_test.go:64: last effective owner could be removed
+=== RUN   TestOwnerLifecycleDatabaseInvariant/closure
+    owner_lifecycle_integration_test.go:64: last effective owner could be removed
+=== RUN   TestOwnerLifecycleDatabaseInvariant/lockout
+    owner_lifecycle_integration_test.go:64: last effective owner could be removed
+=== RUN   TestOwnerLifecycleDatabaseInvariant/immediate_expiry
+=== RUN   TestOwnerLifecycleDatabaseInvariant/future_expiry
+    owner_lifecycle_integration_test.go:64: last effective owner could be removed
+=== RUN   TestOwnerLifecycleDatabaseInvariant/revocation
+=== RUN   TestOwnerLifecycleDatabaseInvariant/demotion
+=== RUN   TestOwnerLifecycleDatabaseInvariant/deletion
+=== RUN   TestOwnerLifecycleDatabaseInvariant/concurrent_removals
+    owner_lifecycle_integration_test.go:91: competing transaction removed the other owner before the first committed
+--- FAIL: TestOwnerLifecycleDatabaseInvariant (0.14s)
+    --- FAIL: TestOwnerLifecycleDatabaseInvariant/suspension (0.01s)
+    --- FAIL: TestOwnerLifecycleDatabaseInvariant/closure (0.01s)
+    --- FAIL: TestOwnerLifecycleDatabaseInvariant/lockout (0.00s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/immediate_expiry (0.00s)
+    --- FAIL: TestOwnerLifecycleDatabaseInvariant/future_expiry (0.00s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/revocation (0.01s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/demotion (0.01s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/deletion (0.00s)
+    --- FAIL: TestOwnerLifecycleDatabaseInvariant/concurrent_removals (0.04s)
+FAIL
+FAIL	kredit/internal/platformsettings	0.266s
+FAIL

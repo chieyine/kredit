@@ -3,6 +3,7 @@ package collections
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 )
@@ -57,6 +58,7 @@ type ApprovedAdapter struct {
 }
 
 func NewApprovedAdapter(inner Provider, approval ApprovalRecord, featureOn bool) *ApprovedAdapter {
+	approval.AllowedCapabilities = slices.Clone(approval.AllowedCapabilities)
 	return &ApprovedAdapter{inner: inner, approval: approval, featureOn: featureOn, now: func() time.Time { return time.Now().UTC() }}
 }
 
@@ -75,7 +77,11 @@ func (a *ApprovedAdapter) Capabilities() Capabilities {
 func (a *ApprovedAdapter) Enabled() bool {
 	return a.featureOn && a.inner != nil && a.approval.Valid(a.Name(), a.now()) == nil
 }
-func (a *ApprovedAdapter) Approval() ApprovalRecord { return a.approval }
+func (a *ApprovedAdapter) Approval() ApprovalRecord {
+	approval := a.approval
+	approval.AllowedCapabilities = slices.Clone(approval.AllowedCapabilities)
+	return approval
+}
 func (a *ApprovedAdapter) Submit(ctx context.Context, request Request) (Response, error) {
 	if err := a.gate(int64(request.AmountKobo)); err != nil {
 		return Response{}, err
@@ -109,6 +115,9 @@ func (a *ApprovedAdapter) Sign(event Webhook) string {
 }
 
 func (a *ApprovedAdapter) gate(amount int64) error {
+	if amount <= 0 {
+		return errors.New("collection amount must be positive")
+	}
 	if !a.featureOn {
 		return errors.New("real collection feature is disabled")
 	}

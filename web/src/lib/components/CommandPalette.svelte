@@ -27,7 +27,7 @@
 	$effect(() => {
 		if (!open) return;
 		if (!returnFocus) returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		void tick().then(() => { dialog?.showModal(); searchInput?.focus(); });
+		void tick().then(() => { if (!open || !dialog?.isConnected) return; if (!dialog.open) dialog.showModal(); searchInput?.focus(); });
 	});
 
 	const results = $derived.by(() => {
@@ -47,6 +47,7 @@
 		else if (event.key === 'ArrowDown') { event.preventDefault(); selected = Math.min(selected + 1, results.length - 1); }
 		else if (event.key === 'ArrowUp') { event.preventDefault(); selected = Math.max(selected - 1, 0); }
 		else if (event.key === 'Enter' && results[selected]) {
+            event.preventDefault();
 			close();
 			goto(results[selected][1]);
 		}
@@ -88,6 +89,7 @@
 						role="option"
 						aria-selected={index === selected}
 						onpointerenter={() => (selected = index)}
+                        onfocus={() => (selected = index)}
 						onclick={() => pick(href)}
 					>{label}<span>{href}</span></button>
 				</li>
@@ -100,11 +102,11 @@
 {/if}
 
 <style>
-	.palette { position: fixed; top: 14vh; width: min(34rem, calc(100vw - 2rem)); max-height:80vh; margin:0 auto; padding:0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); color:var(--color-foreground); box-shadow: var(--shadow-md); }
+	.palette { position: fixed; top: 14vh; width: min(34rem, calc(100vw - 2rem)); max-height:80vh; margin:0 auto; padding:0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); color:var(--color-foreground); box-shadow: var(--shadow-md); }
 	.palette[open]{display:grid}.palette::backdrop{background:rgb(16 45 42 / .55)}
 	.palette input { border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; padding: 0.95rem 1.1rem; font: inherit; font-size: 1.05rem; background: transparent; color: inherit; outline: none; }
 	.palette ul { max-height: 18rem; margin: 0; padding: 0.35rem; list-style: none; overflow-y: auto; }
-	.palette button { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 1rem; border: 0; border-radius: var(--radius-sm); padding: 0.65rem 0.75rem; background: transparent; color: inherit; font-weight: 650; text-align: left; cursor: pointer; }
+	.palette button { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 1rem; border: 0; border-radius: var(--radius); padding: 0.65rem 0.75rem; background: transparent; color: inherit; font-weight: 650; text-align: left; cursor: pointer; }
 	.palette button span { color: var(--color-muted); font-size: 0.8rem; font-weight: 500; }
 	.palette button.selected { background: var(--color-surface-muted); color: var(--color-primary); }
 	.palette .none { padding: 0.9rem; color: var(--color-muted); }

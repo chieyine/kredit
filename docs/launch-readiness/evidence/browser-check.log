@@ -1,0 +1,14 @@
+PASS rendered / 1440x1000
+PASS rendered /pricing 1440x1000
+PASS rendered /legal/terms 1440x1000
+PASS rendered /legal/privacy 1440x1000
+PASS rendered /legal/complaints 1440x1000
+PASS rendered /app 1440x1000
+PASS legal reflow and anchors 320
+PASS legal reflow and anchors 360
+PASS legal reflow and anchors 390
+PASS legal reflow and anchors 430
+PASS legal reflow and anchors 768
+PASS legal reflow and anchors 1024
+PASS legal reflow and anchors 1440
+PASS protected guest redirect

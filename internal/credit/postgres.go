@@ -12,6 +12,7 @@ import (
 
 	"kredit/internal/businesspolicy"
 	"kredit/internal/ledger"
+	"kredit/internal/legalpublication"
 	"kredit/internal/mandates"
 	"kredit/internal/payments"
 	"kredit/internal/schedules"
@@ -393,7 +394,11 @@ func (s *PostgresStore) UpdateDraft(requestID, actorID string, input UpdateDraft
 }
 
 func (s *PostgresStore) Send(requestID, actorID string) (View, error) {
-	return s.mutate(requestID, func() (View, error) { return s.Store.Send(requestID, actorID) })
+	versions, err := legalpublication.Resolve(s.legalReader)
+	if err != nil {
+		return View{}, err
+	}
+	return s.mutate(requestID, func() (View, error) { return s.sendWithLegalVersions(requestID, actorID, versions) })
 }
 func (s *PostgresStore) Cancel(requestID, actorID string) (View, error) {
 	return s.mutate(requestID, func() (View, error) { return s.Store.Cancel(requestID, actorID) })
@@ -408,6 +413,9 @@ func (s *PostgresStore) AuthorizeMandate(ctx context.Context, requestID, buyerUs
 	return s.mutate(requestID, func() (View, error) { return s.Store.AuthorizeMandate(ctx, requestID, buyerUserID, options...) })
 }
 func (s *PostgresStore) SetMandate(requestID, buyerUserID string, mandate mandates.Mandate) (View, error) {
+	if err := s.hydrateForTenant(requestID, buyerUserID, ""); err != nil {
+		return View{}, err
+	}
 	return s.mutate(requestID, func() (View, error) { return s.Store.SetMandate(requestID, buyerUserID, mandate) })
 }
 func (s *PostgresStore) Accept(requestID, buyerUserID, agreementID, agreementHash, mandateID, authLevel string, identityVerified, authorityVerified bool) (View, error) {
@@ -419,10 +427,19 @@ func (s *PostgresStore) Release(requestID, supplierOrgID, actorID, deliveryMetho
 	return s.mutate(requestID, func() (View, error) { return s.Store.Release(requestID, supplierOrgID, actorID, deliveryMethod, notes) })
 }
 func (s *PostgresStore) RecordReceipt(requestID, buyerUserID, state, issueReason string) (View, *ledger.Transaction, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return s.recordReceiptContext(ctx, requestID, buyerUserID, state, issueReason)
+}
+
+func (s *PostgresStore) recordReceiptContext(ctx context.Context, requestID, buyerUserID, state, issueReason string) (View, *ledger.Transaction, error) {
+	return s.recordReceiptTransaction(ctx, requestID, buyerUserID, state, issueReason, false)
+}
+
+func (s *PostgresStore) recordReceiptTransaction(ctx context.Context, requestID, buyerUserID, state, issueReason string, system bool) (View, *ledger.Transaction, error) {
 	if s == nil || s.pool == nil {
 		return View{}, nil, errors.New("credit database is not configured")
 	}
-	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return View{}, nil, err
@@ -442,6 +459,9 @@ func (s *PostgresStore) RecordReceipt(requestID, buyerUserID, state, issueReason
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, old.Request.SupplierOrganizationID); err != nil {
 		return View{}, nil, err
 	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.deemed_acceptance_min_seconds',$1,true)`, fmt.Sprint(int64(s.deemedAcceptanceNoticeWindow()/time.Second))); err != nil {
+		return View{}, nil, err
+	}
 	s.mu.RLock()
 	pgLedger, ok := s.ledger.(*ledger.PostgresStore)
 	now, newID, mandateProvider, hook := s.now, s.newID, s.mandates, s.onActivated
@@ -453,11 +473,26 @@ func (s *PostgresStore) RecordReceipt(requestID, buyerUserID, state, issueReason
 	local.now = now
 	local.newID = newID
 	(&PostgresStore{Store: local}).installView(old)
-	view, journal, err := local.RecordReceipt(requestID, buyerUserID, state, issueReason)
+	systemID := ""
+	if system {
+		var hours int64
+		if err = tx.QueryRow(ctx, `SELECT hours FROM app.system_acceptance_settings()`).Scan(&hours); err != nil {
+			return View{}, nil, err
+		}
+		seconds := max(int64(s.deemedAcceptanceNoticeWindow()/time.Second), int64(259200), hours*3600)
+		err = tx.QueryRow(ctx, `INSERT INTO app.system_acceptances(credit_request_id, supplier_organization_id,buyer_user_id,release_id,notification_id,receipt_channel,receipt_event_id,minimum_seconds) SELECT $1,organization_id,buyer_id,release_id,notification_id,receipt_channel,receipt_event_id,$2 FROM app.deemed_acceptance_evidence($1,$2) RETURNING id::text`, requestID, seconds).Scan(&systemID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return View{}, nil, errDeemedNotEligible
+		}
+		if err != nil {
+			return View{}, nil, err
+		}
+	}
+	view, journal, err := local.recordReceiptLocked(requestID, buyerUserID, state, issueReason, systemID)
 	if err != nil {
 		return View{}, nil, err
 	}
-	if err = syncNormalizedCredit(ctx, tx, view); err != nil {
+	if err = syncNormalizedCreditWithEvidence(ctx, tx, view, system); err != nil {
 		return View{}, nil, err
 	}
 	if view.Obligation != nil {
@@ -493,6 +528,11 @@ func (s *PostgresStore) RecordReceipt(requestID, buyerUserID, state, issueReason
 	}
 	if _, err = tx.Exec(ctx, `UPDATE app.credit_aggregate_snapshots SET aggregate=$2::jsonb,version=$3,updated_at=now() WHERE credit_request_id=$1`, requestID, payload, view.Request.Version); err != nil {
 		return View{}, nil, err
+	}
+	if system {
+		if _, err = tx.Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) VALUES('credit_request',$1,'notification.requested',jsonb_build_object('event','SYSTEM_ACCEPTANCE','amount_kobo',$2::bigint),$3)`, requestID, int64(view.Request.PrincipalKobo), "system-acceptance:"+systemID); err != nil {
+			return View{}, nil, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return View{}, nil, err
@@ -608,7 +648,9 @@ func (s *PostgresStore) CollectionStateForOrganization(obligationID, organizatio
 	return state, nil
 }
 func (s *PostgresStore) ObligationBelongsToOrganization(obligationID, organizationID string) bool {
-	_ = s.hydrateByObligationForTenant(obligationID, "", organizationID)
+	if err := s.hydrateByObligationForTenant(obligationID, "", organizationID); err != nil {
+		return false
+	}
 	return s.Store.ObligationBelongsToOrganization(obligationID, organizationID)
 }
 
@@ -688,6 +730,9 @@ func (s *PostgresStore) hydrate(requestID string) error {
 // aggregate with an in-flight mutation is left alone: replacing it mid-command
 // would discard the mutation.
 func (s *PostgresStore) hydrateForTenant(requestID, userID, organizationID string) error {
+	if s == nil || s.pool == nil {
+		return errors.New("credit database is not configured")
+	}
 	if s.isPinned(requestID) {
 		return nil
 	}
@@ -722,9 +767,12 @@ func (s *PostgresStore) hydrateForTenant(requestID, userID, organizationID strin
 	if err := json.Unmarshal(payload, &view); err != nil {
 		return fmt.Errorf("decode credit aggregate: %w", err)
 	}
+	if err := tx.Commit(context.Background()); err != nil {
+		return err
+	}
 	s.installView(view)
 	s.markLoaded(requestID)
-	return tx.Commit(context.Background())
+	return nil
 }
 
 func (s *PostgresStore) hydrateByObligation(obligationID string) error {
@@ -740,14 +788,9 @@ func (s *PostgresStore) hydrateByObligation(obligationID string) error {
 }
 
 func (s *PostgresStore) hydrateByObligationForTenant(obligationID, userID, organizationID string) error {
-	s.mu.RLock()
-	for _, obligation := range s.obligations {
-		if obligation.ID == obligationID {
-			s.mu.RUnlock()
-			return nil
-		}
+	if s == nil || s.pool == nil {
+		return errors.New("credit database is not configured")
 	}
-	s.mu.RUnlock()
 	if strings.TrimSpace(userID) == "" && strings.TrimSpace(organizationID) == "" {
 		return errors.New("credit tenant context is required before loading an obligation")
 	}
@@ -771,9 +814,12 @@ func (s *PostgresStore) hydrateByObligationForTenant(obligationID, userID, organ
 	if err := json.Unmarshal(payload, &view); err != nil {
 		return fmt.Errorf("decode credit aggregate: %w", err)
 	}
+	if err := tx.Commit(context.Background()); err != nil {
+		return err
+	}
 	s.installView(view)
 	s.markLoaded(view.Request.ID)
-	return tx.Commit(context.Background())
+	return nil
 }
 
 // hydrateList loads a tenant's aggregates and returns their identifiers pinned.
@@ -824,10 +870,10 @@ func (s *PostgresStore) hydrateList(field, value string) ([]string, error) {
 func (s *PostgresStore) installView(view View) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	request := view.Request
+	request := cloneRequest(view.Request)
 	s.requests[request.ID] = &request
 	if view.Agreement.ID != "" {
-		agreement := view.Agreement
+		agreement := cloneAgreement(view.Agreement)
 		s.agreements[agreement.ID] = &agreement
 	}
 	if view.Acceptance != nil {
@@ -903,6 +949,10 @@ func (s *PostgresStore) persist(requestID string) error {
 }
 
 func syncNormalizedCredit(ctx context.Context, tx pgx.Tx, view View) error {
+	return syncNormalizedCreditWithEvidence(ctx, tx, view, false)
+}
+
+func syncNormalizedCreditWithEvidence(ctx context.Context, tx pgx.Tx, view View, system bool) error {
 	r := view.Request
 	_, err := tx.Exec(ctx, `
 		INSERT INTO app.credit_requests
@@ -913,12 +963,12 @@ func syncNormalizedCredit(ctx context.Context, tx pgx.Tx, view View) error {
 	if err != nil {
 		return fmt.Errorf("persist normalized credit request: %w", err)
 	}
-	if a := view.Agreement; a.ID != "" {
-		if _, err := tx.Exec(ctx, `INSERT INTO app.agreement_versions (id,credit_request_id,version,canonical_json,document_hash,terms_version,privacy_version,created_by,created_at) VALUES ($1::uuid,$2::uuid,$3,$4::jsonb,$5,$6,$7,$8::uuid,$9) ON CONFLICT (id) DO NOTHING`, a.ID, a.CreditRequestID, a.Version, a.CanonicalJSON, a.DocumentHash, a.TermsVersion, a.PrivacyVersion, a.CreatedBy, a.CreatedAt); err != nil {
+	if a := view.Agreement; a.ID != "" && !system {
+		if _, err := tx.Exec(ctx, `INSERT INTO app.agreement_versions (id,credit_request_id,version,canonical_json,document_hash,terms_version,privacy_version,created_by,created_at,canonical_bytes) VALUES ($1::uuid,$2::uuid,$3,$4::jsonb,$5,$6,$7,$8::uuid,$9,$10) ON CONFLICT (id) DO NOTHING`, a.ID, a.CreditRequestID, a.Version, a.CanonicalJSON, a.DocumentHash, a.TermsVersion, a.PrivacyVersion, a.CreatedBy, a.CreatedAt, a.CanonicalBytes); err != nil {
 			return fmt.Errorf("persist agreement version: %w", err)
 		}
 	}
-	if a := view.Acceptance; a != nil {
+	if a := view.Acceptance; a != nil && !system {
 		if _, err := tx.Exec(ctx, `INSERT INTO app.agreement_acceptances (id,credit_request_id,agreement_version_id,accepting_user_id,person_id,business_id,acceptance_method,authentication_level,agreement_hash,mandate_provider_id,accepted_at) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING`, a.ID, a.CreditRequestID, a.AgreementVersionID, a.AcceptingUserID, a.PersonID, a.BusinessID, a.AcceptanceMethod, a.AuthenticationLevel, a.AgreementHash, a.MandateProviderID, a.AcceptedAt); err != nil {
 			return fmt.Errorf("persist agreement acceptance: %w", err)
 		}
@@ -926,7 +976,7 @@ func syncNormalizedCredit(ctx context.Context, tx pgx.Tx, view View) error {
 			return err
 		}
 	}
-	if release := view.Release; release != nil {
+	if release := view.Release; release != nil && !system {
 		if _, err := tx.Exec(ctx, `INSERT INTO app.goods_releases (id,credit_request_id,supplier_actor_id,delivery_method,notes,released_at) VALUES ($1::uuid,$2::uuid,$3::uuid,$4,NULLIF($5,''),$6) ON CONFLICT (id) DO NOTHING`, release.ID, release.CreditRequestID, release.SupplierActorID, release.DeliveryMethod, release.Notes, release.ReleasedAt); err != nil {
 			return fmt.Errorf("persist goods release: %w", err)
 		}
@@ -939,6 +989,9 @@ func syncNormalizedCredit(ctx context.Context, tx pgx.Tx, view View) error {
 		}
 	}
 	for _, receipt := range view.Receipts {
+		if system {
+			continue
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO app.receipt_confirmations (id,credit_request_id,buyer_user_id,state,issue_reason,received_at) VALUES ($1::uuid,$2::uuid,$3::uuid,$4,NULLIF($5,''),$6) ON CONFLICT (id) DO NOTHING`, receipt.ID, receipt.CreditRequestID, receipt.BuyerUserID, receipt.State, receipt.IssueReason, receipt.ReceivedAt); err != nil {
 			return fmt.Errorf("persist receipt confirmation: %w", err)
 		}
@@ -987,45 +1040,60 @@ func (s *PostgresStore) InvalidateObligation(obligationID string) {
 
 func feeTermsJSON(f *ledger.FeeTerms) []byte { b, _ := json.Marshal(f); return b }
 
-// AutoActivateMatured promotes every request whose deemed-acceptance window has
-// elapsed. It must not take s.mu itself: the embedded Store takes the same
-// (non-reentrant) mutex, and each activation is persisted through the durable
-// RecordReceipt path below.
+// AutoActivateMatured discovers eligible persisted sales, including on a cold worker.
+// Buyer-originated evidence remains read-only; each activation records distinct
+// immutable system evidence in the same transaction as its ledger and schedule.
+var errDeemedNotEligible = errors.New("system acceptance is no longer eligible")
+
 func (s *PostgresStore) AutoActivateMatured(ctx context.Context, asOf time.Time) ([]string, error) {
 	if s == nil || s.pool == nil {
 		return nil, errors.New("credit database is not configured")
 	}
-	s.mu.RLock()
-	candidates := make([]string, 0)
-	for id, request := range s.requests {
-		if request.State == ReceiptConfirmationPending && request.DeemedAcceptedAt != nil && !asOf.Before(*request.DeemedAcceptedAt) {
-			candidates = append(candidates, id)
-		}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	seconds := max(int64(s.deemedAcceptanceNoticeWindow()/time.Second), int64(259200))
+	var enabled bool
+	var hours int64
+	if err := s.pool.QueryRow(ctx, `SELECT COALESCE((SELECT value='true'::jsonb FROM app.platform_settings WHERE key='features.system_acceptance'),false),COALESCE((SELECT hours FROM app.system_acceptance_settings()),72)`).Scan(&enabled, &hours); err != nil {
+		return nil, err
 	}
-	s.mu.RUnlock()
-	sort.Strings(candidates)
-	activated := make([]string, 0, len(candidates))
-	for _, id := range candidates {
-		s.mu.RLock()
-		request := s.requests[id]
-		buyerID := ""
-		if request != nil {
-			buyerID = request.BuyerUserID
+	if !enabled {
+		return []string{}, nil
+	}
+	if hours < 72 || hours > 720 {
+		return nil, errors.New("automatic recognition waiting period is invalid")
+	}
+	seconds = max(seconds, hours*3600)
+	rows, err := s.pool.Query(ctx, `SELECT request_id::text,buyer_id::text FROM app.deemed_acceptance_candidates($1)`, seconds)
+	if err != nil {
+		return nil, err
+	}
+	type candidate struct{ id, buyer string }
+	candidates := []candidate{}
+	for rows.Next() {
+		var c candidate
+		if err = rows.Scan(&c.id, &c.buyer); err != nil {
+			rows.Close()
+			return nil, err
 		}
-		s.mu.RUnlock()
-		if buyerID == "" {
+		candidates = append(candidates, c)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	activated := []string{}
+	for _, c := range candidates {
+		// Eligibility uses database time; a caller cannot advance the waiting period.
+		_, _, err = s.recordReceiptTransaction(ctx, c.id, c.buyer, "confirmed", deemedAcceptanceReason, true)
+		if errors.Is(err, errDeemedNotEligible) {
 			continue
 		}
-		// The first-obligation and delivered-notice checks are answered from
-		// PostgreSQL rather than the projection: the projection is a cache of
-		// whatever this process happened to load, and absence from it is not
-		// evidence that a buyer has no history.
-		if err := s.deemedAcceptancePermitted(ctx, id); err != nil {
-			continue
+		if err != nil {
+			return activated, err
 		}
-		if _, _, err := s.RecordReceipt(id, buyerID, "confirmed", deemedAcceptanceReason); err == nil {
-			activated = append(activated, id)
-		}
+		activated = append(activated, c.id)
 	}
 	return activated, nil
 }

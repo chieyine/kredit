@@ -66,12 +66,17 @@ export class MutationIntent {
       return result;
     } catch (error) {
       if (error instanceof MutationError) throw error;
+      // This response is emitted only before a financial-review write occurs.
+      if (sent && error instanceof RequestError && error.status === 409 && error.code === 'financial_difference_unresolved') {
+        this.clear();
+        throw new MutationError('Financial discrepancy remains unresolved. Correct the underlying records before closing this review.', 'rejected');
+      }
       if (sent && !wasUnresolved && error instanceof RequestError && error.code !== 'invalid_response' && [400, 401, 403, 404, 422].includes(error.status)) {
         this.clear();
-        const message = error.status === 401 ? 'Your session has ended. Sign in again before continuing.' : error.status === 403 ? 'Your account cannot perform this action. Check your permissions.' : 'The request was not accepted. Check the details and try again.';
+        const message = error.status === 401 ? 'Your session has ended. Sign in again before continuing.' : error.status === 403 ? (error.code === 'step_up_required' ? 'Confirm your identity with your authenticator code, then try again.' : 'Your account cannot perform this action. Check your permissions.') : 'The request was not accepted. Check the details and try again.';
         throw new MutationError(message, 'rejected');
       }
-      throw new MutationError(sent ? 'We have not confirmed the result. Check the record or retry the same request; do not submit it as a new payment.' : 'This request has not been sent. Check your browser and connection.', sent ? 'unknown' : 'not_sent');
+      throw new MutationError(sent ? 'We have not confirmed the result. Check the record or retry the same request; do not submit it as a new request.' : 'This request has not been sent. Check your browser and connection.', sent ? 'unknown' : 'not_sent');
     } finally { this.busy = false; }
   }
 }

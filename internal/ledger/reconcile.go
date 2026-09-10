@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,32 +24,29 @@ func Reconcile(ctx context.Context, pool *pgxpool.Pool) (ReconciliationReport, e
 	if pool == nil {
 		return ReconciliationReport{}, fmt.Errorf("ledger database is not configured")
 	}
+	return reconcileQuery(ctx, pool)
+}
+
+func reconcileQuery(ctx context.Context, query interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}) (ReconciliationReport, error) {
 	var report ReconciliationReport
-	if err := pool.QueryRow(ctx, `
-		SELECT count(DISTINCT transaction_id), COALESCE(sum(debit_kobo),0), COALESCE(sum(credit_kobo),0)
-		FROM ledger.postings`).Scan(&report.TransactionCount, &report.DebitKobo, &report.CreditKobo); err != nil {
-		return ReconciliationReport{}, fmt.Errorf("load ledger totals: %w", err)
-	}
-	rows, err := pool.Query(ctx, `
-		SELECT transactions.id::text
-		FROM ledger.transactions transactions
-		JOIN ledger.postings postings ON postings.transaction_id = transactions.id
-		GROUP BY transactions.id
-		HAVING COALESCE(sum(postings.debit_kobo),0) <> COALESCE(sum(postings.credit_kobo),0)
-		ORDER BY transactions.id`)
+	// One statement gives totals and exceptions the same database snapshot.
+	// Start from journal headers so a header with no postings cannot disappear.
+	err := query.QueryRow(ctx, `
+		WITH balances AS (
+			SELECT t.id, count(p.id) AS posting_count,
+			       COALESCE(sum(p.debit_kobo),0) AS debit,
+			       COALESCE(sum(p.credit_kobo),0) AS credit
+			FROM ledger.transactions t
+			LEFT JOIN ledger.postings p ON p.transaction_id=t.id
+			GROUP BY t.id
+		)
+		SELECT count(*), COALESCE(sum(debit),0), COALESCE(sum(credit),0),
+		       COALESCE(array_agg(id::text ORDER BY id) FILTER (WHERE debit<>credit OR posting_count<2), ARRAY[]::text[])
+		FROM balances`).Scan(&report.TransactionCount, &report.DebitKobo, &report.CreditKobo, &report.UnbalancedIDs)
 	if err != nil {
-		return ReconciliationReport{}, fmt.Errorf("load unbalanced ledger transactions: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return ReconciliationReport{}, fmt.Errorf("scan unbalanced ledger transaction: %w", err)
-		}
-		report.UnbalancedIDs = append(report.UnbalancedIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		return ReconciliationReport{}, fmt.Errorf("read unbalanced ledger transactions: %w", err)
+		return ReconciliationReport{}, fmt.Errorf("reconcile ledger: %w", err)
 	}
 	return report, nil
 }

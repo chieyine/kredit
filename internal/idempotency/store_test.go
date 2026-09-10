@@ -50,3 +50,25 @@ func TestUnfinishedReservationDoesNotExpireIntoAnotherMutation(t *testing.T) {
 		t.Fatalf("uncertain request was reopened: %v %v", existing, err)
 	}
 }
+
+func TestReplayCannotMutateSavedResponse(t *testing.T) {
+	s := NewMemoryStore()
+	if _, _, err := s.Reserve(t.Context(), "scope", "key", "hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Complete(t.Context(), "scope", "key", 200, []byte(`{"ok":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := s.Reserve(t.Context(), "scope", "key", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.ResponseBody[0] = '!'
+	second, _, err := s.Reserve(t.Context(), "scope", "key", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(second.ResponseBody) != `{"ok":true}` {
+		t.Fatal("caller mutated persisted replay")
+	}
+}

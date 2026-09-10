@@ -39,3 +39,9 @@ func TestClaimedApprovalCannotAuthorizeHighValueOperation(t *testing.T) {
 		}
 	}
 }
+
+func TestUnavailableOperationHistoryIsAnError(t *testing.T) {
+	if actions, err := NewPostgresStore(nil, nil, nil).ListForOrganization(t.Context(), "org"); err == nil || actions != nil {
+		t.Fatal("unavailable history was reported as an empty success")
+	}
+}

@@ -1,3 +1,5 @@
+BEGIN;
+
 INSERT INTO app_meta (key, value)
 VALUES ('seed_dataset', 'milestone-1-auth-org')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
@@ -38,32 +40,11 @@ VALUES (
     'verified', 'mock-settlement', 'demo-settlement-destination', 'Demo Bank',
     'ABC Pharmaceuticals Ltd', '0001', NOW(), 'configured', 'split_settlement',
     'demo-billing-reference', 'per_settlement', NOW(), 500000000, 30, 48, NOW(),
-    'supplier-terms-v1', NOW(), '00000000-0000-7000-8000-000000000001',
-    'privacy-v1', NOW(), '00000000-0000-7000-8000-000000000001', NOW(), TRUE,
+    'supplier-terms-v2-2026-09-07', NOW(), '00000000-0000-7000-8000-000000000001',
+    'privacy-v2-2026-09-07', NOW(), '00000000-0000-7000-8000-000000000001', NOW(), TRUE,
     'pilot_ready', NOW()
 )
-ON CONFLICT (organization_id) DO UPDATE SET
-    authorized_representative_name=EXCLUDED.authorized_representative_name,
-    authorized_representative_title=EXCLUDED.authorized_representative_title,
-    owner_email_verified_at=EXCLUDED.owner_email_verified_at,
-    owner_phone_verified_at=EXCLUDED.owner_phone_verified_at,
-    kyb_state=EXCLUDED.kyb_state, kyb_provider_reference=EXCLUDED.kyb_provider_reference,
-    kyb_expires_at=EXCLUDED.kyb_expires_at, settlement_state=EXCLUDED.settlement_state,
-    settlement_provider=EXCLUDED.settlement_provider,
-    settlement_provider_reference=EXCLUDED.settlement_provider_reference,
-    settlement_bank_name=EXCLUDED.settlement_bank_name,
-    settlement_account_name=EXCLUDED.settlement_account_name,
-    settlement_account_last4=EXCLUDED.settlement_account_last4,
-    billing_state=EXCLUDED.billing_state, billing_method=EXCLUDED.billing_method,
-    billing_provider_reference=EXCLUDED.billing_provider_reference,
-    billing_cycle=EXCLUDED.billing_cycle, default_credit_limit_kobo=EXCLUDED.default_credit_limit_kobo,
-    default_payment_days=EXCLUDED.default_payment_days, default_grace_hours=EXCLUDED.default_grace_hours,
-    default_credit_policy_updated_at=EXCLUDED.default_credit_policy_updated_at,
-    terms_version=EXCLUDED.terms_version, terms_accepted_at=EXCLUDED.terms_accepted_at,
-    terms_accepted_by=EXCLUDED.terms_accepted_by, privacy_version=EXCLUDED.privacy_version,
-    privacy_accepted_at=EXCLUDED.privacy_accepted_at, privacy_accepted_by=EXCLUDED.privacy_accepted_by,
-    owner_mfa_verified_at=EXCLUDED.owner_mfa_verified_at, finance_mfa_complete=TRUE,
-    readiness_state='pilot_ready', readiness_changed_at=NOW(), updated_at=NOW();
+ON CONFLICT (organization_id) DO NOTHING;
 
 INSERT INTO app.supplier_onboarding_revisions
     (organization_id, profile_version, change_type, actor_user_id, actor_reference, snapshot)
@@ -71,11 +52,7 @@ SELECT p.organization_id, p.version, 'profile.seeded',
        '00000000-0000-7000-8000-000000000001', 'seed:001_demo', to_jsonb(p)
 FROM app.supplier_onboarding_profiles p
 WHERE p.organization_id = '00000000-0000-7000-8000-000000000010'
-ON CONFLICT (organization_id, profile_version) DO UPDATE SET
-    change_type = EXCLUDED.change_type,
-    actor_user_id = EXCLUDED.actor_user_id,
-    actor_reference = EXCLUDED.actor_reference,
-    snapshot = EXCLUDED.snapshot;
+ON CONFLICT (organization_id, profile_version) DO NOTHING;
 
 INSERT INTO app.memberships (id, organization_id, user_id, role, status, accepted_at)
 VALUES
@@ -128,7 +105,7 @@ ON CONFLICT (mandate_id, provider_event_id) DO NOTHING;
 -- ₦2.75m. The first obligation records ₦1m already repaid, leaving ₦1.75m
 -- current exposure across the line.
 INSERT INTO app.trade_lines (id, supplier_organization_id, buyer_user_id, buyer_business_id, approved_limit_kobo, current_exposure_kobo, reserved_pending_kobo, available_limit_kobo, cadence, default_grace_hours, start_at, end_at, state, mandate_id, mandate_active, terms_version)
-VALUES ('00000000-0000-7000-8000-000000000040', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000004', '00000000-0000-7000-8000-000000000021', 500000000, 175000000, 0, 325000000, 'friday', 48, TIMESTAMPTZ '2026-08-01 00:00:00+01', TIMESTAMPTZ '2027-08-01 00:00:00+01', 'ACTIVE', '00000000-0000-7000-8000-000000000028', true, 'trade-line-v1')
+VALUES ('00000000-0000-7000-8000-000000000040', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000004', '00000000-0000-7000-8000-000000000021', 500000000, 275000000, 0, 225000000, 'friday', 48, TIMESTAMPTZ '2026-08-01 00:00:00+01', TIMESTAMPTZ '2027-08-01 00:00:00+01', 'ACTIVE', '00000000-0000-7000-8000-000000000028', true, 'trade-line-v1')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO app.credit_requests (id,supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,currency,goods_description,invoice_reference,due_date,grace_hours,collection_at,state,created_by,created_at,updated_at,version)
@@ -154,7 +131,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO app.obligations (id,credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at)
 VALUES
-    ('00000000-0000-7000-8000-000000000071','00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000061','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000021',120000000,'NGN','ACTIVE','PARTIALLY_PAID',20000000,600000,'00000000-0000-7000-8000-000000000081',TIMESTAMPTZ '2026-08-02 10:05:00+01'),
+    ('00000000-0000-7000-8000-000000000071','00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000061','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000021',120000000,'NGN','ACTIVE','UNPAID',120000000,600000,'00000000-0000-7000-8000-000000000081',TIMESTAMPTZ '2026-08-02 10:05:00+01'),
     ('00000000-0000-7000-8000-000000000072','00000000-0000-7000-8000-000000000052','00000000-0000-7000-8000-000000000062','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000021',90000000,'NGN','ACTIVE','UNPAID',90000000,450000,'00000000-0000-7000-8000-000000000082',TIMESTAMPTZ '2026-08-08 10:05:00+01'),
     ('00000000-0000-7000-8000-000000000073','00000000-0000-7000-8000-000000000053','00000000-0000-7000-8000-000000000063','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000021',65000000,'NGN','ACTIVE','UNPAID',65000000,325000,'00000000-0000-7000-8000-000000000083',TIMESTAMPTZ '2026-08-15 10:05:00+01')
 ON CONFLICT (id) DO NOTHING;
@@ -173,25 +150,96 @@ VALUES
     ('00000000-0000-7000-8000-000000000043','00000000-0000-7000-8000-000000000040',65000000,'Pharmaceutical inventory drawdown 3','DEMO-TL-003',DATE '2026-09-15',TIMESTAMPTZ '2026-09-17 17:00:00+01',48,'trade-line-v1','21c61c3462747e630f0edf70872fb928fd088dddb4419e4c73dcc80749f409b6','ACTIVATED','00000000-0000-7000-8000-000000000073',TIMESTAMPTZ '2026-08-15 10:00:00+01','00000000-0000-7000-8000-000000000003','delivery','DEMO-RELEASE-3',TIMESTAMPTZ '2026-08-15 10:02:00+01','no_issue','00000000-0000-7000-8000-000000000004',TIMESTAMPTZ '2026-08-15 10:05:00+01',TIMESTAMPTZ '2026-08-15 10:05:00+01')
 ON CONFLICT (id) DO NOTHING;
 
--- FIX-README-A-ONE-TIME, FIX-README-B-INSTALMENTS,
--- FIX-README-D-MANDATE-CANCEL, and FIX-README-E-PARTIAL-DISPUTE are durable credit aggregates used by the supplier
--- and buyer portals. Their exact expected outcomes are kept beside the data so
--- acceptance checks can compare integer-kobo values without hidden arithmetic.
-INSERT INTO app.credit_aggregate_snapshots (credit_request_id, supplier_organization_id, buyer_user_id, aggregate, version, updated_at)
-VALUES
-    ('00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000004', jsonb_build_object('request', jsonb_build_object('id','00000000-0000-7000-8000-000000000101','supplier_organization_id','00000000-0000-7000-8000-000000000010','supplier_legal_name','ABC Pharmaceuticals Ltd','buyer_user_id','00000000-0000-7000-8000-000000000004','buyer_business_id','00000000-0000-7000-8000-000000000021','buyer_legal_name','Royal Pharmacy Ltd','principal_kobo',120000000,'currency','NGN','goods_description','Scenario A — one-time credit pharmaceutical supplies','due_date','2026-09-30','grace_hours',48,'collection_at','2026-10-02T16:00:00Z','state','ACTIVE','created_by','00000000-0000-7000-8000-000000000003','created_at','2026-08-16T09:00:00Z','updated_at','2026-10-02T17:00:00Z','version',8), 'agreement', jsonb_build_object('id','00000000-0000-7000-8000-000000000201','credit_request_id','00000000-0000-7000-8000-000000000101','version',1,'canonical_json','{}'::jsonb,'document_hash','demo-scenario-a-hash','principal_kobo',120000000,'due_date','2026-09-30','grace_hours',48,'collection_at','2026-10-02T16:00:00Z','terms_version','terms-v1','privacy_version','privacy-v1','created_by','00000000-0000-7000-8000-000000000003','created_at','2026-08-16T09:00:00Z'), 'receipts','[]'::jsonb, 'obligation', jsonb_build_object('id','00000000-0000-7000-8000-000000000301','credit_request_id','00000000-0000-7000-8000-000000000101','agreement_version_id','00000000-0000-7000-8000-000000000201','supplier_organization_id','00000000-0000-7000-8000-000000000010','buyer_business_id','00000000-0000-7000-8000-000000000021','principal_kobo',120000000,'currency','NGN','lifecycle_status','ACTIVE','payment_status','PAID','outstanding_kobo',0,'base_fee_kobo',600000,'ledger_transaction_id','00000000-0000-7000-8000-000000000401','activated_at','2026-08-16T10:00:00Z')), 8, NOW()),
-    ('00000000-0000-7000-8000-000000000102', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000004', jsonb_build_object('request', jsonb_build_object('id','00000000-0000-7000-8000-000000000102','supplier_organization_id','00000000-0000-7000-8000-000000000010','supplier_legal_name','ABC Pharmaceuticals Ltd','buyer_user_id','00000000-0000-7000-8000-000000000004','buyer_business_id','00000000-0000-7000-8000-000000000021','buyer_legal_name','Royal Pharmacy Ltd','principal_kobo',300000000,'currency','NGN','goods_description','Scenario B — six monthly instalments','due_date','2027-02-28','grace_hours',48,'collection_at','2027-03-02T16:00:00Z','state','ACTIVE','created_by','00000000-0000-7000-8000-000000000003','created_at','2026-08-16T09:00:00Z','updated_at','2026-08-16T10:00:00Z','version',6), 'agreement', jsonb_build_object('id','00000000-0000-7000-8000-000000000202','credit_request_id','00000000-0000-7000-8000-000000000102','version',1,'canonical_json','{}'::jsonb,'document_hash','demo-scenario-b-hash','principal_kobo',300000000,'due_date','2027-02-28','grace_hours',48,'collection_at','2027-03-02T16:00:00Z','terms_version','terms-v1','privacy_version','privacy-v1','created_by','00000000-0000-7000-8000-000000000003','created_at','2026-08-16T09:00:00Z'), 'receipts','[]'::jsonb, 'obligation', jsonb_build_object('id','00000000-0000-7000-8000-000000000302','credit_request_id','00000000-0000-7000-8000-000000000102','agreement_version_id','00000000-0000-7000-8000-000000000202','supplier_organization_id','00000000-0000-7000-8000-000000000010','buyer_business_id','00000000-0000-7000-8000-000000000021','principal_kobo',300000000,'currency','NGN','lifecycle_status','ACTIVE','payment_status','PARTIALLY_PAID','outstanding_kobo',237500000,'base_fee_kobo',1500000,'ledger_transaction_id','00000000-0000-7000-8000-000000000402','activated_at','2026-08-16T10:00:00Z')), 6, NOW()),
-    ('00000000-0000-7000-8000-000000000104', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000004', jsonb_build_object('request', jsonb_build_object('id','00000000-0000-7000-8000-000000000104','supplier_organization_id','00000000-0000-7000-8000-000000000010','supplier_legal_name','ABC Pharmaceuticals Ltd','buyer_user_id','00000000-0000-7000-8000-000000000004','buyer_business_id','00000000-0000-7000-8000-000000000021','buyer_legal_name','Royal Pharmacy Ltd','principal_kobo',180000000,'currency','NGN','goods_description','Scenario D — overdue after mandate cancellation','due_date','2026-08-10','grace_hours',48,'collection_at','2026-08-12T16:00:00Z','state','ACTIVE','mandate_id','00000000-0000-7000-8000-000000000029','created_by','00000000-0000-7000-8000-000000000003','created_at','2026-08-01T09:00:00Z','updated_at','2026-08-15T09:00:00Z','version',7), 'agreement', jsonb_build_object('id','00000000-0000-7000-8000-000000000204','credit_request_id','00000000-0000-7000-8000-000000000104','version',1,'canonical_json','{}'::jsonb,'document_hash','demo-scenario-d-hash','principal_kobo',180000000,'due_date','2026-08-10','grace_hours',48,'collection_at','2026-08-12T16:00:00Z','terms_version','terms-v1','privacy_version','privacy-v1','created_by','00000000-0000-7000-8000-000000000003','created_at','2026-08-01T09:00:00Z'), 'mandate', jsonb_build_object('id','00000000-0000-7000-8000-000000000029','provider','mock-collection','provider_id','demo-cancelled-mandate','user_id','00000000-0000-7000-8000-000000000004','business_id','00000000-0000-7000-8000-000000000021','status','CANCELLED','amount_ceiling_kobo',180000000), 'receipts','[]'::jsonb, 'obligation', jsonb_build_object('id','00000000-0000-7000-8000-000000000304','credit_request_id','00000000-0000-7000-8000-000000000104','agreement_version_id','00000000-0000-7000-8000-000000000204','supplier_organization_id','00000000-0000-7000-8000-000000000010','buyer_business_id','00000000-0000-7000-8000-000000000021','principal_kobo',180000000,'currency','NGN','lifecycle_status','ACTIVE','payment_status','UNPAID','outstanding_kobo',180000000,'base_fee_kobo',900000,'ledger_transaction_id','00000000-0000-7000-8000-000000000404','activated_at','2026-08-01T10:00:00Z')), 7, NOW()),
-    ('00000000-0000-7000-8000-000000000105', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000004', jsonb_build_object('request', jsonb_build_object('id','00000000-0000-7000-8000-000000000105','supplier_organization_id','00000000-0000-7000-8000-000000000010','supplier_legal_name','ABC Pharmaceuticals Ltd','buyer_user_id','00000000-0000-7000-8000-000000000004','buyer_business_id','00000000-0000-7000-8000-000000000021','buyer_legal_name','Royal Pharmacy Ltd','principal_kobo',100000000,'currency','NGN','goods_description','Scenario E — partial dispute','due_date','2026-08-20','grace_hours',48,'collection_at','2026-08-22T16:00:00Z','state','ACTIVE','created_by','00000000-0000-7000-8000-000000000003','created_at','2026-08-01T09:00:00Z','updated_at','2026-08-16T09:00:00Z','version',7), 'agreement', jsonb_build_object('id','00000000-0000-7000-8000-000000000205','credit_request_id','00000000-0000-7000-8000-000000000105','version',1,'canonical_json','{}'::jsonb,'document_hash','demo-scenario-e-hash','principal_kobo',100000000,'due_date','2026-08-20','grace_hours',48,'collection_at','2026-08-22T16:00:00Z','terms_version','terms-v1','privacy_version','privacy-v1','created_by','00000000-0000-7000-8000-000000000003','created_at','2026-08-01T09:00:00Z'), 'receipts','[]'::jsonb, 'obligation', jsonb_build_object('id','00000000-0000-7000-8000-000000000305','credit_request_id','00000000-0000-7000-8000-000000000105','agreement_version_id','00000000-0000-7000-8000-000000000205','supplier_organization_id','00000000-0000-7000-8000-000000000010','buyer_business_id','00000000-0000-7000-8000-000000000021','principal_kobo',100000000,'currency','NGN','lifecycle_status','ACTIVE','payment_status','PARTIALLY_PAID','outstanding_kobo',90000000,'base_fee_kobo',500000,'ledger_transaction_id','00000000-0000-7000-8000-000000000405','activated_at','2026-08-01T10:00:00Z')), 7, NOW())
-ON CONFLICT (credit_request_id) DO UPDATE SET aggregate=EXCLUDED.aggregate, version=EXCLUDED.version, updated_at=EXCLUDED.updated_at;
+-- The portals must read the same debts as the normalized financial tables.
+-- Earlier demo-only snapshots invented four obligations that did not exist,
+-- so bank collection and payment detail reads failed for those displayed sales.
+-- Remove only those known orphan fixtures on a repeated development seed.
+DELETE FROM app.credit_aggregate_snapshots s
+WHERE s.credit_request_id IN ('00000000-0000-7000-8000-000000000101','00000000-0000-7000-8000-000000000102','00000000-0000-7000-8000-000000000104','00000000-0000-7000-8000-000000000105')
+AND NOT EXISTS (SELECT 1 FROM app.credit_requests r WHERE r.id::text=s.credit_request_id);
+
+INSERT INTO app.repayment_schedules(obligation_id,schedule_type,timezone,allocation_policy,cadence,grace_hours,status)
+SELECT o.id,'equal','Africa/Lagos','oldest_due_first','custom',r.grace_hours,'ACTIVE'
+FROM app.obligations o JOIN app.credit_requests r ON r.id=o.credit_request_id
+WHERE r.id IN ('00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000052','00000000-0000-7000-8000-000000000053')
+ON CONFLICT(obligation_id) DO NOTHING;
+
+INSERT INTO app.schedule_items(schedule_id,sequence,principal_due_kobo,due_at,grace_hours,collection_at,allocated_kobo,state)
+SELECT s.id,1,o.principal_kobo,r.collection_at-make_interval(hours=>r.grace_hours),r.grace_hours,r.collection_at,
+       o.principal_kobo-o.outstanding_kobo,CASE WHEN o.outstanding_kobo=0 THEN 'PAID' WHEN o.outstanding_kobo<o.principal_kobo THEN 'PARTIALLY_PAID' ELSE 'OPEN' END
+FROM app.repayment_schedules s JOIN app.obligations o ON o.id=s.obligation_id JOIN app.credit_requests r ON r.id=o.credit_request_id
+WHERE r.id IN ('00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000052','00000000-0000-7000-8000-000000000053')
+ON CONFLICT(schedule_id,sequence) DO NOTHING;
+
+
+-- Real synthetic accounting evidence backs every displayed demo balance.
+INSERT INTO ledger.transactions(id,event_type,reference_type,reference_id,idempotency_key,effective_at)
+SELECT o.ledger_transaction_id,'principal_activated','obligation',o.id::text,'seed:activation:'||o.id::text,o.activated_at
+FROM app.obligations o WHERE o.id IN('00000000-0000-7000-8000-000000000071','00000000-0000-7000-8000-000000000072','00000000-0000-7000-8000-000000000073')
+ON CONFLICT(id) DO NOTHING;
+
+INSERT INTO ledger.postings(id,transaction_id,account_id,debit_kobo,credit_kobo)
+SELECT md5(o.ledger_transaction_id::text||v.code)::uuid,o.ledger_transaction_id,a.id,v.debit,v.credit
+FROM app.obligations o CROSS JOIN LATERAL (VALUES
+ ('TRADE_RECEIVABLE_CONTROL',o.principal_kobo,0::bigint),
+ ('PRINCIPAL_ORIGINATED_CONTROL',0::bigint,o.principal_kobo),
+ ('SUPPLIER_FEE_RECEIVABLE',o.base_fee_kobo,0::bigint),
+ ('PLATFORM_SERVICE_REVENUE',0::bigint,o.base_fee_kobo)) v(code,debit,credit)
+JOIN ledger.accounts a ON a.code=v.code
+WHERE o.id IN('00000000-0000-7000-8000-000000000071','00000000-0000-7000-8000-000000000072','00000000-0000-7000-8000-000000000073')
+ON CONFLICT(id) DO NOTHING;
+
+WITH recorded AS (
+ INSERT INTO app.payments(id,obligation_id,buyer_user_id,supplier_organization_id,source_type,amount_kobo,currency,state,paid_at,recorded_by,recorded_by_reference,idempotency_key)
+ VALUES('00000000-0000-7000-8000-000000000091','00000000-0000-7000-8000-000000000071','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000010','supplier_recorded_transfer',100000000,'NGN','recognized',TIMESTAMPTZ '2026-08-25 12:00:00+01','00000000-0000-7000-8000-000000000002','00000000-0000-7000-8000-000000000002','seed:payment:royal-001')
+ ON CONFLICT(id) DO NOTHING RETURNING obligation_id,amount_kobo
+)
+UPDATE app.obligations o SET outstanding_kobo=o.outstanding_kobo-recorded.amount_kobo,payment_status='PARTIALLY_PAID'
+FROM recorded WHERE o.id=recorded.obligation_id;
+
+INSERT INTO ledger.transactions(id,event_type,reference_type,reference_id,idempotency_key,effective_at)
+VALUES('00000000-0000-7000-8000-000000000092','payment_recognized','payment','00000000-0000-7000-8000-000000000091','seed:payment-journal:royal-001',TIMESTAMPTZ '2026-08-25 12:00:00+01')
+ON CONFLICT(id) DO NOTHING;
+INSERT INTO ledger.postings(id,transaction_id,account_id,debit_kobo,credit_kobo)
+SELECT md5('seed:royal-payment:'||v.code)::uuid,'00000000-0000-7000-8000-000000000092',a.id,v.debit,v.credit
+FROM (VALUES ('VOLUNTARY_SETTLEMENT_CONTROL',100000000::bigint,0::bigint),('TRADE_RECEIVABLE_CONTROL',0::bigint,100000000::bigint)) v(code,debit,credit)
+JOIN ledger.accounts a ON a.code=v.code ON CONFLICT(id) DO NOTHING;
+
+WITH allocated AS (
+ INSERT INTO app.payment_allocations(id,payment_id,obligation_id,schedule_item_id,amount_kobo,allocation_order)
+ SELECT '00000000-0000-7000-8000-000000000093','00000000-0000-7000-8000-000000000091',s.obligation_id,i.id,100000000,1
+ FROM app.repayment_schedules s JOIN app.schedule_items i ON i.schedule_id=s.id
+ WHERE s.obligation_id='00000000-0000-7000-8000-000000000071' AND i.sequence=1
+ ON CONFLICT(id) DO NOTHING RETURNING schedule_item_id,amount_kobo
+)
+UPDATE app.schedule_items i SET allocated_kobo=i.allocated_kobo+allocated.amount_kobo,state='PARTIALLY_PAID'
+FROM allocated WHERE i.id=allocated.schedule_item_id;
+
+
+INSERT INTO app.credit_aggregate_snapshots(credit_request_id,supplier_organization_id,buyer_user_id,aggregate,version,updated_at)
+SELECT r.id::text,r.supplier_organization_id::text,r.buyer_user_id::text,
+ jsonb_build_object(
+  'request',to_jsonb(r)||jsonb_build_object('supplier_legal_name',org.legal_name,'supplier_trading_name',org.trading_name,'buyer_legal_name',b.legal_name,'buyer_trading_name',b.trading_name,'schedule_type','equal','schedule_count',1,'schedule_cadence','custom'),
+  'agreement',to_jsonb(a)||jsonb_build_object('principal_kobo',r.principal_kobo,'due_date',r.due_date,'grace_hours',r.grace_hours,'collection_at',r.collection_at),
+  'acceptance',to_jsonb(ac),'receipts','[]'::jsonb,'obligation',to_jsonb(o)),r.version,r.updated_at
+FROM app.credit_requests r
+JOIN app.organizations org ON org.id=r.supplier_organization_id
+JOIN app.businesses b ON b.id=r.buyer_business_id
+JOIN app.agreement_versions a ON a.id=r.agreement_version_id
+JOIN app.agreement_acceptances ac ON ac.id=r.acceptance_id
+JOIN app.obligations o ON o.id=r.obligation_id
+WHERE r.id IN ('00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000052','00000000-0000-7000-8000-000000000053')
+ON CONFLICT(credit_request_id) DO NOTHING;
 
 -- FIX-README-F-DUPLICATE-WEBHOOK / Scenario F — duplicate provider webhook. The inbox uniqueness constraint is
--- the executable proof: three deliveries share one provider/event key and
--- therefore resolve to one stored event and one downstream financial effect.
+-- the event row represents a previously processed provider event. Actual
+-- replay and financial-effect assertions live in the collection tests.
 INSERT INTO app.provider_webhook_inbox (id, provider, event_id, event_type, payload, signature_valid, state, attempts, processed_at)
 VALUES ('00000000-0000-7000-8000-000000000060', 'mock-collection', 'scenario-f-success-event', 'collection.succeeded', '{"deliveries":3,"financial_effects":1,"receipts":1}'::jsonb, true, 'processed', 3, NOW())
-ON CONFLICT (provider, event_id) DO UPDATE SET attempts=3, state='processed', processed_at=NOW();
+ON CONFLICT (provider, event_id) DO NOTHING;
 
-INSERT INTO app_meta (key, value)
-VALUES ('acceptance_dataset', 'Scenario A one-time; Scenario B instalments; Scenario C trade line; Scenario D mandate cancellation and overdue; Scenario E partial dispute; Scenario F duplicate webhook')
-ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW();
+INSERT INTO app_meta(key,value)
+VALUES ('acceptance_dataset','Normalized Scenario C trade-line sales and schedules; Scenario F processed webhook fixture. Other lifecycle scenarios are verified by domain tests.')
+ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW();
+
+COMMIT;

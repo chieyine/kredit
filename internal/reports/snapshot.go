@@ -28,14 +28,26 @@ func (s *Store) financialSnapshot(ctx context.Context, org, buyer string) (*Stor
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true),set_config('app.current_user_id',$2,true)`, org, buyer); err != nil {
 		return nil, err
 	}
+	snapshot, err := s.financialSnapshotTx(ctx, tx, org, buyer)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return snapshot, nil
+}
+
+func (s *Store) financialSnapshotTx(ctx context.Context, tx pgx.Tx, org, buyer string) (*Store, error) {
 	rows, err := tx.Query(ctx, `SELECT s.aggregate,to_jsonb(o),
  COALESCE((SELECT jsonb_agg(to_jsonb(p)||jsonb_build_object('recorded_by',p.recorded_by_reference) ORDER BY p.recognized_at,p.id) FROM app.payments p WHERE p.obligation_id=o.id),'[]'::jsonb),
  (SELECT to_jsonb(r) FROM app.repayment_schedules r WHERE r.obligation_id=o.id),
  COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i.sequence) FROM app.schedule_items i JOIN app.repayment_schedules r ON r.id=i.schedule_id WHERE r.obligation_id=o.id),'[]'::jsonb),
  COALESCE((SELECT jsonb_agg(to_jsonb(d)) FROM app.disputes d WHERE d.obligation_id=o.id),'[]'::jsonb),
  COALESCE((SELECT SUM((a.metadata->>'amount_kobo')::bigint) FROM app.operation_actions a WHERE a.resource_id=o.id AND a.organization_id=o.supplier_organization_id AND a.action='fee_waiver'),0)
- FROM app.credit_aggregate_snapshots s JOIN app.obligations o ON o.credit_request_id::text=s.credit_request_id
- WHERE ($1='' OR s.supplier_organization_id=$1) AND ($2='' OR s.buyer_user_id=$2) ORDER BY o.activated_at,o.id`, org, buyer)
+ FROM app.obligations o JOIN app.credit_requests c ON c.id=o.credit_request_id
+ LEFT JOIN app.credit_aggregate_snapshots s ON o.credit_request_id::text=s.credit_request_id
+ WHERE ($1='' OR o.supplier_organization_id=NULLIF($1,'')::uuid) AND ($2='' OR c.buyer_user_id=NULLIF($2,'')::uuid) ORDER BY o.activated_at,o.id`, org, buyer)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +63,9 @@ func (s *Store) financialSnapshot(ctx context.Context, org, buyer string) (*Stor
 		var waived ledger.Money
 		if err = rows.Scan(&aggregate, &obligation, &paymentJSON, &scheduleJSON, &itemJSON, &disputeJSON, &waived); err != nil {
 			return nil, err
+		}
+		if len(aggregate) == 0 || string(aggregate) == "null" {
+			return nil, errors.New("obligation agreement projection is missing")
 		}
 		var view credit.View
 		var o credit.Obligation
@@ -87,11 +102,8 @@ func (s *Store) financialSnapshot(ctx context.Context, org, buyer string) (*Stor
 		return nil, err
 	}
 	rows.Close()
-	if err = tx.Commit(ctx); err != nil {
-		return nil, err
-	}
 	now := s.source.Now()
 	return NewStore(Source{Now: func() time.Time { return now }, SupplierViews: func(string) []credit.View { return views }, BuyerViews: func(string) []credit.View { return views }, Payments: func(id string) ([]payments.Payment, error) { return paymentMap[id], nil }, Schedule: func(id string) (schedules.Schedule, []schedules.Item, error) {
 		return scheduleMap[id], itemMap[id], nil
-	}, Disputes: func(id string) []disputes.Dispute { return disputeMap[id] }, FeeWaivers: func(string) map[string]ledger.Money { return waiverMap }}), nil
+	}, Disputes: func(id string) []disputes.Dispute { return disputeMap[id] }, FeeWaivers: func(context.Context, string) (map[string]ledger.Money, error) { return waiverMap, nil }}), nil
 }

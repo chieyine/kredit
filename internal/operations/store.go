@@ -1,8 +1,10 @@
 package operations
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +39,7 @@ type Store struct {
 type Service interface {
 	WriteOff(string, string, string, ledger.Money, string, string) (Action, error)
 	WaiveFee(string, string, string, ledger.Money, string, string) (Action, error)
-	ListForOrganization(string) []Action
+	ListForOrganization(context.Context, string) ([]Action, error)
 }
 
 type IdempotentService interface {
@@ -102,7 +104,7 @@ func (s *Store) adjust(actor, org, obligation string, amount ledger.Money, reaso
 	s.actions[action.ID] = action
 	return cloneAction(*action), nil
 }
-func (s *Store) ListForOrganization(org string) []Action {
+func (s *Store) ListForOrganization(_ context.Context, org string) ([]Action, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []Action{}
@@ -111,7 +113,13 @@ func (s *Store) ListForOrganization(org string) []Action {
 			out = append(out, cloneAction(*action))
 		}
 	}
-	return out
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].ID > out[j].ID
+	})
+	return out, nil
 }
 func cloneAction(v Action) Action { return v }
 func newIdentifier() string       { return identifier.New() }

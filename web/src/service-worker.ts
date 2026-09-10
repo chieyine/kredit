@@ -30,12 +30,17 @@ self.addEventListener('fetch', (event) => {
 	if (request.destination === 'document') return;
 	if (!staticAssets.has(url.pathname)) return;
 	event.respondWith(
-		caches.match(request).then(async (cached) => {
+		caches.match(request).catch(() => undefined).then(async (cached) => {
 			if (cached) return cached;
 			const response = await fetch(request);
 			if (response.ok) {
-				const cache = await caches.open(shellCache);
-				await cache.put(request, response.clone());
+				try {
+					const cache = await caches.open(shellCache);
+					await cache.put(request, response.clone());
+				} catch {
+					// Full or unavailable device storage must not turn a successful
+					// asset download into a broken page.
+				}
 			}
 			return response;
 		})

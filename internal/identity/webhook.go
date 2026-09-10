@@ -28,13 +28,13 @@ type WebhookProvider struct {
 
 func NewWebhookProvider(name, endpoint, token, webhookSecret string) (*WebhookProvider, error) {
 	parsed, err := url.Parse(endpoint)
-	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, errors.New("valid identity connector endpoint is required")
 	}
 	if strings.TrimSpace(name) == "" || strings.Contains(strings.ToLower(name), "mock") || strings.TrimSpace(token) == "" || strings.TrimSpace(webhookSecret) == "" {
 		return nil, errors.New("certified identity provider name, token, and webhook secret are required")
 	}
-	return &WebhookProvider{name: name, endpoint: strings.TrimRight(endpoint, "/"), token: token, webhookSecret: webhookSecret, client: &http.Client{Timeout: 15 * time.Second}}, nil
+	return &WebhookProvider{name: name, endpoint: strings.TrimRight(endpoint, "/"), token: token, webhookSecret: webhookSecret, client: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 
 func (p *WebhookProvider) Name() string { return p.name }

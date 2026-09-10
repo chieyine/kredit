@@ -22,12 +22,12 @@
 | Dispute reviewer | Existing dispute powers and dispute inbox. |
 | Platform administrator | All administrator functions, subject to independent approval, buyer-consent and financial invariants. |
 
-Multiple roles combine their permitted functions. Independent approval always requires a different person. Financial approvers cannot be the buyer or an active member of the supplier business. Permissions and active account/role status are checked again when applying a stored change. Team role changes require recent MFA, CSRF, an idempotency key and an audit reason. The interface includes identity confirmation for expired verification sessions.
+Multiple roles combine their permitted functions. In delegated-team mode, independent approval requires a different person. Solo-owner mode permits the current platform owner to approve their own policy or financial proposal; buyer consent and financial invariants still apply. Financial approvers cannot be the buyer or an active member of the supplier business. Permissions and active account/role status are checked again when applying a stored change. Team role changes require recent MFA, CSRF, an idempotency key and an audit reason. The interface includes identity confirmation for expired verification sessions.
 
 ## Financial corrections
 
 1. A financial operator or platform administrator loads current obligation details and submits an immutable proposal with an expiry within 30 days.
-2. Another approver reviews the exact amount and reason. The transaction locks the obligation, schedule and proposal and rechecks balances, allocations, accrued fees and pending debits.
+2. The authorized approver reviews the exact amount and reason under the configured governance mode. The transaction locks the obligation, schedule and proposal and rechecks balances, allocations, accrued fees and pending debits.
 3. An approved write-off posts one balanced journal, reduces the outstanding balance and latest unpaid schedule amounts, updates the credit projection, records decision evidence, and queues existing financial notices in one transaction. Paid allocation references remain available for reversals. Disputed instalments and pending buyer payment claims must be resolved before principal write-off.
 4. A fee waiver cannot exceed accrued, unwaived fees. Caller-supplied approver IDs never authorize a correction. Direct supplier corrections remain limited by the cumulative policy threshold; larger amounts use this workflow.
 
@@ -43,7 +43,7 @@ Changed dates produce new reminder identities and invalidate prior pre-debit not
 
 ## Deployment and limits
 
-Apply migrations 064–066 after the existing 061–063 policies/commitment migrations, using the migration owner. API and worker readiness require schema 66 and the new tables, views and functions. The migrations grant runtime access when the application roles exist. Standard roles.sql grants cover installations where roles are created later.
+Apply all migrations through 096 using the migration owner. API and worker readiness require schema 96 and the new tables, views and functions. The migrations grant runtime access when the application roles exist. Standard roles.sql grants cover installations where roles are created later.
 
 Migration 064 deliberately refuses rollback because approval/consent history must survive. Use a forward correction. No real provider calls are needed to deploy these code paths, but live Mono operation still requires separately available credentials, provider access and buyer-hosted authorization. No legal or provider certification is implied by an administrator decision.
 

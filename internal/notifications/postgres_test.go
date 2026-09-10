@@ -53,6 +53,14 @@ func TestPostgresNotificationIsDurableAndDeduplicatedBeforeProviderSend(t *testi
 	if len(provider.Messages()) != 1 {
 		t.Fatalf("provider was called %d times", len(provider.Messages()))
 	}
+	changed := event
+	changed.AmountKobo++
+	if _, err := restarted.Emit(ctx, changed); err == nil {
+		t.Fatal("changed notification amount reused the original delivery")
+	}
+	if len(provider.Messages()) != 1 {
+		t.Fatal("changed replay contacted the provider")
+	}
 	loaded := restarted.ListDeliveries(userID)
 	if len(loaded) != 1 || loaded[0].ProviderMessageID == "" {
 		t.Fatalf("restart-safe list failed: %+v", loaded)
@@ -100,6 +108,11 @@ func TestScheduledNotificationIsRecoveredAndDeliveredOnce(t *testing.T) {
 	}
 	provider := NewMockProvider(ChannelEmail)
 	restarted := NewPostgresStore(pool, "scheduled-secret")
+	// Recovery runs in daytime; the machine clock may currently be in quiet hours.
+	restarted.now = func() time.Time {
+		now := time.Now().In(time.FixedZone("Africa/Lagos", 3600))
+		return time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
+	}
 	restarted.RegisterProvider(provider)
 	ids, err := restarted.DueDeliveryIDs(ctx, 10)
 	found := false
@@ -161,6 +174,22 @@ func TestScheduledSupplierReminderRechecksWithdrawnConsent(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT state FROM app.notifications WHERE id=$1::uuid`, d[0].ID).Scan(&state); err != nil || state != StateSuppressed || len(provider.Messages()) != 0 {
 		t.Fatalf("withdrawn reminder state=%s sent=%d err=%v", state, len(provider.Messages()), err)
 	}
+	// A privacy choice made after scheduling is also checked before delivery.
+	allowed = true
+	optionalAllowed := true
+	store.SetOptionalProcessing(func(context.Context, string) (bool, error) { return optionalAllowed, nil })
+	queued, err := store.Emit(ctx, Event{ID: "privacy-due-" + user, Type: "PaymentDueSoon", RecipientID: user, OrganizationID: org, Email: "buyer@example.test", Priority: PriorityRoutine, DeferDelivery: true})
+	if err != nil || len(queued) != 1 {
+		t.Fatalf("privacy queue: %+v %v", queued, err)
+	}
+	optionalAllowed = false
+	if err = store.DeliverScheduled(ctx, queued[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT state FROM app.notifications WHERE id=$1::uuid`, queued[0].ID).Scan(&state); err != nil || state != StateSuppressed || len(provider.Messages()) != 0 {
+		t.Fatalf("privacy-restricted queued message sent: %s %v", state, err)
+	}
+
 }
 
 func TestPostgresPreferenceVersionAndFutureSuppression(t *testing.T) {
@@ -188,7 +217,7 @@ func TestPostgresPreferenceVersionAndFutureSuppression(t *testing.T) {
 	store.RegisterProvider(emailProvider)
 	store.RegisterProvider(smsProvider)
 	p, err := store.UpdatePreferences(ctx, userID, Preferences{PreferredChannel: ChannelEmail, FallbackChannel: ChannelSMS, PaymentRemindersEnabled: false, QuietStart: 22, QuietEnd: 7, Timezone: "Africa/Lagos"}, 1)
-	if err != nil || p.Version != 1 {
+	if err != nil || p.Version != 2 {
 		t.Fatalf("initial=%+v err=%v", p, err)
 	}
 	optional, err := store.Emit(ctx, Event{ID: "optional-" + userID, Type: "PaymentDueSoon", RecipientID: userID, Email: email, Priority: PriorityRoutine})
@@ -201,7 +230,7 @@ func TestPostgresPreferenceVersionAndFutureSuppression(t *testing.T) {
 	}
 	restarted := NewPostgresStore(pool, "preferences-secret")
 	loaded, err := restarted.GetPreferences(ctx, userID)
-	if err != nil || loaded.PaymentRemindersEnabled || loaded.Version != 1 {
+	if err != nil || loaded.PaymentRemindersEnabled || loaded.Version != 2 {
 		t.Fatalf("loaded=%+v err=%v", loaded, err)
 	}
 	if _, err = restarted.UpdatePreferences(ctx, userID, Preferences{PreferredChannel: ChannelEmail, FallbackChannel: ChannelSMS, Timezone: "Africa/Lagos"}, 99); err == nil {

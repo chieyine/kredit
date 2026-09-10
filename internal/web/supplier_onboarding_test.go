@@ -87,7 +87,7 @@ func TestNewSupplierOwnerReachesPilotReadyAndCanInviteSales(t *testing.T) {
 		{"settlement", http.MethodPut, "onboard-settlement", map[string]any{"provider": "mock-settlement", "provider_reference": "settlement-ref", "bank_name": "Demo Bank", "account_name": "Fresh Foods Ltd", "account_last4": "1234"}},
 		{"billing", http.MethodPut, "onboard-billing", map[string]any{"method": "split_settlement", "provider_reference": "billing-ref", "cycle": "per_settlement"}},
 		{"credit-policy", http.MethodPut, "onboard-policy", map[string]any{"credit_limit_kobo": 100000000, "payment_days": 30, "grace_hours": 48}},
-		{"consents", http.MethodPost, "onboard-consents", map[string]any{"terms_version": "supplier-terms-v1", "privacy_version": "privacy-v1"}},
+		{"consents", http.MethodPost, "onboard-consents", map[string]any{"terms_version": "supplier-terms-v2-2026-09-07", "privacy_version": "privacy-v2-2026-09-07"}},
 	} {
 		step.body["expected_version"] = getVersion()
 		r := doJSON(t, client, "/api/v1/organizations/"+org+"/onboarding/"+step.path, step.method, step.body, headers(step.key), http.StatusOK)

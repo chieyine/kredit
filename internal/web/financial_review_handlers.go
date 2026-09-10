@@ -1,7 +1,9 @@
 package web
 
 import (
+	"errors"
 	"kredit/internal/access"
+	"kredit/internal/platformops"
 	"net/http"
 )
 
@@ -46,7 +48,11 @@ func (s *Server) decideFinancialReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = s.runtime.PlatformOps.DecideFinancialReview(r.Context(), id, user.ID, in.Action, in.Reason); err != nil {
-		writeProblem(w, 409, "review_conflict", err.Error())
+		if errors.Is(err, platformops.ErrFinancialDifferenceUnresolved) {
+			writeProblem(w, 409, "financial_difference_unresolved", "Financial discrepancy remains unresolved. Correct the underlying records before closing this review.")
+		} else {
+			writeProblem(w, 409, "review_conflict", err.Error())
+		}
 		return
 	}
 	writeJSON(w, 200, map[string]any{"status": "applied"})

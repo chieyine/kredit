@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"kredit/internal/identifier"
+	"kredit/internal/legalpublication"
 )
 
 const (
-	CurrentTermsVersion   = "supplier-terms-v1"
-	CurrentPrivacyVersion = "privacy-v1"
+	CurrentTermsVersion   = legalpublication.TermsVersion
+	CurrentPrivacyVersion = legalpublication.PrivacyVersion
 	StateIncomplete       = "incomplete"
 	StateProviderReview   = "provider_review"
 	StatePilotReady       = "pilot_ready"
@@ -67,11 +68,13 @@ type Requirement struct {
 }
 
 type Summary struct {
-	State        string        `json:"state"`
-	Ready        bool          `json:"ready"`
-	Version      int64         `json:"version"`
-	Requirements []Requirement `json:"requirements"`
-	Missing      []Requirement `json:"missing"`
+	CurrentTermsVersion   string        `json:"current_terms_version"`
+	CurrentPrivacyVersion string        `json:"current_privacy_version"`
+	State                 string        `json:"state"`
+	Ready                 bool          `json:"ready"`
+	Version               int64         `json:"version"`
+	Requirements          []Requirement `json:"requirements"`
+	Missing               []Requirement `json:"missing"`
 }
 
 type Revision struct {
@@ -120,10 +123,11 @@ type Service interface {
 }
 
 type Store struct {
-	mu        sync.RWMutex
-	profiles  map[string]*Profile
-	revisions map[string][]Revision
-	now       func() time.Time
+	legalReader legalpublication.Reader
+	mu          sync.RWMutex
+	profiles    map[string]*Profile
+	revisions   map[string][]Revision
+	now         func() time.Time
 }
 
 func NewStore() *Store {
@@ -153,16 +157,24 @@ func (s *Store) Ensure(org, actor string, email, phone bool) (Profile, error) {
 }
 
 func (s *Store) Get(org string) (Profile, Summary, error) {
+	versions, err := legalpublication.Resolve(s.legalReader)
+	if err != nil {
+		return Profile{}, Summary{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	p := s.profiles[org]
 	if p == nil {
 		return Profile{}, Summary{}, errors.New("onboarding profile not found")
 	}
-	return *p, summarize(*p, s.now()), nil
+	return *p, summarize(*p, s.now(), versions), nil
 }
 
-func (s *Store) mutate(org, actor, change string, expected int64, fn func(*Profile) error) (Profile, Summary, error) {
+func (s *Store) mutate(org, actor, change string, expected int64, fn func(*Profile, legalpublication.Versions) error) (Profile, Summary, error) {
+	versions, err := legalpublication.Resolve(s.legalReader)
+	if err != nil {
+		return Profile{}, Summary{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := s.profiles[org]
@@ -172,23 +184,28 @@ func (s *Store) mutate(org, actor, change string, expected int64, fn func(*Profi
 	if expected > 0 && p.Version != int64(expected) {
 		return Profile{}, Summary{}, errors.New("onboarding profile version conflict")
 	}
-	if err := fn(p); err != nil {
+	candidate := *p
+	if err := fn(&candidate, versions); err != nil {
 		return Profile{}, Summary{}, err
 	}
+	*p = candidate
 	now := s.now()
 	oldState := p.ReadinessState
 	p.Version++
 	p.UpdatedAt = now
-	p.ReadinessState = summarize(*p, now).State
+	p.ReadinessState = summarize(*p, now, versions).State
 	if oldState != p.ReadinessState {
 		p.ReadinessChangedAt = now
 	}
 	s.revisionLocked(p, actor, change)
-	return *p, summarize(*p, now), nil
+	return *p, summarize(*p, now, versions), nil
 }
 
 func (s *Store) UpdateRepresentative(org, actor string, in RepresentativeInput) (Profile, Summary, error) {
-	return s.mutate(org, actor, "representative.updated", in.ExpectedVersion, func(p *Profile) error {
+	if in.ExpectedVersion <= 0 {
+		return Profile{}, Summary{}, errors.New("onboarding profile version is required")
+	}
+	return s.mutate(org, actor, "representative.updated", in.ExpectedVersion, func(p *Profile, _ legalpublication.Versions) error {
 		p.AuthorizedRepresentativeName = strings.TrimSpace(in.Name)
 		p.AuthorizedRepresentativeTitle = strings.TrimSpace(in.Title)
 		if p.AuthorizedRepresentativeName == "" || p.AuthorizedRepresentativeTitle == "" {
@@ -198,7 +215,7 @@ func (s *Store) UpdateRepresentative(org, actor string, in RepresentativeInput) 
 	})
 }
 func (s *Store) RecordContactVerified(org, actor, channel string) (Profile, Summary, error) {
-	return s.mutate(org, actor, "contact.verified", 0, func(p *Profile) error {
+	return s.mutate(org, actor, "contact.verified", 0, func(p *Profile, _ legalpublication.Versions) error {
 		switch channel {
 		case "email":
 			p.OwnerEmailVerifiedAt = s.now()
@@ -211,12 +228,16 @@ func (s *Store) RecordContactVerified(org, actor, channel string) (Profile, Summ
 	})
 }
 func (s *Store) SubmitKYB(org, actor, ref string, expected int64) (Profile, Summary, error) {
-	return s.mutate(org, actor, "kyb.submitted", expected, func(p *Profile) error {
+	if expected <= 0 {
+		return Profile{}, Summary{}, errors.New("onboarding profile version is required")
+	}
+	return s.mutate(org, actor, "kyb.submitted", expected, func(p *Profile, _ legalpublication.Versions) error {
 		ref = strings.TrimSpace(ref)
 		if ref == "" {
 			return errors.New("KYB provider reference is required")
 		}
 		p.KYBProviderReference, p.KYBState, p.KYBReasonCode, p.KYBSubmittedAt = ref, "submitted", "", s.now()
+		p.KYBDecidedAt, p.KYBExpiresAt = time.Time{}, time.Time{}
 		return nil
 	})
 }
@@ -225,7 +246,7 @@ func (s *Store) RecordKYBDecision(org, actor, state, reason string, expires time
 }
 
 func (s *Store) RecordKYBDecisionForReference(org, actor, providerReference string, expectedVersion int64, state, reason string, expires time.Time) (Profile, Summary, error) {
-	return s.mutate(org, actor, "kyb.decision", expectedVersion, func(p *Profile) error {
+	return s.mutate(org, actor, "kyb.decision", expectedVersion, func(p *Profile, _ legalpublication.Versions) error {
 		if state != "provider_review" && state != "approved" && state != "rejected" && state != "expired" {
 			return errors.New("invalid KYB provider state")
 		}
@@ -240,7 +261,10 @@ func (s *Store) RecordKYBDecisionForReference(org, actor, providerReference stri
 	})
 }
 func (s *Store) UpdateSettlement(org, actor string, in SettlementInput) (Profile, Summary, error) {
-	return s.mutate(org, actor, "settlement.updated", in.ExpectedVersion, func(p *Profile) error {
+	if in.ExpectedVersion <= 0 {
+		return Profile{}, Summary{}, errors.New("onboarding profile version is required")
+	}
+	return s.mutate(org, actor, "settlement.updated", in.ExpectedVersion, func(p *Profile, _ legalpublication.Versions) error {
 		if strings.TrimSpace(in.Provider) == "" || strings.TrimSpace(in.ProviderReference) == "" || len(strings.TrimSpace(in.AccountLast4)) != 4 {
 			return errors.New("provider reference and four masked account digits are required")
 		}
@@ -255,7 +279,7 @@ func (s *Store) UpdateSettlement(org, actor string, in SettlementInput) (Profile
 	})
 }
 func (s *Store) RecordSettlementDecision(org, actor, state, reason string) (Profile, Summary, error) {
-	return s.mutate(org, actor, "settlement.decision", 0, func(p *Profile) error {
+	return s.mutate(org, actor, "settlement.decision", 0, func(p *Profile, _ legalpublication.Versions) error {
 		if state != "provider_review" && state != "verified" && state != "rejected" && state != "expired" {
 			return errors.New("invalid settlement provider state")
 		}
@@ -267,7 +291,10 @@ func (s *Store) RecordSettlementDecision(org, actor, state, reason string) (Prof
 	})
 }
 func (s *Store) UpdateBilling(org, actor string, in BillingInput) (Profile, Summary, error) {
-	return s.mutate(org, actor, "billing.updated", in.ExpectedVersion, func(p *Profile) error {
+	if in.ExpectedVersion <= 0 {
+		return Profile{}, Summary{}, errors.New("onboarding profile version is required")
+	}
+	return s.mutate(org, actor, "billing.updated", in.ExpectedVersion, func(p *Profile, _ legalpublication.Versions) error {
 		if in.Method != "split_settlement" && in.Method != "authorized_debit" && in.Method != "consolidated_invoice" {
 			return errors.New("invalid billing method")
 		}
@@ -279,7 +306,10 @@ func (s *Store) UpdateBilling(org, actor string, in BillingInput) (Profile, Summ
 	})
 }
 func (s *Store) UpdateCreditPolicy(org, actor string, in CreditPolicyInput) (Profile, Summary, error) {
-	return s.mutate(org, actor, "credit_policy.updated", in.ExpectedVersion, func(p *Profile) error {
+	if in.ExpectedVersion <= 0 {
+		return Profile{}, Summary{}, errors.New("onboarding profile version is required")
+	}
+	return s.mutate(org, actor, "credit_policy.updated", in.ExpectedVersion, func(p *Profile, _ legalpublication.Versions) error {
 		if in.CreditLimitKobo <= 0 || in.PaymentDays < 1 || in.PaymentDays > 365 || in.GraceHours < 0 || in.GraceHours > 720 {
 			return errors.New("valid credit limit, payment days, and grace hours are required")
 		}
@@ -288,8 +318,11 @@ func (s *Store) UpdateCreditPolicy(org, actor string, in CreditPolicyInput) (Pro
 	})
 }
 func (s *Store) AcceptConsents(org, actor string, expected int64, terms, privacy string) (Profile, Summary, error) {
-	return s.mutate(org, actor, "consents.accepted", expected, func(p *Profile) error {
-		if terms != CurrentTermsVersion || privacy != CurrentPrivacyVersion {
+	if expected <= 0 {
+		return Profile{}, Summary{}, errors.New("onboarding profile version is required")
+	}
+	return s.mutate(org, actor, "consents.accepted", expected, func(p *Profile, versions legalpublication.Versions) error {
+		if terms != versions.Terms || privacy != versions.Privacy {
 			return errors.New("current terms and privacy versions must be accepted")
 		}
 		now := s.now()
@@ -303,10 +336,14 @@ func (s *Store) SyncSecurity(org, actor string, ownerMFA, financeMFA bool) (Prof
 	if current != nil && (!current.OwnerMFAVerifiedAt.IsZero()) == ownerMFA && current.FinanceMFAComplete == financeMFA {
 		profile := *current
 		s.mu.RUnlock()
-		return profile, summarize(profile, s.now()), nil
+		versions, err := legalpublication.Resolve(s.legalReader)
+		if err != nil {
+			return Profile{}, Summary{}, err
+		}
+		return profile, summarize(profile, s.now(), versions), nil
 	}
 	s.mu.RUnlock()
-	return s.mutate(org, actor, "security.synced", 0, func(p *Profile) error {
+	return s.mutate(org, actor, "security.synced", 0, func(p *Profile, _ legalpublication.Versions) error {
 		if ownerMFA && p.OwnerMFAVerifiedAt.IsZero() {
 			p.OwnerMFAVerifiedAt = s.now()
 		} else if !ownerMFA {
@@ -318,6 +355,10 @@ func (s *Store) SyncSecurity(org, actor string, ownerMFA, financeMFA bool) (Prof
 }
 
 func (s *Store) Reconcile(now time.Time) []Profile {
+	versions, err := legalpublication.Resolve(s.legalReader)
+	if err != nil {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var changed []Profile
@@ -326,7 +367,7 @@ func (s *Store) Reconcile(now time.Time) []Profile {
 		if expired {
 			p.KYBState = "expired"
 		}
-		state := summarize(*p, now).State
+		state := summarize(*p, now, versions).State
 		if expired || state != p.ReadinessState {
 			p.ReadinessState = state
 			p.ReadinessChangedAt = now
@@ -339,7 +380,11 @@ func (s *Store) Reconcile(now time.Time) []Profile {
 	return changed
 }
 
-func summarize(p Profile, now time.Time) Summary {
+func summarize(p Profile, now time.Time, selected ...legalpublication.Versions) Summary {
+	versions := legalpublication.Initial()
+	if len(selected) > 0 {
+		versions = selected[0]
+	}
 	kybApproved := p.KYBState == "approved" && (p.KYBExpiresAt.IsZero() || now.Before(p.KYBExpiresAt))
 	reqs := []Requirement{
 		{Code: "business_identity", Label: "Business identity and authorised representative", Complete: p.AuthorizedRepresentativeName != "" && p.AuthorizedRepresentativeTitle != "", ManagePath: "/app/onboarding"},
@@ -349,7 +394,7 @@ func summarize(p Profile, now time.Time) Summary {
 		{Code: "settlement_verified", Label: "Settlement destination verified", Complete: p.SettlementState == "verified", ManagePath: "/app/settings/settlement"},
 		{Code: "billing_configured", Label: "Billing method configured", Complete: p.BillingState == "configured", ManagePath: "/app/settings/billing"},
 		{Code: "credit_policy", Label: "Default credit policy configured", Complete: !p.DefaultCreditPolicyUpdatedAt.IsZero(), ManagePath: "/app/settings/credit-policy"},
-		{Code: "current_consents", Label: "Current terms and privacy accepted", Complete: p.TermsVersion == CurrentTermsVersion && p.PrivacyVersion == CurrentPrivacyVersion, ManagePath: "/app/onboarding"},
+		{Code: "current_consents", Label: "Current terms and privacy accepted", Complete: p.TermsVersion == versions.Terms && p.PrivacyVersion == versions.Privacy, ManagePath: "/app/onboarding"},
 		{Code: "owner_mfa", Label: "Owner MFA active", Complete: !p.OwnerMFAVerifiedAt.IsZero(), ManagePath: "/app/settings/security"},
 		{Code: "finance_mfa", Label: "Every active finance user has MFA", Complete: p.FinanceMFAComplete, ManagePath: "/app/team"},
 	}
@@ -369,9 +414,12 @@ func summarize(p Profile, now time.Time) Summary {
 	} else if p.KYBState == "submitted" || p.KYBState == "provider_review" || p.SettlementState == "pending_verification" || p.SettlementState == "provider_review" {
 		state = StateProviderReview
 	}
-	return Summary{State: state, Ready: state == StatePilotReady, Version: p.Version, Requirements: reqs, Missing: missing}
+	return Summary{CurrentTermsVersion: versions.Terms, CurrentPrivacyVersion: versions.Privacy, State: state, Ready: state == StatePilotReady, Version: p.Version, Requirements: reqs, Missing: missing}
 }
 
 func (s *Store) revisionLocked(p *Profile, actor, change string) {
 	s.revisions[p.OrganizationID] = append(s.revisions[p.OrganizationID], Revision{ID: identifier.New(), OrganizationID: p.OrganizationID, ProfileVersion: p.Version, ChangeType: change, ActorUserID: actor, CreatedAt: s.now()})
 }
+
+// SetLegalReader is configured before the store begins serving requests.
+func (s *Store) SetLegalReader(reader legalpublication.Reader) { s.legalReader = reader }

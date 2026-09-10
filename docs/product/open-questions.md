@@ -276,7 +276,7 @@ Reasoning:
 
 **Draft decision: yes in principle, but do not wire it for the pilot.**
 
-The constraints are now in place (README section 8.3.1, migration 070): a
+Historical design (README section 8.3.1, migration 070) required a
 delivered notice, a buyer with history, and a full 72-hour window. That work was
 worth doing, because it means the safe version is what gets switched on if it
 ever is.
@@ -291,8 +291,7 @@ the operational constraint, and the candidate-selection defect recorded in
 `IMPLEMENTATION_STATUS.md` is fixed (the Postgres sweep currently scans a
 process-local cache rather than the database).
 
-`DEEMED_ACCEPTANCE_MIN_HOURS=72` stays configured so the guard is in force the
-moment anything does reach that path.
+Migration 076 disables deemed acceptance in the database. `DEEMED_ACCEPTANCE_MIN_HOURS=72` does not enable it; any future change requires an explicit implementation and review.
 
 ## EXT-011 — Cross-supplier trade history
 
@@ -324,23 +323,15 @@ to the licensing question may make several of them moot.
 
 ## EXT-012 — Operations surfaces
 
-**Draft decision:**
+**Owner instruction, updated 9 September 2026:** enable the complete admin surface so supported configuration and operational actions are available to the owner.
 
 ```
-ADMIN_SURFACES=overview,attention,capabilities,approval-inbox,cases,disputes,money,search,users,organizations,jobs,provider-events,audit,analytics,account-recovery,privacy-requests,admin-changes,review-assignments,change-context,change-history,financial-reconciliation,team,metrics,diagnostics
+ADMIN_SURFACES=all
 ```
 
-Deferred: `business-policies` and `commands`. Policy proposal workflows assume an
-operating scale a first pilot does not have, and the operations command path is
-the highest-privilege surface in the product — enable it the day you first
-genuinely need it, with a record of who asked and why.
+Business policies, platform settings and operational commands remain protected by their individual roles, fresh authentication, validation and audit requirements. Solo-owner decisions follow the owner-authorised path; delegated-team decisions keep the applicable independent-approval requirements. Enabling an admin route does not enable a financial provider or optional customer feature.
 
-The dual-control admin change workflow stays enabled. It is a safety control, not
-surface area, and disabling it to shrink the attack surface would enlarge the
-risk it exists to manage.
-
-Additions are approved by the launch owner and recorded with the same evidence as
-any other privileged grant. See `docs/operations/admin-surface-enablement.md`.
+See `docs/operations/admin-surface-enablement.md` and `docs/product/public-launch-and-admin-controls.md`.
 
 ## EXT-013 — Halt thresholds
 

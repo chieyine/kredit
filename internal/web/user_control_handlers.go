@@ -1,13 +1,17 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
-	"kredit/internal/auth"
 	"kredit/internal/notifications"
+	"kredit/internal/usercontrol"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Server) getNotificationPreferences(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +92,7 @@ func (s *Server) requestAccountRecovery(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	id, _ := s.runtime.UserControl.RequestRecovery(r.Context(), in.Identifier, in.Channel, r.RemoteAddr)
+	id, _ := s.runtime.UserControl.RequestRecovery(r.Context(), in.Identifier, in.Channel, clientIP(r))
 	if id != "" {
 		if req, err := s.runtime.UserControl.Recovery(r.Context(), id); err == nil {
 			if err := s.runtime.UserControl.SendRecoveryInstructions(r.Context(), req, ""); err != nil {
@@ -244,17 +248,35 @@ func (s *Server) createPrivacyRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok || !s.requireCSRF(w, r) {
 		return
 	}
-	if session.AuthenticationLevel != auth.AAL2 {
-		writeProblem(w, 403, "privacy_identity_check_required", "Step-up authentication is required to submit a privacy request.")
+	if !s.requireFreshMFA(w, session) {
 		return
 	}
 	var in privacyCreateInput
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
+	in.OrganizationID = strings.TrimSpace(in.OrganizationID)
+	if in.OrganizationID != "" {
+		parsed, err := uuid.Parse(in.OrganizationID)
+		if err != nil {
+			writeProblem(w, 400, "privacy_request_invalid", "Choose a valid business.")
+			return
+		}
+		in.OrganizationID = parsed.String()
+		if _, _, _, allowed := s.requireOrganizationAccess(w, r, in.OrganizationID, access.PermissionReadOrganization); !allowed {
+			return
+		}
+	}
 	item, err := s.runtime.UserControl.CreatePrivacyRequest(r.Context(), user.ID, in.OrganizationID, in.RequestType, in.Details)
 	if err != nil {
-		writeProblem(w, 400, "privacy_request_invalid", err.Error())
+		switch {
+		case errors.Is(err, usercontrol.ErrPrivacyRequestInvalid):
+			writeProblem(w, 400, "privacy_request_invalid", "Check the request type and details.")
+		case errors.Is(err, usercontrol.ErrPrivacyOrganizationForbidden):
+			writeProblem(w, 403, "privacy_organization_forbidden", "Your access to this business changed. Submit a personal request or reload your business access.")
+		default:
+			writeProblem(w, 503, "privacy_request_unavailable", "The request could not be confirmed. Check your requests before retrying.")
+		}
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "privacy.request_received", ResourceType: "privacy_request", ResourceID: item.ID})
@@ -275,16 +297,25 @@ func (s *Server) listMyPrivacyRequests(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) downloadPrivacyExport(w http.ResponseWriter, r *http.Request) {
-	_, user, ok := s.requireAuth(w, r)
-	if !ok {
+	session, user, ok := s.requireAuth(w, r)
+	if !ok || !s.requireFreshMFA(w, session) {
+		return
+	}
+	if _, err := uuid.Parse(r.PathValue("requestID")); err != nil {
+		writeProblem(w, 404, "privacy_export_unavailable", "The export is not available.")
 		return
 	}
 	payload, err := s.runtime.UserControl.PrivacyExport(r.Context(), r.PathValue("requestID"), user.ID)
 	if err != nil {
-		writeProblem(w, 404, "privacy_export_unavailable", err.Error())
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeProblem(w, 404, "privacy_export_unavailable", "The export is not available or has expired.")
+		} else {
+			writeProblem(w, 503, "privacy_export_unavailable", "Your export could not be opened. Try again later.")
+		}
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "privacy.export_downloaded", ResourceType: "privacy_request", ResourceID: r.PathValue("requestID"), Severity: "notice"})
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", "attachment; filename=kredit-privacy-export.json")
 	_, _ = w.Write(payload)
@@ -328,6 +359,7 @@ func (s *Server) decidePrivacyRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 type privacyCompleteInput struct {
+	Reason             string `json:"reason"`
 	DecisionReviewerID string `json:"decision_reviewer_id"`
 	ExpectedVersion    int64  `json:"expected_version"`
 }
@@ -341,7 +373,7 @@ func (s *Server) completePrivacyRequest(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	item, err := s.runtime.UserControl.CompletePrivacy(r.Context(), r.PathValue("requestID"), in.DecisionReviewerID, user.ID, in.ExpectedVersion)
+	item, err := s.runtime.UserControl.CompletePrivacyWithReason(r.Context(), r.PathValue("requestID"), in.DecisionReviewerID, user.ID, in.ExpectedVersion, in.Reason)
 	if err != nil {
 		writeProblem(w, 409, "privacy_request_conflict", err.Error())
 		return

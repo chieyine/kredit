@@ -304,6 +304,23 @@ func TestCollectionWorkerRoleCanPostAndReconcilePayment(t *testing.T) {
 	if err = worker.QueryRow(ctx, `SELECT app.credit_snapshot_by_id($1)`, f.request).Scan(&snapshot); err != nil {
 		t.Fatal(err)
 	}
+	if len(snapshot) != 0 {
+		t.Fatal("unscoped worker could read a tenant credit snapshot")
+	}
+	tx, err := worker.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true), set_config('app.current_organization_id',$2,true)`, f.user, f.organization); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.QueryRow(ctx, `SELECT app.credit_snapshot_by_id($1)`, f.request).Scan(&snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot) == 0 {
+		t.Fatal("scoped worker could not read its credit snapshot")
+	}
 	if _, err = worker.Exec(ctx, `SELECT * FROM app.payment_mandate_by_provider('mono-sweep','nonexistent-test-reference')`); err != nil {
 		t.Fatal(err)
 	}

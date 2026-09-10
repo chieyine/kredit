@@ -2,6 +2,8 @@ package paymentclaims
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -38,6 +40,44 @@ func TestClaimHoldExpiresAndDecisionRequiresPayment(t *testing.T) {
 	}
 	if got := store.ActiveHold(context.Background(), "obligation-1", expiring.HoldExpiresAt); got != 0 {
 		t.Fatalf("expired hold=%d", got)
+	}
+	if _, err := store.Decide(context.Background(), expiring.ID, "supplier-1", Rejected, "Transfer could not be verified", ""); err != nil {
+		t.Fatal("expired collection hold prevented claim review", err)
+	}
+}
+
+func TestClaimHoldsCannotOverflowAndReturnedReviewsCannotChangeHistory(t *testing.T) {
+	ctx := context.Background()
+	store := NewStore(func(id string) (ObligationSnapshot, error) {
+		return ObligationSnapshot{ID: id, BuyerUserID: "buyer", OutstandingKobo: ledger.Money(math.MaxInt64), Currency: "NGN"}, nil
+	})
+	var claim Claim
+	for i := 0; i < 2; i++ {
+		var err error
+		claim, err = store.Create(ctx, CreateInput{ObligationID: "debt", BuyerUserID: "buyer", AmountKobo: ledger.Money(math.MaxInt64), TransferReference: fmt.Sprint(i), IdempotencyKey: fmt.Sprint(i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if hold := store.ActiveHold(ctx, "debt", time.Now()); hold != ledger.Money(math.MaxInt64) {
+		t.Fatalf("overflowed hold: %d", hold)
+	}
+	decided, err := store.Decide(ctx, claim.ID, "reviewer", Rejected, "Transfer could not be verified", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := *decided.ReviewedAt
+	*decided.ReviewedAt = time.Time{}
+	loaded, err := store.Get(ctx, claim.ID)
+	if err != nil || !loaded.ReviewedAt.Equal(original) {
+		t.Fatalf("external mutation changed review: %+v %v", loaded, err)
+	}
+	*loaded.ReviewedAt = time.Time{}
+	again := store.ListForObligation(ctx, "debt")
+	for _, item := range again {
+		if item.ID == claim.ID && !item.ReviewedAt.Equal(original) {
+			t.Fatal("read exposed mutable review")
+		}
 	}
 }
 

@@ -1,5 +1,10 @@
 # README implementation gap audit
 
+> Historical assessment of an earlier source revision. The September 9 direct
+> audit is still in progress and has found additional code and seed defects.
+> Completion and test claims below do not certify the current working tree.
+> See [the current file ledger](../launch-audit-2026-09-08/FILE-BY-FILE.md).
+
 Audit date: 29 August 2026
 
 Implementation sequence: `docs/product/readme-completion-plan.md`.

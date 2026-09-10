@@ -6,6 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"kredit/internal/audit"
+	"kredit/internal/db"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -74,6 +77,7 @@ type UserSummary struct {
 	DisplayName         string     `json:"display_name"`
 	Identifier          string     `json:"identifier"`
 	Status              string     `json:"status"`
+	Version             int64      `json:"version"`
 	OrganizationCount   int64      `json:"organization_count"`
 	LastAuthenticatedAt *time.Time `json:"last_authenticated_at,omitempty"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -212,9 +216,22 @@ func (s *Store) Search(ctx context.Context, query string) ([]SearchResult, error
 	if len(query) < 4 || len(query) > 128 {
 		return nil, errors.New("search reference must be between 4 and 128 characters")
 	}
-	rows, err := s.pool.Query(ctx, `
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if identity, ok := db.TenantFromContext(ctx); ok {
+		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, identity.UserID); err != nil {
+			return nil, err
+		}
+	}
+	rows, err := tx.Query(ctx, `
 		SELECT kind,id,organization_id,state,reference FROM (
 			SELECT 'credit_request' kind,cr.id::text id,cr.supplier_organization_id::text organization_id,cr.state,cr.id::text reference FROM app.credit_requests cr
+			UNION ALL SELECT 'document',d.id::text,COALESCE(d.organization_id::text,''),d.scan_state,d.id::text FROM app.documents d
 			UNION ALL SELECT 'payment',p.id::text,o.supplier_organization_id::text,p.state,COALESCE(p.provider_reference,p.id::text) FROM app.payments p JOIN app.obligations o ON o.id=p.obligation_id
 			UNION ALL SELECT 'collection',ca.id::text,o.supplier_organization_id::text,ca.state,ca.external_reference FROM app.collection_attempts ca JOIN app.obligations o ON o.id=ca.obligation_id
 			UNION ALL SELECT 'support_case',sc.id::text,COALESCE(sc.organization_id::text,''),sc.state,sc.id::text FROM app.support_cases sc
@@ -247,7 +264,11 @@ func (s *Store) Audit(ctx context.Context, organizationID string, limit int) ([]
 	items := make([]AuditEvent, 0)
 	for rows.Next() {
 		var item AuditEvent
-		if err := rows.Scan(&item.ID, &item.OccurredAt, &item.ActorUserID, &item.OrganizationID, &item.Action, &item.ResourceType, &item.ResourceID, &item.Outcome, &item.Severity, &item.RequestID, &item.Metadata); err != nil {
+		var metadata []byte
+		if err := rows.Scan(&item.ID, &item.OccurredAt, &item.ActorUserID, &item.OrganizationID, &item.Action, &item.ResourceType, &item.ResourceID, &item.Outcome, &item.Severity, &item.RequestID, &metadata); err != nil {
+			return nil, err
+		}
+		if item.Metadata, err = audit.DecodeMetadata(metadata); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -260,7 +281,7 @@ func (s *Store) Users(ctx context.Context, query string, limit int) ([]UserSumma
 		return nil, errors.New("operations database is not configured")
 	}
 	query = strings.TrimSpace(query)
-	rows, err := s.pool.Query(ctx, `SELECT u.id::text,COALESCE(NULLIF(u.display_name,''),'Kredit user'),COALESCE(u.normalized_email,u.normalized_phone,''),u.status,count(DISTINCT m.organization_id),u.last_authenticated_at,u.created_at FROM app.users u LEFT JOIN app.memberships m ON m.user_id=u.id AND m.status IN('active','invited','suspended') WHERE ($1='' OR u.id::text=$1 OR lower(COALESCE(u.normalized_email,''))=lower($1) OR COALESCE(u.normalized_phone,'')=$1 OR lower(COALESCE(u.display_name,'')) LIKE '%'||lower($1)||'%') GROUP BY u.id ORDER BY u.created_at DESC LIMIT $2`, query, normalizeLimit(limit))
+	rows, err := s.pool.Query(ctx, `SELECT u.id::text,COALESCE(NULLIF(u.display_name,''),'Kredit user'),COALESCE(u.normalized_email,u.normalized_phone,''),u.status,count(DISTINCT m.organization_id),u.last_authenticated_at,u.created_at,u.version FROM app.users u LEFT JOIN app.memberships m ON m.user_id=u.id AND m.status IN('active','invited','suspended') WHERE ($1='' OR u.id::text=$1 OR lower(COALESCE(u.normalized_email,''))=lower($1) OR COALESCE(u.normalized_phone,'')=$1 OR lower(COALESCE(u.display_name,'')) LIKE '%'||lower($1)||'%') GROUP BY u.id ORDER BY u.created_at DESC LIMIT $2`, query, normalizeLimit(limit))
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +289,7 @@ func (s *Store) Users(ctx context.Context, query string, limit int) ([]UserSumma
 	items := make([]UserSummary, 0)
 	for rows.Next() {
 		var item UserSummary
-		if err := rows.Scan(&item.ID, &item.DisplayName, &item.Identifier, &item.Status, &item.OrganizationCount, &item.LastAuthenticatedAt, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.DisplayName, &item.Identifier, &item.Status, &item.OrganizationCount, &item.LastAuthenticatedAt, &item.CreatedAt, &item.Version); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -417,7 +438,7 @@ func (s *Store) GrantRole(ctx context.Context, actorID, userID, role, reason str
 		INSERT INTO app.platform_role_assignments(user_id,role,granted_by,reason,expires_at)
 		VALUES($1::uuid,$2,$3::uuid,$4,$5)
 		ON CONFLICT(user_id,role) WHERE revoked_at IS NULL
-		DO UPDATE SET reason=EXCLUDED.reason,expires_at=EXCLUDED.expires_at
+		DO UPDATE SET reason=EXCLUDED.reason,expires_at=EXCLUDED.expires_at,granted_by=EXCLUDED.granted_by,granted_at=clock_timestamp()
 		RETURNING id,user_id,role,granted_at,expires_at
 	)
 	SELECT a.id::text,a.user_id::text,COALESCE(NULLIF(u.display_name,''),'Kredit administrator'),COALESCE(u.normalized_email,u.normalized_phone,''),a.role,a.granted_at,a.expires_at

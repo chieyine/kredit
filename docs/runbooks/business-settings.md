@@ -21,18 +21,18 @@ There are 18 configurable fields. Monetary policy values are whole kobo; 100 kob
 1. Refresh the settings and review the current revision.
 2. Edit the values, review the displayed changes, give a business reason, and choose a future effective date in Lagos time, within one year.
 3. Submit the proposal. No active setting changes at this point.
-4. A different active approver or platform administrator reviews the exact immutable proposal and records an approval or rejection before its effective date. A revoked or suspended proposer cannot have an old proposal approved.
+4. In delegated-team mode, a different active approver or platform administrator reviews the exact immutable proposal and records an approval or rejection before its effective date. A revoked or suspended proposer cannot have an old proposal approved.
 5. An approved proposal takes effect according to database time. API/worker policy reads do not require a restart. A transaction already in progress uses the policy it read; bank submissions already made cannot be recalled by the switch.
 
 Only one pending or future scheduled change is permitted at a time. A stale revision, conflicting proposal identifier, incomplete JSON snapshot, or invalid combination is rejected. A scheduled change can be cancelled before it becomes effective. To revert an active policy, submit a new proposal using the desired previous values; history is never edited. Settings display the last 100 changes. `/admin/history` searches all retained changes with pagination, original values, named actors, decision reasons and a CSV export of each page.
 
-For an urgent customer-specific stop, the existing risk-hold controls remain available. The business settings workflow requires independent approval even when pausing all new collections.
+For an urgent customer-specific stop, the existing risk-hold controls remain available. Delegated-team mode requires independent approval even when pausing all new collections. In solo-owner mode the current platform owner may approve their own policy; the approval and immutable history remain required.
 
 ## Deployment boundary
 
 Database-backed runtimes seed initial policy values from deployment configuration exactly once. Subsequent environment changes do not silently replace saved settings. The startup check validates both active and scheduled policies against deployment ceilings. Lower admin limits before tightening deployment ceilings; otherwise the new deployment will fail readiness rather than run with conflicting approvals.
 
-Secrets, provider endpoints, provider capability/real-money enablement, Mono certification, partial Sweep capability, identity/WhatsApp integrations, live supplier billing, legal/retention/launch approvals, currency and ledger invariants remain deployment controls. An admin switch cannot manufacture provider approval or implement an unavailable provider capability. Approved deployment count/exposure/principal/attempt ceilings, industry restrictions, enhanced-review threshold and notice floor continue to constrain policy changes.
+Supported provider credentials, endpoints, enablement, approval references and pilot limits can be managed by the owner in Admin → Platform settings → Connections. Notification overrides apply to the next delivery; identity, collection and scanner changes require API and worker restarts. Database/storage connections, root keys, currency and ledger invariants remain deployment controls. An admin switch cannot manufacture provider approval or implement an unavailable provider capability. Approved deployment count/exposure/principal/attempt ceilings, industry restrictions, enhanced-review threshold and notice floor continue to constrain policy changes.
 
 ## Existing agreements and published prices
 
@@ -42,7 +42,7 @@ Public pricing reads `/api/v1/pricing` without caching. Buyer and supplier offer
 
 ## Deployment and rollback
 
-Apply migrations 061 through 066 with the migration owner, then apply `infra/postgres/roles.sql` according to the deployment procedure. API and worker startup require schema version 66, the policy functions/tables and the fee-term columns. The role template covers policy authorization and sequence permissions.
+Apply all migrations through 096 with the migration owner, then apply `infra/postgres/roles.sql` according to the deployment procedure. API and worker startup require schema version 96, the policy functions/tables and the fee-term columns. The role template covers policy authorization and sequence permissions.
 
 The demo seed command is development-only and initializes deployment defaults before synthetic fixtures. Use a disposable database for the integration suite; it intentionally creates financial records and exercises immutable history.
 

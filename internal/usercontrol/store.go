@@ -8,11 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"kredit/internal/access"
+	"maps"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -57,13 +60,14 @@ type PrivacyRequest struct {
 	CompletedAt      time.Time `json:"completed_at,omitempty"`
 	ExportReference  string    `json:"export_reference,omitempty"`
 	ExportExpiresAt  time.Time `json:"export_expires_at,omitempty"`
+	CompletionReason string    `json:"completion_reason,omitempty"`
 }
 
 type Store struct {
 	recoveryDelivery func(context.Context, RecoveryRequest, string) error
 	recoveryReset    func(string) error
 	mu               sync.Mutex
-	pool             *pgxpool.Pool
+	pool             controlDatabase
 	secret           []byte
 	now              func() time.Time
 	users            map[string]string
@@ -74,6 +78,13 @@ type Store struct {
 	privacy          map[string]*PrivacyRequest
 	restrictions     map[string]bool
 	rate             map[string][]time.Time
+}
+
+type controlDatabase interface {
+	Begin(context.Context) (pgx.Tx, error)
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
 func NewStore(secret string) *Store {
@@ -89,6 +100,11 @@ func NewPostgresStore(pool *pgxpool.Pool, secret string) *Store {
 func (s *Store) BindUser(userID, email, phone string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for identifier, owner := range s.users {
+		if owner == userID {
+			delete(s.users, identifier)
+		}
+	}
 	if email != "" {
 		s.users[normalize(email)] = userID
 	}
@@ -111,6 +127,9 @@ func (s *Store) GenerateRecoveryCodes(ctx context.Context, userID string) ([]str
 			return nil, err
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
+		if _, err = tx.Exec(ctx, `SELECT id FROM app.users WHERE id=$1::uuid FOR UPDATE`, userID); err != nil {
+			return nil, err
+		}
 		if _, err = tx.Exec(ctx, `UPDATE app.account_recovery_codes SET state='REVOKED' WHERE user_id=$1::uuid AND state='ACTIVE'`, userID); err != nil {
 			return nil, err
 		}
@@ -160,15 +179,29 @@ func (s *Store) RequestRecovery(ctx context.Context, identifier, channel, finger
 		} else if err != nil {
 			return "", err
 		}
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if _, err = tx.Exec(ctx, `WITH expired AS (
+			UPDATE app.account_recovery_requests SET state='EXPIRED',version=version+1,updated_at=now()
+			WHERE target_user_id=$1::uuid AND state IN ('PENDING_VERIFICATION','PENDING_REVIEW','COOLING_OFF','APPROVED') AND expires_at<=now() RETURNING id)
+			INSERT INTO app.account_recovery_events(request_id,event_type,actor_reference) SELECT id,'account.recovery_expired','system:expiry' FROM expired`, userID); err != nil {
+			return "", err
+		}
 		var id string
-		err := s.pool.QueryRow(ctx, `INSERT INTO app.account_recovery_requests(target_user_id,requested_channel,request_fingerprint,risk_facts) VALUES($1::uuid,$2,$3,$4) ON CONFLICT(target_user_id) WHERE state IN ('PENDING_VERIFICATION','PENDING_REVIEW','COOLING_OFF','APPROVED') DO NOTHING RETURNING id::text`, userID, channel, s.digest(fingerprint), jsonBytes(map[string]string{"request_channel": channel})).Scan(&id)
+		err = tx.QueryRow(ctx, `INSERT INTO app.account_recovery_requests(target_user_id,requested_channel,request_fingerprint,risk_facts) VALUES($1::uuid,$2,$3,$4) ON CONFLICT(target_user_id) WHERE state IN ('PENDING_VERIFICATION','PENDING_REVIEW','COOLING_OFF','APPROVED') DO NOTHING RETURNING id::text`, userID, channel, s.digest(fingerprint), jsonBytes(map[string]string{"request_channel": channel})).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
 		if err == nil {
-			_, err = s.pool.Exec(ctx, `INSERT INTO app.account_recovery_events(request_id,event_type,actor_reference) VALUES($1::uuid,'account.recovery_requested','public:self-service')`, id)
+			_, err = tx.Exec(ctx, `INSERT INTO app.account_recovery_events(request_id,event_type,actor_reference) VALUES($1::uuid,'account.recovery_requested','public:self-service')`, id)
 		}
-		return id, err
+		if err != nil {
+			return "", err
+		}
+		return id, tx.Commit(ctx)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -191,6 +224,11 @@ func (s *Store) RequestRecovery(ctx context.Context, identifier, channel, finger
 	}
 	for _, r := range s.recoveries {
 		if r.TargetUserID == userID && (r.State == RecoveryPendingVerification || r.State == RecoveryPendingReview || r.State == RecoveryCoolingOff) {
+			if !s.now().Before(r.ExpiresAt) {
+				r.State = "EXPIRED"
+				r.Version++
+				continue
+			}
 			return "", nil
 		}
 	}
@@ -215,6 +253,9 @@ func (s *Store) AddRecoveryEvidence(ctx context.Context, requestID, factor, proo
 	if r == nil || r.State != RecoveryPendingVerification || !s.now().Before(r.ExpiresAt) {
 		return RecoveryRequest{}, errors.New("recovery request is invalid")
 	}
+	if s.evidence[requestID][factor] {
+		return RecoveryRequest{}, errors.New("recovery evidence was already used")
+	}
 	if factor == "recovery_code" {
 		h := hex.EncodeToString(s.digest(proof))
 		if !s.codes[r.TargetUserID][h] {
@@ -222,16 +263,13 @@ func (s *Store) AddRecoveryEvidence(ctx context.Context, requestID, factor, proo
 		}
 		delete(s.codes[r.TargetUserID], h)
 	}
-	if s.evidence[requestID][factor] {
-		return RecoveryRequest{}, errors.New("recovery evidence was already used")
-	}
 	s.evidence[requestID][factor] = true
 	r.IndependentFactorCount = len(s.evidence[requestID])
 	r.Version++
 	if r.IndependentFactorCount >= 2 && !onlyPhone(s.evidence[requestID]) {
 		r.State = RecoveryPendingReview
 	}
-	return *r, nil
+	return cloneRecovery(*r), nil
 }
 
 func (s *Store) addRecoveryEvidencePG(ctx context.Context, requestID, factor, proof string) (RecoveryRequest, error) {
@@ -282,7 +320,7 @@ func (s *Store) addRecoveryEvidencePG(ctx context.Context, requestID, factor, pr
 }
 
 func (s *Store) ReviewRecovery(ctx context.Context, requestID, reviewerID, decision, reason string, expectedVersion int64) (RecoveryRequest, string, error) {
-	if len(strings.TrimSpace(reason)) < 8 || (decision != "approve" && decision != "reject") {
+	if strings.TrimSpace(reviewerID) == "" || len(strings.TrimSpace(reason)) < 8 || len(reason) > 2000 || (decision != "approve" && decision != "reject") {
 		return RecoveryRequest{}, "", errors.New("recovery decision is invalid")
 	}
 	if s.pool == nil {
@@ -294,13 +332,16 @@ func (s *Store) ReviewRecovery(ctx context.Context, requestID, reviewerID, decis
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	r, err := loadRecovery(ctx, tx, requestID, true)
-	if err != nil || r.State != RecoveryPendingReview || r.Version != expectedVersion || r.TargetUserID == reviewerID {
+	if err != nil || r.State != RecoveryPendingReview || r.Version != expectedVersion || r.TargetUserID == reviewerID || !s.now().Before(r.ExpiresAt) {
 		return RecoveryRequest{}, "", errors.New("recovery conflict")
 	}
 	state := "REJECTED"
 	var until *time.Time
 	token := ""
 	if decision == "approve" {
+		if !s.now().Add(24 * time.Hour).Before(r.ExpiresAt) {
+			return RecoveryRequest{}, "", errors.New("recovery expires before cooling off completes; reject it and request a new recovery")
+		}
 		state = RecoveryCoolingOff
 		t := s.now().Add(24 * time.Hour)
 		until = &t
@@ -333,11 +374,14 @@ func (s *Store) reviewRecoveryMemory(ctx context.Context, id, reviewer, decision
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.recoveries[id]
-	if r == nil || r.State != RecoveryPendingReview || r.Version != version || r.TargetUserID == reviewer {
+	if r == nil || r.State != RecoveryPendingReview || r.Version != version || r.TargetUserID == reviewer || !s.now().Before(r.ExpiresAt) {
 		return RecoveryRequest{}, "", errors.New("recovery conflict")
 	}
 	token := ""
 	if decision == "approve" {
+		if !s.now().Add(24 * time.Hour).Before(r.ExpiresAt) {
+			return RecoveryRequest{}, "", errors.New("recovery expires before cooling off completes; reject it and request a new recovery")
+		}
 		token = randomToken()
 		if err := s.SendRecoveryInstructions(ctx, *r, token); err != nil {
 			return RecoveryRequest{}, "", err
@@ -353,7 +397,7 @@ func (s *Store) reviewRecoveryMemory(ctx context.Context, id, reviewer, decision
 	} else {
 		r.State = "REJECTED"
 	}
-	return *r, token, nil
+	return cloneRecovery(*r), token, nil
 }
 
 func (s *Store) CompleteRecovery(ctx context.Context, requestID, token string) (string, error) {
@@ -418,7 +462,7 @@ func (s *Store) CancelRecovery(ctx context.Context, requestID, userID string) er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.recoveries[requestID]
-	if r == nil || r.TargetUserID != userID {
+	if r == nil || r.TargetUserID != userID || (r.State != RecoveryPendingVerification && r.State != RecoveryPendingReview && r.State != RecoveryCoolingOff) {
 		return errors.New("recovery request is invalid")
 	}
 	r.State = "CANCELLED"
@@ -433,7 +477,7 @@ func (s *Store) ListRecoveries(ctx context.Context, state string) ([]RecoveryReq
 		out := []RecoveryRequest{}
 		for _, r := range s.recoveries {
 			if state == "" || r.State == state {
-				out = append(out, *r)
+				out = append(out, cloneRecovery(*r))
 			}
 		}
 		return out, nil
@@ -451,7 +495,9 @@ func (s *Store) ListRecoveries(ctx context.Context, state string) ([]RecoveryReq
 		if err = rows.Scan(&r.ID, &r.TargetUserID, &r.State, &r.RequestedChannel, &risk, &r.IndependentFactorCount, &r.ReviewerUserID, &r.ReviewReason, &cool, &r.ExpiresAt, &r.Version, &r.CreatedAt); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(risk, &r.RiskFacts)
+		if err := json.Unmarshal(risk, &r.RiskFacts); err != nil {
+			return nil, err
+		}
 		if cool != nil {
 			r.CoolingOffUntil = *cool
 		}
@@ -470,7 +516,7 @@ func (s *Store) Recovery(ctx context.Context, id string) (RecoveryRequest, error
 	if r == nil {
 		return RecoveryRequest{}, errors.New("recovery request is invalid")
 	}
-	return *r, nil
+	return cloneRecovery(*r), nil
 }
 
 func (s *Store) SensitiveActionsBlocked(ctx context.Context, userID string) bool {
@@ -491,19 +537,44 @@ func (s *Store) SensitiveActionsBlocked(ctx context.Context, userID string) bool
 	return false
 }
 
+var ErrPrivacyRequestInvalid = errors.New("privacy request is invalid")
+var ErrPrivacyOrganizationForbidden = errors.New("organization is not available for this request")
+
 func (s *Store) CreatePrivacyRequest(ctx context.Context, userID, orgID, kind, details string) (PrivacyRequest, error) {
 	kind = strings.ToUpper(strings.TrimSpace(kind))
-	if !validPrivacyType(kind) || len(details) > 2000 {
-		return PrivacyRequest{}, errors.New("privacy request is invalid")
+	if strings.TrimSpace(userID) == "" || !validPrivacyType(kind) || len(details) > 2000 {
+		return PrivacyRequest{}, ErrPrivacyRequestInvalid
 	}
 	now := s.now()
 	if s.pool != nil {
-		var r PrivacyRequest
-		err := s.pool.QueryRow(ctx, `INSERT INTO app.privacy_requests(requester_user_id,organization_id,request_type,state,identity_verified_at,details) VALUES($1::uuid,NULLIF($2,'')::uuid,$3,'IN_REVIEW',now(),$4) RETURNING id::text,requester_user_id::text,COALESCE(organization_id::text,''),request_type,state,identity_verified_at,due_at,details,version,created_at`, userID, orgID, kind, details).Scan(&r.ID, &r.RequesterUserID, &r.OrganizationID, &r.RequestType, &r.State, &r.IdentityVerified, &r.DueAt, &r.Details, &r.Version, &r.CreatedAt)
-		if err == nil {
-			_, err = s.pool.Exec(ctx, `INSERT INTO app.privacy_request_events(request_id,event_type,actor_user_id,actor_reference) VALUES($1::uuid,'privacy.request_received',$2::uuid,'user:self-service')`, r.ID, userID)
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return PrivacyRequest{}, err
 		}
-		return r, err
+		defer func() { _ = tx.Rollback(ctx) }()
+		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, userID, orgID); err != nil {
+			return PrivacyRequest{}, err
+		}
+
+		if orgID != "" {
+			var membershipID string
+			err = tx.QueryRow(ctx, `SELECT id::text FROM app.memberships WHERE organization_id=$1::uuid AND user_id=$2::uuid AND status='active' FOR SHARE`, orgID, userID).Scan(&membershipID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return PrivacyRequest{}, ErrPrivacyOrganizationForbidden
+			}
+			if err != nil {
+				return PrivacyRequest{}, err
+			}
+		}
+		var r PrivacyRequest
+		err = tx.QueryRow(ctx, `INSERT INTO app.privacy_requests(requester_user_id,organization_id,request_type,state,identity_verified_at,details) VALUES($1::uuid,NULLIF($2,'')::uuid,$3,'IN_REVIEW',now(),$4) RETURNING id::text,requester_user_id::text,COALESCE(organization_id::text,''),request_type,state,identity_verified_at,due_at,details,version,created_at`, userID, orgID, kind, details).Scan(&r.ID, &r.RequesterUserID, &r.OrganizationID, &r.RequestType, &r.State, &r.IdentityVerified, &r.DueAt, &r.Details, &r.Version, &r.CreatedAt)
+		if err == nil {
+			_, err = tx.Exec(ctx, `INSERT INTO app.privacy_request_events(request_id,event_type,actor_user_id,actor_reference) VALUES($1::uuid,'privacy.request_received',$2::uuid,'user:self-service')`, r.ID, userID)
+		}
+		if err != nil {
+			return PrivacyRequest{}, err
+		}
+		return r, tx.Commit(ctx)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -525,13 +596,16 @@ func (s *Store) listPrivacy(ctx context.Context, where, arg string) ([]PrivacyRe
 		defer s.mu.Unlock()
 		out := []PrivacyRequest{}
 		for _, r := range s.privacy {
+			if arg == "" && r.State != "IN_REVIEW" && r.State != "CLARIFICATION_REQUIRED" && r.State != "APPROVED" && r.State != "PARTIALLY_APPROVED" && r.State != "IN_PROGRESS" {
+				continue
+			}
 			if arg == "" || r.RequesterUserID == arg {
 				out = append(out, *r)
 			}
 		}
 		return out, nil
 	}
-	q := `SELECT p.id::text,p.requester_user_id::text,COALESCE(p.organization_id::text,''),p.request_type,p.state,p.identity_verified_at,p.due_at,p.details,COALESCE(p.decision_reason,''),COALESCE(p.retention_outcome,''),p.legal_hold_applies,COALESCE(p.decided_by::text,''),COALESCE(p.second_approved_by::text,''),p.version,p.created_at,p.completed_at,COALESCE(e.object_reference,''),e.expires_at FROM app.privacy_requests p LEFT JOIN app.privacy_exports e ON e.request_id=p.id WHERE ` + where + ` ORDER BY p.created_at DESC`
+	q := `SELECT p.id::text,p.requester_user_id::text,COALESCE(p.organization_id::text,''),p.request_type,p.state,p.identity_verified_at,p.due_at,p.details,COALESCE(p.decision_reason,''),COALESCE(p.retention_outcome,''),p.legal_hold_applies,COALESCE(p.decided_by::text,''),COALESCE(p.second_approved_by::text,''),p.version,p.created_at,p.completed_at,COALESCE(p.completion_reason,''),COALESCE(e.object_reference,''),e.expires_at FROM app.privacy_requests p LEFT JOIN app.privacy_exports e ON e.request_id=p.id WHERE ` + where + ` ORDER BY p.created_at DESC`
 	var rows pgx.Rows
 	var err error
 	if arg == "" {
@@ -547,7 +621,7 @@ func (s *Store) listPrivacy(ctx context.Context, where, arg string) ([]PrivacyRe
 	for rows.Next() {
 		var r PrivacyRequest
 		var ident, completed, exportExpiry *time.Time
-		if err = rows.Scan(&r.ID, &r.RequesterUserID, &r.OrganizationID, &r.RequestType, &r.State, &ident, &r.DueAt, &r.Details, &r.DecisionReason, &r.RetentionOutcome, &r.LegalHoldApplies, &r.DecidedBy, &r.SecondApprovedBy, &r.Version, &r.CreatedAt, &completed, &r.ExportReference, &exportExpiry); err != nil {
+		if err = rows.Scan(&r.ID, &r.RequesterUserID, &r.OrganizationID, &r.RequestType, &r.State, &ident, &r.DueAt, &r.Details, &r.DecisionReason, &r.RetentionOutcome, &r.LegalHoldApplies, &r.DecidedBy, &r.SecondApprovedBy, &r.Version, &r.CreatedAt, &completed, &r.CompletionReason, &r.ExportReference, &exportExpiry); err != nil {
 			return nil, err
 		}
 		if ident != nil {
@@ -566,7 +640,7 @@ func (s *Store) listPrivacy(ctx context.Context, where, arg string) ([]PrivacyRe
 
 func (s *Store) DecidePrivacy(ctx context.Context, id, reviewer, decision, reason string, version int64) (PrivacyRequest, error) {
 	decision = strings.ToUpper(strings.TrimSpace(decision))
-	if len(strings.TrimSpace(reason)) < 8 {
+	if strings.TrimSpace(reviewer) == "" || len(strings.TrimSpace(reason)) < 8 || len(reason) > 2000 {
 		return PrivacyRequest{}, errors.New("privacy decision is invalid")
 	}
 	if s.pool == nil {
@@ -577,10 +651,13 @@ func (s *Store) DecidePrivacy(ctx context.Context, id, reviewer, decision, reaso
 		return PrivacyRequest{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = access.LockPlatformAuthority(ctx, tx, reviewer, access.PermissionReviewPrivacy); err != nil {
+		return PrivacyRequest{}, err
+	}
 	var r PrivacyRequest
 	var hold bool
 	err = tx.QueryRow(ctx, `SELECT requester_user_id::text,request_type,state,version,EXISTS(SELECT 1 FROM app.legal_holds h WHERE h.user_id=p.requester_user_id AND h.active) FROM app.privacy_requests p WHERE id=$1::uuid FOR UPDATE`, id).Scan(&r.RequesterUserID, &r.RequestType, &r.State, &r.Version, &hold)
-	if err != nil || r.Version != version || reviewer == r.RequesterUserID {
+	if err != nil || r.Version != version || reviewer == r.RequesterUserID || (r.State != "IN_REVIEW" && r.State != "CLARIFICATION_REQUIRED") {
 		return PrivacyRequest{}, errors.New("privacy request conflict")
 	}
 	state := decision
@@ -597,7 +674,7 @@ func (s *Store) DecidePrivacy(ctx context.Context, id, reviewer, decision, reaso
 		return PrivacyRequest{}, err
 	}
 	if state == "APPROVED" || state == "PARTIALLY_APPROVED" {
-		if r.RequestType == "RESTRICTION" || r.RequestType == "DELETION" {
+		if restrictsOptionalProcessing(r.RequestType) {
 			if _, err = tx.Exec(ctx, `INSERT INTO app.processing_restrictions(user_id,privacy_request_id,scope,reason) VALUES($1::uuid,$2::uuid,'non-essential-processing',$3)`, r.RequesterUserID, id, reason); err != nil {
 				return PrivacyRequest{}, err
 			}
@@ -625,7 +702,7 @@ func (s *Store) decidePrivacyMemory(id, reviewer, decision, reason string, versi
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.privacy[id]
-	if r == nil || r.Version != version || reviewer == r.RequesterUserID {
+	if r == nil || r.Version != version || reviewer == r.RequesterUserID || (r.State != "IN_REVIEW" && r.State != "CLARIFICATION_REQUIRED") {
 		return PrivacyRequest{}, errors.New("privacy request conflict")
 	}
 	if decision != "APPROVED" && decision != "REJECTED" && decision != "CLARIFICATION_REQUIRED" {
@@ -635,49 +712,108 @@ func (s *Store) decidePrivacyMemory(id, reviewer, decision, reason string, versi
 	r.DecisionReason = reason
 	r.DecidedBy = reviewer
 	r.Version++
-	if decision == "APPROVED" && (r.RequestType == "RESTRICTION" || r.RequestType == "DELETION") {
+	if decision == "APPROVED" && restrictsOptionalProcessing(r.RequestType) {
 		s.restrictions[r.RequesterUserID] = true
 	}
 	return *r, nil
 }
 
 func (s *Store) CompletePrivacy(ctx context.Context, id, reviewer, secondApprover string, version int64) (PrivacyRequest, error) {
-	if reviewer == secondApprover || secondApprover == "" {
+	return s.CompletePrivacyWithReason(ctx, id, reviewer, secondApprover, version, "")
+}
+
+func (s *Store) CompletePrivacyWithReason(ctx context.Context, id, reviewer, secondApprover string, version int64, reason string) (PrivacyRequest, error) {
+	if strings.TrimSpace(reviewer) == "" || strings.TrimSpace(secondApprover) == "" {
 		return PrivacyRequest{}, errors.New("dual control is required")
 	}
+	soloOwner := reviewer == secondApprover
+	reason = strings.TrimSpace(reason)
+	if len(reason) > 2000 || (soloOwner && len(reason) < 8) {
+		return PrivacyRequest{}, errors.New("solo-owner completion needs a reason of 8 to 2000 characters")
+	}
 	if s.pool == nil {
+		if soloOwner {
+			return PrivacyRequest{}, errors.New("owner governance must be verified in the database")
+		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		r := s.privacy[id]
-		if r == nil || r.Version != version || r.DecidedBy != reviewer {
+		if r == nil || r.Version != version || r.DecidedBy != reviewer || secondApprover == r.RequesterUserID || (r.State != "APPROVED" && r.State != "PARTIALLY_APPROVED") {
 			return PrivacyRequest{}, errors.New("privacy request conflict")
 		}
+		if r.RequestType == "ACCESS" || r.RequestType == "PORTABILITY" {
+			return PrivacyRequest{}, errors.New("protected exports require the persistent database")
+		}
+		if (r.RequestType == "CORRECTION" || r.RequestType == "DELETION") && (len(reason) < 8 || len(reason) > 2000) {
+			return PrivacyRequest{}, errors.New("record the completed work and retained information before finishing this request")
+		}
+		r.CompletionReason = reason
 		r.SecondApprovedBy = secondApprover
 		r.State = "COMPLETED"
 		r.CompletedAt = s.now()
 		r.Version++
-		if r.RequestType == "ACCESS" || r.RequestType == "PORTABILITY" {
-			r.ExportReference = "privacy-export/" + id
-			r.ExportExpiresAt = s.now().Add(7 * 24 * time.Hour)
-		}
 		return *r, nil
 	}
-	tx, err := s.pool.Begin(ctx)
+	var tx pgx.Tx
+	var err error
+	if starter, ok := s.pool.(interface {
+		BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+	}); ok {
+		tx, err = starter.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+	} else {
+		tx, err = s.pool.Begin(ctx)
+	}
 	if err != nil {
 		return PrivacyRequest{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = access.LockPlatformAuthority(ctx, tx, secondApprover, access.PermissionReviewPrivacy); err != nil {
+		return PrivacyRequest{}, err
+	}
+	mode := "delegated_team"
+	if soloOwner {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(746219830045::bigint)`); err != nil {
+			return PrivacyRequest{}, err
+		}
+		var eligible bool
+		if err = tx.QueryRow(ctx, `SELECT app.current_governance_mode()='solo_owner' AND app.is_platform_owner($1::uuid)`, secondApprover).Scan(&eligible); err != nil {
+			return PrivacyRequest{}, err
+		}
+		if !eligible {
+			return PrivacyRequest{}, errors.New("a different reviewer must complete this request under current governance")
+		}
+		mode = "solo_owner"
+	}
 	var r PrivacyRequest
-	err = tx.QueryRow(ctx, `UPDATE app.privacy_requests SET state='COMPLETED',second_approved_by=$2::uuid,completed_at=now(),version=version+1,updated_at=now() WHERE id=$1::uuid AND version=$3 AND decided_by IS NOT NULL AND decided_by<>$2::uuid AND state IN ('APPROVED','PARTIALLY_APPROVED') RETURNING requester_user_id::text,request_type,version,completed_at`, id, secondApprover, version).Scan(&r.RequesterUserID, &r.RequestType, &r.Version, &r.CompletedAt)
+	err = tx.QueryRow(ctx, `UPDATE app.privacy_requests SET state='COMPLETED',second_approved_by=$2::uuid,completion_mode=$5,completion_reason=$6,completed_at=now(),version=version+1,updated_at=now() WHERE id=$1::uuid AND version=$3 AND decided_by=$4::uuid AND (decided_by<>$2::uuid OR $5='solo_owner') AND requester_user_id<>$2::uuid AND state IN ('APPROVED','PARTIALLY_APPROVED') RETURNING requester_user_id::text,request_type,version,completed_at,due_at,created_at,details,COALESCE(organization_id::text,''),COALESCE(decision_reason,''),COALESCE(retention_outcome,''),legal_hold_applies,decided_by::text`, id, secondApprover, version, reviewer, mode, reason).Scan(&r.RequesterUserID, &r.RequestType, &r.Version, &r.CompletedAt, &r.DueAt, &r.CreatedAt, &r.Details, &r.OrganizationID, &r.DecisionReason, &r.RetentionOutcome, &r.LegalHoldApplies, &r.DecidedBy)
 	if err != nil {
 		return PrivacyRequest{}, errors.New("privacy request conflict")
 	}
-	if r.RequestType == "ACCESS" || r.RequestType == "PORTABILITY" {
-		var authoritative []byte
-		if err = tx.QueryRow(ctx, `SELECT jsonb_build_object('generated_at',now(),'request_id',$1::text,'profile',to_jsonb(u),'memberships',COALESCE((SELECT jsonb_agg(to_jsonb(m)) FROM app.memberships m WHERE m.user_id=u.id),'[]'::jsonb),'privacy_requests',COALESCE((SELECT jsonb_agg(to_jsonb(pr)-'details') FROM app.privacy_requests pr WHERE pr.requester_user_id=u.id),'[]'::jsonb)) FROM app.users u WHERE u.id=$2::uuid`, id, r.RequesterUserID).Scan(&authoritative); err != nil {
+	if (r.RequestType == "CORRECTION" || r.RequestType == "DELETION") && (len(reason) < 8 || len(reason) > 2000) {
+		return PrivacyRequest{}, errors.New("record the completed work and retained information before finishing this request")
+	}
+	r.CompletionReason = reason
+	if restrictsOptionalProcessing(r.RequestType) {
+		var restricted bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.processing_restrictions WHERE privacy_request_id=$1::uuid AND user_id=$2::uuid AND active)`, id, r.RequesterUserID).Scan(&restricted); err != nil {
 			return PrivacyRequest{}, err
 		}
-		payload := authoritative
+		if !restricted {
+			return PrivacyRequest{}, errors.New("apply the approved processing restriction before completing this request")
+		}
+	}
+	if r.RequestType == "ACCESS" || r.RequestType == "PORTABILITY" {
+		// The approved request supplies the subject. Apply their read scope only
+		// after reviewer/version/governance checks, so restricted runtime roles
+		// can assemble that person's export without broadening user-table RLS.
+		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id','',true)`, r.RequesterUserID); err != nil {
+			return PrivacyRequest{}, err
+		}
+		payload, exportErr := privacyExportPayload(ctx, tx, id, r.RequesterUserID)
+		if exportErr != nil {
+			return PrivacyRequest{}, exportErr
+		}
+
 		sum := sha256.Sum256(payload)
 		r.ExportReference = "privacy-export/" + id
 		r.ExportExpiresAt = s.now().Add(7 * 24 * time.Hour)
@@ -686,7 +822,7 @@ func (s *Store) CompletePrivacy(ctx context.Context, id, reviewer, secondApprove
 			return PrivacyRequest{}, err
 		}
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO app.privacy_request_events(request_id,event_type,actor_user_id,actor_reference) VALUES($1::uuid,'privacy.request_completed',$2::uuid,'platform:second-approver')`, id, secondApprover); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO app.privacy_request_events(request_id,event_type,actor_user_id,actor_reference,metadata) VALUES($1::uuid,'privacy.request_completed',$2::uuid,$3,jsonb_build_object('completion_mode',$4::text,'reason',$5::text))`, id, secondApprover, "platform:"+mode, mode, reason); err != nil {
 		return PrivacyRequest{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -705,7 +841,7 @@ func (s *Store) PrivacyExport(ctx context.Context, requestID, userID string) (js
 	var payload []byte
 	err := s.pool.QueryRow(ctx, `UPDATE app.privacy_exports e SET downloaded_at=COALESCE(downloaded_at,now()) FROM app.privacy_requests r WHERE e.request_id=r.id AND e.request_id=$1::uuid AND r.requester_user_id=$2::uuid AND r.state='COMPLETED' AND e.expires_at>now() RETURNING e.payload`, requestID, userID).Scan(&payload)
 	if err != nil {
-		return nil, errors.New("privacy export is unavailable or expired")
+		return nil, err
 	}
 	return json.RawMessage(payload), nil
 }
@@ -755,7 +891,12 @@ func loadRecovery(ctx context.Context, q rowQuerier, id string, lock bool) (Reco
 	var risk []byte
 	var cool *time.Time
 	err := q.QueryRow(ctx, `SELECT id::text,target_user_id::text,state,requested_channel,risk_facts,independent_factor_count,COALESCE(reviewer_user_id::text,''),COALESCE(review_reason,''),cooling_off_until,expires_at,version,created_at FROM app.account_recovery_requests WHERE id=$1::uuid`+suffix, id).Scan(&r.ID, &r.TargetUserID, &r.State, &r.RequestedChannel, &risk, &r.IndependentFactorCount, &r.ReviewerUserID, &r.ReviewReason, &cool, &r.ExpiresAt, &r.Version, &r.CreatedAt)
-	_ = json.Unmarshal(risk, &r.RiskFacts)
+	if err != nil {
+		return RecoveryRequest{}, err
+	}
+	if err := json.Unmarshal(risk, &r.RiskFacts); err != nil {
+		return RecoveryRequest{}, err
+	}
 	if cool != nil {
 		r.CoolingOffUntil = *cool
 	}
@@ -776,4 +917,32 @@ func (s *Store) SendRecoveryInstructions(ctx context.Context, r RecoveryRequest,
 		return nil
 	}
 	return s.recoveryDelivery(ctx, r, token)
+}
+
+func cloneRecovery(request RecoveryRequest) RecoveryRequest {
+	request.RiskFacts = maps.Clone(request.RiskFacts)
+	return request
+}
+
+func restrictsOptionalProcessing(requestType string) bool {
+	return requestType == "RESTRICTION" || requestType == "DELETION" || requestType == "OBJECTION" || requestType == "CONSENT_WITHDRAWAL"
+}
+
+// AllowsOptionalProcessing is checked at scheduling and immediately before
+// routine delivery. Essential account and financial evidence is retained.
+func (s *Store) AllowsOptionalProcessing(ctx context.Context, userID string) (bool, error) {
+	if strings.TrimSpace(userID) == "" {
+		return false, errors.New("processing subject is required")
+	}
+	if s.pool == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return !s.restrictions[userID], nil
+	}
+	var restricted bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.processing_restrictions WHERE user_id=$1::uuid AND active AND scope='non-essential-processing')`, userID).Scan(&restricted)
+	if err != nil {
+		return false, err
+	}
+	return !restricted, nil
 }

@@ -85,6 +85,7 @@ func TestPlatformOperationsRequiresRoleAndStepUp(t *testing.T) {
 		t.Fatalf("authorized status=%d body=%s", response.Code, response.Body.String())
 	}
 	for _, path := range []string{
+		"/api/v1/ops/customer-registrations",
 		"/api/v1/ops/metrics",
 		"/api/v1/ops/metrics/prometheus",
 		"/api/v1/ops/users",
@@ -108,6 +109,29 @@ func TestPlatformOperationsRequiresRoleAndStepUp(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Fatalf("%s status=%d body=%s", path, response.Code, response.Body.String())
 		}
+	}
+	// A saved uncertain attempt is recoverable without deleting its history.
+	var recoveryBusiness, recoveryAttempt string
+	if err = database.Raw().QueryRow(ctx, `INSERT INTO app.businesses(owner_user_id,legal_name,business_type,business_address,industry) VALUES($1,'Registration fixture','limited_company','Lagos','retail') RETURNING id::text`, user.ID).Scan(&recoveryBusiness); err != nil {
+		t.Fatal(err)
+	}
+	if err = database.Raw().QueryRow(ctx, `INSERT INTO app.customer_registration_attempts(business_id,user_id,identity_fingerprint,consent_version,created_at) VALUES($1,$2,'opaque-test-fingerprint','v1',now()-interval '5 minutes') RETURNING id::text`, recoveryBusiness, user.ID).Scan(&recoveryAttempt); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		recoveryRequest := httptest.NewRequest(http.MethodPost, "/api/v1/ops/customer-registrations/"+recoveryAttempt, strings.NewReader(`{"action":"not_created","reason":"Provider dashboard confirms no customer was created for this attempt."}`))
+		recoveryRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+		recoveryRequest.AddCookie(&http.Cookie{Name: csrfCookieName, Value: "recovery-csrf-fixture"})
+		recoveryRequest.Header.Set("X-CSRF-Token", "recovery-csrf-fixture")
+		recoveryResponse := httptest.NewRecorder()
+		server.Handler().ServeHTTP(recoveryResponse, recoveryRequest)
+		if recoveryResponse.Code != 200 {
+			t.Fatalf("registration recovery: %d %s", recoveryResponse.Code, recoveryResponse.Body.String())
+		}
+	}
+	var recoveryState string
+	if err = database.Raw().QueryRow(ctx, `SELECT state FROM app.customer_registration_attempts WHERE id=$1`, recoveryAttempt).Scan(&recoveryState); err != nil || recoveryState != "NOT_CREATED" {
+		t.Fatalf("registration history: %s %v", recoveryState, err)
 	}
 	currentPolicy, err := runtime.BusinessPolicies.Read(ctx)
 	if err != nil {

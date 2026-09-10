@@ -39,7 +39,7 @@ func (s *S3ObjectStore) Put(ctx context.Context, key string, body io.Reader, siz
 	if s == nil || s.client == nil {
 		return errors.New("object storage is not configured")
 	}
-	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key), Body: body, ContentLength: aws.Int64(size), ContentType: aws.String(contentType), ServerSideEncryption: "AES256"})
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key), Body: body, IfNoneMatch: aws.String("*"), ContentLength: aws.Int64(size), ContentType: aws.String(contentType), ServerSideEncryption: "AES256"})
 	return err
 }
 
@@ -83,4 +83,45 @@ func (s *S3ObjectStore) Head(ctx context.Context, key string) (int64, string, er
 		return 0, "", errors.New("object storage returned incomplete metadata")
 	}
 	return *result.ContentLength, *result.ContentType, nil
+}
+
+// Open reads private object bytes directly so completion records a checksum of
+// the stored content rather than trusting a client-provided digest or ETag.
+func (s *S3ObjectStore) Open(ctx context.Context, key string) (io.ReadCloser, error) {
+	if s == nil || s.client == nil {
+		return nil, errors.New("object storage is not configured")
+	}
+	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		return nil, err
+	}
+	return result.Body, nil
+}
+
+func (s *S3ObjectStore) ListObjects(ctx context.Context, cursor string) ([]ObjectCandidate, string, error) {
+	if s == nil || s.client == nil {
+		return nil, "", errors.New("object storage is not configured")
+	}
+	input := &s3.ListObjectsV2Input{Bucket: aws.String(s.bucket), MaxKeys: aws.Int32(100)}
+	if cursor != "" {
+		input.ContinuationToken = aws.String(cursor)
+	}
+	result, err := s.client.ListObjectsV2(ctx, input)
+	if err != nil {
+		return nil, "", err
+	}
+	objects := []ObjectCandidate{}
+	for _, item := range result.Contents {
+		if item.Key != nil && item.LastModified != nil {
+			objects = append(objects, ObjectCandidate{Key: *item.Key, ModifiedAt: *item.LastModified})
+		}
+	}
+	return objects, aws.ToString(result.NextContinuationToken), nil
+}
+func (s *S3ObjectStore) DeleteObject(ctx context.Context, key string) error {
+	if s == nil || s.client == nil {
+		return errors.New("object storage is not configured")
+	}
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	return err
 }

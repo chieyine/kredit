@@ -37,7 +37,12 @@ func (c *Client) ParseWebhook(secret string, raw []byte) (Notice, error) {
 	if len(raw) > 1<<20 || json.Unmarshal(raw, &event) != nil {
 		return Notice{}, errors.New("invalid Mono webhook")
 	}
-	if event.Data.LiveMode != nil && *event.Data.LiveMode {
+	// Sandbox and live traffic must never cross. Each side refuses the other's
+	// events rather than guessing which environment a payload belongs to.
+	if event.Data.LiveMode != nil && *event.Data.LiveMode != c.live {
+		if c.live {
+			return Notice{}, errors.New("sandbox provider event rejected by live adapter")
+		}
 		return Notice{}, errors.New("live provider event rejected by sandbox adapter")
 	}
 	hash := sha256.Sum256(raw)
@@ -58,7 +63,7 @@ func (c *Client) ParseWebhook(secret string, raw []byte) (Notice, error) {
 	default:
 		return Notice{}, errors.New("unsupported Mono event")
 	}
-	if mandate == "" || len(mandate) > 256 || len(event.Data.Reference) > 256 {
+	if !validReference(mandate) || (event.Data.Reference != "" && !validReference(event.Data.Reference)) {
 		return Notice{}, errors.New("invalid Mono event reference")
 	}
 	// Individual partial-sweep notices need correlation too, even though only

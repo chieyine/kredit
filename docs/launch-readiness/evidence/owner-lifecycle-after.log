@@ -1,0 +1,22 @@
+=== RUN   TestOwnerLifecycleDatabaseInvariant
+=== RUN   TestOwnerLifecycleDatabaseInvariant/suspension
+=== RUN   TestOwnerLifecycleDatabaseInvariant/closure
+=== RUN   TestOwnerLifecycleDatabaseInvariant/lockout
+=== RUN   TestOwnerLifecycleDatabaseInvariant/immediate_expiry
+=== RUN   TestOwnerLifecycleDatabaseInvariant/future_expiry
+=== RUN   TestOwnerLifecycleDatabaseInvariant/revocation
+=== RUN   TestOwnerLifecycleDatabaseInvariant/demotion
+=== RUN   TestOwnerLifecycleDatabaseInvariant/deletion
+=== RUN   TestOwnerLifecycleDatabaseInvariant/concurrent_removals
+--- PASS: TestOwnerLifecycleDatabaseInvariant (0.70s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/suspension (0.01s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/closure (0.00s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/lockout (0.01s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/immediate_expiry (0.00s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/future_expiry (0.01s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/revocation (0.01s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/demotion (0.00s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/deletion (0.00s)
+    --- PASS: TestOwnerLifecycleDatabaseInvariant/concurrent_removals (0.54s)
+PASS
+ok  	kredit/internal/platformsettings	0.740s

@@ -2,7 +2,7 @@
 
 | Area | Minimum scenarios |
 | --- | --- |
-| bootstrap | migrations, seed, generated-code drift, config validation |
+| bootstrap | migrations, reconciled seed, OpenAPI contract validation, config validation |
 | auth/access | OTP, MFA, CSRF, session expiry, RBAC, RLS, break-glass |
 | agreements | draft amendment/version conflict, cancellation, decline, immutable version, exact acceptance, release/receipt evidence, token replay |
 | money | kobo arithmetic, balanced postings, allocations, reversals, rebuild, concurrency, explicit payment sources, confirmed/rejected off-platform claims |
@@ -14,8 +14,10 @@
 | product quality | unique SEO/social metadata, valid JSON-LD, sitemap/robots, index privacy, caching, install assets and public-route accessibility |
 | operations | failed jobs/webhooks, controlled retry, reports, backup restore, deployment definitions, alert-rule validation |
 
-Acceptance scenarios A–F from `README.md` are represented by deterministic
-seed records plus domain/provider/integration assertions. Browser acceptance
+Acceptance scenarios A–F from `README.md` have deterministic fixture identifiers
+and domain/provider/integration assertions. The September 9 source audit found
+that the demo seed does not yet reconcile its paid drawdowns with payment and
+ledger records; the seed alone is not acceptance evidence. Browser acceptance
 also covers create, amend, cancel, decline, team lifecycle, trade-line
 creation/administration, dispute evidence, operations, public, mobile, and
 indexing flows. Axe-core blocks serious or critical violations across the

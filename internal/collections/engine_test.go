@@ -194,6 +194,63 @@ func TestEligibilityReturnsExplicitReasons(t *testing.T) {
 	}
 }
 
+func TestCancelledCollectionCannotBeReopenedByDelayedOutcome(t *testing.T) {
+	for _, state := range []string{ProviderPending, ProviderTimeout, ProviderFailed, ProviderSucceeded, ProviderPartial} {
+		t.Run(state, func(t *testing.T) {
+			engine, provider, paymentStore, snapshot := testEngine(t)
+			provider.SetNextResponse(Response{State: ProviderPending, ProviderCollectionID: "cancel-late"})
+			attempt, err := engine.Start(context.Background(), "obl-1", "cancel-late", time.Now().UTC())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = engine.Cancel(context.Background(), attempt.ID); err != nil {
+				t.Fatal(err)
+			}
+			event := Webhook{EventID: "late", ExternalReference: attempt.ExternalReference, ProviderCollectionID: attempt.ProviderCollectionID, State: state}
+			financial := state == ProviderSucceeded || state == ProviderPartial
+			if financial {
+				event.SucceededAmountKobo = 50000
+			}
+			event.Signature = provider.Sign(event)
+			_, err = engine.ProcessWebhook(context.Background(), event)
+			if (err != nil) != financial {
+				t.Fatalf("financial=%v err=%v", financial, err)
+			}
+			stored, _ := engine.GetAttempt(attempt.ID)
+			if stored.State != AttemptCancelled || engine.reservations[stored.ReservationID].State != ReservationReleased || snapshot.OutstandingKobo != 100000 {
+				t.Fatalf("cancelled collection changed: %+v", stored)
+			}
+			items, err := paymentStore.List("obl-1")
+			if err != nil || len(items) != 0 {
+				t.Fatalf("unexpected payments: %v %v", items, err)
+			}
+		})
+	}
+}
+
+type mismatchedCancellationProvider struct{ *MockProvider }
+
+func (p mismatchedCancellationProvider) Cancel(context.Context, string) (Response, error) {
+	return Response{State: ProviderReversed, ProviderCollectionID: "different-collection"}, nil
+}
+
+func TestCancellationRequiresMatchingProviderIdentity(t *testing.T) {
+	engine, provider, _, _ := testEngine(t)
+	engine.provider = mismatchedCancellationProvider{provider}
+	provider.SetNextResponse(Response{State: ProviderPending, ProviderCollectionID: "expected-collection"})
+	attempt, err := engine.Start(context.Background(), "obl-1", "cancel-mismatch", time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = engine.Cancel(context.Background(), attempt.ID); err == nil {
+		t.Fatal("accepted cancellation for another collection")
+	}
+	stored, _ := engine.GetAttempt(attempt.ID)
+	if stored.State != AttemptSubmitted || engine.reservations[stored.ReservationID].State != ReservationProcessing {
+		t.Fatalf("reservation released: %+v", stored)
+	}
+}
+
 func TestPartialDisputeLeavesUndisputedAmountEligible(t *testing.T) {
 	engine, _, _, snapshot := testEngine(t)
 	snapshot.DisputedBlockedKobo = 20000

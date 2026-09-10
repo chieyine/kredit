@@ -38,8 +38,8 @@ func TestSubmitCountsOneAnswerPerPersonAndPageEachMonth(t *testing.T) {
 		t.Fatal(err)
 	}
 	input.Answer = "no"
-	if _, err := store.Submit(context.Background(), input); err != nil {
-		t.Fatal(err)
+	if replay, err := store.Submit(context.Background(), input); err != nil || replay.Answer != "yes" {
+		t.Fatalf("replay did not return stored monthly answer: %+v, %v", replay, err)
 	}
 	if len(store.rows) != 1 || store.rows[0].Answer != "yes" {
 		t.Fatalf("expected first monthly answer only, got %#v", store.rows)

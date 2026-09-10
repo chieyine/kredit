@@ -60,7 +60,7 @@
     if (createBusy) return; createBusy = true; createError = '';
     try {
       creation ??= new MutationIntent(account.userID, '/api/v1/organizations');
-      await creation.run({ legal_name: legalName.trim(), trading_name: tradingName.trim(), business_type: businessType, business_address: address.trim(), industry: industry.trim(), timezone: 'Africa/Lagos', currency: 'NGN' }, record);
+      await creation.run({ legal_name: legalName.trim(), trading_name: tradingName.trim(), business_type: businessType, business_address: address.trim(), industry: industry.trim(), timezone: 'Africa/Lagos', currency: 'NGN' }, value => organization(record(value).organization));
       await load();
     } catch (cause) { createError = cause instanceof Error ? cause.message : 'We could not confirm your business details.'; }
     finally { createBusy = false; }

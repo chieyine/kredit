@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"kredit/internal/legalpublication"
 )
 
 func TestConcurrentReservationsCannotExceedLimit(t *testing.T) {
@@ -216,5 +218,49 @@ func TestFeeDisclosurePreservesAcceptedLegacyHash(t *testing.T) {
 	d.PrincipalKobo++
 	if VerifyAgreementHash(d, l) {
 		t.Fatal("changed terms verified")
+	}
+}
+
+func TestPublicationChangePreservesReservedOfferAndHash(t *testing.T) {
+	s := NewStore()
+	now := time.Now().UTC()
+	current := legalpublication.Initial()
+	s.SetLegalReader(func() (legalpublication.Versions, error) { return current, nil })
+	line, err := s.CreateLine(CreateLineInput{SupplierOrganizationID: "org", BuyerUserID: "buyer", BuyerBusinessID: "biz", ApprovedLimitKobo: 5000, Cadence: "friday", StartAt: now.Add(-time.Hour), EndAt: now.Add(time.Hour), MandateID: "mandate", MandateActive: true, MandateVerified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := CreateDrawdownInput{LineID: line.ID, PrincipalKobo: 1200, GoodsDescription: "stock", IdempotencyKey: "legal-reservation"}
+	first, _, _, err := s.ReserveDrawdown(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.SetMandateState(line.ID, "different-permission", true); err == nil {
+		t.Fatal("bank permission change invalidated existing agreement")
+	}
+	if _, err = s.SetMandateState(line.ID, line.MandateID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.SetMandateState(line.ID, line.MandateID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Resume(line.ID); err != nil {
+		t.Fatal(err)
+	}
+	current.Terms = "legal-terms-v7"
+	replay, _, _, err := s.ReserveDrawdown(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay.AgreementHash != first.AgreementHash || replay.LegalVersions.Terms != legalpublication.TermsVersion {
+		t.Fatal("publication changed a reserved offer")
+	}
+	tampered := cloneDrawdown(first)
+	tampered.LegalVersions.Terms = current.Terms
+	if drawdownHash(tampered, line) == first.AgreementHash {
+		t.Fatal("legal versions excluded from agreement hash")
+	}
+	if _, _, err = s.ConfirmDrawdown(first.ID, "buyer", first.AgreementHash); err != nil {
+		t.Fatal(err)
 	}
 }

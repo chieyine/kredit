@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kredit/internal/observability"
+	"kredit/internal/platform/logging"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -138,13 +139,15 @@ type OperationHandler func(context.Context, string, string) error
 type CollectionHandler func(context.Context, CollectionArgs) error
 
 type Handlers struct {
-	ProviderWebhook func(context.Context, ProviderWebhookArgs) error
-	Collection      CollectionHandler
-	Notification    OperationHandler
-	Document        OperationHandler
-	Report          OperationHandler
-	Tracer          *observability.Tracer
-	Metrics         *observability.Store
+	CleanupDocuments func(context.Context) error
+	MaturedCredit    func(context.Context) error
+	ProviderWebhook  func(context.Context, ProviderWebhookArgs) error
+	Collection       CollectionHandler
+	Notification     OperationHandler
+	Document         OperationHandler
+	Report           OperationHandler
+	Tracer           *observability.Tracer
+	Metrics          *observability.Store
 }
 
 type TelemetryMiddleware struct {
@@ -184,8 +187,10 @@ func (*TelemetryMiddleware) IsMiddleware() bool { return true }
 
 type MaintenanceWorker struct {
 	river.WorkerDefaults[MaintenanceArgs]
-	Pool   *pgxpool.Pool
-	Logger *slog.Logger
+	Pool             *pgxpool.Pool
+	Logger           *slog.Logger
+	MaturedCredit    func(context.Context) error
+	CleanupDocuments func(context.Context) error
 }
 
 // sharedRateLimitWindow must match internal/web.sensitiveRateLimitWindow. The
@@ -199,6 +204,11 @@ func (w *MaintenanceWorker) Work(ctx context.Context, job *river.Job[Maintenance
 	}
 	switch job.Args.Operation {
 	case OpExpireReservations:
+		if w.CleanupDocuments != nil {
+			if err := w.CleanupDocuments(ctx); err != nil {
+				return fmt.Errorf("clean expired upload objects: %w", err)
+			}
+		}
 		if err := ExpireDrawdownReservations(ctx, w.Pool); err != nil {
 			return err
 		}
@@ -209,6 +219,11 @@ func (w *MaintenanceWorker) Work(ctx context.Context, job *river.Job[Maintenance
 			return fmt.Errorf("prune shared rate limits: %w", err)
 		}
 	case OpEvaluateSchedules:
+		if w.MaturedCredit != nil {
+			if err := w.MaturedCredit(ctx); err != nil {
+				return fmt.Errorf("activate eligible sales: %w", err)
+			}
+		}
 		_, err := w.Pool.Exec(ctx, `
 			UPDATE app.schedule_items
 			SET state = CASE
@@ -317,8 +332,13 @@ func (w *ReconciliationWorker) Work(ctx context.Context, job *river.Job[Reconcil
 	return reconcileLedger(ctx, w.Pool, w.Logger)
 }
 
+const reconciliationSQL = `SELECT t.id::text,COALESCE(sum(p.debit_kobo),0),COALESCE(sum(p.credit_kobo),0)
+ FROM ledger.transactions t LEFT JOIN ledger.postings p ON p.transaction_id=t.id
+ GROUP BY t.id HAVING count(p.id)=0 OR COALESCE(sum(p.debit_kobo),0)<>COALESCE(sum(p.credit_kobo),0)
+ ORDER BY t.id`
+
 func reconcileLedger(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
-	rows, err := pool.Query(ctx, `SELECT transaction_id::text, COALESCE(SUM(debit_kobo),0), COALESCE(SUM(credit_kobo),0) FROM ledger.postings GROUP BY transaction_id HAVING COALESCE(SUM(debit_kobo),0) <> COALESCE(SUM(credit_kobo),0)`)
+	rows, err := pool.Query(ctx, reconciliationSQL)
 	if err != nil {
 		return fmt.Errorf("reconcile ledger: %w", err)
 	}
@@ -329,7 +349,7 @@ func reconcileLedger(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logge
 		if err := rows.Scan(&transactionID, &debits, &credits); err != nil {
 			return err
 		}
-		return fmt.Errorf("ledger imbalance transaction=%s debits=%d credits=%d", transactionID, debits, credits)
+		return fmt.Errorf("ledger imbalance or missing postings transaction=%s debits=%d credits=%d", transactionID, debits, credits)
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -347,8 +367,8 @@ type ProviderWebhookWorker struct {
 }
 
 func (w *ProviderWebhookWorker) Work(ctx context.Context, job *river.Job[ProviderWebhookArgs]) error {
-	if w.Pool == nil {
-		return errors.New("provider webhook worker database is not configured")
+	if w.Pool == nil || w.Handler == nil {
+		return errors.New("provider webhook database and handler are required")
 	}
 	if job.Args.Provider == "" || job.Args.EventID == "" || job.Args.EventType == "" || len(job.Args.Payload) == 0 {
 		return errors.New("provider, event, type, and payload are required")
@@ -361,31 +381,55 @@ func (w *ProviderWebhookWorker) Work(ctx context.Context, job *river.Job[Provide
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `INSERT INTO app.provider_webhook_inbox (provider,event_id,event_type,payload,signature_valid,provider_sequence) VALUES ($1,$2,$3,$4::jsonb,true,CASE WHEN ($4::jsonb->>'sequence') ~ '^[0-9]+$' THEN ($4::jsonb->>'sequence')::bigint END) ON CONFLICT (provider,event_id) DO UPDATE SET duplicate_count=app.provider_webhook_inbox.duplicate_count+1 WHERE app.provider_webhook_inbox.state='processed'`, job.Args.Provider, job.Args.EventID, job.Args.EventType, string(job.Args.Payload)); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO app.provider_webhook_inbox(provider,event_id,event_type,payload,signature_valid,provider_sequence)
+ VALUES($1,$2,$3,$4::jsonb,true,CASE WHEN ($4::jsonb->>'sequence') ~ '^[0-9]{1,19}$' THEN CASE WHEN ($4::jsonb->>'sequence')::numeric<=9223372036854775807 THEN ($4::jsonb->>'sequence')::bigint END END)
+ ON CONFLICT(provider,event_id) DO NOTHING`, job.Args.Provider, job.Args.EventID, job.Args.EventType, string(job.Args.Payload)); err != nil {
 		return err
 	}
 	var state string
-	if err := tx.QueryRow(ctx, `SELECT state FROM app.provider_webhook_inbox WHERE provider = $1 AND event_id = $2 FOR UPDATE`, job.Args.Provider, job.Args.EventID).Scan(&state); err != nil {
+	var matches, claimed bool
+	if err = tx.QueryRow(ctx, `SELECT state,payload=$3::jsonb AND event_type=$4 AND signature_valid,COALESCE(lease_expires_at>now(),false)
+ FROM app.provider_webhook_inbox WHERE provider=$1 AND event_id=$2 FOR UPDATE`, job.Args.Provider, job.Args.EventID, string(job.Args.Payload), job.Args.EventType).Scan(&state, &matches, &claimed); err != nil {
 		return err
+	}
+	if !matches {
+		return river.JobCancel(errors.New("provider event identity was reused with different evidence"))
 	}
 	if state == "processed" {
+		if _, err = tx.Exec(ctx, `UPDATE app.provider_webhook_inbox SET duplicate_count=duplicate_count+1 WHERE provider=$1 AND event_id=$2`, job.Args.Provider, job.Args.EventID); err != nil {
+			return err
+		}
 		return tx.Commit(ctx)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE app.provider_webhook_inbox SET state = 'processing', attempts = attempts + 1 WHERE provider = $1 AND event_id = $2`, job.Args.Provider, job.Args.EventID); err != nil {
+	if state == "processing" && claimed {
+		return river.JobSnooze(30 * time.Second)
+	}
+	var attempt int
+	if err = tx.QueryRow(ctx, `UPDATE app.provider_webhook_inbox SET state='processing',attempts=attempts+1,lease_expires_at=now()+interval '5 minutes' WHERE provider=$1 AND event_id=$2 RETURNING attempts`, job.Args.Provider, job.Args.EventID).Scan(&attempt); err != nil {
 		return err
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return err
 	}
-	if w.Handler == nil {
-		return errors.New("provider webhook handler is not configured")
+	// Finish well inside the claim lease. A stale worker cannot overwrite the
+	// outcome of a newer attempt after recovery.
+	workCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	handlerErr := w.Handler(workCtx, job.Args)
+	cancel()
+	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer finishCancel()
+	if handlerErr != nil {
+		_, saveErr := w.Pool.Exec(finishCtx, `UPDATE app.provider_webhook_inbox SET state='failed',last_error=$3,lease_expires_at=NULL WHERE provider=$1 AND event_id=$2 AND state='processing' AND attempts=$4`, job.Args.Provider, job.Args.EventID, logging.Redact(handlerErr.Error()), attempt)
+		return errors.Join(handlerErr, saveErr)
 	}
-	if err := w.Handler(ctx, job.Args); err != nil {
-		_, _ = w.Pool.Exec(ctx, `UPDATE app.provider_webhook_inbox SET state = 'failed', last_error = $3 WHERE provider = $1 AND event_id = $2`, job.Args.Provider, job.Args.EventID, err.Error())
+	result, err := w.Pool.Exec(finishCtx, `UPDATE app.provider_webhook_inbox SET state='processed',processed_at=now(),last_error=NULL,lease_expires_at=NULL WHERE provider=$1 AND event_id=$2 AND state='processing' AND attempts=$3`, job.Args.Provider, job.Args.EventID, attempt)
+	if err != nil {
 		return err
 	}
-	_, err = w.Pool.Exec(ctx, `UPDATE app.provider_webhook_inbox SET state = 'processed', processed_at = NOW(), last_error = NULL WHERE provider = $1 AND event_id = $2`, job.Args.Provider, job.Args.EventID)
-	return err
+	if result.RowsAffected() != 1 {
+		return errors.New("provider webhook processing claim was lost")
+	}
+	return nil
 }
 
 type CollectionWorker struct {
@@ -447,7 +491,7 @@ func NewClientWithHandlers(pool *pgxpool.Pool, logger *slog.Logger, handlers Han
 		return nil, errors.New("river database pool is required")
 	}
 	workers := river.NewWorkers()
-	river.AddWorker(workers, &MaintenanceWorker{Pool: pool, Logger: logger})
+	river.AddWorker(workers, &MaintenanceWorker{Pool: pool, Logger: logger, MaturedCredit: handlers.MaturedCredit, CleanupDocuments: handlers.CleanupDocuments})
 	river.AddWorker(workers, &FinancialWorker{Pool: pool, Logger: logger})
 	river.AddWorker(workers, &ReconciliationWorker{Pool: pool, Logger: logger})
 	// Optional workers are registered only when their durable handler is

@@ -1,11 +1,4 @@
-import createClient from 'openapi-fetch';
 import { boundedFetch, clearPrivateBrowserData } from './reliable';
-import type { paths } from './generated/schema';
-
-export const api = createClient<paths>({
-	baseUrl: '/api/v1',
-	credentials: 'include'
-});
 
 export class ApiReadError extends Error {
 	constructor(
@@ -28,10 +21,13 @@ export async function readJSON<T>(
 	let lastError: unknown;
 	for (let attempt = 1; attempt <= attempts; attempt += 1) {
 		try {
+            const deadline = AbortSignal.timeout(20_000);
+            const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
 			const response = await fetch(url, {
 				method: 'GET',
 				credentials: 'include',
-				signal: options.signal
+				signal,
+                cache: 'no-store'
 			});
 			if (response.ok) return (await response.json()) as T;
 			const body = await response.json().catch(() => ({}));

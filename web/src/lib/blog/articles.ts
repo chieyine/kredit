@@ -9,7 +9,7 @@ export type Article = {
 	slug: string; title: string; description: string; category: ArticleCategory; keyphrase: string;
 	published?: string; modified: string; readingMinutes: number; wordCount: number; intro: string;
 	sections: ArticleSection[]; faq: { question: string; answer: string }[]; sources: ArticleSource[];
-	related: { slug: string; title: string }[];
+	related: { slug: string; title: string; category?: string }[];
 };
 
 type ArticleDraft = {

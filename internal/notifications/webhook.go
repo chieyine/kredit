@@ -31,7 +31,7 @@ func NewWebhookProvider(channel, endpoint, token string) (*WebhookProvider, erro
 	if strings.TrimSpace(endpoint) == "" || strings.TrimSpace(token) == "" {
 		return nil, errors.New("notification endpoint and token are required")
 	}
-	return &WebhookProvider{channel: channel, endpoint: strings.TrimSpace(endpoint), token: strings.TrimSpace(token), client: &http.Client{Timeout: 10 * time.Second}}, nil
+	return &WebhookProvider{channel: channel, endpoint: strings.TrimSpace(endpoint), token: strings.TrimSpace(token), client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 
 func (p *WebhookProvider) Channel() string { return p.channel }
@@ -64,7 +64,7 @@ func (p *WebhookProvider) Send(ctx context.Context, message Message) (string, er
 	req.Header.Set("Idempotency-Key", message.EventID+":"+message.Channel)
 	response, err := p.client.Do(req)
 	if err != nil {
-		return "", err
+		return "", errors.New("notification connector request failed")
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))

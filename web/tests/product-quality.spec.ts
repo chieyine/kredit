@@ -21,16 +21,14 @@ test('public navigation is clear, complete and closes after a mobile choice', as
 	await expect(footer.getByRole('link', { name: 'How we keep it safe' })).toBeVisible();
 });
 
-test('homepage trust proof uses verifiable product controls rather than invented social proof', async ({ page }) => {
-	await page.goto('/');
-	const proof = page.locator('.proof');
-	await expect(proof.getByRole('heading', { name: /Both sides can.*check the details/ })).toBeVisible();
-	await expect(proof).toContainText('The customer sees the terms first.');
-	await expect(proof).toContainText('The delivery proof stays with the sale.');
-	await expect(proof).toContainText('Confirmed payments update the balance.');
-	await expect(proof).toContainText('Kredit does not choose your customer.');
-	await expect(proof.getByRole('link', { name: /See how a sale works/i })).toHaveAttribute('href', '/how-it-works');
-	await expect(proof.getByRole('link', { name: /See how we keep it safe/i })).toHaveAttribute('href', '/security');
+test('homepage distinguishes sample records and explains confirmed payments', async ({ page }) => {
+ await page.goto('/');
+ await expect(page.locator('.hero-product')).toContainText('Example sale');
+ await expect(page.locator('.hero-product')).toContainText('not a real account');
+ await expect(page.locator('.hero-product [aria-hidden="true"] a')).toHaveCount(0);
+ await page.getByRole('tab', { name: /The money/ }).click();
+ await expect(page.getByRole('tabpanel')).toContainText('Confirmed payments reduce the balance');
+ await expect(page.getByRole('tabpanel').getByRole('link', { name: /Explore the payment record/ })).toHaveAttribute('href', '/demo');
 });
 
 test('both sale-creation entry points preserve authentication and the intended destination', async ({ request }) => {
@@ -86,10 +84,26 @@ test('responsive public pages avoid horizontal overflow and serious accessibilit
 });
 
 test('index boundaries, error recovery, sitemap and install assets are safe and complete', async ({ page, request }) => {
-	for (const path of ['/app/overview', '/buyer', '/admin', '/recover', '/legal/privacy', '/legal/terms']) {
+	// Account areas are never indexable, whatever else is true.
+	for (const path of ['/app/overview', '/buyer', '/admin', '/recover']) {
 		const response = await page.goto(path);
 		await expect(page.locator('meta[name="robots"]'), path).toHaveAttribute('content', 'noindex,nofollow');
-		if (!path.startsWith('/legal/')) expect(response?.headers()['cache-control'], path).toContain('no-store');
+		expect(response?.headers()['cache-control'], path).toContain('no-store');
+	}
+
+	// The legal documents are different: they become public once the published
+	// versions are approved and in effect, because people and regulators have to
+	// be able to find them. What must never happen is the two halves disagreeing
+	// — a page inviting crawlers that robots.txt shuts out, or the reverse. So
+	// this asserts they agree, in whichever state the deployment is in.
+	const robotsBody = await (await request.get('/robots.txt')).text();
+	for (const path of ['/legal/privacy', '/legal/terms']) {
+		await page.goto(path);
+		const blockedByRobots = robotsBody.includes(`Disallow: ${path}`);
+		await expect(page.locator('meta[name="robots"]'), path).toHaveAttribute(
+			'content',
+			blockedByRobots ? 'noindex,nofollow' : /^index,follow/
+		);
 	}
 	await page.goto('/this-page-does-not-exist');
 	await expect(page.getByRole('heading', { name: 'This page is not here' })).toBeVisible();
@@ -97,10 +111,18 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 
 	const sitemap = await (await request.get('/sitemap.xml')).text();
 	for (const path of publicRoutes) expect(sitemap, `sitemap ${path}`).toContain(`<loc>https://kredit.com.ng${path}</loc>`);
-	for (const path of ['/app/', '/buyer/', '/admin/', '/recover', '/legal/privacy', '/legal/terms']) expect(sitemap).not.toContain(`<loc>https://kredit.com.ng${path}`);
+	for (const path of ['/app/', '/buyer/', '/admin/', '/recover']) expect(sitemap).not.toContain(`<loc>https://kredit.com.ng${path}`);
 	const robots = await (await request.get('/robots.txt')).text();
 	for (const path of ['/app', '/buyer', '/admin', '/recover']) expect(robots).toContain(`Disallow: ${path}`);
-	for (const path of ['/legal/privacy', '/legal/terms']) expect(robots).toContain(`Disallow: ${path}`);
+	// The third place publication state shows up. A legal document that robots.txt
+	// shuts out must not be advertised in the sitemap, and one that is published
+	// must be — the meta tag, robots.txt and the sitemap are one decision, and a
+	// deployment where they disagree is the failure worth catching.
+	for (const path of ['/legal/privacy', '/legal/terms']) {
+		const blockedByRobots = robots.includes(`Disallow: ${path}`);
+		const listed = sitemap.includes(`<loc>https://kredit.com.ng${path}</loc>`);
+		expect(listed, `${path} sitemap listing must match robots.txt`).toBe(!blockedByRobots);
+	}
 
 	const manifestResponse = await request.get('/manifest.webmanifest');
 	expect(manifestResponse.ok()).toBe(true);

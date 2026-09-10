@@ -108,3 +108,26 @@ func TestVerifyChain(t *testing.T) {
 }
 
 func now() time.Time { return time.Now().UTC() }
+
+func TestSmallPrincipalWithRoundedZeroFeeCanActivate(t *testing.T) {
+	transaction, err := NewStore().PostActivation("small-obligation", 1, now(), "small-activation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transaction.Postings) != 2 {
+		t.Fatal("zero fee should not create empty postings")
+	}
+}
+
+func TestLedgerDigestPreservesFieldBoundariesAndRecordedTime(t *testing.T) {
+	a := Transaction{ID: "ab", EventType: "c"}
+	b := Transaction{ID: "a", EventType: "bc"}
+	if VerifyChain([]Transaction{a}) == VerifyChain([]Transaction{b}) {
+		t.Fatal("field boundary change was invisible to digest")
+	}
+	b = a
+	b.RecordedAt = time.Unix(123, 0)
+	if VerifyChain([]Transaction{a}) == VerifyChain([]Transaction{b}) {
+		t.Fatal("recorded time change was invisible to digest")
+	}
+}

@@ -132,11 +132,17 @@ func (s *Store) Create(input CreateInput) (Schedule, []Item, error) {
 	if input.AllocationPolicy == "" {
 		input.AllocationPolicy = "due_date_order"
 	}
+	if input.AllocationPolicy != "due_date_order" {
+		return Schedule{}, nil, errors.New("unsupported allocation policy")
+	}
 	if input.Cadence == "" {
 		input.Cadence = CadenceMonthly
 	}
 	if input.MonthEndPolicy == "" {
 		input.MonthEndPolicy = PolicyCap
+	}
+	if input.MonthEndPolicy != PolicyCap && input.MonthEndPolicy != PolicyLastDay {
+		return Schedule{}, nil, errors.New("invalid month-end policy")
 	}
 	if input.Cadence != CadenceWeekly && input.Cadence != CadenceFortnightly && input.Cadence != CadenceMonthly && input.Cadence != CadenceCustom {
 		return Schedule{}, nil, errors.New("invalid cadence")
@@ -144,6 +150,9 @@ func (s *Store) Create(input CreateInput) (Schedule, []Item, error) {
 	amounts := []ledger.Money{}
 	dates := []time.Time{}
 	if input.ScheduleType == TypeEqual {
+		if input.InstalmentAmountKobo < 0 {
+			return Schedule{}, nil, errors.New("instalment amount cannot be negative")
+		}
 		if input.Count < 1 || input.Count > 60 {
 			return Schedule{}, nil, errors.New("equal schedule count must be between 1 and 60")
 		}
@@ -199,6 +208,9 @@ func (s *Store) Create(input CreateInput) (Schedule, []Item, error) {
 	items := make([]*Item, 0, len(amounts))
 	for i, amount := range amounts {
 		due := time.Date(dates[i].Year(), dates[i].Month(), dates[i].Day(), input.DueHour, input.DueMinute, 0, 0, loc)
+		if i > 0 && !due.After(items[i-1].DueAt) {
+			return Schedule{}, nil, errors.New("schedule payment days must be strictly ordered")
+		}
 		collection := due.Add(time.Duration(input.GraceHours) * time.Hour)
 		if !input.FirstCollectionAt.IsZero() {
 			first := dates[0]
@@ -241,6 +253,32 @@ func (s *Store) GetForObligation(obligationID string) (Schedule, []Item, error) 
 		return Schedule{}, nil, errors.New("schedule not found")
 	}
 	return cloneSchedule(*s.schedules[id]), cloneItems(s.items[id]), nil
+}
+
+// GetForObligationAt derives display states for this schedule without modifying
+// other customers' schedules as a side effect of opening a page.
+func (s *Store) GetForObligationAt(obligationID string, now time.Time) (Schedule, []Item, error) {
+	schedule, items, err := s.GetForObligation(obligationID)
+	if err != nil {
+		return Schedule{}, nil, err
+	}
+	for i := range items {
+		item := &items[i]
+		if item.State == ItemPaid || item.State == ItemCancelled {
+			continue
+		}
+		switch {
+		case item.AllocatedKobo > 0:
+			item.State = ItemPartiallyPaid
+		case now.Before(item.DueAt):
+			item.State = ItemOpen
+		case now.Before(item.CollectionAt):
+			item.State = ItemInGrace
+		default:
+			item.State = ItemOverdue
+		}
+	}
+	return schedule, items, nil
 }
 
 func (s *Store) DeleteIfEmpty(obligationID string) error {

@@ -126,9 +126,39 @@ func TestCompletionNoticeRequiresDeliveryAndWaitingPeriod(t *testing.T) {
 	if err = start(); err == nil {
 		t.Fatal("changed schedule reused a stale notice")
 	}
-	if _, err = f.pool.Exec(ctx, `UPDATE app.schedule_items SET collection_at=collection_at-interval '1 minute' WHERE schedule_id IN (SELECT id FROM app.repayment_schedules WHERE obligation_id=$1::uuid)`, f.id); err != nil {
+
+	// A changed date needs a new delivered notice and its own acknowledgement;
+	// the original immutable acknowledgement must remain available for history.
+	var newEventID, newNotificationID string
+	if err = f.pool.QueryRow(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key)
+ SELECT 'obligation',$1::uuid::text,'notification.requested','{}',app.collection_notice_key(i)
+ FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id WHERE s.obligation_id=$1::uuid RETURNING id::text`, f.id).Scan(&newEventID); err != nil {
 		t.Fatal(err)
 	}
+	newDeliveries, err := store.Emit(ctx, notifications.Event{ID: "outbox:" + newEventID, Type: "PriorDebitNotice", RecipientID: f.user, Email: "synthetic@example.test", Priority: notifications.PriorityCritical, DeferDelivery: true})
+	if err != nil || len(newDeliveries) != 1 {
+		t.Fatalf("new notice: %+v %v", newDeliveries, err)
+	}
+	newNotificationID = newDeliveries[0].ID
+	if _, err = f.pool.Exec(ctx, `UPDATE app.notifications SET state='delivered' WHERE id=$1::uuid`, newNotificationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.pool.Exec(ctx, `INSERT INTO app.notification_delivery_receipts(channel,event_id,payload_hash,notification_id,received_at) VALUES('email',$1,'synthetic-aged-receipt',$2::uuid,now()-interval '32 days')`, "receipt:"+newEventID, newNotificationID); err != nil {
+		t.Fatal(err)
+	}
+	if err = start(); err == nil || p.count.Load() != 0 {
+		t.Fatal("old acknowledgement authorized a new notice")
+	}
+	if _, err = f.pool.Exec(ctx, `INSERT INTO app.collection_notice_acknowledgements(schedule_item_id,buyer_user_id,notification_id,receipt_channel,receipt_event_id,acknowledged_at)
+ SELECT i.id,$2::uuid,$3::uuid,'email',$4,now()-interval '32 days'
+ FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id WHERE s.obligation_id=$1::uuid`, f.id, f.user, newNotificationID, "receipt:"+newEventID); err != nil {
+		t.Fatal(err)
+	}
+	var acknowledgements int
+	if err = f.pool.QueryRow(ctx, `SELECT count(*) FROM app.collection_notice_acknowledgements WHERE notification_id IN($1::uuid,$2::uuid)`, deliveries[0].ID, newNotificationID).Scan(&acknowledgements); err != nil || acknowledgements != 2 {
+		t.Fatalf("notice history: count=%d error=%v", acknowledgements, err)
+	}
+
 	if err = start(); err != nil || p.count.Load() != 1 {
 		t.Fatalf("valid delivered notice did not authorize single debit: %v", err)
 	}
@@ -137,6 +167,9 @@ func TestCompletionNoticeRequiresDeliveryAndWaitingPeriod(t *testing.T) {
 func TestCompletionReconciliationCannotCloseUnresolvedDifference(t *testing.T) {
 	f := financialFixture(t)
 	ctx := context.Background()
+	if _, err := f.pool.Exec(ctx, `INSERT INTO app.platform_role_assignments(user_id,role,granted_by,reason) VALUES($1::uuid,'platform_admin',$1::uuid,'Synthetic financial review authority')`, f.user); err != nil {
+		t.Fatal(err)
+	}
 	store := platformops.NewStore(f.pool)
 	if _, err := f.pool.Exec(ctx, `UPDATE app.obligations SET outstanding_kobo=outstanding_kobo-1 WHERE id=$1::uuid`, f.id); err != nil {
 		t.Fatal(err)
@@ -172,6 +205,12 @@ func TestCompletionReconciliationCannotCloseUnresolvedDifference(t *testing.T) {
 	}
 	if err := store.RefreshFinancialReviews(ctx); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `UPDATE app.platform_role_assignments SET revoked_at=now() WHERE user_id=$1::uuid AND revoked_at IS NULL`, f.user); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecideFinancialReview(ctx, id, f.user, "claim", "Attempt review after role revoked"); err == nil {
+		t.Fatal("revoked reviewer retained mutation authority")
 	}
 	var state string
 	if err := f.pool.QueryRow(ctx, `SELECT state FROM app.financial_review_cases WHERE id=$1::uuid`, id).Scan(&state); err != nil || state != "OPEN" {

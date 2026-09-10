@@ -130,3 +130,54 @@ func postJSON(t *testing.T, handler http.Handler, path string, input any, header
 	}
 	return result
 }
+
+func TestSimulatorReplaysPreserveProviderState(t *testing.T) {
+	handler := newSimulator().handler()
+	input := map[string]any{"user_id": "buyer", "business_id": "business", "amount_ceiling": 1000}
+	mandate := postJSON(t, handler, "/mandates", input, nil)
+	postJSON(t, handler, "/mandates/"+mandate["provider_id"].(string)+"/cancel", map[string]string{"reason": "withdrawn"}, nil)
+	replay := postJSON(t, handler, "/mandates", input, nil)
+	if replay["status"] != "cancelled" {
+		t.Fatalf("replay reactivated mandate: %+v", replay)
+	}
+	payment := map[string]any{"external_reference": "attempt", "amount_kobo": 1000}
+	postJSON(t, handler, "/collections", payment, map[string]string{"X-Simulator-Scenario": "failed"})
+	replay = postJSON(t, handler, "/collections", payment, nil)
+	if replay["state"] != "failed" || replay["succeeded_amount_kobo"] != float64(0) {
+		t.Fatalf("replay rewrote collection: %+v", replay)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/collections/"+replay["provider_collection_id"].(string)+"?state=succeeded", nil))
+	var polled map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &polled); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != 200 || polled["succeeded_amount_kobo"] != float64(1000) || polled["retryable"] != false {
+		t.Fatalf("inconsistent poll: %+v", polled)
+	}
+}
+
+func TestSimulatorRejectsConflictingReplaysAndInvalidScans(t *testing.T) {
+	handler := newSimulator().handler()
+	postJSON(t, handler, "/collections", map[string]any{"external_reference": "attempt", "amount_kobo": 1000}, nil)
+	postJSON(t, handler, "/mandates", map[string]any{"user_id": "buyer", "business_id": "business", "amount_ceiling": 1000}, nil)
+	postJSON(t, handler, "/notifications", map[string]string{"channel": "email"}, map[string]string{"Idempotency-Key": "message"})
+	for _, tc := range []struct {
+		path, body, key string
+		status          int
+	}{
+		{"/collections", `{"external_reference":"attempt","amount_kobo":2000}`, "", 409},
+		{"/mandates", `{"user_id":"buyer","business_id":"business","amount_ceiling":2000}`, "", 409},
+		{"/notifications", `{"channel":"sms"}`, "message", 409},
+		{"/documents/scan?scenario=unknown", `{}`, "", 422},
+		{"/collections?scenario=unknown", `{"external_reference":"new","amount_kobo":1000}`, "", 422},
+	} {
+		request := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+		request.Header.Set("Idempotency-Key", tc.key)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != tc.status {
+			t.Fatalf("%s status=%d want=%d", tc.path, response.Code, tc.status)
+		}
+	}
+}

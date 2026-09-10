@@ -1,7 +1,12 @@
 # Kredit — Strategic Recommendations
 
+> Historical assessment of an earlier source revision. The September 9 direct
+> audit is still in progress and has found additional code and seed defects.
+> Completion and test claims below do not certify the current working tree.
+> See [the current file ledger](../launch-audit-2026-09-08/FILE-BY-FILE.md).
+
 **Prepared:** 3 September 2026
-**Basis:** Full file-by-file audit of the Kredit codebase and README build contract, plus `docs/product/pilot-scorecard.md`, `docs/product/open-questions.md`, and the data model in `db/migrations/`.
+**Historical basis:** Earlier code review and README build contract, plus `docs/product/pilot-scorecard.md`, `docs/product/open-questions.md`, and the data model in `db/migrations/`.
 **Scope:** Product, commercial and risk. Code-level defects and their fixes are recorded separately in `IMPLEMENTATION_STATUS.md`.
 
 ---
@@ -141,7 +146,12 @@ The risk is sequencing. If the go-to-market story comes to depend on history sha
 
 ---
 
-## 8. Dark-launch the admin surface
+## 8. Historical proposal: dark-launch the admin surface
+
+The owner subsequently requested access to all supported admin controls. The
+current policy is role-scoped access with recent MFA and recorded changes, not
+a reduced screen allowlist. The earlier proposal below is not an instruction to
+disable the completed controls.
 
 Twenty-one admin screens is a large privileged surface for a pilot of five to ten suppliers. Every admin screen is a path that has to be access-reviewed, audit-logged, and defended.
 

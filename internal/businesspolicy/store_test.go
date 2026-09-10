@@ -51,7 +51,7 @@ func TestPostgresIndependentApprovalHistoryAndEffectivePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := Proposal{ID: uuid.NewString(), BaseRevision: current.Revision, Values: current.Values, Reason: "Change the operating notice period", EffectiveAt: time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond)}
+	in := Proposal{ID: uuid.NewString(), BaseRevision: current.Revision, Values: current.Values, Reason: "Change the operating notice period", EffectiveAt: time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond).Add(789 * time.Nanosecond)}
 	in.Values.NoticeHours = 48
 	if _, err = s.Propose(ctx, b, in); err == nil {
 		t.Fatal("approver proposed policy")
@@ -66,6 +66,11 @@ func TestPostgresIndependentApprovalHistoryAndEffectivePolicy(t *testing.T) {
 		t.Fatal("exact replay", err)
 	}
 	bad := in
+	bad.EffectiveAt = bad.EffectiveAt.Add(time.Microsecond)
+	if _, err = s.Propose(ctx, a, bad); err == nil {
+		t.Fatal("changed effective date accepted under the same identifier")
+	}
+	bad = in
 	bad.Values.NoticeHours = 72
 	if _, err = s.Propose(ctx, a, bad); err == nil {
 		t.Fatal("conflicting replay accepted")

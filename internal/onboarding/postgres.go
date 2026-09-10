@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kredit/internal/identifier"
+	"kredit/internal/legalpublication"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,8 +16,9 @@ import (
 )
 
 type PostgresStore struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	legalReader legalpublication.Reader
+	pool        *pgxpool.Pool
+	now         func() time.Time
 }
 
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
@@ -40,6 +42,9 @@ func scanProfile(row pgx.Row) (Profile, error) {
 }
 
 func (s *PostgresStore) begin(org string) (pgx.Tx, error) {
+	if s == nil || s.pool == nil {
+		return nil, errors.New("onboarding database is not configured")
+	}
 	tx, err := s.pool.Begin(context.Background())
 	if err != nil {
 		return nil, err
@@ -52,17 +57,34 @@ func (s *PostgresStore) begin(org string) (pgx.Tx, error) {
 }
 
 func (s *PostgresStore) Ensure(org, actor string, email, phone bool) (Profile, error) {
-	tx, err := s.begin(org)
+	if s == nil || s.pool == nil {
+		return Profile{}, errors.New("onboarding database is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Profile{}, err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	now := s.now()
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, org); err != nil {
+		return Profile{}, err
+	}
+	p, err := EnsureProfileTx(ctx, tx, org, actor, email, phone, s.now())
+	if err != nil {
+		return Profile{}, err
+	}
+	return p, tx.Commit(ctx)
+}
+
+// EnsureProfileTx creates the initial profile and immutable revision inside the
+// caller's organization transaction. The caller must establish tenant context.
+func EnsureProfileTx(ctx context.Context, tx pgx.Tx, org, actor string, email, phone bool, now time.Time) (Profile, error) {
 	var actorUUID any
 	if parsed, parseErr := uuid.Parse(actor); parseErr == nil {
 		actorUUID = parsed
 	}
-	_, err = tx.Exec(context.Background(), `
+	_, err := tx.Exec(ctx, `
 		WITH inserted AS (
 			INSERT INTO app.supplier_onboarding_profiles (organization_id,owner_email_verified_at,owner_phone_verified_at)
 			VALUES ($1,$2,$3) ON CONFLICT (organization_id) DO NOTHING RETURNING *
@@ -74,15 +96,13 @@ func (s *PostgresStore) Ensure(org, actor string, email, phone bool) (Profile, e
 	if err != nil {
 		return Profile{}, fmt.Errorf("ensure onboarding profile: %w", err)
 	}
-	p, err := scanProfile(tx.QueryRow(context.Background(), profileSelect, org))
+	p, err := scanProfile(tx.QueryRow(ctx, profileSelect, org))
 	if err != nil {
-		return Profile{}, err
-	}
-	if err = tx.Commit(context.Background()); err != nil {
 		return Profile{}, err
 	}
 	return p, nil
 }
+
 func timeOrNil(ok bool, t time.Time) any {
 	if ok {
 		return t
@@ -91,6 +111,13 @@ func timeOrNil(ok bool, t time.Time) any {
 }
 
 func (s *PostgresStore) Get(org string) (Profile, Summary, error) {
+	if s == nil {
+		return Profile{}, Summary{}, errors.New("onboarding unavailable")
+	}
+	versions, err := legalpublication.Resolve(s.legalReader)
+	if err != nil {
+		return Profile{}, Summary{}, err
+	}
 	tx, err := s.begin(org)
 	if err != nil {
 		return Profile{}, Summary{}, err
@@ -106,12 +133,16 @@ func (s *PostgresStore) Get(org string) (Profile, Summary, error) {
 	if err := tx.Commit(context.Background()); err != nil {
 		return Profile{}, Summary{}, err
 	}
-	return p, summarize(p, s.now()), nil
+	return p, summarize(p, s.now(), versions), nil
 }
 
 type memoryMutation func(*Store) (Profile, Summary, error)
 
 func (s *PostgresStore) apply(org, actor, change string, fn memoryMutation) (Profile, Summary, error) {
+	versions, err := legalpublication.Resolve(s.legalReader)
+	if err != nil {
+		return Profile{}, Summary{}, err
+	}
 	tx, err := s.begin(org)
 	if err != nil {
 		return Profile{}, Summary{}, err
@@ -126,13 +157,20 @@ func (s *PostgresStore) apply(org, actor, change string, fn memoryMutation) (Pro
 	}
 	previousVersion := p.Version
 	mem := NewStore()
+	mem.legalReader = func() (legalpublication.Versions, error) { return versions, nil }
 	mem.now = s.now
 	mem.profiles[org] = &p
 	next, summary, err := fn(mem)
 	if err != nil {
 		return Profile{}, Summary{}, err
 	}
-	snapshot, _ := json.Marshal(next)
+	if next.Version == previousVersion {
+		return next, summary, tx.Commit(context.Background())
+	}
+	snapshot, err := json.Marshal(next)
+	if err != nil {
+		return Profile{}, Summary{}, err
+	}
 	var actorUUID any
 	if parsed, parseErr := uuid.Parse(actor); parseErr == nil {
 		actorUUID = parsed
@@ -200,23 +238,36 @@ func (s *PostgresStore) SyncSecurity(o, a string, owner, finance bool) (Profile,
 	return s.apply(o, a, "security.synced", func(m *Store) (Profile, Summary, error) { return m.SyncSecurity(o, a, owner, finance) })
 }
 func (s *PostgresStore) Reconcile(now time.Time) []Profile {
+	if s == nil || s.pool == nil {
+		return nil
+	}
 	rows, err := s.pool.Query(context.Background(), `SELECT organization_id::text FROM app.reconcile_supplier_onboarding($1)`, now)
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
-	var result []Profile
+	var ids []string
 	for rows.Next() {
-		var organizationID string
-		if rows.Scan(&organizationID) != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
 			return nil
 		}
-		if profile, _, loadErr := s.Get(organizationID); loadErr == nil {
-			result = append(result, profile)
-		}
+		ids = append(ids, id)
 	}
+	rows.Close()
 	if rows.Err() != nil {
 		return nil
 	}
+	var result []Profile
+	for _, id := range ids {
+		profile, _, err := s.Get(id)
+		if err != nil {
+			return nil
+		}
+		result = append(result, profile)
+	}
 	return result
 }
+
+// SetLegalReader is configured before the store begins serving requests.
+func (s *PostgresStore) SetLegalReader(reader legalpublication.Reader) { s.legalReader = reader }

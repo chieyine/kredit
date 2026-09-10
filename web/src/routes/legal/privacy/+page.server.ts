@@ -1,5 +1,2 @@
-import { loadLegalConfig } from '$lib/server/legal-config';
-
-export function load() {
-	return { legal: loadLegalConfig() };
-}
+import {loadLegalContent} from '$lib/server/legal-content';
+export async function load({fetch,url}:{fetch:typeof globalThis.fetch;url:URL}){return loadLegalContent(fetch,'privacy',url.searchParams.get('version'));}

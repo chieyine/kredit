@@ -10,7 +10,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U kredit -d kredit"]
       interval: 5s
@@ -137,6 +137,8 @@ services:
       DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@postgres:5432/kredit?sslmode=disable
       RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@postgres:5432/kredit?sslmode=disable
       OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      DOCUMENT_SCANNER_ENDPOINT: http://provider-simulator:8090/documents/scan
+      DOCUMENT_SCANNER_TOKEN: development-simulator-token
     healthcheck:
       test: ["CMD", "/app/kredit-worker", "-healthcheck"]
       interval: 15s
@@ -148,6 +150,8 @@ services:
         condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
+      provider-simulator:
+        condition: service_healthy
 
   web:
     build:

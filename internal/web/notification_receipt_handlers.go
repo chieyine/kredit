@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"kredit/internal/notifications"
 	"net/http"
@@ -20,6 +21,20 @@ func (s *Server) notificationDeliveryReceipt(w http.ResponseWriter, r *http.Requ
 		token = s.config.NotificationSMSToken
 	case "whatsapp":
 		token = s.config.NotificationWhatsAppToken
+	default:
+		writeProblem(w, 404, "notification_channel_invalid", "Notification channel is not available")
+		return
+	}
+	connector, err := notifications.ResolveConnector(r.Context(), s.runtime.PlatformSettings, channel)
+	if err != nil {
+		writeProblem(w, 503, "connector_unavailable", "Connector configuration is unavailable")
+		return
+	}
+	if connector != nil {
+		token = ""
+		if connector.Enabled {
+			token = connector.Token
+		}
 	}
 	if token == "" {
 		writeProblem(w, 401, "invalid_signature", "Connector authentication required")
@@ -43,7 +58,16 @@ func (s *Server) notificationDeliveryReceipt(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err = s.runtime.Notifications.RecordDeliveryReceipt(r.Context(), channel, receipt); err != nil {
-		writeProblem(w, 409, "receipt_not_recorded", err.Error())
+		switch {
+		case errors.Is(err, notifications.ErrInvalidDeliveryReceipt):
+			writeProblem(w, 400, "invalid_receipt", "The delivery receipt is incomplete or invalid.")
+		case errors.Is(err, notifications.ErrDeliveryReceiptConflict):
+			writeProblem(w, 409, "receipt_conflict", "The receipt reference was already used for different evidence.")
+		case errors.Is(err, notifications.ErrDeliveryReceiptPending):
+			writeProblem(w, 409, "receipt_pending", "The sent message is not yet available. Retry this receipt later.")
+		default:
+			writeProblem(w, 503, "receipt_unavailable", "The delivery receipt could not be saved. Retry this receipt later.")
+		}
 		return
 	}
 	writeJSON(w, 200, map[string]any{"status": "recorded"})

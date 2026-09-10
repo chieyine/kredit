@@ -12,6 +12,7 @@ import (
 	"kredit/internal/identity"
 	"kredit/internal/notifications"
 	"kredit/internal/onboarding"
+	"kredit/internal/organizations"
 )
 
 type representativeRequest struct {
@@ -68,14 +69,17 @@ func (s *Server) getSupplierOnboarding(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.syncOnboardingSecurity(orgID, user.ID)
+	if err := s.syncOnboardingSecurity(orgID, user.ID); err != nil {
+		writeProblem(w, 503, "onboarding_security_unavailable", "Account security requirements could not be checked")
+		return
+	}
 	profile, summary, err := s.runtime.Onboarding.Get(orgID)
 	if err != nil {
 		writeProblem(w, 404, "onboarding_not_found", err.Error())
 		return
 	}
 	profile = visibleOnboardingProfile(profile, membership.Role)
-	writeJSON(w, 200, map[string]any{"profile": profile, "readiness": summary, "current_terms_version": onboarding.CurrentTermsVersion, "current_privacy_version": onboarding.CurrentPrivacyVersion, "permissions": onboardingPermissions(membership.Role)})
+	writeJSON(w, 200, map[string]any{"profile": profile, "readiness": summary, "current_terms_version": summary.CurrentTermsVersion, "current_privacy_version": summary.CurrentPrivacyVersion, "permissions": onboardingPermissions(membership.Role)})
 }
 
 func (s *Server) requestOnboardingContactOTP(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +96,7 @@ func (s *Server) requestOnboardingContactOTP(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var in onboardingContactRequest
-	if err := decodeJSON(w, r, &in); err != nil {
+	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
 	challenge, code, err := s.runtime.Auth.RequestOTP(in.Identifier, in.Channel, "supplier_contact_verification")
@@ -103,7 +107,7 @@ func (s *Server) requestOnboardingContactOTP(w http.ResponseWriter, r *http.Requ
 	// A swallowed delivery failure returns 202 for a code that never arrives and
 	// leaves the supplier stuck on an onboarding step with no way to know why.
 	// The login OTP route already reports this; report it here too.
-	if err := s.runtime.Notifications.SendOTP(r.Context(), in.Identifier, in.Channel, code); err != nil {
+	if err := s.runtime.Notifications.SendOTP(r.Context(), challenge.TargetValue, challenge.TargetType, code); err != nil {
 		writeProblem(w, http.StatusServiceUnavailable, "otp_delivery_unavailable", "We cannot send codes right now. Please try again shortly.")
 		return
 	}
@@ -129,7 +133,7 @@ func (s *Server) verifyOnboardingContact(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var in onboardingContactVerifyRequest
-	if err := decodeJSON(w, r, &in); err != nil {
+	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
 	if err := s.runtime.Auth.VerifyAndAttachIdentifier(user.ID, in.ChallengeID, in.Code, in.Channel, in.Identifier); err != nil {
@@ -343,8 +347,19 @@ func (s *Server) finishOnboardingChange(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, 200, map[string]any{"profile": p, "readiness": sum})
 }
 
-func (s *Server) syncOnboardingSecurity(orgID, actor string) {
-	members := s.runtime.Organizations.ListMembers(orgID)
+func (s *Server) syncOnboardingSecurity(orgID, actor string) error {
+	var members []organizations.Membership
+	if source, ok := s.runtime.Organizations.(interface {
+		ReadMembers(string) ([]organizations.Membership, error)
+	}); ok {
+		var err error
+		members, err = source.ReadMembers(orgID)
+		if err != nil {
+			return err
+		}
+	} else {
+		members = s.runtime.Organizations.ListMembers(orgID)
+	}
 	ownerMFA := false
 	financeMFA := true
 	for _, m := range members {
@@ -358,7 +373,8 @@ func (s *Server) syncOnboardingSecurity(orgID, actor string) {
 			financeMFA = false
 		}
 	}
-	_, _, _ = s.runtime.Onboarding.SyncSecurity(orgID, actor, ownerMFA, financeMFA)
+	_, _, err := s.runtime.Onboarding.SyncSecurity(orgID, actor, ownerMFA, financeMFA)
+	return err
 }
 func visibleOnboardingProfile(p onboarding.Profile, role access.Role) onboarding.Profile {
 	if role != access.RoleOwner && role != access.RoleAdministrator && role != access.RoleFinance {
@@ -374,7 +390,10 @@ func onboardingPermissions(role access.Role) map[string]bool {
 }
 
 func (s *Server) requireSupplierReady(w http.ResponseWriter, organizationID, actorUserID, action string) bool {
-	s.syncOnboardingSecurity(organizationID, actorUserID)
+	if err := s.syncOnboardingSecurity(organizationID, actorUserID); err != nil {
+		writeProblem(w, 503, "onboarding_security_unavailable", "Account security requirements could not be checked")
+		return false
+	}
 	_, summary, err := s.runtime.Onboarding.Get(organizationID)
 	if err != nil {
 		writeProblem(w, http.StatusConflict, "supplier_onboarding_required", "Complete supplier onboarding before "+action+". Open /app/onboarding to continue.")

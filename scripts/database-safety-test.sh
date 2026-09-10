@@ -13,6 +13,7 @@ done
 
 printf 'synthetic backup\n' > "$fixture/backup.dump"
 shasum -a 256 "$fixture/backup.dump" > "$fixture/backup.dump.sha256"
+printf '{}\n' > "$fixture/fingerprint.json"
 mkdir "$fixture/bin"
 cat > "$fixture/bin/psql" <<'SHIM'
 #!/usr/bin/env bash
@@ -24,7 +25,7 @@ printf 'pg_restore must not be invoked for a populated target\n' >&2
 exit 99
 SHIM
 chmod +x "$fixture/bin/psql" "$fixture/bin/pg_restore"
-if env PATH="$fixture/bin:$PATH" DATABASE_URL='' RESTORE_DATABASE_URL='postgres://synthetic@localhost/isolated' bash "$root_dir/scripts/restore-drill.sh" "$fixture/backup.dump" > "$fixture/restore.log" 2>&1; then
+if env PATH="$fixture/bin:$PATH" DATABASE_URL='' RESTORE_EXPECTED_FINGERPRINT="$fixture/fingerprint.json" RESTORE_DATABASE_URL='postgres://synthetic@localhost/isolated' bash "$root_dir/scripts/restore-drill.sh" "$fixture/backup.dump" > "$fixture/restore.log" 2>&1; then
   printf 'populated restore target was accepted\n' >&2; exit 1
 fi
 grep -q 'restore target must be an empty database' "$fixture/restore.log"

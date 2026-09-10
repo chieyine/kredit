@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"kredit/internal/config"
+	"kredit/internal/mandates"
 	"log/slog"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +22,7 @@ func TestNotificationReceiptsAuthenticateExactBody(t *testing.T) {
 	for _, test := range []struct {
 		body, signature string
 		status          int
-	}{{original, "", 401}, {strings.Replace(original, "message\"", "changed\"", 1), signature, 401}, {original, signature, 409}} {
+	}{{original, "", 401}, {strings.Replace(original, "message\"", "changed\"", 1), signature, 401}, {original, signature, 503}} {
 		request := httptest.NewRequest("POST", "/api/v1/webhooks/notifications/email", strings.NewReader(test.body))
 		request.SetPathValue("channel", "email")
 		request.Header.Set("X-Notification-Signature", test.signature)
@@ -48,5 +49,22 @@ func TestScrapeCredentialOnlyGrantsMetricsAccess(t *testing.T) {
 	s.financialReviews(recorder, request)
 	if recorder.Code == 200 {
 		t.Fatal("scrape credential opened financial cases")
+	}
+}
+
+func TestBuyerCanFindStandaloneBankPermission(t *testing.T) {
+	cfg := config.Config{Environment: "development", Currency: "NGN", MoneyUnit: "kobo", TokenHashKey: "test-only", CollectionProvider: "mock"}
+	s := NewServer(cfg, slog.Default())
+	created, err := s.runtime.Mandates.CreateAuthorizationSession(t.Context(), mandates.AuthorizationInput{UserID: "standalone-buyer", BusinessID: "business", SupplierOrganizationID: "supplier", AmountCeiling: 10000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, views, found, err := s.findBuyerMandate(t.Context(), "standalone-buyer", created.ID)
+	if err != nil || !found || current.ID != created.ID || len(views) != 0 {
+		t.Fatalf("standalone permission hidden: %+v %v %v", current, found, err)
+	}
+	_, _, found, err = s.findBuyerMandate(t.Context(), "another-buyer", created.ID)
+	if err != nil || found {
+		t.Fatalf("another buyer found permission: %v %v", found, err)
 	}
 }

@@ -1,13 +1,16 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/corrections"
 	"kredit/internal/notifications"
+	"kredit/internal/reports"
 )
 
 type correctionInput struct {
@@ -28,10 +31,11 @@ func (s *Server) reportReceivables(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_path", err.Error())
 		return
 	}
-	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
+	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
+	if !ok {
 		return
 	}
-	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.receivables.viewed", orgID, "supplier receivables reporting", nil)
+	s.trackOptionalActivity(r, user.ID, "report.receivables.viewed", orgID, "supplier receivables reporting", nil)
 	report, err := s.runtime.Reports.ReceivablesForSupplier(r.Context(), orgID)
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "We could not open that report. Please try again.")
@@ -69,10 +73,11 @@ func (s *Server) reportAgeing(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_path", err.Error())
 		return
 	}
-	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
+	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
+	if !ok {
 		return
 	}
-	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.ageing.viewed", orgID, "supplier ageing reporting", nil)
+	s.trackOptionalActivity(r, user.ID, "report.ageing.viewed", orgID, "supplier ageing reporting", nil)
 	report, err := s.runtime.Reports.AgeingForSupplier(r.Context(), orgID)
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "We could not open that report. Please try again.")
@@ -86,10 +91,11 @@ func (s *Server) reportFees(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_path", err.Error())
 		return
 	}
-	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
+	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
+	if !ok {
 		return
 	}
-	_, _ = s.runtime.Reports.TrackContext(r.Context(), "report.fees.viewed", orgID, "supplier fee reporting", nil)
+	s.trackOptionalActivity(r, user.ID, "report.fees.viewed", orgID, "supplier fee reporting", nil)
 	report, err := s.runtime.Reports.FeesForSupplier(r.Context(), orgID)
 	if err != nil {
 		writeProblem(w, 503, "fee_report_unavailable", "We could not open your fee report. Please try again.")
@@ -140,9 +146,17 @@ func (s *Server) buyerHistory(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 503, "report_unavailable", "We could not open your money history. Please try again.")
 		return
 	}
+	reviewed, err := s.runtime.Corrections.ReadForBuyer(r.Context(), user.ID)
+	if err != nil {
+		writeProblem(w, 503, "report_unavailable", "We could not open your correction history. Please try again.")
+		return
+	}
 	h.Shareable = false
-	_, _ = s.runtime.Reports.TrackContext(r.Context(), "history.viewed", user.ID, "buyer factual history", nil)
-	writeJSON(w, 200, h)
+	s.trackOptionalActivity(r, user.ID, "history.viewed", user.ID, "buyer factual history", nil)
+	writeJSON(w, 200, struct {
+		reports.History
+		Corrections []corrections.ReviewedRequest `json:"corrections"`
+	}{h, reviewed})
 }
 
 func (s *Server) supplierCustomerHistory(w http.ResponseWriter, r *http.Request) {
@@ -244,7 +258,12 @@ func (s *Server) listCorrections(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadAudit); !ok {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"corrections": s.runtime.Corrections.ListForOrganization(orgID)})
+	requests, err := s.runtime.Corrections.ListForOrganization(r.Context(), orgID)
+	if err != nil {
+		writeProblem(w, 503, "correction_history_unavailable", "We could not load the correction requests. Please try again.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"corrections": requests})
 }
 
 func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
@@ -284,6 +303,10 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"correction": updated})
 		return
 	}
+	financialRows2, readErr2 := s.runtime.readCreditForSupplier(r.Context(), orgID)
+	if financialReadError(w, readErr2) {
+		return
+	}
 	updated, decision, err := s.runtime.Corrections.Decide(id, user.ID, in.Outcome, in.Reason)
 	if err != nil {
 		writeProblem(w, 422, "correction_decision_invalid", err.Error())
@@ -296,10 +319,6 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 			lookupType, lookupID = "obligation", payment.ObligationID
 		}
 	}
-	financialRows2, readErr2 := s.runtime.readCreditForSupplier(r.Context(), orgID)
-	if financialReadError(w, readErr2) {
-		return
-	}
 	for _, view := range financialRows2 {
 		if (lookupType == "credit_request" && view.Request.ID == lookupID) || (lookupType == "obligation" && view.Obligation != nil && view.Obligation.ID == lookupID) {
 			_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "correction-notice-" + id, Type: "history.correction.updated", RecipientID: view.Request.BuyerUserID, OrganizationID: orgID, Priority: notifications.PriorityRoutine, Reference: id, NextAction: "Review your factual history"})
@@ -307,4 +326,18 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"correction": updated, "decision": decision})
+}
+
+// Usage events are optional processing; the underlying report remains available.
+func (s *Server) trackOptionalActivity(r *http.Request, actorID, name, subjectID, purpose string, metadata map[string]string) {
+	if s.runtime.UserControl == nil || s.runtime.Reports == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	allowed, err := s.runtime.UserControl.AllowsOptionalProcessing(ctx, actorID)
+	if err != nil || !allowed {
+		return
+	}
+	_, _ = s.runtime.Reports.TrackContext(ctx, name, subjectID, purpose, metadata)
 }
