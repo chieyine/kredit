@@ -82,7 +82,7 @@
 	<link rel="canonical" href={canonical} />
 	<link rel="alternate" hreflang="en-NG" href={canonical} />
 	<link rel="alternate" hreflang="x-default" href={canonical} />
-	<link rel="alternate" type="application/rss+xml" title="Kredit helpful guides" href="https://kredit.com.ng/blog/rss.xml" />
+	<link rel="alternate" type="application/rss+xml" title="Kredit helpful guides" href="https://kredit.ng/blog/rss.xml" />
 	<meta property="og:site_name" content="Kredit" />
 	<meta property="og:type" content={seo.type ?? 'website'} />
 	<meta property="og:url" content={canonical} />
