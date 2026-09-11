@@ -8,7 +8,7 @@ export type PageSEO = {
 	category?: string;
 };
 
-export const SITE_URL = 'https://kredit.com.ng';
+export const SITE_URL = 'https://kredit.ng';
 
 export const publicSitemapEntries = [
 	{ path: '/', priority: '1.0', changeFrequency: 'weekly' },

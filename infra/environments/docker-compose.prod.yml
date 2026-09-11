@@ -1,0 +1,131 @@
+name: kredit-prod
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kredit
+      POSTGRES_USER: kredit
+      POSTGRES_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - kredit-backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kredit -d kredit"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/containers/Dockerfile.api
+      target: api
+    entrypoint: ["/app/kredit-migrate"]
+    environment:
+      DATABASE_URL: postgres://kredit:${POSTGRES_ROOT_PASSWORD}@postgres:5432/kredit?sslmode=disable
+    networks:
+      - kredit-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  role-init:
+    image: postgres:18
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        psql "$${DATABASE_DIRECT_URL}" -X -v ON_ERROR_STOP=1 -f /config/roles.sql &&
+        psql "$${DATABASE_DIRECT_URL}" -X -v ON_ERROR_STOP=1
+        -v app_login_password="$${KREDIT_APP_DB_PASSWORD}"
+        -v worker_login_password="$${KREDIT_WORKER_DB_PASSWORD}"
+        -v backup_login_password="$${KREDIT_BACKUP_DB_PASSWORD}"
+        -v demote_owner=false
+        -f /config/development-logins.sql
+    environment:
+      DATABASE_DIRECT_URL: postgres://kredit:${POSTGRES_ROOT_PASSWORD}@postgres:5432/kredit?sslmode=disable
+      KREDIT_APP_DB_PASSWORD: ${KREDIT_APP_DB_PASSWORD}
+      KREDIT_WORKER_DB_PASSWORD: ${KREDIT_WORKER_DB_PASSWORD}
+      KREDIT_BACKUP_DB_PASSWORD: ${KREDIT_BACKUP_DB_PASSWORD}
+    volumes:
+      - ../postgres:/config:ro
+    networks:
+      - kredit-backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/containers/Dockerfile.api
+      target: api
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      API_ADDR: :8080
+      DATABASE_URL: postgres://kredit_app_login:${KREDIT_APP_DB_PASSWORD}@postgres:5432/kredit?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:${KREDIT_WORKER_DB_PASSWORD}@postgres:5432/kredit?sslmode=disable
+    networks:
+      - kredit-backend
+    healthcheck:
+      test: ["CMD", "/app/kredit-api", "-healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    depends_on:
+      role-init:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infra/containers/Dockerfile.api
+      target: worker
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: postgres://kredit_app_login:${KREDIT_APP_DB_PASSWORD}@postgres:5432/kredit?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:${KREDIT_WORKER_DB_PASSWORD}@postgres:5432/kredit?sslmode=disable
+    networks:
+      - kredit-backend
+    healthcheck:
+      test: ["CMD", "/app/kredit-worker", "-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 15s
+    depends_on:
+      role-init:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - kredit-backend
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  kredit-backend:
+    driver: bridge
