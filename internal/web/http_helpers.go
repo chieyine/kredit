@@ -45,7 +45,7 @@ func writeProblem(w http.ResponseWriter, status int, code, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"type":   "https://api.kredit.com.ng/problems/" + code,
+		"type":   "https://api.kredit.ng/problems/" + code,
 		"title":  code,
 		"status": status,
 		"detail": safeProblemDetail(status, code, detail),

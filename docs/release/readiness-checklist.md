@@ -13,12 +13,12 @@ first-day review.
 - [ ] Approved operator name, service address, legal/privacy contacts,
       effective date and document versions are deployed; live legal pages no
       longer show the pre-launch notice.
-- [ ] `kredit.com.ng` DNS, TLS renewal, canonical origin and HTTPS redirects are
+- [ ] `kredit.ng` DNS, TLS renewal, canonical origin and HTTPS redirects are
       verified from outside the production network.
 - [ ] `scripts/post-deploy-check.sh` passes against the public production
       origin and approved legal entity.
 - [ ] Google Search Console domain ownership is verified, the live
-      `https://kredit.com.ng/sitemap.xml` is submitted, and its first fetch
+      `https://kredit.ng/sitemap.xml` is submitted, and its first fetch
       succeeds without sitemap or robots errors.
 - [ ] The live home page and one guide pass Google Rich Results and URL
       Inspection checks; canonical URL, rendered HTML and index permission

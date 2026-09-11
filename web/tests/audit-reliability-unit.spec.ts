@@ -133,8 +133,8 @@ for (const phone of ['0803 123 4567', '2348031234567', '+234 (803) 123-4567']) t
 for (const phone of ['123', '+12025551234', '080312345678', '80letters']) test(`rejects invalid Nigerian phone ${phone}`, () => { expect(() => normalizeNigerianPhone(phone)).toThrow(); });
 
 test('post-login destinations stay on the same origin', () => {
-  for (const path of ['//evil.test', '/\\evil.test', '/app', 'https://evil.test', '/\u0000evil']) expect(safeNext(path, 'https://kredit.com.ng')).toBe('/app/overview');
-  expect(safeNext('/buyer/credit-requests/abc?review=1', 'https://kredit.com.ng')).toBe('/buyer/credit-requests/abc?review=1');
+  for (const path of ['//evil.test', '/\\evil.test', '/app', 'https://evil.test', '/\u0000evil']) expect(safeNext(path, 'https://kredit.ng')).toBe('/app/overview');
+  expect(safeNext('/buyer/credit-requests/abc?review=1', 'https://kredit.ng')).toBe('/buyer/credit-requests/abc?review=1');
 });
 
 test('hosted permission only links to the approved HTTPS provider origin', () => {

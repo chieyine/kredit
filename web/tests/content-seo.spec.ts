@@ -15,7 +15,7 @@ test('guide renders useful content without invented publication or research clai
 	await page.goto('/blog/how-to-sell-goods-on-credit-in-nigeria');
 	await expect(page).toHaveTitle('How to sell goods on credit in Nigeria');
 	await expect(page.locator('meta[name="description"]')).toHaveAttribute('content',/Before goods leave your shop/i);
-	await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href','https://kredit.com.ng/blog/how-to-sell-goods-on-credit-in-nigeria');
+	await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href','https://kredit.ng/blog/how-to-sell-goods-on-credit-in-nigeria');
 	await expect(page.locator('meta[property="article:published_time"]')).toHaveCount(0);
 	await expect(page.locator('.guide > section').first().getByRole('heading')).toBeVisible();
 	await expect(page.getByRole('heading',{name:'Frequently asked questions'})).toBeVisible();
@@ -32,9 +32,9 @@ test('topic hubs give every article a crawlable route into its guide cluster',as
 	await expect(page.getByRole('heading',{name:'Customer check guides'})).toBeVisible();
 	await expect(page.locator('.topic-list').getByRole('link')).toHaveCount(1);
 	await expect(page.getByRole('link',{name:/12 questions to ask before giving business credit/i})).toBeVisible();
-	await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href','https://kredit.com.ng/blog/topic/customer-checks');
+	await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href','https://kredit.ng/blog/topic/customer-checks');
 	const sitemap=await (await request.get('/sitemap.xml')).text();
-	expect(sitemap).toContain('<loc>https://kredit.com.ng/blog/topic/customer-checks</loc>');
+	expect(sitemap).toContain('<loc>https://kredit.ng/blog/topic/customer-checks</loc>');
 });
 
 test('sitemap and RSS publish the guide library for discovery',async({request})=>{
@@ -88,8 +88,8 @@ test('approved production details activate both legal documents', async ({ page 
 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow,max-image-preview:large,max-snippet:-1');
 	}
 	const sitemap = await (await page.request.get('/sitemap.xml')).text();
-	expect(sitemap).toContain('<loc>https://kredit.com.ng/legal/privacy</loc>');
-	expect(sitemap).toContain('<loc>https://kredit.com.ng/legal/terms</loc>');
+	expect(sitemap).toContain('<loc>https://kredit.ng/legal/privacy</loc>');
+	expect(sitemap).toContain('<loc>https://kredit.ng/legal/terms</loc>');
 	const robots = await (await page.request.get('/robots.txt')).text();
 	expect(robots).not.toContain('Disallow: /legal/privacy');
 	expect(robots).not.toContain('Disallow: /legal/terms');

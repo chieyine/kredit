@@ -7,7 +7,7 @@ from phase5_load import percentile, run, valid_body, validate_origin
 class LoadBaselineTests(unittest.TestCase):
     def test_explicit_loopback_only(self):
         self.assertEqual('http://127.0.0.1:8080', validate_origin('http://127.0.0.1:8080/'))
-        for url in ['https://kredit.com.ng', 'http://localhost:8080', 'http://127.0.0.1', 'http://127.0.0.1:8080/api', 'http://user:password@127.0.0.1:8080', 'http://127.0.0.1:8080?secret=1', 'http://127.0.0.1:8080#fragment']:
+        for url in ['https://kredit.ng', 'http://localhost:8080', 'http://127.0.0.1', 'http://127.0.0.1:8080/api', 'http://user:password@127.0.0.1:8080', 'http://127.0.0.1:8080?secret=1', 'http://127.0.0.1:8080#fragment']:
             with self.subTest(url=url), self.assertRaises(ValueError):
                 validate_origin(url)
 

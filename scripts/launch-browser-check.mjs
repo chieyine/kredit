@@ -11,7 +11,7 @@ try {
   const text=await page.locator('body').innerText();
   assert.doesNotMatch(text,/pre-launch|approval pending|Before you read all this|Check session again|current session|Invalid Date/i);
   if(name==='pricing') {assert.match(text,/0.5%/);assert.doesNotMatch(text,/temporarily unavailable/)}
-  if(['terms','privacy','complaints'].includes(name)) assert.match(text,/hello@kredit.com.ng/);
+  if(['terms','privacy','complaints'].includes(name)) assert.match(text,/hello@kredit.ng/);
   await page.screenshot({path:`docs/launch-readiness/evidence/after-${name}.png`,fullPage:true});
   console.log('PASS rendered',path,'1440x1000');
  }

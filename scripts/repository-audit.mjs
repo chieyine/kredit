@@ -96,7 +96,7 @@ for (const file of files) {
 }
 
 const requiredBrandEvidence = new Map([
-	['web/src/lib/seo.ts', "export const SITE_URL = 'https://kredit.com.ng'"],
+	['web/src/lib/seo.ts', "export const SITE_URL = 'https://kredit.ng'"],
 	['web/static/manifest.webmanifest', '"short_name": "Kredit"'],
 	['api/openapi.yaml', 'title: Kredit API'],
 	['go.mod', 'module kredit'],

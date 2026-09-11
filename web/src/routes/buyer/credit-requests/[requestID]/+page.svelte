@@ -85,7 +85,7 @@
   async function createPaymentLink() {
     await perform('payment-link', undefined, value => {
       const result = record(value), raw = text(result.payment_url), url = new URL(raw, location.origin);
-      if (url.username || url.password || !url.pathname.startsWith('/pay/') || (url.origin !== location.origin && url.origin !== 'https://kredit.com.ng')) throw new Error('The payment link could not be verified.');
+      if (url.username || url.password || !url.pathname.startsWith('/pay/') || (url.origin !== location.origin && url.origin !== 'https://kredit.ng')) throw new Error('The payment link could not be verified.');
       return url.href;
     }, url => { paymentURL = url; message = 'Payment page ready. Check the seller and amount before paying.'; });
   }

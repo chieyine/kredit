@@ -31,9 +31,9 @@ become indexable. The versions must match supplier onboarding.
 
 ## 3. Configure production
 
-1. Use `APP_ENV=production`, `ORIGIN=https://kredit.com.ng`,
-   `PUBLIC_BASE_URL=https://kredit.com.ng` and
-   `APP_BASE_URL=https://kredit.com.ng`.
+1. Use `APP_ENV=production`, `ORIGIN=https://kredit.ng`,
+   `PUBLIC_BASE_URL=https://kredit.ng` and
+   `APP_BASE_URL=https://kredit.ng`.
 2. Inject backend secrets from the managed secret store. Never put them in a
    Terraform variable file, image, repository file or support note.
 3. Use managed PostgreSQL with TLS, private object storage, encrypted backups,
@@ -65,9 +65,9 @@ informal message.
 1. Create and checksum a final pre-deployment backup.
 2. Apply migrations through the migration job before starting the new API.
 3. Deploy API and worker, wait for `/healthz` and `/readyz`, then deploy web.
-4. Confirm `https://kredit.com.ng`, the two legal pages, sign-in, a private
+4. Confirm `https://kredit.ng`, the two legal pages, sign-in, a private
    invitation, payment link and receipt link over HTTPS.
-   Run `BASE_URL=https://kredit.com.ng LEGAL_ENTITY_NAME="Approved company"
+   Run `BASE_URL=https://kredit.ng LEGAL_ENTITY_NAME="Approved company"
    bash scripts/post-deploy-check.sh` for the repeatable public-origin check.
 5. Confirm legal pages show the approved entity and effective date, not the
    pre-launch notice.
