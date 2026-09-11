@@ -11,7 +11,7 @@ func TestMonoProductionRequiresCertificationAndLiveCredentials(t *testing.T) {
 	base.MonoSweepEnabled = true
 	base.CollectionProvider = "mono-sweep"
 	base.MonoWebhookSecret = "mono-webhook-secret-0123456789abcdef0123456789"
-	base.MonoRedirectURL = "https://app.kredit.com.ng/mono/return"
+	base.MonoRedirectURL = "https://app.kredit.ng/mono/return"
 	base.MonoSecretKey = "live_sk_0123456789abcdef0123456789abcdef"
 	base.RealCollections = true
 	base.CollectionNoticeMinHours = 24

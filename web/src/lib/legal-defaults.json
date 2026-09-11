@@ -26,7 +26,7 @@
       },
       {
         "heading": "Payments, balances and Kredit fees",
-        "body": "Payments\n\nA customer may pay the seller directly or through an available approved payment method. When a customer reports a direct transfer, the seller must check the seller's bank before confirming it. Kredit reduces the amount left only when the payment is recognised. A reversed or failed payment may make money due again.\n\nA customer must not pay more than the amount lawfully due. Kredit recalculates the true unpaid amount before any bank-debit request and uses controls intended to prevent duplicate collection. A pending payment, provider delay or reconciliation issue may temporarily stop another money action.\n\nFees paid by the seller\n\nAdding a customer or draft sale has no fee. The rates recorded in each offer govern that sale:\n\n• the supplier base service fee applies to activated principal after the required acceptance and goods steps; and\n• the recorded additional collection fee applies only to money successfully collected through Kredit at or after the permitted collection time.\n\nChanging the published rates does not change existing offers. Current pricing (https://kredit.com.ng/pricing) applies to new offers. A failed debit does not earn the additional collection fee. A sale cancelled before activation does not earn the base fee. The seller must review the applicable rates before agreeing to the sale.\n\nThe customer pays the accepted price of the goods and any customer charge clearly included in the individual sale and permitted by law. Kredit does not silently add the seller's platform fee to the customer's debt.\n\nTaxes may apply to Kredit fees. The final invoice and tax treatment will follow applicable law. If a fee or payment record is wrong, use the correction or complaint process; do not edit a completed financial record outside the provided reversal or correction flow."
+        "body": "Payments\n\nA customer may pay the seller directly or through an available approved payment method. When a customer reports a direct transfer, the seller must check the seller's bank before confirming it. Kredit reduces the amount left only when the payment is recognised. A reversed or failed payment may make money due again.\n\nA customer must not pay more than the amount lawfully due. Kredit recalculates the true unpaid amount before any bank-debit request and uses controls intended to prevent duplicate collection. A pending payment, provider delay or reconciliation issue may temporarily stop another money action.\n\nFees paid by the seller\n\nAdding a customer or draft sale has no fee. The rates recorded in each offer govern that sale:\n\n• the supplier base service fee applies to activated principal after the required acceptance and goods steps; and\n• the recorded additional collection fee applies only to money successfully collected through Kredit at or after the permitted collection time.\n\nChanging the published rates does not change existing offers. Current pricing (https://kredit.ng/pricing) applies to new offers. A failed debit does not earn the additional collection fee. A sale cancelled before activation does not earn the base fee. The seller must review the applicable rates before agreeing to the sale.\n\nThe customer pays the accepted price of the goods and any customer charge clearly included in the individual sale and permitted by law. Kredit does not silently add the seller's platform fee to the customer's debt.\n\nTaxes may apply to Kredit fees. The final invoice and tax treatment will follow applicable law. If a fee or payment record is wrong, use the correction or complaint process; do not edit a completed financial record outside the provided reversal or correction flow."
       },
       {
         "heading": "Bank-debit permission and late payment",
@@ -58,7 +58,7 @@
       },
       {
         "heading": "Help, complaints and regulators",
-        "body": "Use Help and complaints (https://kredit.com.ng/legal/complaints) and include the Kredit reference, date, amount, what happened and the result you expect. Never send your password, OTP, bank PIN or full card number.\n\nYou may also email hello@kredit.com.ng or write to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nIf the concern is not resolved, you may use a competent Nigerian regulator or court. Consumer concerns may fall within the remit of the Federal Competition and Consumer Protection Commission (https://fccpc.gov.ng/). Privacy complaints may be made to the Nigeria Data Protection Commission (https://www.ndpc.gov.ng/). A bank or payment-provider complaint may also need the provider's process or the appropriate financial regulator."
+        "body": "Use Help and complaints (https://kredit.ng/legal/complaints) and include the Kredit reference, date, amount, what happened and the result you expect. Never send your password, OTP, bank PIN or full card number.\n\nYou may also email hello@kredit.ng or write to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nIf the concern is not resolved, you may use a competent Nigerian regulator or court. Consumer concerns may fall within the remit of the Federal Competition and Consumer Protection Commission (https://fccpc.gov.ng/). Privacy complaints may be made to the Nigeria Data Protection Commission (https://www.ndpc.gov.ng/). A bank or payment-provider complaint may also need the provider's process or the appropriate financial regulator."
       }
     ]
   },
@@ -93,7 +93,7 @@
       },
       {
         "heading": "If information leaves Nigeria",
-        "body": "Some approved service companies may store or process information outside Nigeria. Before that happens, Kredit must check the destination and provider, limit the information sent, use an approved transfer safeguard and record the assessment required by Nigerian data-protection law. Contact hello@kredit.com.ng for information about relevant processors and transfer safeguards."
+        "body": "Some approved service companies may store or process information outside Nigeria. Before that happens, Kredit must check the destination and provider, limit the information sent, use an approved transfer safeguard and record the assessment required by Nigerian data-protection law. Contact hello@kredit.ng for information about relevant processors and transfer safeguards."
       },
       {
         "heading": "How long we keep information",
@@ -101,7 +101,7 @@
       },
       {
         "heading": "Your rights and choices",
-        "body": "Subject to the Nigeria Data Protection Act 2023 and any lawful exception, you may:\n\n• ask whether Kredit uses your personal information;\n• ask to see it and receive a copy;\n• ask us to correct information that is wrong or incomplete;\n• ask us to remove information when there is no lawful reason to keep it;\n• ask us to limit a use while a concern is checked;\n• object to a use based on legitimate interests or direct marketing;\n• withdraw consent where consent is the reason for the use;\n• ask for portable information in a usable format where applicable;\n• ask for an explanation of a significant automated decision and request human review; and\n• complain to Kredit or the Nigeria Data Protection Commission.\n\nOpen Your information (https://kredit.com.ng/app/settings/privacy) after signing in to send a request and follow its progress. We will verify the requester before releasing or changing private information. We may keep a limited record that a request was completed. If we cannot do everything requested, we will explain the lawful reason."
+        "body": "Subject to the Nigeria Data Protection Act 2023 and any lawful exception, you may:\n\n• ask whether Kredit uses your personal information;\n• ask to see it and receive a copy;\n• ask us to correct information that is wrong or incomplete;\n• ask us to remove information when there is no lawful reason to keep it;\n• ask us to limit a use while a concern is checked;\n• object to a use based on legitimate interests or direct marketing;\n• withdraw consent where consent is the reason for the use;\n• ask for portable information in a usable format where applicable;\n• ask for an explanation of a significant automated decision and request human review; and\n• complain to Kredit or the Nigeria Data Protection Commission.\n\nOpen Your information (https://kredit.ng/app/settings/privacy) after signing in to send a request and follow its progress. We will verify the requester before releasing or changing private information. We may keep a limited record that a request was completed. If we cannot do everything requested, we will explain the lawful reason."
       },
       {
         "heading": "What we keep on your phone",
@@ -121,7 +121,7 @@
       },
       {
         "heading": "Questions and complaints",
-        "body": "Use Help and complaints (https://kredit.com.ng/legal/complaints) for a privacy concern, or use Your information after signing in. Include the Kredit reference and a short explanation, but never send your password, OTP, bank PIN or full card number.\n\nFor privacy enquiries, contact hello@kredit.com.ng or write to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nIf Kredit does not resolve the concern, you may complain to the Nigeria Data Protection Commission (https://www.ndpc.gov.ng/)."
+        "body": "Use Help and complaints (https://kredit.ng/legal/complaints) for a privacy concern, or use Your information after signing in. Include the Kredit reference and a short explanation, but never send your password, OTP, bank PIN or full card number.\n\nFor privacy enquiries, contact hello@kredit.ng or write to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nIf Kredit does not resolve the concern, you may complain to the Nigeria Data Protection Commission (https://www.ndpc.gov.ng/)."
       }
     ]
   },
@@ -132,7 +132,7 @@
     "sections": [
       {
         "heading": "Contact us",
-        "body": "Email hello@kredit.com.ng. You can raise a complaint without signing in, including if you have lost account access.\n\nWrite to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nFor an existing transaction, use the dispute controls in your buyer account (https://kredit.com.ng/buyer/disputes) or supplier account (https://kredit.com.ng/app/disputes) to attach the concern to its record."
+        "body": "Email hello@kredit.ng. You can raise a complaint without signing in, including if you have lost account access.\n\nWrite to KREDIT TECHNOLOGIES LIMITED (RC 9834452), House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria.\n\nFor an existing transaction, use the dispute controls in your buyer account (https://kredit.ng/buyer/disputes) or supplier account (https://kredit.ng/app/disputes) to attach the concern to its record."
       },
       {
         "heading": "What to include",
@@ -140,7 +140,7 @@
       },
       {
         "heading": "How we handle complaints",
-        "body": "We review the concern, request any missing information and explain the outcome and available next steps. Keep the case or transaction reference for follow-up. If more investigation is needed, we will explain what remains outstanding.\n\nWe handle complaint information according to our privacy notice (https://kredit.com.ng/legal/privacy). Relevant records may be retained for dispute resolution, fraud prevention and applicable legal obligations."
+        "body": "We review the concern, request any missing information and explain the outcome and available next steps. Keep the case or transaction reference for follow-up. If more investigation is needed, we will explain what remains outstanding.\n\nWe handle complaint information according to our privacy notice (https://kredit.ng/legal/privacy). Relevant records may be retained for dispute resolution, fraud prevention and applicable legal obligations."
       },
       {
         "heading": "Payment disputes",

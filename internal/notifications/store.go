@@ -223,7 +223,7 @@ type Store struct {
 }
 
 func NewStore(secret string) *Store {
-	return &Store{secret: []byte(secret), providers: map[string]Provider{}, templates: map[string]string{}, preferences: map[string]Preferences{}, deliveries: map[string]*Delivery{}, dedupe: map[string]string{}, eventFingerprints: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier, baseURL: "https://app.kredit.com.ng"}
+	return &Store{secret: []byte(secret), providers: map[string]Provider{}, templates: map[string]string{}, preferences: map[string]Preferences{}, deliveries: map[string]*Delivery{}, dedupe: map[string]string{}, eventFingerprints: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier, baseURL: "https://app.kredit.ng"}
 }
 func NewPostgresStore(pool *pgxpool.Pool, secret string) *Store {
 	store := NewStore(secret)

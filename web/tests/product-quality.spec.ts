@@ -58,11 +58,11 @@ test('every indexable page has complete, unique search and social metadata', asy
 		expect(descriptions.has(description ?? ''), `${path} unique description`).toBe(false);
 		titles.add(title); descriptions.add(description ?? '');
 		await expect(page.locator('meta[name="description"]')).toHaveCount(1);
-		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://kredit.com.ng${path}`);
+		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://kredit.ng${path}`);
 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /index,follow/);
 		await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', title);
 		await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', description ?? '');
-		await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://kredit.com.ng/og.png');
+		await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://kredit.ng/og.png');
 		await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', title);
 		const schemas = await page.locator('script[type="application/ld+json"]').allTextContents();
 		expect(schemas.length, `${path} structured data`).toBeGreaterThanOrEqual(3);
@@ -110,8 +110,8 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
 
 	const sitemap = await (await request.get('/sitemap.xml')).text();
-	for (const path of publicRoutes) expect(sitemap, `sitemap ${path}`).toContain(`<loc>https://kredit.com.ng${path}</loc>`);
-	for (const path of ['/app/', '/buyer/', '/admin/', '/recover']) expect(sitemap).not.toContain(`<loc>https://kredit.com.ng${path}`);
+	for (const path of publicRoutes) expect(sitemap, `sitemap ${path}`).toContain(`<loc>https://kredit.ng${path}</loc>`);
+	for (const path of ['/app/', '/buyer/', '/admin/', '/recover']) expect(sitemap).not.toContain(`<loc>https://kredit.ng${path}`);
 	const robots = await (await request.get('/robots.txt')).text();
 	for (const path of ['/app', '/buyer', '/admin', '/recover']) expect(robots).toContain(`Disallow: ${path}`);
 	// The third place publication state shows up. A legal document that robots.txt
@@ -120,7 +120,7 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 	// deployment where they disagree is the failure worth catching.
 	for (const path of ['/legal/privacy', '/legal/terms']) {
 		const blockedByRobots = robots.includes(`Disallow: ${path}`);
-		const listed = sitemap.includes(`<loc>https://kredit.com.ng${path}</loc>`);
+		const listed = sitemap.includes(`<loc>https://kredit.ng${path}</loc>`);
 		expect(listed, `${path} sitemap listing must match robots.txt`).toBe(!blockedByRobots);
 	}
 

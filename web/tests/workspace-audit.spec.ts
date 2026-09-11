@@ -100,7 +100,7 @@ test('opening a related guide updates the article and structured metadata', asyn
 	await related.click();
 	await expect(page).toHaveURL(new RegExp(`${href}$`));
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
-	await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://kredit.com.ng${href}`);
+	await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://kredit.ng${href}`);
 	const schemas = await page.locator('script[type="application/ld+json"]').allTextContents();
 	expect(schemas.some(schema => schema.includes(title))).toBe(true);
 });

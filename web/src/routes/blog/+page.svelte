@@ -11,7 +11,7 @@
 	const featured = $derived(posts[0]);
 	const topics = $derived(articleCategories.map(category => ({ category, ...articleCategoryDetails[category], count: articles.filter(article => article.category === category).length })));
 	const visiblePosts=$derived(posts.filter(post=>(category==='All guides'||post.category===category)&&`${post.title} ${post.excerpt} ${post.category}`.toLowerCase().includes(query.trim().toLowerCase())));
-	const listSchema=$derived({'@context':'https://schema.org','@type':'ItemList',name:'Kredit guides for Nigerian businesses',numberOfItems:articles.length,itemListElement:articles.map((article,index)=>({'@type':'ListItem',position:index+1,name:article.title,url:`https://kredit.com.ng/blog/${article.slug}`}))});
+	const listSchema=$derived({'@context':'https://schema.org','@type':'ItemList',name:'Kredit guides for Nigerian businesses',numberOfItems:articles.length,itemListElement:articles.map((article,index)=>({'@type':'ListItem',position:index+1,name:article.title,url:`https://kredit.ng/blog/${article.slug}`}))});
 </script>
 
 <svelte:head>{@html `<script type="application/ld+json">${jsonLd(listSchema)}<\/script>`}</svelte:head>

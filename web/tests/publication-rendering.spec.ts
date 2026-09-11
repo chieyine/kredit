@@ -18,7 +18,7 @@ test('published guide reaches its page, listings, topic, feed and search metadat
  await page.goto('/blog');await expect(page.getByRole('heading',{name:copy.title}).first()).toBeVisible();
  await page.goto('/blog/topic/payments');await expect(page.getByRole('heading',{name:copy.title})).toBeVisible();
  expect(await (await request.get('/blog/rss.xml')).text()).toContain(copy.title);
- expect(await (await request.get('/sitemap.xml')).text()).toContain(`<loc>https://kredit.com.ng/blog/${slug}</loc><lastmod>2026-09-09</lastmod>`);
+ expect(await (await request.get('/sitemap.xml')).text()).toContain(`<loc>https://kredit.ng/blog/${slug}</loc><lastmod>2026-09-09</lastmod>`);
 });
 test('published contact details render safe email links and responsive content',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/contact');

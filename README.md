@@ -954,7 +954,7 @@ Benefits:
 - consistent request tracing;
 - no exposure of internal provider endpoints.
 
-A separate `api.kredit.com.ng` may later serve approved third-party API clients, but the first-party web application should use same-origin requests.
+A separate `api.kredit.ng` may later serve approved third-party API clients, but the first-party web application should use same-origin requests.
 
 ### 10.4 Why no microservices
 
@@ -1686,7 +1686,7 @@ Example:
 
 ```json
 {
-  "type": "https://docs.kredit.com.ng/problems/mandate-inactive",
+  "type": "https://docs.kredit.ng/problems/mandate-inactive",
   "title": "Payment mandate is not active",
   "status": 409,
   "code": "MANDATE_INACTIVE",
