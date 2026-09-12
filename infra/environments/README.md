@@ -10,8 +10,6 @@ plan, and apply staging before production. The runtime secret must contain the
 validated variables documented in `README.md` and the deployment must attach
 the monitoring resources in `infra/monitoring`.
 
-The web deployment also requires the approved public legal values declared in
-`variables.tf`. Production activates the documents automatically and the web
-process refuses to start when the operator name, address, contacts, effective
-date or versions are missing. Follow `docs/release/go-live-runbook.md` for
-staging certification and cutover.
+For the selected Vercel/VPS deployment, use `docs/operations/PRODUCTION-DEPLOYMENT-GUIDE.md`. Compose requires both `.env.production` (deployment database passwords) and `.env.runtime` (application settings). Certificates remain outside version control.
+
+Legal publication metadata is source-controlled and later versions use the website-content publication workflow. Legacy Terraform legal environment values do not change the current pages. Follow `docs/release/go-live-runbook.md` for release evidence and cutover.

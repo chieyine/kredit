@@ -42,6 +42,7 @@ func (p *PostgresProvider) ReadForBuyer(ctx context.Context, userID string) ([]M
 			rows.Close()
 			return nil, err
 		}
+		m.ProviderAdapter = stored.ProviderAdapter
 		m.AuthorizationURL, m.Variable, m.MultiAccount, m.PartialRecovery, m.ActivatedAt = stored.AuthorizationURL, stored.Variable, stored.MultiAccount, stored.PartialRecovery, stored.ActivatedAt
 		m.Status = Status(strings.ToUpper(string(m.Status)))
 		result = append(result, m)

@@ -15,12 +15,13 @@ export function customer(value: unknown): Customer {
   return { buyer_user_id: text(row.buyer_user_id), buyer_business_id: text(row.buyer_business_id), legal_name: text(row.legal_name), trading_name: optionalText(row.trading_name), state: optionalText(row.state ?? row.status), overdue: row.has_overdue_obligations === true || (typeof row.overdue_count === 'number' && row.overdue_count > 0) || row.has_network_overdue === true };
 }
 export interface SaleRequest {
-  system_acceptance_id?: string; id: string; state: string; supplier_legal_name: string; buyer_legal_name: string; buyer_user_id: string; buyer_business_id: string;
+  invoice_document_id?: string; system_acceptance_id?: string; id: string; state: string; supplier_legal_name: string; buyer_legal_name: string; buyer_user_id: string; buyer_business_id: string;
   principal_kobo: KoboValue; goods_description: string; due_date: string; collection_at: string; grace_hours: number;
   schedule_type: string; schedule_count: number; schedule_cadence: string; fee_terms: FeeTerms | null;
   custom_schedule_items: { amount_kobo: KoboValue; due_date: string }[];
 }
 export interface SaleView {
+  timeline?: {label:string;at:string}[];
   request: SaleRequest;
   agreement: { id: string; document_hash: string; terms_version: string; privacy_version: string } | null;
   mandate: { id: string; provider_id: string; provider: string; status: string; authorization_url: string } | null;
@@ -31,9 +32,18 @@ export function saleView(value: unknown): SaleView {
   const agreement = view.agreement ? record(view.agreement) : null;
   const mandate = view.mandate ? record(view.mandate) : null;
   const obligation = view.obligation ? record(view.obligation) : null;
-  return {
+  const timeline:{label:string;at:string}[]=[];
+  const event=(label:string,at:unknown)=>{if(typeof at==='string'&&Number.isFinite(Date.parse(at))&&Date.parse(at)>0)timeline.push({label,at})};
+  event('Sale created',row.created_at);
+  if(agreement?.id)event('Agreement issued',agreement.created_at);
+  if(view.acceptance)event('Customer accepted',record(view.acceptance).accepted_at);
+  if(view.release)event('Goods dispatched',record(view.release).released_at);
+  if(Array.isArray(view.receipts))for(const value of view.receipts){const receipt=record(value);event(receipt.state==='confirmed'?(receipt.issue_reason==='deemed_acceptance_auto_activated'?'Receipt recorded under the system acceptance process':'Customer confirmed receipt'):'Delivery problem reported',receipt.received_at)}
+  if(obligation)event(row.system_acceptance_id?'Sale recognized through recorded automatic acceptance':'Sale balance activated',obligation.activated_at);
+  timeline.sort((a,b)=>Date.parse(a.at)-Date.parse(b.at));
+  return { timeline,
     request: {
-      system_acceptance_id: optionalText(row.system_acceptance_id), id: text(row.id), state: text(row.state), supplier_legal_name: optionalText(row.supplier_legal_name), buyer_legal_name: text(row.buyer_legal_name), buyer_user_id: optionalText(row.buyer_user_id), buyer_business_id: optionalText(row.buyer_business_id),
+      invoice_document_id: optionalText(row.invoice_document_id), system_acceptance_id: optionalText(row.system_acceptance_id), id: text(row.id), state: text(row.state), supplier_legal_name: optionalText(row.supplier_legal_name), buyer_legal_name: text(row.buyer_legal_name), buyer_user_id: optionalText(row.buyer_user_id), buyer_business_id: optionalText(row.buyer_business_id),
       principal_kobo: kobo(row.principal_kobo), goods_description: optionalText(row.goods_description), due_date: text(row.due_date), collection_at: optionalText(row.collection_at), grace_hours: typeof row.grace_hours === 'number' ? row.grace_hours : 0,
       schedule_type: optionalText(row.schedule_type), schedule_count: typeof row.schedule_count === 'number' ? row.schedule_count : 1, schedule_cadence: optionalText(row.schedule_cadence), fee_terms: validFeeTerms(row.fee_terms) ? row.fee_terms : null,
       custom_schedule_items: Array.isArray(row.custom_schedule_items) ? row.custom_schedule_items.map(value => { const item = record(value); return { amount_kobo: kobo(item.amount_kobo), due_date: text(item.due_date) }; }) : []

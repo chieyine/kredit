@@ -18,7 +18,7 @@ import (
 )
 
 func (s *Server) monoWebhook(w http.ResponseWriter, r *http.Request) {
-	if s.runtime.Mono == nil || s.runtime.WebhookJobs == nil {
+	if len(s.runtime.monoAccountClients()) == 0 || s.runtime.WebhookJobs == nil {
 		writeProblem(w, 503, "provider_unavailable", "The bank collection connection is not configured.")
 		return
 	}
@@ -27,13 +27,26 @@ func (s *Server) monoWebhook(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_webhook", "webhook body could not be read")
 		return
 	}
-	notice, err := s.runtime.Mono.ParseWebhook(r.Header.Get("mono-webhook-secret"), raw)
-	if err != nil {
+	var notice mono.Notice
+	accountName := ""
+	for name, client := range s.runtime.monoAccountClients() {
+		candidate, parseErr := client.ParseWebhook(r.Header.Get("mono-webhook-secret"), raw)
+		if parseErr != nil {
+			continue
+		}
+		if accountName != "" {
+			writeProblem(w, 401, "webhook_rejected", "webhook account is ambiguous")
+			return
+		}
+		accountName = name
+		notice = candidate
+	}
+	if accountName == "" {
 		writeProblem(w, 401, "webhook_rejected", "webhook authentication or payload is invalid")
 		return
 	}
 	safe, _ := json.Marshal(notice)
-	err = s.runtime.WebhookJobs.EnqueueProviderWebhook(r.Context(), jobs.ProviderWebhookArgs{Provider: "mono-sweep", EventID: notice.EventID, EventType: notice.Type, Payload: safe, SignatureValid: true})
+	err = s.runtime.WebhookJobs.EnqueueProviderWebhook(r.Context(), jobs.ProviderWebhookArgs{Provider: accountName, EventID: notice.EventID, EventType: notice.Type, Payload: safe, SignatureValid: true})
 	if err != nil {
 		writeProblem(w, 503, "webhook_unavailable", "webhook could not be saved; retry delivery")
 		return
@@ -44,7 +57,7 @@ func (s *Server) monoWebhook(w http.ResponseWriter, r *http.Request) {
 // HandleProviderNotice treats callbacks as a reconciliation signal. It never
 // posts the webhook's amount directly; the server-to-server lookup is authoritative.
 func (r *Runtime) HandleProviderNotice(ctx context.Context, args jobs.ProviderWebhookArgs) error {
-	if args.Provider != "mono-sweep" || r.Mono == nil || r.Database == nil || !args.SignatureValid {
+	if r.monoAccountClients()[args.Provider] == nil || r.Database == nil || !args.SignatureValid {
 		return errors.New("unsupported provider notice")
 	}
 	var notice mono.Notice
@@ -54,7 +67,17 @@ func (r *Runtime) HandleProviderNotice(ctx context.Context, args jobs.ProviderWe
 	if strings.Contains(notice.Type, "debit_attempt") {
 		return nil
 	} // Aggregate final event/periodic lookup owns financial effect.
-	if strings.Contains(notice.Type, ".debit.") {
+	isDisputeSignal := notice.Type == "mono.transaction.dispute_initiated" || notice.Type == "mono.transaction.reversal_completed"
+	if r.FeeBilling != nil {
+		handled, err := r.FeeBilling.Notice(ctx, args.Provider, notice.Reference, notice.MandateID, notice.EventID, isDisputeSignal)
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
+	}
+	if strings.Contains(notice.Type, ".debit.") || isDisputeSignal {
 		var id, organizationID string
 		if err := r.Database.Raw().QueryRow(ctx, `SELECT attempt_id::text,organization_id::text FROM app.collection_attempt_identity_by_external($1)`, notice.Reference).Scan(&id, &organizationID); err != nil {
 			return errors.New("debit attempt is not yet available")
@@ -69,12 +92,24 @@ func (r *Runtime) HandleProviderNotice(ctx context.Context, args jobs.ProviderWe
 		} else {
 			attempt, ok = r.Collections.GetAttempt(id)
 		}
-		if !ok || attempt.MandateReference != notice.MandateID {
+		if !ok || attempt.Provider != args.Provider || (!isDisputeSignal && attempt.MandateReference != notice.MandateID) {
 			return errors.New("debit mandate does not match the reserved attempt")
 		}
-		_, err := r.Collections.Reconcile(ctx, id)
-		return err
+		verified, err := r.Collections.Reconcile(ctx, id)
+		if err != nil {
+			return err
+		}
+		if isDisputeSignal {
+			// These events concern bank recovery of a failed debit. Never reverse a
+			// recognized payment solely because a callback says reversal_completed.
+			if verified.State != collections.AttemptFailed || verified.SucceededAmountKobo != 0 {
+				return errors.New("mono dispute or reversal conflicts with the recorded debit; financial review required")
+			}
+			return r.recordProviderAudit(ctx, audit.Event{OrganizationID: organizationID, Action: "collection.provider_dispute_verified", ResourceType: "collection_attempt", ResourceID: id, Outcome: "success", Metadata: map[string]string{"provider": args.Provider, "provider_event_id": notice.EventID, "provider_event_type": notice.Type}})
+		}
+		return nil
 	}
+	ctx = mandates.WithProvider(ctx, args.Provider)
 	var mandate mandates.Mandate
 	var err error
 	if notice.BlockStatus != "" {
@@ -89,19 +124,23 @@ func (r *Runtime) HandleProviderNotice(ctx context.Context, args jobs.ProviderWe
 	if err != nil {
 		return err
 	}
+	return r.applyVerifiedMandate(ctx, mandate, notice.EventID)
+}
+
+func (r *Runtime) applyVerifiedMandate(ctx context.Context, mandate mandates.Mandate, eventID string) error {
 	views, err := r.readCreditForBuyer(ctx, mandate.UserID)
 	if err != nil {
 		return err
 	}
 	for _, view := range views {
-		if view.Mandate != nil && view.Mandate.ProviderID == notice.MandateID {
+		if view.Mandate != nil && view.Mandate.ProviderID == mandate.ProviderID && view.Mandate.Provider == mandate.Provider {
 			if _, err = r.Credit.SetMandate(view.Request.ID, mandate.UserID, mandate); err != nil {
 				return err
 			}
 		}
 	}
 	if r.TradeLines != nil {
-		lines, err := r.readTradeLinesForBuyer(mandate.UserID)
+		lines, err := r.readTradeLinesForBuyer(db.WithTenantContext(ctx, mandate.UserID, mandate.SupplierOrganizationID), mandate.UserID)
 		if err != nil {
 			return err
 		}
@@ -110,12 +149,27 @@ func (r *Runtime) HandleProviderNotice(ctx context.Context, args jobs.ProviderWe
 			if line.MandateID != mandate.ID || line.MandateActive == active {
 				continue
 			}
-			if _, err := r.TradeLines.SetMandateState(line.ID, mandate.ID, active); err != nil {
+			if _, err := r.ScopedTradeLines(db.WithTenantContext(ctx, mandate.UserID, mandate.SupplierOrganizationID)).SetMandateState(line.ID, mandate.ID, active); err != nil {
 				return err
 			}
 		}
 	}
-	r.Audit.Append(audit.Event{ActorUserID: "provider", Action: "mandate.provider_verified", ResourceType: "payment_mandate", ResourceID: mandate.ID, Outcome: string(mandate.Status)})
+	return r.recordProviderAudit(ctx, audit.Event{OrganizationID: mandate.SupplierOrganizationID, Action: "mandate.provider_verified", ResourceType: "payment_mandate", ResourceID: mandate.ID, Outcome: "success", Metadata: map[string]string{"mandate_status": string(mandate.Status), "provider": mandate.Provider, "provider_event_id": eventID}})
+}
+
+// Provider events have no human actor. Persist failures must reach the inbox
+// worker so the callback remains retryable instead of silently losing evidence.
+func (r *Runtime) recordProviderAudit(ctx context.Context, event audit.Event) error {
+	if recorder, ok := r.Audit.(interface {
+		Record(context.Context, audit.Event) (audit.Event, error)
+	}); ok {
+		_, err := recorder.Record(ctx, event)
+		return err
+	}
+	if r.Audit == nil {
+		return errors.New("audit recording is unavailable")
+	}
+	r.Audit.Append(event)
 	return nil
 }
 
@@ -149,7 +203,7 @@ func (s *Server) createRepaymentCustomer(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var exists bool
-	if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM app.provider_customer_bindings WHERE provider='mono-sweep' AND buyer_business_id=$1::uuid)`, businessID).Scan(&exists); err != nil {
+	if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM app.provider_customer_bindings WHERE provider=$2 AND buyer_business_id=$1::uuid)`, businessID, s.runtime.Mono.Name()).Scan(&exists); err != nil {
 		writeProblem(w, 503, "database_unavailable", "database is unavailable")
 		return
 	}
@@ -160,6 +214,20 @@ func (s *Server) createRepaymentCustomer(w http.ResponseWriter, r *http.Request)
 	var in mono.CustomerInput
 	if err = decodeJSON(w, r, &in); err != nil {
 		writeProblem(w, 400, "invalid_customer", "customer details could not be read")
+		return
+	}
+	var businessName string
+	if err = tx.QueryRow(r.Context(), `SELECT legal_name FROM app.businesses WHERE id=$1::uuid`, businessID).Scan(&businessName); err != nil {
+		writeProblem(w, 503, "business_unavailable", "Business details could not be loaded.")
+		return
+	}
+	in.FirstName, in.LastName, err = mono.BusinessCustomerNames(businessName)
+	if err != nil {
+		writeProblem(w, 409, "business_name_required", "Confirm the full bank-registered business name in your business profile before continuing.")
+		return
+	}
+	if in.ConsentVersion != "business-bank-v1" {
+		writeProblem(w, 400, "consent_required", "Confirm shareholder consent for this business bank setup.")
 		return
 	}
 	in, err = mono.ValidateCustomerInput(in)
@@ -177,7 +245,7 @@ func (s *Server) createRepaymentCustomer(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var attemptID string
-	if err = tx.QueryRow(r.Context(), `INSERT INTO app.customer_registration_attempts(business_id,user_id,identity_fingerprint,consent_version) VALUES($1,$2,$3,$4) RETURNING id::text`, businessID, user.ID, s.registrationFingerprint(in.BVN), in.ConsentVersion).Scan(&attemptID); err != nil {
+	if err = tx.QueryRow(r.Context(), `INSERT INTO app.customer_registration_attempts(business_id,user_id,identity_fingerprint,consent_version,provider) VALUES($1,$2,$3,$4,$5) RETURNING id::text`, businessID, user.ID, s.registrationFingerprint(in.BVN), in.ConsentVersion, s.runtime.Mono.Name()).Scan(&attemptID); err != nil {
 		writeProblem(w, 503, "registration_unavailable", "Registration intent could not be saved.")
 		return
 	}
@@ -209,7 +277,7 @@ func (s *Server) createRepaymentCustomer(w http.ResponseWriter, r *http.Request)
 		writeProblem(w, 503, "registration_unconfirmed", "Business ownership must be reconciled before registration can be attached.")
 		return
 	}
-	if _, err = tx.Exec(completionCtx, `INSERT INTO app.provider_customer_bindings(provider,buyer_user_id,buyer_business_id,provider_customer_reference,consent_version) VALUES('mono-sweep',$1::uuid,$2::uuid,$3,$4)`, user.ID, businessID, reference, in.ConsentVersion); err != nil {
+	if _, err = tx.Exec(completionCtx, `INSERT INTO app.provider_customer_bindings(provider,buyer_user_id,buyer_business_id,provider_customer_reference,consent_version) VALUES($5,$1::uuid,$2::uuid,$3,$4)`, user.ID, businessID, reference, in.ConsentVersion, s.runtime.Mono.Name()); err != nil {
 		writeProblem(w, 503, "registration_unconfirmed", "customer registration needs reconciliation")
 		return
 	}
@@ -224,4 +292,14 @@ func (s *Server) createRepaymentCustomer(w http.ResponseWriter, r *http.Request)
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "repayment.customer_registered", ResourceType: "business", ResourceID: businessID, Outcome: "success"})
 	writeJSON(w, 201, map[string]bool{"registered": true})
+}
+
+func (r *Runtime) monoAccountClients() map[string]*mono.Client {
+	if len(r.MonoAccounts) > 0 {
+		return r.MonoAccounts
+	}
+	if r.Mono != nil {
+		return map[string]*mono.Client{r.Mono.Name(): r.Mono}
+	}
+	return map[string]*mono.Client{}
 }

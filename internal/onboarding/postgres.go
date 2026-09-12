@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kredit/internal/access"
+	"kredit/internal/notifications"
+	"strings"
 	"time"
 
 	"kredit/internal/identifier"
@@ -138,7 +141,7 @@ func (s *PostgresStore) Get(org string) (Profile, Summary, error) {
 
 type memoryMutation func(*Store) (Profile, Summary, error)
 
-func (s *PostgresStore) apply(org, actor, change string, fn memoryMutation) (Profile, Summary, error) {
+func (s *PostgresStore) apply(org, actor, change string, fn memoryMutation, hooks ...func(pgx.Tx) error) (Profile, Summary, error) {
 	versions, err := legalpublication.Resolve(s.legalReader)
 	if err != nil {
 		return Profile{}, Summary{}, err
@@ -148,6 +151,11 @@ func (s *PostgresStore) apply(org, actor, change string, fn memoryMutation) (Pro
 		return Profile{}, Summary{}, err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	if change == "billing.approved" {
+		if err := access.LockPlatformAuthority(context.Background(), tx, actor, access.PermissionPlatformSettings); err != nil {
+			return Profile{}, Summary{}, err
+		}
+	}
 	p, err := scanProfile(tx.QueryRow(context.Background(), profileSelect+` FOR UPDATE`, org))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Profile{}, Summary{}, errors.New("onboarding profile not found")
@@ -182,6 +190,23 @@ func (s *PostgresStore) apply(org, actor, change string, fn memoryMutation) (Pro
 	_, err = tx.Exec(context.Background(), `INSERT INTO app.supplier_onboarding_revisions(id,organization_id,profile_version,change_type,actor_user_id,actor_reference,snapshot) VALUES($1,$2,$3,$4,$5,$6,$7)`, identifier.New(), org, next.Version, change, actorUUID, actor, snapshot)
 	if err != nil {
 		return Profile{}, Summary{}, fmt.Errorf("record onboarding revision: %w", err)
+	}
+
+	if strings.HasPrefix(change, "settlement.") || strings.HasPrefix(change, "billing.") {
+		eventID := "onboarding-sensitive:" + org + ":" + fmt.Sprint(next.Version)
+		notice := notifications.Event{ID: eventID, Type: "SupplierSensitiveSettingChanged", OrganizationID: org, Priority: notifications.PriorityCritical, Reference: change, NextAction: "Review the change in business settings.", SecurePath: "/app/onboarding"}
+		payload, marshalErr := json.Marshal(map[string]any{"notification": notice})
+		if marshalErr != nil {
+			return Profile{}, Summary{}, marshalErr
+		}
+		if _, err = tx.Exec(context.Background(), `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) VALUES('supplier_onboarding',$1,'notification.requested',$2::jsonb,$3) ON CONFLICT(idempotency_key) DO NOTHING`, org, payload, eventID); err != nil {
+			return Profile{}, Summary{}, fmt.Errorf("queue bank or billing change notice: %w", err)
+		}
+	}
+	for _, hook := range hooks {
+		if err := hook(tx); err != nil {
+			return Profile{}, Summary{}, err
+		}
 	}
 	if err = tx.Commit(context.Background()); err != nil {
 		return Profile{}, Summary{}, err
@@ -271,3 +296,25 @@ func (s *PostgresStore) Reconcile(now time.Time) []Profile {
 
 // SetLegalReader is configured before the store begins serving requests.
 func (s *PostgresStore) SetLegalReader(reader legalpublication.Reader) { s.legalReader = reader }
+
+func (s *PostgresStore) RecordSettlementDecisionForReference(o, a, ref string, v int64, st, reason string) (Profile, Summary, error) {
+	return s.apply(o, a, "settlement.decision", func(m *Store) (Profile, Summary, error) {
+		return m.RecordSettlementDecisionForReference(o, a, ref, v, st, reason)
+	})
+}
+
+func (s *PostgresStore) ApproveInvoiceBilling(org, actor, ref string, version int64, instructions string) (Profile, Summary, error) {
+	return s.apply(org, actor, "billing.approved", func(m *Store) (Profile, Summary, error) {
+		return m.ApproveInvoiceBilling(org, actor, ref, version, instructions)
+	}, func(tx pgx.Tx) error {
+		var owner bool
+		if err := tx.QueryRow(context.Background(), `SELECT app.has_admin_role($1::uuid,ARRAY['platform_owner'])`, actor).Scan(&owner); err != nil {
+			return err
+		}
+		if !owner {
+			return fmt.Errorf("super-admin authority required")
+		}
+		_, err := tx.Exec(context.Background(), `INSERT INTO app.invoice_billing_approvals(organization_id,billing_reference,payment_instructions,approved_by) VALUES($1::uuid,$2,$3,$4::uuid) ON CONFLICT(organization_id) DO UPDATE SET billing_reference=EXCLUDED.billing_reference,payment_instructions=EXCLUDED.payment_instructions,approved_by=EXCLUDED.approved_by,approved_at=now()`, org, ref, strings.TrimSpace(instructions), actor)
+		return err
+	})
+}

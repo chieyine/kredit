@@ -34,3 +34,13 @@ test-results/
 .pnpm-store/
 .DS_Store
 
+
+# Local SSH keys
+/ssh/
+/.ssh/
+*.pem
+*.key
+
+# Production TLS material stays on the deployment host.
+infra/environments/certs/
+infra/environments/db-certs/

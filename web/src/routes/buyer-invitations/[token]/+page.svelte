@@ -6,6 +6,8 @@
 	import { MutationIntent } from '$lib/api/mutation';
 
 	type Preview = {
+ legal_versions: {terms_version:string;privacy_version:string};
+ identity_notice:string; identity_notice_version:string;
 		invitation: {
 			proposed_legal_name: string;
 			proposed_business_type: string;
@@ -21,6 +23,7 @@
 	let developmentCode = $state('');
 	let code = $state('');
 	let fullName = $state('');
+ let consentsAccepted = $state(false);
 	let loading = $state(true);
 	let error = $state('');
 	let busy = $state(false);
@@ -37,6 +40,7 @@
 				for (const key of ['proposed_legal_name','proposed_business_type','proposed_address','proposed_industry','expires_at']) text(invitation[key]);
 				if (!Number.isFinite(Date.parse(String(invitation.expires_at)))) throw new Error('Invalid invitation');
 				text(supplier.legal_name); text(supplier.trading_name);
+ text(record(row.legal_versions).terms_version); text(record(row.legal_versions).privacy_version); text(row.identity_notice); text(row.identity_notice_version);
 				return row as unknown as Preview;
 			}, { signal: request.signal });
 			if (request.current()) preview = result;
@@ -59,11 +63,11 @@
 		finally { if (token === activeToken) busy=false; }
 	}
 	async function accept() {
-		if(busy||!challengeId||!/^\d{6}$/.test(code)||!fullName.trim())return;
+		if(busy||!preview||!consentsAccepted||!challengeId||!/^\d{6}$/.test(code)||!fullName.trim())return;
 		const token = activeToken; busy=true;error='';
 		try {
 			acceptance ??= new MutationIntent('accept-buyer-invitation',invitationPath()+'/accept');
-			await acceptance.run({challenge_id:challengeId,code,full_name:fullName.trim()},value=>{
+			await acceptance.run({challenge_id:challengeId,code,full_name:fullName.trim(),consents_accepted:consentsAccepted,...preview.legal_versions,identity_notice_version:preview.identity_notice_version},value=>{
 				const row=record(value);text(record(row.user).id);text(record(row.session).id);record(row.portal);return row;
 			});
 			if (token === activeToken) await goto('/buyer');
@@ -73,7 +77,7 @@
 	$effect(() => {
 		const token = page.params.token ?? '';
 		untrack(() => {
-			activeToken = token; acceptance = null; challengeId = ''; developmentCode = ''; code = ''; fullName = ''; busy = false;
+			activeToken = token; consentsAccepted = false; acceptance = null; challengeId = ''; developmentCode = ''; code = ''; fullName = ''; busy = false;
 			void loadPreview();
 		});
 		return () => reads.cancel();
@@ -106,7 +110,10 @@
 				<label>The six-digit code we sent you<input disabled={busy} bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
 				<button disabled={busy || !!acceptance?.unresolved} onclick={requestCode}>Send a new code</button>
 				{#if developmentCode}<p class="hint">Development code: {developmentCode}</p>{/if}
-				<button class="primary" disabled={busy || !fullName.trim() || !/^\d{6}$/.test(code)} onclick={accept}>{busy ? 'Confirming…' : 'Yes, this is my business'}</button>
+				<p>{preview.identity_notice}</p>
+                <p><a href={`/legal/terms?version=${encodeURIComponent(preview.legal_versions.terms_version)}`} target="_blank" rel="noreferrer">Terms of service</a> · <a href={`/legal/privacy?version=${encodeURIComponent(preview.legal_versions.privacy_version)}`} target="_blank" rel="noreferrer">Privacy notice</a></p>
+                <label><input type="checkbox" bind:checked={consentsAccepted} disabled={busy} /> I accept the terms, acknowledge the privacy notice and authorise the checks described above.</label>
+                <button class="primary" disabled={busy || !consentsAccepted || !fullName.trim() || !/^\d{6}$/.test(code)} onclick={accept}>{busy ? 'Confirming…' : 'Yes, this is my business'}</button>
 			{/if}
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
 		</section>

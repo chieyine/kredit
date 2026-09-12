@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { Handle } from '@sveltejs/kit';
 import { assertLaunchWebConfig } from '$lib/server/legal-config';
@@ -50,20 +51,21 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const headers = new Headers(event.request.headers);
 	headers.delete('host');
 	headers.delete('connection');
-	// The Go API trusts forwarded-client-address headers when the peer is the
-	// private proxy address, which this hop is. Anything the browser supplied
-	// must therefore be discarded and replaced with the address this server
-	// actually observed, or a caller could rotate its rate-limit and OTP-throttle
-	// identity at will by setting the header itself.
-	for (const spoofable of ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'true-client-ip', 'forwarded']) {
+	// Discard browser-supplied forwarding claims before signing the adapter's address.
+	for (const spoofable of ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'true-client-ip', 'forwarded', 'x-kredit-client-ip', 'x-kredit-client-timestamp', 'x-kredit-client-signature']) {
 		headers.delete(spoofable);
 	}
 	try {
 		const clientAddress = event.getClientAddress();
-		if (clientAddress) headers.set('x-forwarded-for', clientAddress);
+		if (clientAddress && env.FRONTEND_PROXY_SIGNING_KEY) {
+			const timestamp = Math.floor(Date.now() / 1000).toString();
+			const payload = [timestamp, event.request.method, target.pathname + target.search, clientAddress].join('\n');
+			headers.set('x-kredit-client-ip', clientAddress);
+			headers.set('x-kredit-client-timestamp', timestamp);
+			headers.set('x-kredit-client-signature', createHmac('sha256', env.FRONTEND_PROXY_SIGNING_KEY).update(payload).digest('hex'));
+		}
 	} catch {
-		// No observable client address (some adapters during prerender); leave the
-		// header absent so the API falls back to the connection address.
+		// Without an observed address, the API uses its trusted ingress address.
 	}
 	const method = event.request.method;
 	try {

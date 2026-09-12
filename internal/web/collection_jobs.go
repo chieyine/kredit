@@ -2,9 +2,9 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"kredit/internal/providers/mono"
+	"kredit/internal/mandates"
+	"strings"
 	"time"
 
 	"kredit/internal/businesspolicy"
@@ -19,6 +19,32 @@ import (
 func (r *Runtime) EnqueueCollectionWork(ctx context.Context, cfg config.Config) error {
 	if r.Database == nil || r.WebhookJobs == nil {
 		return nil
+	}
+	if r.FeeBilling != nil {
+		rows, err := r.Database.Raw().Query(ctx, `SELECT organization_id::text FROM app.fee_billing_work()`)
+		if err != nil {
+			return err
+		}
+		orgs := []string{}
+		for rows.Next() {
+			var org string
+			if err = rows.Scan(&org); err != nil {
+				break
+			}
+			orgs = append(orgs, org)
+		}
+		if err == nil {
+			err = rows.Err()
+		}
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		for _, org := range orgs {
+			if err = r.WebhookJobs.EnqueueCollection(ctx, jobs.CollectionArgs{Operation: "fee_billing", ResourceID: org, OrganizationID: org}); err != nil {
+				return err
+			}
+		}
 	}
 	policy := businesspolicy.Defaults(cfg)
 	if r.BusinessPolicies != nil {
@@ -46,11 +72,11 @@ func (r *Runtime) EnqueueCollectionWork(ctx context.Context, cfg config.Config) 
 	if _, err = r.Database.Raw().Exec(ctx, `SELECT app.enqueue_due_payment_notices($1)`, int(policy.UpcomingNoticeDays)); err != nil {
 		return err
 	}
-	if r.Mono != nil {
-		if _, err = r.Database.Raw().Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) SELECT 'payment_mandate',id::text,'notification.requested',jsonb_build_object('event','MANDATE_EXPIRING','ends_at',ends_at),'mandate-expiring:'||id::text||':'||ends_at::text FROM app.payment_mandates WHERE provider='mono-sweep' AND state='active' AND ends_at>now() AND ends_at<=now()+make_interval(days=>$1) ON CONFLICT(idempotency_key) DO NOTHING`, int(policy.MandateNoticeDays)); err != nil {
+	if r.Mandates != nil {
+		if _, err = r.Database.Raw().Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) SELECT 'payment_mandate',id::text,'notification.requested',jsonb_build_object('event','MANDATE_EXPIRING','ends_at',ends_at),'mandate-expiring:'||id::text||':'||ends_at::text FROM app.payment_mandates WHERE state='active' AND ends_at>now() AND ends_at<=now()+make_interval(days=>$1) ON CONFLICT(idempotency_key) DO NOTHING`, int(policy.MandateNoticeDays)); err != nil {
 			return err
 		}
-		if err := r.enqueueCollectionPages(ctx, `SELECT id::text,provider_mandate_id FROM app.payment_mandates WHERE provider='mono-sweep' AND state IN ('pending','active') AND (provider_updated_at IS NULL OR provider_updated_at<now()-interval '5 minutes') AND id::text>$1 ORDER BY id::text LIMIT 100`, "reconcile_mandate"); err != nil {
+		if err := r.enqueueCollectionPages(ctx, `SELECT id::text,provider||':'||provider_mandate_id FROM app.payment_mandates WHERE state IN ('pending','active') AND (provider_updated_at IS NULL OR provider_updated_at<now()-interval '5 minutes') AND id::text>$1 ORDER BY id::text LIMIT 100`, "reconcile_mandate"); err != nil {
 			return err
 		}
 	}
@@ -131,6 +157,12 @@ func (r *Runtime) enqueueTenantCollectionPages(ctx context.Context, query, opera
 }
 
 func (r *Runtime) HandleCollectionJob(ctx context.Context, cfg config.Config, args jobs.CollectionArgs) error {
+	if args.Operation == "fee_billing" {
+		if r.FeeBilling == nil {
+			return errors.New("fee billing is unavailable")
+		}
+		return r.FeeBilling.Run(ctx, args.OrganizationID)
+	}
 	operation, id := args.Operation, args.ResourceID
 	if (operation == jobs.OpReconcileProvider || operation == "collect_due") && args.OrganizationID == "" {
 		return errors.New("collection tenant context is required")
@@ -139,9 +171,16 @@ func (r *Runtime) HandleCollectionJob(ctx context.Context, cfg config.Config, ar
 		ctx = db.WithTenantContext(ctx, "", args.OrganizationID)
 	}
 	if operation == "reconcile_mandate" {
-		notice := mono.Notice{EventID: "mandate-reconciliation:" + id, Type: "reconcile", MandateID: id}
-		payload, _ := json.Marshal(notice)
-		return r.HandleProviderNotice(ctx, jobs.ProviderWebhookArgs{Provider: "mono-sweep", SignatureValid: true, Payload: payload})
+		provider, reference, hasProvider := strings.Cut(id, ":")
+		if !hasProvider {
+			provider = "mono-sweep"
+			reference = id
+		}
+		mandate, err := r.Mandates.GetMandate(mandates.WithProvider(ctx, provider), reference)
+		if err != nil {
+			return err
+		}
+		return r.applyVerifiedMandate(ctx, mandate, "mandate-reconciliation:"+id)
 	}
 	if operation == jobs.OpReconcileProvider {
 		_, err := r.Collections.Reconcile(ctx, id)

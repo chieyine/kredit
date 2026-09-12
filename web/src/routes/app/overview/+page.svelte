@@ -19,19 +19,20 @@
   let overdue = $state<Resource<WorkRow[]>>(pending());
   let claims = $state<Resource<WorkRow[]>>(pending());
   let disputes = $state<Resource<WorkRow[]>>(pending());
+ let due=$state<Resource<WorkRow[]>>(pending());
   let summary = $state<Resource<Receivables>>(pending());
   let visibleCount = $state(5), legalName = $state(''), tradingName = $state(''), businessType = $state('unregistered_business'), address = $state(''), industry = $state(''), createBusy = $state(false), createError = $state('');
   let creation: MutationIntent | null = null;
   const businessRequest = new LatestRequest(), dashboardRequest = new LatestRequest();
   const organizations = $derived(businesses.state === 'ready' ? businesses.data : []);
   const currentBusiness = $derived(organizations.find(item => item.id === organizationID));
-  const allChecked = $derived([sales, payments, overdue, claims, disputes, summary].every(item => item.state === 'ready' && item.scope === organizationID));
-  const attention = $derived(attentionItems(organizationID, sales.state === 'ready' ? sales.data : [], claims.state === 'ready' ? claims.data : [], overdue.state === 'ready' ? overdue.data : [], disputes.state === 'ready' ? disputes.data : []));
+  const allChecked = $derived([sales, payments, overdue, claims, disputes, summary, due].every(item => item.state === 'ready' && item.scope === organizationID));
+  const attention = $derived(attentionItems(organizationID, sales.state === 'ready' ? sales.data : [], claims.state === 'ready' ? claims.data : [], overdue.state === 'ready' ? overdue.data : [], disputes.state === 'ready' ? disputes.data : [],due.state==='ready'?due.data:[]));
   const scopeQuery = $derived(`?organization=${encodeURIComponent(organizationID)}`);
   async function loadRequests() {
     const scope = organizationID;
     const request = dashboardRequest.begin(); visibleCount = 5;
-    sales = pending(scope); payments = pending(scope); overdue = pending(scope); claims = pending(scope); disputes = pending(scope); summary = pending(scope);
+    sales = pending(scope); payments = pending(scope); overdue = pending(scope); claims = pending(scope); disputes = pending(scope); summary = pending(scope);due=pending(scope);
     if (!scope) return;
     const root = `/api/v1/organizations/${encodeURIComponent(scope)}`;
     const results = await Promise.all([
@@ -40,10 +41,11 @@
       readResource(scope, `${root}/overdue`, rows('overdue', workRow), request.signal, 'overdue sales'),
       readResource(scope, `${root}/payment-claims`, rows('payment_claims', workRow), request.signal, 'reported transfers'),
       readResource(scope, `${root}/disputes`, rows('disputes', workRow), request.signal, 'reported problems'),
-      readResource(scope, `${root}/reports/receivables`, receivables, request.signal, 'your balance')
+      readResource(scope, `${root}/reports/receivables`, receivables, request.signal, 'your balance'),
+ readResource(scope,`${root}/due`,rows('due',workRow),request.signal,'upcoming payments')
     ]);
     if (!request.current() || organizationID !== scope) return;
-    [sales, payments, overdue, claims, disputes, summary] = results;
+    [sales, payments, overdue, claims, disputes, summary, due] = results;
   }
   async function load() {
     const request = businessRequest.begin(); businesses = pending(account.userID);
@@ -82,7 +84,7 @@
     </section>
   {:else if currentBusiness}
     <div class="toolbar"><label>Business<select bind:value={organizationID} onchange={loadRequests}>{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}</select></label><button type="button" onclick={loadRequests}>Refresh</button><a href="/app/onboarding">Business setup</a></div>
-    <section class="balance-card" aria-label="What you are owed" aria-busy={summary.state === 'loading'}>
+    <ResourceNotice resource={due} label="Upcoming payments" retry={loadRequests}/><section class="balance-card" aria-label="What you are owed" aria-busy={summary.state === 'loading'}>
       <p>Outstanding balance</p>
       {#if summary.state === 'ready'}
         <strong class="balance"><Money amountKobo={summary.data.outstanding_kobo} /></strong><p class="balance-caption">Across {summary.data.obligation_count} active sale{summary.data.obligation_count === 1 ? '' : 's'}</p>

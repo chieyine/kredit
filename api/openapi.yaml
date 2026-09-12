@@ -8,6 +8,696 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /organizations/{organizationID}/fee-authorizations:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listSupplierFeeAuthorizations
+      summary: Read separate fee bank permissions
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+    post:
+      operationId: changeSupplierFeeAuthorization
+      summary: Start, authorize, pause or request resumption of fee bank permission
+      description: Requires CSRF and an idempotency key. Financial administration and compliance review also require current authority and recent MFA.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeeAuthorizationCommand'
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /organizations/{organizationID}/fee-operations:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listSupplierFeeOperations
+      summary: Read fee debits and bank reconciliation balances
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /ops/fee-authorizations/{organizationID}:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listAdminFeeAuthorizations
+      summary: Read separate fee bank permissions
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+    post:
+      operationId: changeAdminFeeAuthorization
+      summary: Review fee permission evidence
+      description: Requires CSRF and an idempotency key. Financial administration and compliance review also require current authority and recent MFA.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeeAuthorizationCommand'
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /ops/fee-operations/{organizationID}:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listAdminFeeOperations
+      summary: Read fee debits and bank reconciliation balances
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+    post:
+      operationId: recordFeeBankOperation
+      summary: Record verified fee bank movements or review a saved debit
+      description: Requires CSRF and an idempotency key. Financial administration and compliance review also require current authority and recent MFA.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeeBankCommand'
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /identity/checks:
+    get:
+      operationId: listNativeIdentityChecks
+      summary: Read own checks; review=true requires compliance authority
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /identity/checks/{provider}/{caseID}:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema: {type: string}
+      - name: caseID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: actNativeIdentityCheck
+      summary: Complete or review the original native identity check
+      description: Requires CSRF and an idempotency key. Financial administration and compliance review also require current authority and recent MFA.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NativeIdentityCommand'
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /identity/checks/{provider}/{caseID}/document:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema: {type: string}
+      - name: caseID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: readNativeIdentityDocument
+      summary: Read evidence status; download=true returns a clean private document link
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+    post:
+      operationId: attachNativeIdentityDocument
+      summary: Upload up to 2 MB of private identity evidence for scanning
+      description: Requires CSRF and an idempotency key. Financial administration and compliance review also require current authority and recent MFA.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NativeIdentityDocument'
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /ops/seller-settlements:
+    get:
+      operationId: listAdminSellerSettlements
+      summary: Read frozen seller payout routes and bank receipts
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /organizations/{organizationID}/seller-settlements:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: listSupplierSellerSettlements
+      summary: Read business payout routes and bank receipts
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /ops/seller-settlements/{organizationID}/{attemptID}:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: attemptID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: recordSellerBankSettlement
+      summary: Record an actual seller bank credit or return without changing buyer debt
+      description: Requires CSRF and an idempotency key. Financial administration and compliance review also require current authority and recent MFA.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellerBankReceipt'
+      responses:
+        '200': {description: Saved result or scoped records}
+        '202': {description: Evidence saved and awaiting its safety check}
+        '403': {description: Current authority or security verification required}
+        '409': {description: Saved state or provider evidence requires review}
+        '503': {description: Service unavailable}
+  /organizations/{organizationID}/fee-invoices:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listSupplierFeeInvoices
+      summary: Read the latest 100 itemised platform fee bills
+      description: Requires financial-read permission for the business. Credits, received funds, completed refunds and remaining balances are separate amounts in NGN kobo.
+      responses:
+        '200': {description: Invoices with immutable line amounts and current credits and receipts}
+        '403': {description: Business financial access required}
+        '503': {description: Billing records unavailable}
+  /ops/billing-review:
+    get:
+      operationId: listInvoiceBillingReviews
+      summary: Super-admin queue of requested arrangements and recently issued bills
+      responses:
+        '200': {description: Pending businesses and latest invoice identifiers}
+        '403': {description: Platform owner required}
+  /ops/billing-review/{organizationID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    post:
+      operationId: approveConsolidatedInvoiceBilling
+      summary: Approve the exact invoice arrangement requested by the seller
+      description: Requires platform owner, recent MFA, CSRF and an idempotency key. Split and debit arrangements cannot use this approval.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [version, billing_reference, payment_instructions]
+              properties:
+                version: {type: integer, format: int64, minimum: 1}
+                billing_reference: {type: string}
+                payment_instructions: {type: string, minLength: 20, maxLength: 2000}
+      responses:
+        '200': {description: Profile and readiness updated with approval and notification evidence}
+        '403': {description: Owner authority or recent MFA required}
+        '409': {description: Arrangement changed or is not an invoice arrangement}
+  /ops/fee-invoices/{organizationID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listOwnerFeeInvoices
+      summary: Super-admin view of the business fee bills
+      responses:
+        '200': {description: Latest 100 bills including lines and balances}
+        '403': {description: Platform owner required}
+  /ops/fee-invoices/{organizationID}/{invoiceID}/receipts:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: invoiceID, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: recordInvoiceBankMovement
+      summary: Record a bank-verified receipt or completed fee refund
+      description: Requires current owner authority, recent MFA, CSRF and an idempotency key. Does not initiate a transfer. Bank references are unique across invoices; amount, date, direction and evidence must match on replay. Buyer debt is unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [bank_reference, amount_kobo, received_at, evidence]
+              properties:
+                direction: {type: string, enum: [received, refunded], default: received}
+                bank_reference: {type: string, minLength: 3, maxLength: 200}
+                amount_kobo: {type: integer, format: int64, minimum: 1}
+                received_at: {type: string, format: date-time}
+                evidence: {type: string, minLength: 20, maxLength: 2000}
+      responses:
+        '200': {description: Current invoice after atomic bank record, ledger and audit commit}
+        '403': {description: Owner authority or recent MFA required}
+        '409': {description: Invalid or duplicate bank evidence, or amount exceeds balance}
+  /ops/setup:
+    get:
+      operationId: ownerLaunchSetup
+      summary: Super-admin setup tasks and API and worker configuration status
+      description: Requires platform owner access and recent MFA. Applied configuration is not proof of provider approval or successful live operation.
+      responses:
+        '200': {description: Tasks, saved versions, process heartbeats and configuration gates}
+        '403': {description: Super-admin access or recent MFA required}
+        '503': {description: Saved configuration or service status unavailable}
+  /ops/message-submissions:
+    get:
+      operationId: listUncertainMessageSubmissions
+      summary: List native message sends held after uncertain results
+      responses:
+        '200': {description: Up to 100 held submissions, without message contents or recipients}
+        '403': {description: Provider operations permission required}
+  /ops/message-submissions/{submissionID}/resolve:
+    parameters:
+      - {name: submissionID, in: path, required: true, schema: {type: string, pattern: '^[0-9a-f]{64}$'}}
+    post:
+      operationId: resolveUncertainMessageSubmission
+      summary: Record acceptance evidence or close a send without resending
+      description: Requires provider operations permission, recent MFA and CSRF. This never establishes delivery evidence or starts payment deadlines.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, reason]
+              properties:
+                action: {type: string, enum: [record_reference, close_without_resend]}
+                provider_reference: {type: string, maxLength: 512}
+                reason: {type: string, minLength: 8, maxLength: 2000}
+      responses:
+        '200': {description: Resolution recorded and delivery remains unconfirmed}
+        '409': {description: Send still active or record changed}
+  /organizations/{organizationID}/onboarding/settlement/banks:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: supplierSettlementBanks
+      summary: Read banks from the configured registration provider
+      responses:
+        '200': {description: Bank codes and names}
+        '503': {description: Provider or bank list unavailable}
+  /ops/settlement-review:
+    get:
+      operationId: listSettlementOwnershipReviews
+      summary: Super-admin review of registered destinations and interrupted registrations
+      responses:
+        '200': {description: Masked destinations and held registrations}
+        '403': {description: Platform owner required}
+  /ops/settlement-review/{organizationID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    post:
+      operationId: reviewSettlementOwnership
+      summary: Approve or reject the exact registered business destination
+      description: Requires platform owner, recent MFA and CSRF. Approval requires current business verification and matching original provider registration evidence. This does not prove settlement of any payment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, provider_reference, action, reason]
+              properties:
+                version: {type: integer, minimum: 1}
+                provider_reference: {type: string, maxLength: 128}
+                action: {type: string, enum: [approve, reject]}
+                reason: {type: string, minLength: 20, maxLength: 2000}
+      responses:
+        '200': {description: Versioned ownership decision recorded}
+        '409': {description: Profile changed or provider evidence missing}
+  /ops/settlement-registrations/{organizationID}/{registrationID}/retry:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: registrationID, in: path, required: true, schema: {type: string, minLength: 64, maxLength: 64}}
+    post:
+      operationId: permitSettlementRegistrationRetry
+      summary: Record provider-confirmed non-creation before allowing the seller to retry
+      description: Requires platform owner, recent MFA and CSRF. No provider request is made by this action.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 20, maxLength: 2000}
+      responses:
+        '200': {description: Retry permission recorded in the audit trail}
+        '409': {description: Registration active or already resolved}
+  /webhooks/meta:
+    get:
+      security: []
+      operationId: verifyMetaWebhookSubscription
+      summary: Meta subscription challenge using the configured verification token
+      responses:
+        '200': {description: Plain-text challenge}
+        '403': {description: Verification token did not match}
+    post:
+      security: []
+      operationId: receiveMetaWebhook
+      summary: Receive signed WhatsApp statuses and text messages
+      description: X-Hub-Signature-256 authenticates the raw body. Delivery statuses must match the original encrypted route, phone account and recipient. Inbound replies do not execute financial commands.
+      responses:
+        '200': {description: Authenticated event handled}
+        '403': {description: Signature invalid}
+        '503': {description: Evidence cannot yet be linked or processing unavailable; retry required}
+  /ops/mandate-authorizations:
+    get:
+      operationId: listMandateAuthorizationAttempts
+      summary: List interrupted provider requests for authorized operators
+      responses:
+        '200': {description: Saved attempt identifiers and original subject references}
+        '403': {description: Provider operations permission required}
+  /ops/mandate-authorizations/{attemptID}:
+    parameters:
+      - name: attemptID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: resolveMandateAuthorizationAttempt
+      summary: Verify a provider reference or record confirmed non-creation
+      description: Requires recent MFA and CSRF. Original request identity must match authoritative provider evidence. Uncertain outcomes stay blocked.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, reason]
+              properties:
+                action: {type: string, enum: [link, not_created]}
+                provider_reference: {type: string}
+                reason: {type: string, minLength: 20, maxLength: 2000}
+      responses:
+        '200': {description: Resolution saved}
+        '409': {description: Original request still running or provider evidence unconfirmed}
+  /ops/verification-requests:
+    get:
+      operationId: listBuyerVerificationAttempts
+      summary: List interrupted provider requests for authorized operators
+      responses:
+        '200': {description: Saved attempt identifiers and original subject references}
+        '403': {description: Provider operations permission required}
+  /ops/verification-requests/{attemptID}:
+    parameters:
+      - name: attemptID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: resolveBuyerVerificationAttempt
+      summary: Verify a provider reference or record confirmed non-creation
+      description: Requires recent MFA and CSRF. Original request identity must match authoritative provider evidence. Uncertain outcomes stay blocked.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, reason]
+              properties:
+                action: {type: string, enum: [link, not_created]}
+                provider_reference: {type: string}
+                reason: {type: string, minLength: 20, maxLength: 2000}
+      responses:
+        '200': {description: Resolution saved}
+        '409': {description: Original request still running or provider evidence unconfirmed}
+  /buyer/me/verification/refresh:
+    parameters:
+      - name: business_id
+        in: query
+        description: Select an owned business; defaults to the latest business.
+        schema: {type: string, format: uuid}
+    post:
+      operationId: refreshBuyerVerification
+      summary: Resume saved identity checks without recreating uncertain provider sessions
+      description: Authenticated account and CSRF required. Pending verification does not permit accepting a sale.
+      responses:
+        '200': {description: Current buyer portal and verification status}
+        '503': {description: Details remain saved; verification is pending or needs provider review}
+  /buyer/credit-requests/{requestID}/invoice:
+    parameters:
+      - name: requestID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: buyerInvoice
+      summary: Open the clean invoice attached to this buyer's sent sale
+      responses:
+        '200': {description: Audited signed download URL valid for five minutes}
+        '404': {description: Sale or matching invoice not found}
+        '409': {description: File has not passed its safety scan}
+  /buyer/disputes/{disputeID}/documents:
+    parameters:
+      - name: disputeID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: uploadBuyerDisputeDocument
+      summary: Upload a document owned by the submitting dispute party
+      description: CSRF required. Maximum decoded file size is 2 MiB; PDF, JPG and PNG are supported. Wait for a clean scan before submitting the document as evidence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, content_type, content_base64]
+              properties:
+                file_name: {type: string}
+                content_type: {type: string, enum: [application/pdf, image/jpeg, image/png]}
+                content_base64: {type: string, contentEncoding: base64}
+      responses:
+        '202': {description: Saved document and current scan state}
+        '422': {description: Invalid file}
+  /buyer/disputes/{disputeID}/documents/{documentID}:
+    parameters:
+      - name: disputeID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: documentID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: readBuyerDisputeDocument
+      summary: Read evidence belonging to this authorized dispute
+      description: Unsubmitted scan status is visible only to its uploader. Downloads require a clean file attached to the dispute and are audited.
+      responses:
+        '200': {description: Document metadata or signed download URL valid for five minutes}
+        '404': {description: File is outside this dispute or not visible to this actor}
+        '409': {description: Evidence attachment or clean scan required}
+  /buyer/disputes/{disputeID}/documents/{documentID}/download:
+    parameters:
+      - name: disputeID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: documentID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: downloadBuyerDisputeDocument
+      summary: Download evidence belonging to this authorized dispute
+      description: Unsubmitted scan status is visible only to its uploader. Downloads require a clean file attached to the dispute and are audited.
+      responses:
+        '200': {description: Document metadata or signed download URL valid for five minutes}
+        '404': {description: File is outside this dispute or not visible to this actor}
+        '409': {description: Evidence attachment or clean scan required}
+  /organizations/{organizationID}/disputes/{disputeID}/documents:
+    parameters:
+      - name: disputeID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: uploadSupplierDisputeDocument
+      summary: Upload a document owned by the submitting dispute party
+      description: CSRF required. Maximum decoded file size is 2 MiB; PDF, JPG and PNG are supported. Wait for a clean scan before submitting the document as evidence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, content_type, content_base64]
+              properties:
+                file_name: {type: string}
+                content_type: {type: string, enum: [application/pdf, image/jpeg, image/png]}
+                content_base64: {type: string, contentEncoding: base64}
+      responses:
+        '202': {description: Saved document and current scan state}
+        '422': {description: Invalid file}
+  /organizations/{organizationID}/disputes/{disputeID}/documents/{documentID}:
+    parameters:
+      - name: disputeID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: documentID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: readSupplierDisputeDocument
+      summary: Read evidence belonging to this authorized dispute
+      description: Unsubmitted scan status is visible only to its uploader. Downloads require a clean file attached to the dispute and are audited.
+      responses:
+        '200': {description: Document metadata or signed download URL valid for five minutes}
+        '404': {description: File is outside this dispute or not visible to this actor}
+        '409': {description: Evidence attachment or clean scan required}
+  /organizations/{organizationID}/disputes/{disputeID}/documents/{documentID}/download:
+    parameters:
+      - name: disputeID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: documentID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: downloadSupplierDisputeDocument
+      summary: Download evidence belonging to this authorized dispute
+      description: Unsubmitted scan status is visible only to its uploader. Downloads require a clean file attached to the dispute and are audited.
+      responses:
+        '200': {description: Document metadata or signed download URL valid for five minutes}
+        '404': {description: File is outside this dispute or not visible to this actor}
+        '409': {description: Evidence attachment or clean scan required}
+  /ops/disputes/{disputeID}/documents/{documentID}:
+    parameters:
+      - name: disputeID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: documentID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: readReviewerDisputeDocument
+      summary: Read evidence belonging to this authorized dispute
+      description: Unsubmitted scan status is visible only to its uploader. Downloads require a clean file attached to the dispute and are audited.
+      responses:
+        '200': {description: Document metadata or signed download URL valid for five minutes}
+        '404': {description: File is outside this dispute or not visible to this actor}
+        '409': {description: Evidence attachment or clean scan required}
+  /ops/disputes/{disputeID}/documents/{documentID}/download:
+    parameters:
+      - name: disputeID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: documentID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: downloadReviewerDisputeDocument
+      summary: Download evidence belonging to this authorized dispute
+      description: Unsubmitted scan status is visible only to its uploader. Downloads require a clean file attached to the dispute and are audited.
+      responses:
+        '200': {description: Document metadata or signed download URL valid for five minutes}
+        '404': {description: File is outside this dispute or not visible to this actor}
+        '409': {description: Evidence attachment or clean scan required}
   /ops/customer-registrations:
     get:
       operationId: listCustomerRegistrations
@@ -151,7 +841,7 @@ paths:
               properties:
                 due_date: {type: string, format: date}
                 grace_hours: {type: integer, minimum: 0, maximum: 720}
-                collection_local: {type: string, description: Optional Nigerian local datetime in YYYY-MM-DDTHH:mm format.}
+                collection_local: {type: string, description: "Optional Nigerian local datetime in YYYY-MM-DDTHH:mm format."}
       responses:
         '200':
           description: Canonical timing for review before creating a sale.
@@ -827,7 +1517,7 @@ paths:
       - $ref: '#/components/parameters/RequiredIdempotencyKey'
     put:
       operationId: updateSupplierSettlement
-      summary: Save a provider reference and masked settlement destination after recent MFA
+      summary: Register a business bank account through the configured provider after recent MFA
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SettlementRequest' } } } }
       responses: { '200': { description: Settlement verification state recorded without full bank details. } }
   /organizations/{organizationID}/onboarding/billing:
@@ -1084,12 +1774,17 @@ paths:
               $ref: '#/components/schemas/BuyerInvitationAcceptRequest'
       responses:
         '201':
-          description: Buyer portal account created and verified.
+          description: Buyer account and consent evidence saved; verification may still be pending.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BuyerPortalResponse'
   /buyer/me:
+    parameters:
+      - name: business_id
+        in: query
+        description: Select an owned business; defaults to the latest business.
+        schema: {type: string, format: uuid}
     get:
       operationId: getBuyerPortal
       summary: Get the current buyer portal profile
@@ -1807,7 +2502,7 @@ paths:
   /buyer/businesses/{businessID}/repayment-customer:
     post:
       operationId: createRepaymentCustomer
-      description: Register the business owner's repayment customer with consent. Requires recent MFA, CSRF, and an idempotency key. BVN is sent directly to the provider and is never persisted or returned. Registration is not verification or trade-credit acceptance.
+      description: Register a business bank customer using its legal business name and a consenting shareholder’s BVN. Requires recent MFA, CSRF, and an idempotency key. BVN is sent directly to the provider and is never persisted or returned. Registration is not verification or trade-credit acceptance.
       parameters:
         - name: businessID
           in: path
@@ -1820,10 +2515,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [first_name, last_name, email, phone, address, bvn, consent_version]
+              required: [email, phone, address, bvn, consent_version]
               properties:
-                first_name: {type: string}
-                last_name: {type: string}
                 email: {type: string, format: email}
                 phone: {type: string}
                 address: {type: string, maxLength: 100}
@@ -1835,7 +2528,7 @@ paths:
         '403': {description: "Recent MFA or CSRF required."}
         '404': {description: "Business not owned by the authenticated user."}
         '409': {description: "Provider registration not confirmed."}
-        '503': {description: "Mono sandbox not configured."}
+        '503': {description: "Bank provider not configured."}
   /webhooks/collection/{provider}:
     post:
       security: []
@@ -2003,33 +2696,26 @@ paths:
     post:
       security: []
       operationId: notificationDeliveryReceipt
-      summary: Record authenticated delivery evidence from the configured notification connector
-      description: X-Notification-Signature is the hex HMAC-SHA256 of the exact request body using the channel connector token. Receipt IDs deduplicate per channel. A send acknowledgment is not delivery evidence. Connectors retry 409 when a sent message is not yet committed.
+      summary: Receive provider notification events
+      description: Sendly requires sendly-timestamp and sendly-signature (HMAC-SHA256 over timestamp, a dot, and the exact body). Mesaj documents no callback signature; its callback is acknowledged without changing delivery state. The worker independently reads authenticated Sendly message or Mesaj webhook-log records. Connector v1 callbacks use X-Notification-Signature and are signals only. The worker obtains delivery evidence through the immutable connection saved for the original message.
       parameters:
         - name: channel
           in: path
           required: true
           schema: { type: string, enum: [email, sms, whatsapp] }
-        - name: X-Notification-Signature
-          in: header
-          required: true
-          schema: { type: string }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [event_id, notification_event_id, message_id, delivered_at]
-              properties:
-                event_id: { type: string, maxLength: 200 }
-                notification_event_id: { type: string }
-                message_id: { type: string }
-                delivered_at: { type: string, format: date-time }
+              description: Provider-specific event envelope. Sendly uses id/type/createdAt/data; Mesaj bulk uses message_id/recipient/status. Callback receipt alone is not proof of SMS delivery.
+              additionalProperties: true
       responses:
-        '200': { description: "Delivery receipt recorded or exact replay acknowledged" }
-        '401': { description: "Missing or invalid connector signature" }
-        '409': { description: "Conflicting receipt or matching sent message unavailable" }
+        '200': { description: "Provider event acknowledged" }
+        '400': { description: "Invalid provider envelope" }
+        '401': { description: "Connector disabled, or required authentication invalid" }
+        '409': { description: "Conflicting connector receipt or matching sent message unavailable" }
   /pricing:
     get:
       operationId: publicPricing
@@ -2635,6 +3321,22 @@ paths:
       summary: List collection attempts across an organisation
       responses:
         '200': { description: "Organisation collection attempts" }
+  /ops/provider-work:
+    get:
+      operationId: providerWork
+      summary: Read provider configuration and work needing attention
+      responses:
+        '200': { description: "Configuration states, full queue counts, and oldest 100 pending records; requires provider operations authority" }
+        '403': { description: "Insufficient platform authority" }
+        '503': { description: "Provider work could not be read" }
+  /organizations/{organizationID}/due:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listOrganizationDue
+      summary: Read unpaid schedule amounts due within seven days, including overdue amounts
+      responses:
+        '200': { description: "Due amounts capped at the obligation balance, current due date, and observation time; requires organization financial read access" }
   /organizations/{organizationID}/overdue:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
@@ -2951,6 +3653,57 @@ components:
         type: string
         minLength: 64
   schemas:
+    FeeAuthorizationCommand:
+      type: object
+      required: [action]
+      properties:
+        action: {type: string, enum: [start, authorize, pause, resume, customer, approve]}
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        phone: {type: string}
+        address: {type: string, maxLength: 100}
+        bvn: {type: string, pattern: '^[0-9]{11}$', writeOnly: true}
+        ceiling_kobo: {type: integer, minimum: 20000, maximum: 2500000000}
+        consent_version: {type: string, const: seller-fees-v1}
+        reference: {type: string, description: Original provider reference for evidence recovery}
+        evidence: {type: string, minLength: 20, maxLength: 2000}
+    FeeBankCommand:
+      type: object
+      required: [action]
+      properties:
+        action: {type: string, enum: [bank, reconcile, reversed, clear_review]}
+        id: {type: string, format: uuid}
+        provider: {type: string}
+        direction: {type: string, enum: [received, returned]}
+        bank_reference: {type: string, maxLength: 200}
+        amount_kobo: {type: integer, minimum: 1}
+        received_at: {type: string, format: date-time}
+        evidence: {type: string, minLength: 20, maxLength: 2000}
+    NativeIdentityCommand:
+      type: object
+      required: [action, expected_version]
+      properties:
+        action: {type: string, enum: [phone_start, phone_verify, business_lookup, renew, approve, reject, retry]}
+        expected_version: {type: integer, minimum: 1}
+        value: {type: string, writeOnly: true, description: Transient phone, OTP or registration number for the selected action}
+        consent_version: {type: string}
+        evidence: {type: string, minLength: 20, maxLength: 2000}
+    NativeIdentityDocument:
+      type: object
+      required: [file_name, content_type, content_base64]
+      properties:
+        file_name: {type: string}
+        content_type: {type: string, enum: [application/pdf, image/jpeg, image/png]}
+        content_base64: {type: string, contentEncoding: base64, writeOnly: true}
+    SellerBankReceipt:
+      type: object
+      required: [reference, amount_kobo, direction, occurred_at, evidence]
+      properties:
+        reference: {type: string, maxLength: 160}
+        amount_kobo: {type: integer, minimum: 1}
+        direction: {type: string, enum: [paid, returned]}
+        occurred_at: {type: string, format: date-time}
+        evidence: {type: string, minLength: 20, maxLength: 2000}
     WebsiteCopy:
       type: object
       additionalProperties: false
@@ -3135,17 +3888,16 @@ components:
         expected_version: { type: integer, format: int64, minimum: 1 }
     SettlementRequest:
       type: object
-      required: [expected_version, provider, provider_reference, bank_name, account_name, account_last4]
+      additionalProperties: false
+      required: [expected_version, bank_code, account_number]
       properties:
         expected_version: { type: integer, format: int64, minimum: 1 }
-        provider: { type: string }
-        provider_reference: { type: string }
-        bank_name: { type: string }
-        account_name: { type: string }
-        account_last4: { type: string, pattern: '^[0-9]{4}$' }
+        bank_code: { type: string, pattern: '^[0-9]{3,6}$' }
+        account_number: { type: string, pattern: '^[0-9]{10}$', writeOnly: true }
     BillingRequest:
+      description: Invoice billing receives a server-generated arrangement reference; other methods require a provider reference. All new preferences remain pending verification.
       type: object
-      required: [expected_version, method, provider_reference, cycle]
+      required: [expected_version, method, cycle]
       properties:
         expected_version: { type: integer, format: int64, minimum: 1 }
         method: { type: string, enum: [split_settlement, authorized_debit, consolidated_invoice] }
@@ -3180,6 +3932,7 @@ components:
         principal_kobo: {type: integer, format: int64, minimum: 1}
         goods_description: {type: string}
         invoice_reference: {type: string}
+        invoice_document_id: {type: string, format: uuid}
         invoice_document_hash: {type: string}
         due_date: {type: string, format: date}
         grace_hours: {type: integer, minimum: 0, maximum: 720}
@@ -3214,6 +3967,7 @@ components:
         principal_kobo: {type: integer, format: int64, minimum: 1}
         goods_description: {type: string}
         invoice_reference: {type: string}
+        invoice_document_id: {type: string, format: uuid}
         invoice_document_hash: {type: string}
         due_date: {type: string, format: date}
         grace_hours: {type: integer, minimum: 0, maximum: 720}
@@ -3701,8 +4455,12 @@ components:
           format: date-time
     BuyerInvitationAcceptRequest:
       type: object
-      required: [challenge_id, code, full_name]
+      required: [challenge_id, code, full_name, consents_accepted, terms_version, privacy_version, identity_notice_version]
       properties:
+        consents_accepted: {type: boolean, const: true}
+        terms_version: {type: string}
+        privacy_version: {type: string}
+        identity_notice_version: {type: string}
         challenge_id:
           type: string
         code:
@@ -3852,5 +4610,8 @@ components:
       type: object
       required: [portal]
       properties:
+        verification_current:
+          type: boolean
+          description: All three identity checks are verified at the required level and have not expired.
         portal:
           $ref: '#/components/schemas/BuyerPortal'

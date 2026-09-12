@@ -20,16 +20,34 @@ type RuntimeConnection struct {
 }
 
 var RuntimeConnections = map[string]RuntimeConnection{
+	"integrations.runtime.retained_identity":    {Title: "Saved identity accounts", Fields: []ConnectionField{{"RetainedIdentityProviders", "Accounts used by existing verification", "retained"}}},
+	"integrations.runtime.retained_collections": {Title: "Saved collection accounts", Fields: []ConnectionField{{"RetainedCollectionProviders", "Accounts used by existing collections", "retained"}}},
+	"integrations.runtime.settlement": {Title: "Seller bank accounts", Fields: []ConnectionField{
+		{"SettlementEnabled", "Enable seller bank registration", "boolean"},
+		{"SettlementProvider", "Provider name (mono-sweep for Mono)", "text"},
+		{"SettlementEndpoint", "Other provider connector HTTPS address", "url"},
+		{"SettlementToken", "Other provider connector access token", "password"},
+	}},
+	"integrations.runtime.storage": {Title: "Private file storage", Fields: []ConnectionField{
+		{"ObjectStorageEndpoint", "S3-compatible HTTPS address", "url"},
+		{"ObjectStorageBucket", "Private bucket name", "text"},
+		{"ObjectStorageRegion", "Bucket region", "text"},
+		{"ObjectStorageAccessKey", "Access key", "password"},
+		{"ObjectStorageSecretKey", "Secret key", "password"},
+	}},
+
 	"integrations.runtime.identity": {Title: "Identity verification", Fields: []ConnectionField{
 		{"RealIdentity", "Enable identity verification", "boolean"},
+		{"IdentityAdapter", "Adapter: mono or connector", "text"},
 		{"IdentityProvider", "Provider name", "text"},
-		{"IdentityProviderEndpoint", "Kredit-compatible connector HTTPS address", "url"},
-		{"IdentityProviderToken", "Connector access token", "password"},
+		{"IdentityProviderEndpoint", "Provider HTTPS address", "url"},
+		{"IdentityProviderToken", "Provider secret key or connector token", "password"},
 		{"IdentityWebhookSecret", "Webhook signing secret", "password"},
 		{"IdentityApprovalReference", "Provider approval reference", "text"},
 	}},
 	"integrations.runtime.mono": {Title: "Mono bank collections", Fields: []ConnectionField{
 		{"MonoSweepEnabled", "Enable new Mono collections", "boolean"},
+		{"MonoAccountName", "Account name (use a new name for another Mono account)", "text"},
 		{"PartialSweepEnabled", "Allow partial collections", "boolean"},
 		{"MonoSecretKey", "Mono secret key", "password"},
 		{"MonoWebhookSecret", "Mono webhook secret", "password"},
@@ -43,8 +61,8 @@ var RuntimeConnections = map[string]RuntimeConnection{
 	"integrations.runtime.collections": {Title: "Other bank collection connector", Fields: []ConnectionField{
 		{"RealCollections", "Enable this collection connector", "boolean"},
 		{"CollectionProvider", "Provider name", "text"},
-		{"CollectionProviderEndpoint", "Kredit-compatible connector HTTPS address", "url"},
-		{"CollectionProviderToken", "Connector access token", "password"},
+		{"CollectionProviderEndpoint", "Provider HTTPS address", "url"},
+		{"CollectionProviderToken", "Provider secret key or connector token", "password"},
 		{"CollectionWebhookSecret", "Webhook signing secret", "password"},
 		{"ProviderApprovalReference", "Written provider approval reference", "text"},
 		{"ProviderApprovedBy", "Approved by", "text"},

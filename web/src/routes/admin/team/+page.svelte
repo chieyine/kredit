@@ -28,6 +28,10 @@
 	let error = $state('');
 	let revokeTarget = $state<TeamMember | null>(null);
 	let revokeReason = $state('');
+ let grantReview=$state<{user:UserResult;role:string;reason:string;expires_at:string}|null>(null);
+ const roleEffect=(value:string)=>({support_agent:'Handle support requests within assigned access.',compliance_reviewer:'Review compliance, audit and provider evidence.',dispute_reviewer:'Review and decide reported sale problems.',finance_operator:'Propose financial corrections; approval follows the current governance rules.',policy_manager:'Propose changes to business policies.',approver:'Approve eligible changes under the current governance rules.',access_administrator:'Manage administrator access and role assignments.',platform_admin:'Manage platform operations, financial workflows and permitted administrator access.'}[value]??'Review the role permissions before granting access.');
+ function previewGrant(event:SubmitEvent){event.preventDefault();if(!selectedUser||busy)return;try{grantReview={user:{...selectedUser},role,reason:reason.trim(),expires_at:expires?lagosISO(expires):''};message=''}catch{message='Check the access expiry date.'}}
+
 
 	async function load() {
 		const request = requests.begin(); loading = true; error = '';
@@ -52,14 +56,14 @@
 		userQuery = user.display_name;
 	}
 
-	async function grant(event: SubmitEvent) {
-		event.preventDefault();
-		if (!selectedUser || busy) return;
+	async function grant() {
+		if (!grantReview || busy) return;
+ const reviewed=grantReview;
 		busy = true; message = '';
 		try {
-			const target = selectedUser.id; const requestedRole = role;
-			await intent(`/api/v1/ops/team/${encodeURIComponent(target)}/roles`).run({ role, reason, expires_at: expires ? lagosISO(expires) : '' }, value => { const saved = member(record(value).member); if (saved.user_id !== target || saved.role !== requestedRole) throw new Error('Access was not confirmed'); return saved; });
-			message = 'Admin access was granted and recorded.';
+			const target = reviewed.user.id; const requestedRole = reviewed.role;
+			await intent(`/api/v1/ops/team/${encodeURIComponent(target)}/roles`).run({ role:reviewed.role, reason:reviewed.reason, expires_at:reviewed.expires_at }, value => { const saved = member(record(value).member); if (saved.user_id !== target || saved.role !== requestedRole) throw new Error('Access was not confirmed'); return saved; });
+			message = 'Admin access was granted and recorded.';grantReview=null;
 			selectedUser = null; userQuery = ''; reason = ''; expires = ''; await load();
 		} catch (cause) { message = cause instanceof Error ? cause.message : 'Access could not be confirmed.'; }
 		finally { busy = false; }
@@ -108,13 +112,14 @@
 					<div class="results" aria-label="User search results">{#each userResults as user}<button type="button" onclick={() => chooseUser(user)}><strong>{user.display_name}</strong><span>{user.identifier} · {user.status}</span></button>{/each}</div>
 				{:else if userQuery && !selectedUser && !searching}<p class="hint">Search and choose one Kredit user before giving access.</p>{/if}
 				{#if selectedUser}
-					<form class="grant-form" onsubmit={grant}>
+					<form class="grant-form" onsubmit={previewGrant}>
 						<div class="selected"><small>Selected user</small><strong>{selectedUser.display_name}</strong><span>{selectedUser.identifier}</span></div>
 						<label>Role<select disabled={busy} bind:value={role}><option value="support_agent">Support agent</option><option value="compliance_reviewer">Compliance reviewer</option><option value="dispute_reviewer">Dispute reviewer</option><option value="finance_operator">Financial operator — propose corrections and date changes</option><option value="policy_manager">Policy manager — propose business policies</option><option value="approver">Approver — independently approve changes</option><option value="access_administrator">Access administrator — manage admin team</option><option value="platform_admin">Platform administrator</option></select></label>
 						<label>Access ends (Lagos time) <small>optional</small><input type="datetime-local" disabled={busy} bind:value={expires} /></label>
 						<label>Why are you giving access?<textarea disabled={busy} bind:value={reason} minlength="8" maxlength="1000" rows="4" required></textarea></label>
-						<button class="primary" disabled={busy}>{busy ? 'Saving…' : 'Give this access'}</button>
+						<button class="primary" disabled={busy}>{busy ? 'Saving…' : 'Review this access'}</button>
 					</form>
+ {#if grantReview}<section aria-label="Review administrator access"><h3>Confirm this access change</h3><p><strong>{grantReview.user.display_name}</strong> ({grantReview.user.identifier}) will receive <strong>{grantReview.role.replaceAll('_',' ')}</strong> access.</p><p>{roleEffect(grantReview.role)}</p><p>Ends: {grantReview.expires_at?localTime(grantReview.expires_at):'No expiry — remains active until revoked'}</p><p>Recorded reason: {grantReview.reason}</p><p>The server rechecks your authority before saving. This change is kept in the audit trail.</p><button type="button" disabled={busy} onclick={grant}>Grant the reviewed access</button><button type="button" disabled={busy} onclick={()=>grantReview=null}>Back to editing</button></section>{/if}
 				{/if}
 			</section>
 		</div>

@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,18 +18,26 @@ const defaultTimezone = "Africa/Lagos"
 // Config contains deployment configuration shared by the API and worker.
 // Secrets are read from the environment and are never logged or serialized.
 type Config struct {
-	AdminConnectionVersions    map[string]int `json:"-"`
-	MetricsScrapeToken         string
-	MonoSweepEnabled           bool
-	PartialSweepEnabled        bool
-	CollectionNoticeMinHours   int64
-	DeemedAcceptanceMinHours   int64
-	AdminSurfaces              []string
-	AutomaticCollectionEnabled bool
-	AutomaticRetryEnabled      bool
-	MonoSecretKey              string
-	MonoWebhookSecret          string
-	MonoRedirectURL            string
+	SettlementEnabled           bool
+	SettlementProvider          string
+	SettlementEndpoint          string
+	SettlementToken             string
+	AdminConfigAutoApply        bool
+	RetainedIdentityProviders   string         `json:"-"`
+	RetainedCollectionProviders string         `json:"-"`
+	AdminConnectionVersions     map[string]int `json:"-"`
+	MetricsScrapeToken          string
+	MonoSweepEnabled            bool
+	PartialSweepEnabled         bool
+	CollectionNoticeMinHours    int64
+	DeemedAcceptanceMinHours    int64
+	AdminSurfaces               []string
+	AutomaticCollectionEnabled  bool
+	AutomaticRetryEnabled       bool
+	MonoAccountName             string
+	MonoSecretKey               string
+	MonoWebhookSecret           string
+	MonoRedirectURL             string
 
 	Environment                    string
 	Version                        string
@@ -46,6 +56,7 @@ type Config struct {
 	DocumentScannerEnabled         bool
 	DocumentScannerEndpoint        string
 	DocumentScannerToken           string
+	FrontendProxySigningKey        string `json:"-"`
 	SessionSigningKey              string
 	FieldEncryptionKeyID           string
 	FieldEncryptionKey             string
@@ -95,12 +106,19 @@ type Config struct {
 	LiveSupplierBilling            bool
 	ApprovedRetentionPolicy        bool
 	ProductionPilot                bool
+	NotificationEmailFrom          string
+	NotificationEmailWebhookSecret string `json:"-"`
+	NotificationEmailAdapter       string
 	NotificationEmailEndpoint      string
 	NotificationEmailToken         string
+	NotificationSMSFrom            string
+	NotificationSMSAdapter         string
 	NotificationSMSEndpoint        string
 	NotificationSMSToken           string
+	NotificationWhatsAppAdapter    string
 	NotificationWhatsAppEndpoint   string
 	NotificationWhatsAppToken      string
+	IdentityAdapter                string
 	IdentityProvider               string
 	IdentityProviderEndpoint       string
 	IdentityProviderToken          string
@@ -110,6 +128,7 @@ type Config struct {
 func Load() (Config, error) {
 	c := Config{
 		MetricsScrapeToken:             envOr("METRICS_SCRAPE_TOKEN", ""),
+		MonoAccountName:                envOr("MONO_ACCOUNT_NAME", "mono-sweep"),
 		MonoSecretKey:                  envOr("MONO_SECRET_KEY", ""),
 		MonoWebhookSecret:              envOr("MONO_WEBHOOK_SECRET", ""),
 		MonoRedirectURL:                envOr("MONO_REDIRECT_URL", ""),
@@ -129,6 +148,7 @@ func Load() (Config, error) {
 		ObjectStorageSecretKey:         envOr("OBJECT_STORAGE_SECRET_KEY", "minioadmin"),
 		DocumentScannerEndpoint:        envOr("DOCUMENT_SCANNER_ENDPOINT", ""),
 		DocumentScannerToken:           envOr("DOCUMENT_SCANNER_TOKEN", ""),
+		FrontendProxySigningKey:        os.Getenv("FRONTEND_PROXY_SIGNING_KEY"),
 		SessionSigningKey:              envOr("SESSION_SIGNING_KEY", "development-only-change-me"),
 		FieldEncryptionKeyID:           envOr("FIELD_ENCRYPTION_KEY_ID", "development-only"),
 		FieldEncryptionKey:             envOr("FIELD_ENCRYPTION_KEY", "development-only-change-me"),
@@ -139,6 +159,7 @@ func Load() (Config, error) {
 		Timezone:                       envOr("BUSINESS_TIMEZONE", defaultTimezone),
 		Currency:                       "NGN",
 		MoneyUnit:                      "kobo",
+		RetainedCollectionProviders:    envOr("COLLECTION_RETAINED_PROVIDERS", ""),
 		CollectionProvider:             envOr("COLLECTION_PROVIDER", "mock-collection"),
 		CollectionProviderEndpoint:     envOr("COLLECTION_PROVIDER_ENDPOINT", ""),
 		CollectionProviderToken:        envOr("COLLECTION_PROVIDER_TOKEN", ""),
@@ -162,12 +183,19 @@ func Load() (Config, error) {
 		LaunchApprovalReference:        envOr("LAUNCH_APPROVAL_REFERENCE", ""),
 		PilotAllowedProviderAccounts:   envOr("PILOT_ALLOWED_PROVIDER_ACCOUNTS", ""),
 		PilotAllowedIndustries:         envOr("PILOT_ALLOWED_INDUSTRIES", ""),
+		NotificationEmailFrom:          os.Getenv("NOTIFICATION_EMAIL_FROM"),
+		NotificationEmailWebhookSecret: os.Getenv("SENDLY_WEBHOOK_SECRET"),
+		NotificationEmailAdapter:       envOr("NOTIFICATION_EMAIL_ADAPTER", ""),
 		NotificationEmailEndpoint:      envOr("NOTIFICATION_EMAIL_ENDPOINT", ""),
 		NotificationEmailToken:         envOr("NOTIFICATION_EMAIL_TOKEN", ""),
+		NotificationSMSFrom:            envOr("NOTIFICATION_SMS_FROM", ""),
+		NotificationSMSAdapter:         envOr("NOTIFICATION_SMS_ADAPTER", ""),
 		NotificationSMSEndpoint:        envOr("NOTIFICATION_SMS_ENDPOINT", ""),
 		NotificationSMSToken:           envOr("NOTIFICATION_SMS_TOKEN", ""),
+		NotificationWhatsAppAdapter:    envOr("NOTIFICATION_WHATSAPP_ADAPTER", ""),
 		NotificationWhatsAppEndpoint:   envOr("NOTIFICATION_WHATSAPP_ENDPOINT", ""),
 		NotificationWhatsAppToken:      envOr("NOTIFICATION_WHATSAPP_TOKEN", ""),
+		IdentityAdapter:                envOr("IDENTITY_ADAPTER", "connector"),
 		IdentityProvider:               envOr("IDENTITY_PROVIDER", "mock-identity"),
 		IdentityProviderEndpoint:       envOr("IDENTITY_PROVIDER_ENDPOINT", ""),
 		IdentityProviderToken:          envOr("IDENTITY_PROVIDER_TOKEN", ""),
@@ -199,6 +227,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	for name, target := range map[string]*bool{
+		"ADMIN_CONFIG_AUTO_APPLY":            &c.AdminConfigAutoApply,
 		"MONO_SWEEP_ENABLED":                 &c.MonoSweepEnabled,
 		"PARTIAL_SWEEP_ENABLED":              &c.PartialSweepEnabled,
 		"AUTOMATIC_COLLECTION_ENABLED":       &c.AutomaticCollectionEnabled,
@@ -233,6 +262,35 @@ func Load() (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if c.SettlementEnabled {
+		if c.SettlementProvider == c.MonoAccount() {
+			if c.MonoSecretKey == "" {
+				return errors.New("configure Mono before enabling bank registration")
+			}
+		} else {
+			if c.SettlementProvider == "" {
+				return errors.New("settlement provider name is required")
+			}
+			if err := validateProductionURL("settlement endpoint", c.SettlementEndpoint); err != nil {
+				return err
+			}
+			if len(c.SettlementToken) < 32 || strings.ContainsAny(c.SettlementToken, "\r\n") {
+				return errors.New("settlement access token must contain at least 32 characters and no line breaks")
+			}
+		}
+	}
+	if c.IdentityAdapter != "" && c.IdentityAdapter != "connector" && c.IdentityAdapter != "mono" {
+		return errors.New("identity adapter must be connector or mono")
+	}
+	if err := c.validateMonoAccountName(); err != nil {
+		return err
+	}
+	if _, err := c.RetainedIdentities(); err != nil {
+		return err
+	}
+	if _, err := c.RetainedCollections(); err != nil {
+		return err
+	}
 	if strings.TrimSpace(c.Environment) == "" || strings.TrimSpace(c.Version) == "" || strings.TrimSpace(c.APIListenAddr) == "" {
 		return errors.New("APP_ENV, APP_VERSION, and API_ADDR are required")
 	}
@@ -247,8 +305,8 @@ func (c Config) Validate() error {
 	if c.Currency != "NGN" || c.MoneyUnit != "kobo" {
 		return errors.New("money configuration must remain NGN/kobo")
 	}
-	if c.MonoSweepEnabled || c.CollectionProvider == "mono-sweep" {
-		if c.CollectionProvider != "mono-sweep" || strings.TrimSpace(c.MonoWebhookSecret) == "" || strings.TrimSpace(c.MonoRedirectURL) == "" {
+	if c.MonoSecretKey != "" || c.MonoSweepEnabled || c.CollectionProvider == c.MonoAccount() {
+		if (c.MonoSweepEnabled && c.CollectionProvider != c.MonoAccount()) || strings.TrimSpace(c.MonoWebhookSecret) == "" || strings.TrimSpace(c.MonoRedirectURL) == "" {
 			return errors.New("mono Sweep requires COLLECTION_PROVIDER=mono-sweep, webhook secret, and redirect URL")
 		}
 		if c.Environment == "production" {
@@ -354,6 +412,7 @@ func (c Config) Validate() error {
 			return errors.New("production requires FEATURE_APPROVED_RETENTION_POLICY and its written approval reference: the deployment retains personal records from its first sale")
 		}
 		for name, value := range map[string]string{
+			"FRONTEND_PROXY_SIGNING_KEY":  c.FrontendProxySigningKey,
 			"SESSION_SIGNING_KEY":         c.SessionSigningKey,
 			"OTP_HMAC_KEY":                c.OTPHMACKey,
 			"TOKEN_HASH_KEY":              c.TokenHashKey,
@@ -361,7 +420,6 @@ func (c Config) Validate() error {
 			"FIELD_ENCRYPTION_KEY":        c.FieldEncryptionKey,
 			"FIELD_ENCRYPTION_KEY_ID":     c.FieldEncryptionKeyID,
 			"DATABASE_URL":                c.DatabaseURL,
-			"DATABASE_DIRECT_URL":         c.DatabaseDirectURL,
 			"RIVER_DATABASE_URL":          c.RiverDatabaseURL,
 			"OBJECT_STORAGE_ENDPOINT":     c.ObjectStorageEndpoint,
 			"OBJECT_STORAGE_BUCKET":       c.ObjectStorageBucket,
@@ -375,12 +433,13 @@ func (c Config) Validate() error {
 			}
 		}
 		for name, value := range map[string]string{
-			"SESSION_SIGNING_KEY":       c.SessionSigningKey,
-			"OTP_HMAC_KEY":              c.OTPHMACKey,
-			"TOKEN_HASH_KEY":            c.TokenHashKey,
-			"SETTINGS_ENCRYPTION_KEY":   c.SettingsEncryptionKey,
-			"FIELD_ENCRYPTION_KEY":      c.FieldEncryptionKey,
-			"OBJECT_STORAGE_SECRET_KEY": c.ObjectStorageSecretKey,
+			"FRONTEND_PROXY_SIGNING_KEY": c.FrontendProxySigningKey,
+			"SESSION_SIGNING_KEY":        c.SessionSigningKey,
+			"OTP_HMAC_KEY":               c.OTPHMACKey,
+			"TOKEN_HASH_KEY":             c.TokenHashKey,
+			"SETTINGS_ENCRYPTION_KEY":    c.SettingsEncryptionKey,
+			"FIELD_ENCRYPTION_KEY":       c.FieldEncryptionKey,
+			"OBJECT_STORAGE_SECRET_KEY":  c.ObjectStorageSecretKey,
 		} {
 			if err := validateSecret(name, value); err != nil {
 				return err
@@ -396,12 +455,17 @@ func (c Config) Validate() error {
 				return err
 			}
 		}
-		for name, value := range map[string]string{"DATABASE_URL": c.DatabaseURL, "DATABASE_DIRECT_URL": c.DatabaseDirectURL, "RIVER_DATABASE_URL": c.RiverDatabaseURL} {
+		for name, value := range map[string]string{"DATABASE_URL": c.DatabaseURL, "RIVER_DATABASE_URL": c.RiverDatabaseURL} {
 			if err := validateProductionDatabaseURL(name, value); err != nil {
 				return err
 			}
 		}
 
+		for _, selection := range []struct{ channel, adapter, native string }{{"email", c.NotificationEmailAdapter, "sendly"}, {"sms", c.NotificationSMSAdapter, "mesaj"}, {"whatsapp", c.NotificationWhatsAppAdapter, "connector"}} {
+			if selection.adapter != "" && selection.adapter != selection.native && selection.adapter != "connector" {
+				return fmt.Errorf("unsupported %s notification adapter", selection.channel)
+			}
+		}
 		// --- Sign-in delivery: validated when configured, never half-configured. ---
 		// Neither channel is mandatory to boot: a deployment may publish the
 		// public site before a messaging provider is contracted. What is refused
@@ -427,6 +491,24 @@ func (c Config) Validate() error {
 			}
 		}
 
+		if c.NotificationSMSEndpoint != "" && c.NotificationSMSAdapter != "connector" {
+			if c.NotificationSMSEndpoint != "https://api.mesaj.cloud:25274/client/sms/send/bulk" || !regexp.MustCompile(`^[A-Za-z0-9]{1,11}$`).MatchString(c.NotificationSMSFrom) {
+				return errors.New("SMS requires the Mesaj send endpoint and NOTIFICATION_SMS_FROM set to an approved sender ID")
+			}
+		}
+
+		if c.NotificationEmailEndpoint != "" && c.NotificationEmailAdapter != "connector" {
+			if c.NotificationEmailEndpoint != "https://api.sendlyai.com/v1/messages" || !strings.HasPrefix(c.NotificationEmailToken, "sk_live_") {
+				return errors.New("production email requires the Sendly /v1/messages endpoint and a live API key")
+			}
+			sender, err := mail.ParseAddress(c.NotificationEmailFrom)
+			if err != nil || !strings.HasSuffix(strings.ToLower(sender.Address), "@kredit.ng") {
+				return errors.New("NOTIFICATION_EMAIL_FROM must use the verified kredit.ng domain")
+			}
+			if err := validateSecret("SENDLY_WEBHOOK_SECRET", c.NotificationEmailWebhookSecret); err != nil {
+				return err
+			}
+		}
 		// --- Capabilities: required only where the capability is switched on. ---
 		if c.WhatsApp {
 			if strings.TrimSpace(c.NotificationWhatsAppEndpoint) == "" || strings.TrimSpace(c.NotificationWhatsAppToken) == "" {
@@ -455,13 +537,19 @@ func (c Config) Validate() error {
 		}
 
 		if c.RealIdentity {
-			if strings.TrimSpace(c.IdentityProvider) == "" || strings.Contains(strings.ToLower(c.IdentityProvider), "mock") || strings.TrimSpace(c.IdentityProviderEndpoint) == "" || strings.TrimSpace(c.IdentityProviderToken) == "" || strings.TrimSpace(c.IdentityWebhookSecret) == "" {
+			if c.IdentityAdapter == "mono" && !strings.HasPrefix(c.IdentityProviderToken, "live_sk_") {
+				return errors.New("production Mono lookup requires a live secret key")
+			}
+			if strings.TrimSpace(c.IdentityProvider) == "" || strings.Contains(strings.ToLower(c.IdentityProvider), "mock") || strings.TrimSpace(c.IdentityProviderEndpoint) == "" || strings.TrimSpace(c.IdentityProviderToken) == "" || (c.IdentityAdapter != "mono" && strings.TrimSpace(c.IdentityWebhookSecret) == "") {
 				return errors.New("FEATURE_REAL_IDENTITY requires a certified IDENTITY_PROVIDER and its endpoint, token, and webhook secret")
 			}
 			if err := validateProductionURL("IDENTITY_PROVIDER_ENDPOINT", c.IdentityProviderEndpoint); err != nil {
 				return err
 			}
 			for name, value := range map[string]string{"IDENTITY_PROVIDER_TOKEN": c.IdentityProviderToken, "IDENTITY_WEBHOOK_SECRET": c.IdentityWebhookSecret} {
+				if c.IdentityAdapter == "mono" && name == "IDENTITY_WEBHOOK_SECRET" {
+					continue
+				}
 				if err := validateSecret(name, value); err != nil {
 					return err
 				}
@@ -629,4 +717,11 @@ func boolEnv(name string, fallback bool) (bool, error) {
 		return false, fmt.Errorf("%s must be true or false: %w", name, err)
 	}
 	return parsed, nil
+}
+
+func (c Config) MonoAccount() string {
+	if strings.TrimSpace(c.MonoAccountName) == "" {
+		return "mono-sweep"
+	}
+	return c.MonoAccountName
 }

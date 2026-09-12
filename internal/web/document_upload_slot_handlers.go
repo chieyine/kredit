@@ -76,5 +76,5 @@ func (s *Server) createDocumentUploadSlot(w http.ResponseWriter, r *http.Request
 		writeProblem(w, http.StatusUnprocessableEntity, "document_upload_invalid", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"document": doc, "upload_url": url, "upload_headers": map[string]string{"If-None-Match": "*", "Content-Type": input.ContentType, "x-amz-server-side-encryption": "AES256"}, "expires_in_seconds": 600})
+	writeJSON(w, http.StatusCreated, map[string]any{"document": doc, "upload_url": url, "upload_headers": s.runtime.Documents.UploadHeaders(doc.ContentType), "expires_in_seconds": 600})
 }

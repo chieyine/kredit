@@ -9,7 +9,7 @@ export function GET() {
 	const body = [
 		'User-agent: *',
 		'Allow: /',
-		...disallowed.map((path) => `Disallow: ${path}`),
+		...disallowed.flatMap((path) => [`Disallow: ${path}$`, `Disallow: ${path}/`]),
 		`Sitemap: ${SITE_URL}/sitemap.xml`,
 		''
 	].join('\n');

@@ -28,13 +28,25 @@ func (c *Client) ParseWebhook(secret string, raw []byte) (Notice, error) {
 		ID   string `json:"event_id"`
 		Type string `json:"event"`
 		Data struct {
-			LiveMode  *bool  `json:"live_mode"`
-			ID        string `json:"id"`
-			Mandate   string `json:"mandate"`
-			Reference string `json:"reference_number"`
+			LiveMode             *bool  `json:"live_mode"`
+			ID                   string `json:"id"`
+			Mandate              string `json:"mandate"`
+			Reference            string `json:"reference_number"`
+			TransactionReference string `json:"reference"`
 		} `json:"data"`
 	}
-	if len(raw) > 1<<20 || json.Unmarshal(raw, &event) != nil {
+	var root struct {
+		Event string          `json:"event"`
+		Data  json.RawMessage `json:"data"`
+	}
+	if len(raw) > 1<<20 || json.Unmarshal(raw, &root) != nil {
+		return Notice{}, errors.New("invalid Mono webhook")
+	}
+	normalized := raw
+	if root.Event == "" {
+		normalized = root.Data
+	}
+	if json.Unmarshal(normalized, &event) != nil {
 		return Notice{}, errors.New("invalid Mono webhook")
 	}
 	// Sandbox and live traffic must never cross. Each side refuses the other's
@@ -52,6 +64,12 @@ func (c *Client) ParseWebhook(secret string, raw []byte) (Notice, error) {
 	}
 	if len(event.ID) > 256 {
 		return Notice{}, errors.New("invalid Mono event identity")
+	}
+	if event.Type == "mono.transaction.dispute_initiated" || event.Type == "mono.transaction.reversal_completed" {
+		if !validReference(event.Data.TransactionReference) {
+			return Notice{}, errors.New("transaction reference is required")
+		}
+		return Notice{EventID: event.ID, Type: event.Type, Reference: event.Data.TransactionReference, PayloadHash: digest}, nil
 	}
 	mandate := event.Data.Mandate
 	if mandate == "" {

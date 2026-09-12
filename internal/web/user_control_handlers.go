@@ -92,7 +92,7 @@ func (s *Server) requestAccountRecovery(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	id, _ := s.runtime.UserControl.RequestRecovery(r.Context(), in.Identifier, in.Channel, clientIP(r))
+	id, _ := s.runtime.UserControl.RequestRecovery(r.Context(), in.Identifier, in.Channel, s.clientIP(r))
 	if id != "" {
 		if req, err := s.runtime.UserControl.Recovery(r.Context(), id); err == nil {
 			if err := s.runtime.UserControl.SendRecoveryInstructions(r.Context(), req, ""); err != nil {

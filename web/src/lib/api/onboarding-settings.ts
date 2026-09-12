@@ -7,12 +7,16 @@ export function settingsProfile(value: unknown) {
   return profile;
 }
 
-export async function loadOnboardingSettings() {
+export async function loadOnboardingSettings(selectedOrganization = new URLSearchParams(window.location.search).get('organization')) {
   const organizations = await adminGet('/api/v1/organizations');
   if (!Array.isArray(organizations.organizations)) throw new Error('We could not load your businesses. Try again.');
   if (!organizations.organizations.length) throw new Error('Finish your business setup before changing these settings.');
-  const orgID = text(record(organizations.organizations[0]).id);
+  const available: Record<string, unknown>[] = organizations.organizations.map(record);
+  const selected = selectedOrganization ? available.find((organization) => text(organization.id) === selectedOrganization) : available[0];
+  if (!selected) throw new Error('You do not have access to the selected business.');
+  const orgID = text(selected.id);
+  const organizationName = text(selected.name) || text(selected.legal_name) || 'Your business';
   if (!orgID) throw new Error('We could not confirm your business. Try again.');
   const result = await adminGet(`/api/v1/organizations/${encodeURIComponent(orgID)}/onboarding`);
-  return { orgID, profile: settingsProfile(result.profile), permissions: record(result.permissions) };
+  return { orgID, organizationName, profile: settingsProfile(result.profile), permissions: record(result.permissions) };
 }

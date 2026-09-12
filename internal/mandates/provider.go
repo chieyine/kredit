@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kredit/internal/access"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ type AuthorizationOptions struct {
 }
 
 type AuthorizationInput struct {
+	Reference              string
 	SupplierOrganizationID string
 	RequiredUntil          time.Time
 	UserID                 string
@@ -40,6 +42,8 @@ type AuthorizationInput struct {
 }
 
 type Mandate struct {
+	ProviderAdapter        string    `json:"provider_adapter,omitempty"`
+	Reference              string    `json:"reference,omitempty"`
 	ID                     string    `json:"id"`
 	SupplierOrganizationID string    `json:"supplier_organization_id"`
 	Provider               string    `json:"provider"`
@@ -141,18 +145,63 @@ func (p *PostgresProvider) CreateAuthorizationSession(ctx context.Context, input
 			return existing, nil
 		}
 	}
-	var mandate Mandate
-	providerID := uuid.NewString()
-	providerState := Active
+	intentID := ""
 	if p.remote != nil {
-		remote, err := p.remote.CreateAuthorizationSession(ctx, input)
+		intentID = uuid.NewString()
+		input.Reference = strings.ReplaceAll(intentID, "-", "")
+		payload, err := json.Marshal(input)
 		if err != nil {
 			return Mandate{}, err
 		}
-		mandate = remote
-		providerID = remote.ProviderID
-		providerState = remote.Status
+		var savedID string
+		err = tx.QueryRow(ctx, `INSERT INTO app.mandate_authorization_intents(id,user_id,business_id,supplier_organization_id,provider,purpose,reference,input) VALUES($1::uuid,$2::uuid,$3::uuid,NULLIF($4,'')::uuid,$5,$6,$7,$8::jsonb) ON CONFLICT(provider,business_id,purpose) WHERE state='STARTED' DO NOTHING RETURNING id::text`, intentID, input.UserID, input.BusinessID, input.SupplierOrganizationID, p.name, input.Purpose, input.Reference, payload).Scan(&savedID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Mandate{}, errors.New("this authorization request needs provider confirmation; contact support before starting another")
+		}
+		if err != nil {
+			return Mandate{}, err
+		}
 	}
+	if err = tx.Commit(ctx); err != nil {
+		return Mandate{}, err
+	}
+	mandate := Mandate{ProviderID: uuid.NewString(), Status: Active, AmountCeiling: input.AmountCeiling}
+	if p.remote != nil {
+		mandate, err = p.remote.CreateAuthorizationSession(ctx, input)
+		if err != nil {
+			return Mandate{}, errors.New("authorization outcome is unconfirmed; the saved request needs reconciliation before retrying")
+		}
+	}
+	return p.saveAuthorization(ctx, input, mandate, intentID)
+}
+
+func (p *PostgresProvider) saveAuthorization(ctx context.Context, input AuthorizationInput, mandate Mandate, intentID string, review ...string) (Mandate, error) {
+	if mandate.ProviderID == "" || mandate.AmountCeiling <= 0 || mandate.AmountCeiling > input.AmountCeiling {
+		return Mandate{}, errors.New("provider mandate does not match the saved authorization")
+	}
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return Mandate{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if len(review) == 2 {
+		if err = access.LockPlatformAuthority(ctx, tx, review[0], access.PermissionProviderOperations); err != nil {
+			return Mandate{}, err
+		}
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, input.UserID); err != nil {
+		return Mandate{}, err
+	}
+	if intentID != "" {
+		var state string
+		if err = tx.QueryRow(ctx, `SELECT state FROM app.mandate_authorization_intents WHERE id=$1::uuid FOR UPDATE`, intentID).Scan(&state); err != nil {
+			return Mandate{}, err
+		}
+		if state != "STARTED" {
+			return Mandate{}, errors.New("authorization attempt has already been resolved")
+		}
+	}
+	mandate.Reference = input.Reference
 	err = tx.QueryRow(ctx, `
 		INSERT INTO app.payment_mandates
 			(buyer_subject_type, buyer_subject_id, provider, provider_mandate_id,
@@ -164,7 +213,7 @@ func (p *PostgresProvider) CreateAuthorizationSession(ctx context.Context, input
 		  AND app.payment_mandates.supplier_organization_id IS NOT DISTINCT FROM EXCLUDED.supplier_organization_id
 		RETURNING id::text, provider, provider_mandate_id, buyer_subject_id::text,
 			amount_ceiling_kobo, state, created_at`,
-		input.BusinessID, p.name, providerID, input.Purpose, input.AmountCeiling, strings.ToLower(string(providerState)), "v1", input.SupplierOrganizationID,
+		input.BusinessID, p.name, mandate.ProviderID, input.Purpose, mandate.AmountCeiling, strings.ToLower(string(mandate.Status)), "v1", input.SupplierOrganizationID,
 	).Scan(&mandate.ID, &mandate.Provider, &mandate.ProviderID, &mandate.BusinessID, &mandate.AmountCeiling, &mandate.Status, &mandate.CreatedAt)
 	if err != nil {
 		return Mandate{}, err
@@ -178,6 +227,15 @@ func (p *PostgresProvider) CreateAuthorizationSession(ctx context.Context, input
 	metadata, _ := json.Marshal(mandate)
 	if _, err = tx.Exec(ctx, `UPDATE app.payment_mandates SET metadata=$2::jsonb,starts_at=$3,ends_at=$4,supplier_organization_id=NULLIF($5,'')::uuid WHERE id=$1::uuid`, mandate.ID, metadata, nullableTime(mandate.StartsAt), nullableTime(mandate.EndsAt), input.SupplierOrganizationID); err != nil {
 		return Mandate{}, err
+	}
+	if intentID != "" {
+		actor, reason := "", ""
+		if len(review) == 2 {
+			actor, reason = review[0], review[1]
+		}
+		if _, err = tx.Exec(ctx, `UPDATE app.mandate_authorization_intents SET state='CONFIRMED',provider_reference=$2,resolved_at=now(),resolved_by=NULLIF($3,'')::uuid,resolution_note=NULLIF($4,'') WHERE id=$1::uuid AND state='STARTED'`, intentID, mandate.ProviderID, actor, reason); err != nil {
+			return Mandate{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Mandate{}, err
@@ -291,6 +349,7 @@ func (p *PostgresProvider) loadMandateDetails(ctx context.Context, mandate *Mand
 	if err := json.Unmarshal(metadata, &stored); err != nil {
 		return fmt.Errorf("decode mandate details: %w", err)
 	}
+	mandate.ProviderAdapter = stored.ProviderAdapter
 	mandate.AuthorizationURL, mandate.Variable = stored.AuthorizationURL, stored.Variable
 	mandate.MultiAccount, mandate.PartialRecovery = stored.MultiAccount, stored.PartialRecovery
 	mandate.ActivatedAt = stored.ActivatedAt

@@ -6,6 +6,7 @@ import (
 
 	"kredit/internal/audit"
 	"kredit/internal/credit"
+	"kredit/internal/db"
 	"kredit/internal/mandates"
 	"kredit/internal/notifications"
 )
@@ -122,7 +123,7 @@ func (s *Server) applyMandateToBuyerResources(userID string, previous, next mand
 			return err
 		}
 	}
-	lines, err := s.runtime.readTradeLinesForBuyer(userID)
+	lines, err := s.runtime.readTradeLinesForBuyer(db.WithTenantContext(context.Background(), userID, ""), userID)
 	if err != nil {
 		return err
 	}
@@ -130,7 +131,7 @@ func (s *Server) applyMandateToBuyerResources(userID string, previous, next mand
 		if line.MandateID != previous.ID && line.MandateID != previous.ProviderID {
 			continue
 		}
-		if _, err := s.runtime.TradeLines.SetMandateState(line.ID, next.ID, next.Status == mandates.Active); err != nil {
+		if _, err := s.runtime.ScopedTradeLines(db.WithTenantContext(context.Background(), userID, "")).SetMandateState(line.ID, next.ID, next.Status == mandates.Active); err != nil {
 			return err
 		}
 	}

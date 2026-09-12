@@ -122,24 +122,14 @@ func (s *PostgresStore) adjustTx(ctx context.Context, tx pgx.Tx, actor, org, obl
 			return Action{}, err
 		}
 	}
+	var waiverParts []feeWaiverPart
 	if kind == "fee_waiver" {
-		var prior ledger.Money
-		if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM((metadata->>'amount_kobo')::bigint),0) FROM app.operation_actions WHERE resource_id=$1::uuid AND action='fee_waiver'`, obligation).Scan(&prior); err != nil {
-			return Action{}, err
-		}
-		var collectionFees ledger.Money
-		if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(amount_kobo),0) FROM app.fees WHERE obligation_id=$1::uuid AND state='accrued'`, obligation).Scan(&collectionFees); err != nil {
-			return Action{}, err
-		}
-		totalFees, err := ledger.CheckedAdd(baseFee, collectionFees)
+		waiverParts, err = waiveFeeLinesTx(ctx, tx, obligation, amount)
 		if err != nil {
-			return Action{}, errors.New("accrued fees overflow")
-		}
-		if prior > totalFees || amount > totalFees-prior {
-			return Action{}, errors.New("fee waiver exceeds accrued fees")
+			return Action{}, err
 		}
 	}
-	ledgerID, err := postOperationLedgerTx(ctx, tx, kind, obligation, "operation:"+actionID, amount)
+	ledgerID, err := postOperationLedgerTx(ctx, tx, kind, obligation, "operation:"+actionID, amount, waiverParts...)
 	if err != nil {
 		return Action{}, err
 	}
@@ -165,7 +155,7 @@ func (s *PostgresStore) adjustTx(ctx context.Context, tx pgx.Tx, actor, org, obl
 	return action, nil
 }
 
-func postOperationLedgerTx(ctx context.Context, tx pgx.Tx, kind, referenceID, key string, amount ledger.Money) (string, error) {
+func postOperationLedgerTx(ctx context.Context, tx pgx.Tx, kind, referenceID, key string, amount ledger.Money, waiverParts ...feeWaiverPart) (string, error) {
 	eventType := "write_off"
 	referenceType := "obligation"
 	debit := ledger.AccountWriteOff
@@ -185,10 +175,18 @@ func postOperationLedgerTx(ctx context.Context, tx pgx.Tx, kind, referenceID, ke
 	if err != nil {
 		return "", err
 	}
-	for _, p := range []struct {
+	type posting struct {
 		account       string
 		debit, credit int64
-	}{{debit, int64(amount), 0}, {credit, 0, int64(amount)}} {
+	}
+	postings := []posting{{debit, int64(amount), 0}, {credit, 0, int64(amount)}}
+	if kind == "fee_waiver" {
+		postings = []posting{{credit, 0, int64(amount)}}
+		for _, part := range waiverParts {
+			postings = append(postings, posting{part.account, int64(part.amount), 0})
+		}
+	}
+	for _, p := range postings {
 		command, err := tx.Exec(ctx, `INSERT INTO ledger.postings(transaction_id,account_id,debit_kobo,credit_kobo) SELECT $1::uuid,id,$3,$4 FROM ledger.accounts WHERE code=$2`, id, p.account, p.debit, p.credit)
 		if err != nil {
 			return "", err
@@ -268,4 +266,77 @@ func (s *PostgresStore) ListForOrganization(ctx context.Context, org string) ([]
 		return nil, err
 	}
 	return out, nil
+}
+
+type feeWaiverPart struct {
+	account string
+	amount  ledger.Money
+}
+
+// The caller owns the obligation lock shared with payments and invoice receipts.
+func waiveFeeLinesTx(ctx context.Context, tx pgx.Tx, obligation string, amount ledger.Money) ([]feeWaiverPart, error) {
+	var held bool
+	var acquired bool
+	if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock(hashtextextended($1,73421))`, obligation).Scan(&acquired); err != nil {
+		return nil, err
+	}
+	if !acquired {
+		return nil, errors.New("collection is busy; refresh before waiving fees")
+	}
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.collection_reservations WHERE obligation_id=$1::uuid AND state IN ('PROCESSING','COMPLETED'))`, obligation).Scan(&held); err != nil {
+		return nil, err
+	}
+	if held {
+		return nil, errors.New("reconcile the pending collection before waiving fees")
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text,fee_type,amount_kobo-waived_kobo-collected_kobo FROM app.fees WHERE obligation_id=$1::uuid AND state='accrued' AND amount_kobo>waived_kobo+collected_kobo ORDER BY fee_type,accrued_at,id FOR UPDATE`, obligation)
+	if err != nil {
+		return nil, err
+	}
+	type line struct {
+		id, kind  string
+		available ledger.Money
+	}
+	lines := []line{}
+	for rows.Next() {
+		var l line
+		if err = rows.Scan(&l.id, &l.kind, &l.available); err != nil {
+			break
+		}
+		lines = append(lines, l)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.fee_debits d JOIN app.fee_invoice_lines l ON l.invoice_id=d.invoice_id JOIN app.fees f ON f.id=l.fee_id WHERE f.obligation_id=$1::uuid AND d.state='pending')`, obligation).Scan(&held); err != nil {
+		return nil, err
+	}
+	if held {
+		return nil, errors.New("reconcile the pending fee debit before waiving fees")
+	}
+	remaining := amount
+	parts := []feeWaiverPart{}
+	for _, l := range lines {
+		if remaining == 0 {
+			break
+		}
+		take := min(remaining, l.available)
+		account := ledger.AccountPlatformServiceRevenue
+		if l.kind == "collection" {
+			account = ledger.AccountPlatformCollectionRevenue
+		}
+		if _, err = tx.Exec(ctx, `UPDATE app.fees SET waived_kobo=waived_kobo+$2,state=CASE WHEN waived_kobo+$2=amount_kobo THEN 'waived' ELSE state END WHERE id=$1::uuid`, l.id, int64(take)); err != nil {
+			return nil, err
+		}
+		parts = append(parts, feeWaiverPart{account, take})
+		remaining -= take
+	}
+	if remaining != 0 {
+		return nil, errors.New("fee waiver exceeds accrued, unwaived fees")
+	}
+	return parts, nil
 }

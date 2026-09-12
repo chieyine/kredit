@@ -1,4 +1,12 @@
 .git
+ssh
+.ssh
+**/ssh
+**/.ssh
+**/id_ed25519
+**/id_rsa
+infra/environments/certs
+infra/environments/db-certs
 .tmp
 node_modules
 web/node_modules

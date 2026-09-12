@@ -74,6 +74,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go config.WatchConnections(ctx, cfg, settings, database.Raw(), "api", stop)
 
 	serverErr := make(chan error, 1)
 	go func() {

@@ -187,3 +187,76 @@ GRANT EXECUTE ON FUNCTION app.system_acceptance_settings() TO kredit_worker;
 
 GRANT SELECT,INSERT,UPDATE ON app.customer_registration_attempts TO kredit_app;
 REVOKE INSERT,UPDATE,DELETE ON app.customer_registration_attempts FROM kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.financial_change_identity(text,boolean),app.lock_transfer_recipient(uuid),app.financial_review_differences(boolean) TO kredit_app;
+GRANT EXECUTE ON FUNCTION app.financial_review_differences(boolean) TO kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.admin_user_directory(text,integer,uuid),app.admin_organization_directory(text,integer,uuid),app.admin_audit_directory(text,integer,uuid),app.admin_team_directory(uuid),app.admin_money_summary(uuid),app.admin_money_activity(integer,uuid) TO kredit_app;
+
+GRANT EXECUTE ON FUNCTION app.drawdown_expiry_tenants(text,integer) TO kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.pilot_metric(timestamptz,timestamptz,text,text),app.pilot_reconciliation(timestamptz,timestamptz,text) TO kredit_app;
+
+GRANT EXECUTE ON FUNCTION app.collection_mandate_capacity(uuid) TO kredit_app,kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.recovery_account(text,text) TO kredit_app;
+GRANT SELECT,INSERT,UPDATE ON app.buyer_verification_intents,app.mandate_authorization_intents TO kredit_app;
+REVOKE INSERT,UPDATE,DELETE ON app.buyer_verification_intents,app.mandate_authorization_intents FROM kredit_worker;
+REVOKE DELETE ON app.buyer_verification_intents,app.mandate_authorization_intents FROM kredit_app;
+
+GRANT EXECUTE ON FUNCTION app.provider_work() TO kredit_app;
+
+GRANT SELECT,INSERT,UPDATE ON app.message_submissions TO kredit_app,kredit_worker;
+REVOKE DELETE ON app.message_submissions FROM kredit_app,kredit_worker;
+
+GRANT SELECT,INSERT ON app.message_routes TO kredit_app,kredit_worker;
+REVOKE UPDATE,DELETE ON app.message_routes FROM kredit_app,kredit_worker;
+
+
+GRANT SELECT,INSERT,UPDATE ON app.runtime_process_status TO kredit_app,kredit_worker;
+REVOKE DELETE ON app.runtime_process_status FROM kredit_app,kredit_worker;
+
+GRANT SELECT, INSERT, UPDATE ON app.settlement_registrations TO kredit_app;
+REVOKE DELETE ON app.settlement_registrations FROM kredit_app;
+REVOKE INSERT,UPDATE,DELETE ON app.settlement_registrations FROM kredit_worker;
+GRANT EXECUTE ON FUNCTION app.settlement_registration_review() TO kredit_app;
+
+GRANT SELECT,INSERT ON app.fee_invoices,app.fee_invoice_lines TO kredit_app,kredit_worker;
+REVOKE UPDATE,DELETE ON app.fee_invoices,app.fee_invoice_lines,app.fee_invoice_receipts FROM kredit_app,kredit_worker;
+GRANT SELECT,INSERT ON app.fee_invoice_receipts TO kredit_app;
+REVOKE INSERT ON app.fee_invoice_receipts FROM kredit_worker;
+GRANT SELECT,INSERT,UPDATE ON app.invoice_billing_approvals TO kredit_app;
+REVOKE DELETE ON app.invoice_billing_approvals FROM kredit_app;
+REVOKE INSERT,UPDATE,DELETE ON app.invoice_billing_approvals FROM kredit_worker;
+GRANT EXECUTE ON FUNCTION app.invoice_billing_work() TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.invoice_billing_review() TO kredit_app;
+
+-- Interactive identity evidence is written by authenticated API flows only.
+GRANT SELECT, INSERT, UPDATE ON app.native_identity_sessions TO kredit_app;
+REVOKE INSERT, UPDATE, DELETE ON app.native_identity_sessions FROM kredit_worker;
+-- Frozen payout destinations and recorded bank evidence are append-only.
+GRANT SELECT,INSERT ON app.collection_settlement_routes TO kredit_app,kredit_worker;
+REVOKE UPDATE,DELETE ON app.collection_settlement_routes FROM kredit_app,kredit_worker;
+GRANT SELECT,INSERT ON app.seller_settlement_receipts TO kredit_app;
+GRANT SELECT ON app.seller_settlement_receipts TO kredit_worker;
+REVOKE UPDATE,DELETE ON app.seller_settlement_receipts FROM kredit_app;
+REVOKE INSERT,UPDATE,DELETE ON app.seller_settlement_receipts FROM kredit_worker;
+
+-- Fee allocation and bank evidence retain tenant scopes and append-only facts.
+GRANT SELECT,INSERT ON app.split_fee_allocations TO kredit_app,kredit_worker;
+REVOKE UPDATE,DELETE ON app.split_fee_allocations FROM kredit_app,kredit_worker;
+GRANT SELECT,INSERT,UPDATE ON app.fee_authorizations,app.fee_debits TO kredit_app;
+REVOKE DELETE ON app.fee_authorizations,app.fee_debits FROM kredit_app,kredit_worker;
+REVOKE INSERT,UPDATE ON app.fee_authorizations FROM kredit_worker;
+GRANT SELECT,UPDATE(approved_at) ON app.fee_authorizations TO kredit_worker;
+GRANT SELECT,INSERT,UPDATE ON app.fee_debits TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.fee_billing_work() TO kredit_worker;
+GRANT SELECT,INSERT ON app.fee_bank_receipts TO kredit_app;
+GRANT SELECT ON app.fee_bank_receipts TO kredit_worker;
+REVOKE UPDATE,DELETE ON app.fee_bank_receipts FROM kredit_app;
+REVOKE INSERT,UPDATE,DELETE ON app.fee_bank_receipts FROM kredit_worker;
+
+GRANT SELECT ON app.native_identity_history TO kredit_app;
+REVOKE INSERT,UPDATE,DELETE ON app.native_identity_history FROM kredit_app,kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.fee_notice_scope(text,text,text) TO kredit_app,kredit_worker;

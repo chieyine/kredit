@@ -53,7 +53,7 @@ func Evaluate(cfg config.Config) Report {
 			identityGate = "enabled"
 		}
 		collectionGate := ""
-		if cfg.RealCollections && !strings.Contains(strings.ToLower(cfg.CollectionProvider), "mock") {
+		if (cfg.RealCollections || cfg.MonoSweepEnabled) && !strings.Contains(strings.ToLower(cfg.CollectionProvider), "mock") {
 			collectionGate = "enabled"
 		}
 		checks = append(checks,

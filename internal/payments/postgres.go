@@ -10,6 +10,7 @@ import (
 
 	"kredit/internal/db"
 
+	"kredit/internal/billing"
 	"kredit/internal/ledger"
 	"kredit/internal/outbox"
 
@@ -206,6 +207,9 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 			return Payment{}, Allocation{}, err
 		}
 	}
+	if err := billing.ApplySplitTx(ctx, tx, payment.ID, input.IdempotencyKey, payment.AmountKobo, payment.CollectionFeeKobo, paidAt); err != nil {
+		return Payment{}, Allocation{}, err
+	}
 	if err := s.appendEvent(ctx, tx, payment.ID, "payment.recognized", payment, "payment:"+input.IdempotencyKey); err != nil {
 		return Payment{}, Allocation{}, err
 	}
@@ -381,12 +385,18 @@ func (s *PostgresStore) ReverseContext(ctx context.Context, paymentID, actor, re
 	if err := postLedgerTx(ctx, tx, "payment_reversed", payment.ID, "reversal:"+payment.ID, now, ledger.AccountTradeReceivable, settlement, payment.AmountKobo); err != nil {
 		return Payment{}, err
 	}
+	if err := billing.ReverseSplitTx(ctx, tx, payment.ID, now); err != nil {
+		return Payment{}, err
+	}
 	if payment.CollectionFeeKobo > 0 {
-		if _, err := tx.Exec(ctx, `UPDATE app.fees SET state='refunded' WHERE payment_id=$1::uuid AND fee_type='collection'`, payment.ID); err != nil {
+		var remainingFee ledger.Money
+		if err := tx.QueryRow(ctx, `UPDATE app.fees SET state='refunded' WHERE payment_id=$1::uuid AND fee_type='collection' RETURNING amount_kobo-waived_kobo`, payment.ID).Scan(&remainingFee); err != nil {
 			return Payment{}, err
 		}
-		if err := postLedgerTx(ctx, tx, "collection_fee_reversed", payment.ID, "collection-fee-reversal:"+payment.ID, now, ledger.AccountPlatformCollectionRevenue, ledger.AccountSupplierFeeReceivable, payment.CollectionFeeKobo); err != nil {
-			return Payment{}, err
+		if remainingFee > 0 {
+			if err := postLedgerTx(ctx, tx, "collection_fee_reversed", payment.ID, "collection-fee-reversal:"+payment.ID, now, ledger.AccountPlatformCollectionRevenue, ledger.AccountSupplierFeeReceivable, remainingFee); err != nil {
+				return Payment{}, err
+			}
 		}
 	}
 	payment.State = StateReversed

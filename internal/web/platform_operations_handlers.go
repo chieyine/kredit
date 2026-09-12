@@ -65,6 +65,7 @@ func (s *Server) requirePlatformAccess(w http.ResponseWriter, r *http.Request, p
 		writeProblem(w, http.StatusForbidden, "step_up_required", "step-up authentication is required for platform operations")
 		return auth.Session{}, auth.User{}, "", false
 	}
+	*r = *r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))
 	return session, user, selected, true
 }
 

@@ -20,7 +20,7 @@
  let errorSummary:HTMLParagraphElement=$state()!;
  let reviewHeading:HTMLHeadingElement=$state()!;
  let creation:MutationIntent|null=null;
- const uploadedInvoices=new Map<string,string>();
+ const uploadedInvoices=new Map<string,{id:string;hash:string}>();
  const businessReads=new LatestRequest(), customerReads=new LatestRequest();
  const customerKey=(item:Customer)=>`${item.buyer_user_id}:${item.buyer_business_id}`;
  const selectedCustomer=$derived(customers.find(item=>customerKey(item)===selectedBuyer));
@@ -103,7 +103,7 @@
   return{buyer_user_id:buyerUserID,buyer_business_id:buyerBusinessID,buyer_legal_name:buyerLegalName,buyer_trading_name:selectedCustomer.trading_name,principal_kobo:amount,goods_description:goods.trim(),invoice_reference:invoiceReference.trim(),due_date:dueDate,grace_hours:graceHours,schedule_type:scheduleType,schedule_count:scheduleType==='one_time'?1:Number(scheduleCount),schedule_cadence:scheduleType==='equal'?scheduleCadence:'custom',month_end_policy:monthEndPolicy,custom_schedule_items:customItems(),collection_local:collectionAt||undefined};
  }
  async function uploadInvoice(){
-  if(!invoiceFile)return '';
+  if(!invoiceFile)return {id:'',hash:''};
   const file=invoiceFile;
   if(!['application/pdf','image/jpeg','image/png'].includes(file.type)||file.size<=0||file.size>2*1024*1024)throw new Error('Choose a PDF, JPG or PNG invoice up to 2 MB.');
   const bytes=await file.arrayBuffer();
@@ -115,8 +115,10 @@
   return operation.run({purpose:'credit_invoice',file_name:file.name,content_type:file.type,retention_class:'financial_agreement',content_base64:content},value=>{
    const saved=text(record(record(value).document).sha256);
    if(saved!==hash)throw new Error('The stored invoice did not match the selected file.');
-   uploadedInvoices.set(uploadScope,saved);
-   return saved;
+   const attachment={id:text(record(record(value).document).id),hash:saved};
+   if(!attachment.id)throw new Error('The invoice reference was not returned.');
+   uploadedInvoices.set(uploadScope,attachment);
+   return attachment;
   });
  }
  async function submit(event:SubmitEvent){
@@ -133,7 +135,7 @@
    }
    const invoiceDocumentHash=await uploadInvoice();
    creation??=new MutationIntent(`${account.userID}:${organizationID}`,`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests`);
-   const id=await creation.run({...input,invoice_document_hash:invoiceDocumentHash,collection_at:canonicalAt,timing_mode:collectionAt?'lagos_explicit':'lagos_end_of_day'},value=>{const id=text(record(record(value).request).id);if(!id)throw new Error('Missing sale reference');return id;});
+   const id=await creation.run({...input,invoice_document_hash:invoiceDocumentHash.hash,invoice_document_id:invoiceDocumentHash.id,collection_at:canonicalAt,timing_mode:collectionAt?'lagos_explicit':'lagos_end_of_day'},value=>{const id=text(record(record(value).request).id);if(!id)throw new Error('Missing sale reference');return id;});
    draftReady=false;try{deleteDraft(account.userID,organizationID,sessionStorage);}catch{/* Server result is authoritative. */}
    await goto(`/app/credit/${encodeURIComponent(id)}?organization=${encodeURIComponent(organizationID)}`);
   }catch(cause){showError(cause instanceof Error?cause.message:'We could not confirm the result. Check the sale history before starting again.');}finally{busy=false;}

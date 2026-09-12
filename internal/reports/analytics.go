@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"kredit/internal/db"
 )
 
 type Metric struct {
@@ -73,6 +75,9 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 		return PilotScorecard{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		return PilotScorecard{}, err
+	}
 	result := PilotScorecard{GeneratedAt: s.source.Now(), From: from.UTC(), To: to.UTC(), OrganizationID: organizationID, SourceOfTruth: "authoritative domain tables; analytics events are reconciliation evidence only", RefreshMode: "live query", FreshnessStatus: "live", Funnel: map[string]int64{}, ReconciliationOK: true}
 	org := organizationID
 	var latest *time.Time
@@ -93,57 +98,62 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 	}
 
 	queries := []struct {
-		set                                       *([]Metric)
-		key, label, unit, definition, source, sql string
+		set                                  *([]Metric)
+		key, label, unit, definition, source string
 	}{
-		{&result.KPIs, "gross_trade_credit_volume", "Gross trade credit activated", "kobo", "Sum of principal for obligations activated in the window.", "app.obligations", `SELECT COALESCE(sum(principal_kobo),0)::float8 FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.KPIs, "active_suppliers", "Active suppliers", "organizations", "Distinct supplier organisations with an obligation activated in the window.", "app.obligations", `SELECT count(DISTINCT supplier_organization_id)::float8 FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.KPIs, "time_to_first_accepted_sale", "Time to first accepted credit sale", "hours", "Average hours from a supplier's first onboarding record to its first accepted agreement.", "app.supplier_onboarding_profiles + app.credit_requests + app.agreement_acceptances", `WITH firsts AS (SELECT c.supplier_organization_id,min(a.accepted_at) accepted_at FROM app.agreement_acceptances a JOIN app.credit_requests c ON c.id=a.credit_request_id WHERE a.accepted_at >= $1 AND a.accepted_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid) GROUP BY c.supplier_organization_id) SELECT COALESCE(avg(extract(epoch FROM (f.accepted_at-p.created_at))/3600),0)::float8 FROM firsts f JOIN app.supplier_onboarding_profiles p ON p.organization_id=f.supplier_organization_id`},
-		{&result.Drivers, "sent_to_acceptance", "Sent-to-acceptance conversion", "percent", "Accepted agreements divided by credit.sent events in the window.", "app.analytics_events (transition evidence)", `SELECT CASE WHEN count(*) FILTER(WHERE name='credit.sent')=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE name='credit.accepted')/count(*) FILTER(WHERE name='credit.sent') END::float8 FROM app.analytics_events WHERE occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=encode(digest($3,'sha256'),'hex'))`},
-		{&result.Drivers, "invitation_to_verification", "Invitation-to-verification conversion", "percent", "Invitations accepted by a user who owns a verified business, divided by invitations created in the window.", "app.buyer_invitations + app.businesses", `SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE EXISTS(SELECT 1 FROM app.businesses b WHERE b.owner_user_id=i.accepted_by_user_id AND b.status='verified'))/count(*) END::float8 FROM app.buyer_invitations i WHERE i.created_at >= $1 AND i.created_at < $2 AND ($3='' OR i.organization_id=NULLIF($3,'')::uuid)`},
-		{&result.Drivers, "acceptance_to_release", "Acceptance to goods release", "hours", "Average elapsed hours from immutable acceptance to goods release for the same request.", "app.agreement_acceptances + app.goods_releases", `SELECT COALESCE(avg(extract(epoch FROM (g.released_at-a.accepted_at))/3600),0)::float8 FROM app.agreement_acceptances a JOIN app.goods_releases g USING(credit_request_id) JOIN app.credit_requests c ON c.id=a.credit_request_id WHERE g.released_at >= $1 AND g.released_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.Drivers, "release_to_receipt", "Release to receipt confirmation", "hours", "Average elapsed hours from goods release to buyer receipt response.", "app.goods_releases + app.receipt_confirmations", `SELECT COALESCE(avg(extract(epoch FROM (r.received_at-g.released_at))/3600),0)::float8 FROM app.goods_releases g JOIN app.receipt_confirmations r USING(credit_request_id) JOIN app.credit_requests c ON c.id=g.credit_request_id WHERE r.received_at >= $1 AND r.received_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.Drivers, "days_to_payment", "Days to payment", "days", "Average days from activation to the final recognised payment, for principal fully repaid within the window.", "app.obligations + app.payments", daysToPaymentSQL},
-		{&result.Drivers, "repeat_sale_rate", "Repeat-sale rate", "percent", "Supplier-buyer relationships with at least two activated obligations divided by relationships with any activated obligation.", "app.obligations", `WITH pairs AS (SELECT supplier_organization_id,buyer_business_id,count(*) n FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid) GROUP BY supplier_organization_id,buyer_business_id) SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE n>1)/count(*) END::float8 FROM pairs`},
-		{&result.Drivers, "trade_line_utilization", "Trade-line utilisation", "percent", "Current exposure plus pending reservations divided by approved limit on active trade lines.", "app.trade_lines", `SELECT CASE WHEN COALESCE(sum(approved_limit_kobo),0)=0 THEN 0 ELSE 100.0*sum(current_exposure_kobo+reserved_pending_kobo)/sum(approved_limit_kobo) END::float8 FROM app.trade_lines WHERE state='ACTIVE' AND $1::timestamptz < $2::timestamptz AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.Drivers, "supplier_retention", "Retained active suppliers", "percent", "Suppliers with activated obligations in both the selected window and the immediately preceding equal window, divided by active suppliers in the preceding window.", "app.obligations", `WITH previous AS (SELECT DISTINCT supplier_organization_id FROM app.obligations WHERE activated_at >= $1::timestamptz-($2::timestamptz-$1::timestamptz) AND activated_at < $1 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)), current_window AS (SELECT DISTINCT supplier_organization_id FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)) SELECT CASE WHEN (SELECT count(*) FROM previous)=0 THEN 0 ELSE 100.0*(SELECT count(*) FROM previous p JOIN current_window c USING(supplier_organization_id))/(SELECT count(*) FROM previous) END::float8`},
-		{&result.Guardrails, "on_time_payment_rate", "On-time payment rate", "percent", "Fully repaid obligations completed in the window whose allocated payments met every agreed instalment deadline.", "app.obligations + app.payments + app.payment_allocations + app.schedule_items", onTimePaymentSQL},
-		{&result.Guardrails, "failed_collection_recovery", "Failed-collection recovery", "percent", "Obligations with a failed attempt in the window and a later positive collection completed before the window ends, divided by obligations with a failed attempt.", "app.collection_attempts + app.obligations", failedCollectionRecoverySQL},
-		{&result.Guardrails, "dispute_rate", "Dispute rate", "percent", "Obligations with a dispute opened in the window divided by obligations activated in the window.", "app.disputes + app.obligations", `SELECT CASE WHEN count(DISTINCT o.id)=0 THEN 0 ELSE 100.0*count(DISTINCT d.obligation_id)/count(DISTINCT o.id) END::float8 FROM app.obligations o LEFT JOIN app.disputes d ON d.obligation_id=o.id AND d.opened_at >= $1 AND d.opened_at < $2 WHERE o.activated_at >= $1 AND o.activated_at < $2 AND ($3='' OR o.supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.Guardrails, "receipt_issue_rate", "Issue-at-receipt rate", "percent", "Receipt responses marked issue_raised divided by all receipt responses.", "app.receipt_confirmations + app.credit_requests", `SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE r.state='issue_raised')/count(*) END::float8 FROM app.receipt_confirmations r JOIN app.credit_requests c ON c.id=r.credit_request_id WHERE r.received_at >= $1 AND r.received_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.Guardrails, "provider_reliability", "Collection provider reliability", "percent", "Successful or partial final collection attempts divided by all final attempts.", "app.collection_attempts + app.obligations", `SELECT CASE WHEN count(*)=0 THEN 100 ELSE 100.0*count(*) FILTER(WHERE ca.state IN('SUCCEEDED','PARTIAL'))/count(*) END::float8 FROM app.collection_attempts ca JOIN app.obligations o ON o.id=ca.obligation_id WHERE ca.final_at >= $1 AND ca.final_at < $2 AND ca.state IN('SUCCEEDED','PARTIAL','FAILED','CANCELLED') AND ($3='' OR o.supplier_organization_id=NULLIF($3,'')::uuid)`},
-		{&result.Guardrails, "recognized_loss_rate", "Recognised loss rate", "percent", "Write-off amount recorded in the window divided by principal of the affected obligations.", "app.operation_actions + app.obligations", `WITH losses AS (SELECT resource_id,COALESCE(sum((metadata->>'amount_kobo')::bigint),0) amount FROM app.operation_actions WHERE action='write_off' AND created_at >= $1 AND created_at < $2 AND ($3='' OR organization_id=NULLIF($3,'')::uuid) GROUP BY resource_id), exposure AS (SELECT COALESCE(sum(o.principal_kobo),0) principal FROM app.obligations o WHERE EXISTS(SELECT 1 FROM losses l WHERE l.resource_id=o.id)) SELECT CASE WHEN exposure.principal=0 THEN 0 ELSE 100.0*(SELECT COALESCE(sum(amount),0) FROM losses)/exposure.principal END::float8 FROM exposure`},
-		{&result.Guardrails, "support_intervention_rate", "Support intervention rate", "cases_per_100_active_suppliers", "Support cases opened per 100 suppliers that activated an obligation in the selected window.", "app.support_cases + app.obligations", `WITH active AS (SELECT count(DISTINCT supplier_organization_id) n FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)), cases AS (SELECT count(*) n FROM app.support_cases WHERE created_at >= $1 AND created_at < $2 AND ($3='' OR organization_id=NULLIF($3,'')::uuid)) SELECT CASE WHEN active.n=0 THEN 0 ELSE 100.0*cases.n/active.n END::float8 FROM active,cases`},
-		{&result.Guardrails, "accessibility_defects", "Open accessibility defects", "cases", "Accessibility defect cases opened by the end of the window and still open or in progress.", "app.support_cases", `SELECT count(*)::float8 FROM app.support_cases WHERE subject_type='accessibility_defect' AND created_at < $2 AND state IN('OPEN','IN_PROGRESS') AND $1::timestamptz < $2::timestamptz AND ($3='' OR organization_id=NULLIF($3,'')::uuid)`},
+		{&result.KPIs, "gross_trade_credit_volume", "Gross trade credit activated", "kobo", "Sum of principal for obligations activated in the window.", "app.obligations"},
+		{&result.KPIs, "active_suppliers", "Active suppliers", "organizations", "Distinct supplier organisations with an obligation activated in the window.", "app.obligations"},
+		{&result.KPIs, "time_to_first_accepted_sale", "Time to first accepted credit sale", "hours", "Average hours from a supplier's first onboarding record to its first accepted agreement.", "app.supplier_onboarding_profiles + app.credit_requests + app.agreement_acceptances"},
+		{&result.Drivers, "sent_to_acceptance", "Sent-to-acceptance conversion", "percent", "Accepted agreements divided by credit.sent events in the window.", "app.analytics_events (transition evidence)"},
+		{&result.Drivers, "invitation_to_verification", "Invitation-to-verification conversion", "percent", "Invitations accepted by a user who owns a verified business, divided by invitations created in the window.", "app.buyer_invitations + app.businesses"},
+		{&result.Drivers, "acceptance_to_release", "Acceptance to goods release", "hours", "Average elapsed hours from immutable acceptance to goods release for the same request.", "app.agreement_acceptances + app.goods_releases"},
+		{&result.Drivers, "release_to_receipt", "Release to receipt confirmation", "hours", "Average elapsed hours from goods release to buyer receipt response.", "app.goods_releases + app.receipt_confirmations"},
+		{&result.Drivers, "days_to_payment", "Days to payment", "days", "Average days from activation to the final recognised payment, for principal fully repaid within the window.", "app.obligations + app.payments"},
+		{&result.Drivers, "repeat_sale_rate", "Repeat-sale rate", "percent", "Supplier-buyer relationships with at least two activated obligations divided by relationships with any activated obligation.", "app.obligations"},
+		{&result.Drivers, "trade_line_utilization", "Trade-line utilisation", "percent", "Current exposure plus pending reservations divided by approved limit on active trade lines.", "app.trade_lines"},
+		{&result.Drivers, "supplier_retention", "Retained active suppliers", "percent", "Suppliers with activated obligations in both the selected window and the immediately preceding equal window, divided by active suppliers in the preceding window.", "app.obligations"},
+		{&result.Guardrails, "on_time_payment_rate", "On-time payment rate", "percent", "Fully repaid obligations completed in the window whose allocated payments met every agreed instalment deadline.", "app.obligations + app.payments + app.payment_allocations + app.schedule_items"},
+		{&result.Guardrails, "failed_collection_recovery", "Failed-collection recovery", "percent", "Obligations with a failed attempt in the window and a later positive collection completed before the window ends, divided by obligations with a failed attempt.", "app.collection_attempts + app.obligations"},
+		{&result.Guardrails, "dispute_rate", "Dispute rate", "percent", "Obligations with a dispute opened in the window divided by obligations activated in the window.", "app.disputes + app.obligations"},
+		{&result.Guardrails, "receipt_issue_rate", "Issue-at-receipt rate", "percent", "Receipt responses marked issue_raised divided by all receipt responses.", "app.receipt_confirmations + app.credit_requests"},
+		{&result.Guardrails, "provider_reliability", "Collection provider reliability", "percent", "Successful or partial final collection attempts divided by all final attempts.", "app.collection_attempts + app.obligations"},
+		{&result.Guardrails, "recognized_loss_rate", "Recognised loss rate", "percent", "Write-off amount recorded in the window divided by principal of the affected obligations.", "app.operation_actions + app.obligations"},
+		{&result.Guardrails, "support_intervention_rate", "Support intervention rate", "cases_per_100_active_suppliers", "Support cases opened per 100 suppliers that activated an obligation in the selected window.", "app.support_cases + app.obligations"},
+		{&result.Guardrails, "accessibility_defects", "Open accessibility defects", "cases", "Accessibility defect cases opened by the end of the window and still open or in progress.", "app.support_cases"},
 		// The buyer is asked for full verification and a variable-amount debit
 		// authorisation in exchange for goods they previously received on a
 		// handshake. This is where the funnel breaks if the buyer proposition is
 		// wrong, so it is measured on its own rather than folded into
 		// sent-to-acceptance conversion.
-		{&result.Drivers, "mandate_authorization_dropoff", "Mandate authorisation drop-off", "percent", "Mandates created in the window that never reached an active authorisation, divided by mandates created.", "app.mandates + app.credit_requests", `SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE m.activated_at IS NULL AND m.status<>'ACTIVE')/count(*) END::float8 FROM app.mandates m JOIN app.credit_requests c ON c.id=m.credit_request_id WHERE m.created_at >= $1 AND m.created_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid)`},
+		{&result.Drivers, "mandate_authorization_dropoff", "Mandate authorisation drop-off", "percent", "Mandates created in the window that never reached an active authorisation, divided by mandates created.", "app.mandates + app.credit_requests"},
 		// Kredit earns its collection uplift only on money it collects, so the
 		// pricing quietly rewards buyers drifting to the collection date. This
 		// metric exists so that drift is visible rather than inferred: a falling
 		// voluntary share is the signal that reminder timing or payment friction
 		// has moved in Kredit's favour and against the buyer's.
-		{&result.Guardrails, "voluntary_payment_share", "Voluntary payment share", "percent", "Recognised payment value that arrived without a Kredit collection, divided by all recognised payment value excluding adjustments.", "app.payments", `SELECT CASE WHEN COALESCE(sum(amount_kobo) FILTER(WHERE source_type<>'adjustment'),0)=0 THEN 0 ELSE 100.0*COALESCE(sum(amount_kobo) FILTER(WHERE source_type NOT IN ('kredit_collection','collected','adjustment')),0)/sum(amount_kobo) FILTER(WHERE source_type<>'adjustment') END::float8 FROM app.payments WHERE state='recognized' AND recognized_at >= $1 AND recognized_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)`},
+		{&result.Guardrails, "voluntary_payment_share", "Voluntary payment share", "percent", "Recognised payment value that arrived without a Kredit collection, divided by all recognised payment value excluding adjustments.", "app.payments"},
 		// Deemed acceptance is the only path where silence creates a collectable
 		// obligation. A rising share means buyers are not answering, which is a
 		// wrongful-debit risk signal long before it becomes a dispute.
-		{&result.Guardrails, "deemed_acceptance_share", "Activations from buyer silence", "percent", "Confirmed receipts recorded by deemed acceptance, divided by all confirmed receipts in the window.", "app.receipt_confirmations + app.credit_requests", `SELECT CASE WHEN count(*)=0 THEN 0 ELSE 100.0*count(*) FILTER(WHERE rc.issue_reason='deemed_acceptance_auto_activated')/count(*) END::float8 FROM app.receipt_confirmations rc JOIN app.credit_requests c ON c.id=rc.credit_request_id WHERE rc.state='confirmed' AND rc.received_at >= $1 AND rc.received_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid)`},
+		{&result.Guardrails, "deemed_acceptance_share", "Activations from buyer silence", "percent", "Confirmed receipts recorded by deemed acceptance, divided by all confirmed receipts in the window.", "app.receipt_confirmations + app.credit_requests"},
 		// Kredit earns at most one hundred basis points on activated principal.
 		// Every workflow counted here consumes human time against that margin, so
 		// the ratio is the cost-to-serve signal. Minutes per touch is not
 		// invented here; it is a sampled input the pilot supplies, and this
 		// metric is the multiplier it applies to.
-		{&result.Guardrails, "manual_touches_per_obligation", "Manual touches per activated obligation", "touches", "Support cases, operations actions, correction requests, and disputes recorded in the window, divided by obligations activated in the window.", "app.support_cases + app.operation_actions + app.correction_requests + app.disputes + app.obligations", `WITH activated AS (SELECT count(*) n FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)), touches AS (SELECT (SELECT count(*) FROM app.support_cases WHERE created_at >= $1 AND created_at < $2 AND ($3='' OR organization_id=NULLIF($3,'')::uuid)) + (SELECT count(*) FROM app.operation_actions WHERE created_at >= $1 AND created_at < $2 AND ($3='' OR organization_id=NULLIF($3,'')::uuid)) + (SELECT count(*) FROM app.correction_requests WHERE created_at >= $1 AND created_at < $2 AND ($3='' OR organization_id=NULLIF($3,'')::uuid)) + (SELECT count(*) FROM app.disputes WHERE opened_at >= $1 AND opened_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)) n) SELECT CASE WHEN activated.n=0 THEN 0 ELSE touches.n::float8/activated.n END::float8 FROM activated,touches`},
+		{&result.Guardrails, "manual_touches_per_obligation", "Manual touches per activated obligation", "touches", "Support cases, operations actions, correction requests, and disputes recorded in the window, divided by obligations activated in the window.", "app.support_cases + app.operation_actions + app.correction_requests + app.disputes + app.obligations"},
 	}
 	for _, q := range queries {
-		var value float64
-		if err := tx.QueryRow(ctx, q.sql, from, to, org).Scan(&value); err != nil {
+		var value *float64
+		if err := tx.QueryRow(ctx, `SELECT app.pilot_metric($1,$2,$3,$4)`, from, to, org, q.key).Scan(&value); err != nil {
 			return PilotScorecard{}, fmt.Errorf("scorecard metric %s: %w", q.key, err)
 		}
-		*q.set = append(*q.set, Metric{Key: q.key, Label: q.label, Value: value, Unit: q.unit, Definition: q.definition, Source: q.source, TargetStatus: "baseline_required"})
+		metric := Metric{Key: q.key, Label: q.label, Unit: q.unit, Definition: q.definition, Source: q.source, TargetStatus: "no_data"}
+		if value != nil {
+			metric.Value = *value
+			metric.TargetStatus = "baseline_required"
+		}
+		*q.set = append(*q.set, metric)
 	}
 
 	rows, err := tx.Query(ctx, `SELECT name,count(*) FROM app.analytics_events WHERE occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=$3) GROUP BY name`, from, to, orgHash)
@@ -165,18 +175,7 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 	}
 	rows.Close()
 
-	reconciliationSQL := `WITH expected(event,n) AS (
-		SELECT 'customer.invited',count(*) FROM app.buyer_invitations WHERE created_at >= $1 AND created_at < $2 AND ($3='' OR organization_id=NULLIF($3,'')::uuid) UNION ALL
-		SELECT 'credit.drafted',count(*) FROM app.credit_requests WHERE created_at >= $1 AND created_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid) UNION ALL
-		SELECT 'credit.accepted',count(*) FROM app.agreement_acceptances a JOIN app.credit_requests c ON c.id=a.credit_request_id WHERE a.accepted_at >= $1 AND a.accepted_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid) UNION ALL
-		SELECT 'goods.released',count(*) FROM app.goods_releases g JOIN app.credit_requests c ON c.id=g.credit_request_id WHERE g.released_at >= $1 AND g.released_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid) UNION ALL
-		SELECT 'receipt.confirmed',count(*) FROM app.receipt_confirmations r JOIN app.credit_requests c ON c.id=r.credit_request_id WHERE r.state='confirmed' AND r.received_at >= $1 AND r.received_at < $2 AND ($3='' OR c.supplier_organization_id=NULLIF($3,'')::uuid) UNION ALL
-		SELECT 'obligation.activated',count(*) FROM app.obligations WHERE activated_at >= $1 AND activated_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid) UNION ALL
-		SELECT 'payment.confirmed',count(*) FROM app.payments WHERE state='recognized' AND recognized_at >= $1 AND recognized_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid) UNION ALL
-		SELECT 'trade_line.created',count(*) FROM app.trade_lines WHERE created_at >= $1 AND created_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid) UNION ALL
-		SELECT 'dispute.opened',count(*) FROM app.disputes WHERE opened_at >= $1 AND opened_at < $2 AND ($3='' OR supplier_organization_id=NULLIF($3,'')::uuid)
-	), observed AS (SELECT name,count(*) n FROM app.analytics_events WHERE occurred_at >= $1 AND occurred_at < $2 AND ($3='' OR organization_id_hash=encode(digest($3,'sha256'),'hex')) GROUP BY name)
-	SELECT e.event,e.n,COALESCE(o.n,0),e.n-COALESCE(o.n,0) FROM expected e LEFT JOIN observed o ON o.name=e.event ORDER BY e.event`
+	reconciliationSQL := `SELECT * FROM app.pilot_reconciliation($1,$2,$3)`
 	rows, err = tx.Query(ctx, reconciliationSQL, from, to, org)
 	if err != nil {
 		return PilotScorecard{}, err

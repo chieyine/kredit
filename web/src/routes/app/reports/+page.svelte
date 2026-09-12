@@ -81,7 +81,7 @@
 		return { count: received.length, total: sumKobo(received.map((payment) => payment.amount_kobo)) };
 	});
 	const summaryText = $derived(`Kredit ${sharePeriod === 'today' ? 'today' : 'last 7 days'}: ${shared.count} payment${shared.count === 1 ? '' : 's'} received, ${money(shared.total)} in total. ${money(summary?.outstanding_kobo)} still owed; ${money(summary?.overdue_kobo)} overdue.`);
-	function bucketName(bucket:string){const normalized=bucket.toLowerCase();if(normalized.includes('current')||normalized.includes('not_due'))return 'Not overdue';if(normalized.includes('60'))return '60+ days overdue';const numbers=bucket.match(/\d+/g);return numbers?.length===2?`${numbers[0]}–${numbers[1]} days overdue`:numbers?.length===1?`${numbers[0]}+ days overdue`:bucket.replaceAll('_',' ')}
+	function bucketName(bucket:string){return ({current:'Not overdue',not_due:'Not overdue','1_7':'1–7 days overdue','8_30':'8–30 days overdue','31_60':'31–60 days overdue', '61_plus':'61+ days overdue',paid:'Paid'} as Record<string,string>)[bucket.toLowerCase()] ?? bucket.replaceAll('_',' ')}
 	async function exportCSV() {
 		if (exporting||loading||!summary||!organizationID) return;
 		exporting = true;

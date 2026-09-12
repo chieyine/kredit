@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"kredit/internal/businesspolicy"
+	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/legalpublication"
 	"kredit/internal/mandates"
@@ -603,15 +604,26 @@ func (s *PostgresStore) ApplyAdjustment(obligationID string, reduction ledger.Mo
 	return s.persistByObligation(obligationID)
 }
 func (s *PostgresStore) CollectionState(obligationID string) (CollectionState, error) {
+	return s.CollectionStateContext(context.Background(), obligationID)
+}
+func (s *PostgresStore) CollectionStateContext(ctx context.Context, obligationID string) (CollectionState, error) {
 	if s == nil || s.pool == nil {
 		return CollectionState{}, errors.New("credit database is not configured")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return CollectionState{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := db.SetObligationContext(ctx, tx, obligationID); err != nil {
+		return CollectionState{}, err
 	}
 	// Workers must start from current persisted evidence, even after restart or
 	// a payment in another process. Never depend on a prior portal cache read.
 	var payload []byte
 	var outstanding ledger.Money
 	var lifecycle string
-	if err := s.pool.QueryRow(context.Background(), `SELECT s.aggregate,o.outstanding_kobo,o.lifecycle_status FROM app.credit_aggregate_snapshots s JOIN app.obligations o ON o.credit_request_id::text=s.credit_request_id WHERE o.id=$1::uuid`, obligationID).Scan(&payload, &outstanding, &lifecycle); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT s.aggregate,o.outstanding_kobo,o.lifecycle_status FROM app.credit_aggregate_snapshots s JOIN app.obligations o ON o.credit_request_id::text=s.credit_request_id WHERE o.id=$1::uuid`, obligationID).Scan(&payload, &outstanding, &lifecycle); err != nil {
 		return CollectionState{}, err
 	}
 	var view View
@@ -625,20 +637,11 @@ func (s *PostgresStore) CollectionState(obligationID string) (CollectionState, e
 	if err != nil || state.MandateReference == "" {
 		return state, err
 	}
-	ctx := context.Background()
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return CollectionState{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, state.BuyerUserID); err != nil {
-		return CollectionState{}, err
-	}
-	err = tx.QueryRow(ctx, `SELECT GREATEST(0,m.amount_ceiling_kobo-COALESCE((SELECT SUM(a.succeeded_amount_kobo) FROM app.collection_attempts a JOIN app.collection_reservations r ON r.id=a.reservation_id WHERE r.mandate_id=m.id),0)-COALESCE((SELECT SUM(r.reserved_amount_kobo) FROM app.collection_reservations r WHERE r.mandate_id=m.id AND r.obligation_id<>o.id AND r.state IN ('PROCESSING','COMPLETED')),0)) FROM app.credit_requests c JOIN app.obligations o ON o.credit_request_id=c.id JOIN app.payment_mandates m ON m.id=c.mandate_id WHERE o.id=$1::uuid`, obligationID).Scan(&state.MandateRemainingKobo)
+	err = tx.QueryRow(ctx, `SELECT app.collection_mandate_capacity($1::uuid)`, obligationID).Scan(&state.MandateRemainingKobo)
 	return state, err
 }
 func (s *PostgresStore) CollectionStateForOrganization(obligationID, organizationID string) (CollectionState, error) {
-	state, err := s.CollectionState(obligationID)
+	state, err := s.CollectionStateContext(db.WithTenantContext(context.Background(), "", organizationID), obligationID)
 	if err != nil {
 		return CollectionState{}, err
 	}
@@ -956,10 +959,10 @@ func syncNormalizedCreditWithEvidence(ctx context.Context, tx pgx.Tx, view View,
 	r := view.Request
 	_, err := tx.Exec(ctx, `
 		INSERT INTO app.credit_requests
-		(fee_terms, id, supplier_organization_id, buyer_user_id, buyer_business_id, principal_kobo, currency, goods_description, invoice_reference, invoice_document_hash, due_date, grace_hours, collection_at, state, agreement_version_id, mandate_id, acceptance_id, release_id, receipt_id, obligation_id, created_by, created_at, updated_at, version)
-		VALUES ($24::jsonb,$1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,NULLIF($8,''),NULLIF($9,''),$10::date,$11,$12,$13,NULLIF($14,'')::uuid,NULLIF($15,'')::uuid,NULLIF($16,'')::uuid,NULLIF($17,'')::uuid,NULLIF($18,'')::uuid,NULLIF($19,'')::uuid,$20::uuid,$21,$22,$23)
-		ON CONFLICT (id) DO UPDATE SET principal_kobo=EXCLUDED.principal_kobo,goods_description=EXCLUDED.goods_description,invoice_reference=EXCLUDED.invoice_reference,invoice_document_hash=EXCLUDED.invoice_document_hash,due_date=EXCLUDED.due_date,grace_hours=EXCLUDED.grace_hours,collection_at=EXCLUDED.collection_at,state=EXCLUDED.state, agreement_version_id=EXCLUDED.agreement_version_id, mandate_id=EXCLUDED.mandate_id, acceptance_id=EXCLUDED.acceptance_id, release_id=EXCLUDED.release_id, receipt_id=EXCLUDED.receipt_id, obligation_id=EXCLUDED.obligation_id, updated_at=EXCLUDED.updated_at, version=EXCLUDED.version`,
-		r.ID, r.SupplierOrganizationID, r.BuyerUserID, r.BuyerBusinessID, int64(r.PrincipalKobo), r.Currency, r.GoodsDescription, r.InvoiceReference, r.InvoiceDocumentHash, r.DueDate, r.GraceHours, r.CollectionAt, r.State, r.AgreementVersionID, r.MandateID, r.AcceptanceID, r.ReleaseID, r.ReceiptID, r.ObligationID, r.CreatedBy, r.CreatedAt, r.UpdatedAt, r.Version, feeTermsJSON(r.FeeTerms))
+		(invoice_document_id, fee_terms, id, supplier_organization_id, buyer_user_id, buyer_business_id, principal_kobo, currency, goods_description, invoice_reference, invoice_document_hash, due_date, grace_hours, collection_at, state, agreement_version_id, mandate_id, acceptance_id, release_id, receipt_id, obligation_id, created_by, created_at, updated_at, version)
+		VALUES (NULLIF($25,'')::uuid,$24::jsonb,$1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,NULLIF($8,''),NULLIF($9,''),$10::date,$11,$12,$13,NULLIF($14,'')::uuid,NULLIF($15,'')::uuid,NULLIF($16,'')::uuid,NULLIF($17,'')::uuid,NULLIF($18,'')::uuid,NULLIF($19,'')::uuid,$20::uuid,$21,$22,$23)
+		ON CONFLICT (id) DO UPDATE SET principal_kobo=EXCLUDED.principal_kobo,goods_description=EXCLUDED.goods_description,invoice_reference=EXCLUDED.invoice_reference,invoice_document_hash=EXCLUDED.invoice_document_hash,invoice_document_id=EXCLUDED.invoice_document_id,due_date=EXCLUDED.due_date,grace_hours=EXCLUDED.grace_hours,collection_at=EXCLUDED.collection_at,state=EXCLUDED.state, agreement_version_id=EXCLUDED.agreement_version_id, mandate_id=EXCLUDED.mandate_id, acceptance_id=EXCLUDED.acceptance_id, release_id=EXCLUDED.release_id, receipt_id=EXCLUDED.receipt_id, obligation_id=EXCLUDED.obligation_id, updated_at=EXCLUDED.updated_at, version=EXCLUDED.version`,
+		r.ID, r.SupplierOrganizationID, r.BuyerUserID, r.BuyerBusinessID, int64(r.PrincipalKobo), r.Currency, r.GoodsDescription, r.InvoiceReference, r.InvoiceDocumentHash, r.DueDate, r.GraceHours, r.CollectionAt, r.State, r.AgreementVersionID, r.MandateID, r.AcceptanceID, r.ReleaseID, r.ReceiptID, r.ObligationID, r.CreatedBy, r.CreatedAt, r.UpdatedAt, r.Version, feeTermsJSON(r.FeeTerms), r.InvoiceDocumentID)
 	if err != nil {
 		return fmt.Errorf("persist normalized credit request: %w", err)
 	}
@@ -999,6 +1002,13 @@ func syncNormalizedCreditWithEvidence(ctx context.Context, tx pgx.Tx, view View,
 	if obligation := view.Obligation; obligation != nil {
 		if _, err := tx.Exec(ctx, `INSERT INTO app.obligations (id,credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$7,$8,$9,$10,$11,$12::uuid,$13) ON CONFLICT (id) DO UPDATE SET lifecycle_status=EXCLUDED.lifecycle_status,payment_status=EXCLUDED.payment_status,outstanding_kobo=EXCLUDED.outstanding_kobo`, obligation.ID, obligation.CreditRequestID, obligation.AgreementVersionID, obligation.SupplierOrganizationID, obligation.BuyerBusinessID, int64(obligation.PrincipalKobo), obligation.Currency, obligation.LifecycleStatus, obligation.PaymentStatus, int64(obligation.OutstandingKobo), int64(obligation.BaseFeeKobo), obligation.LedgerTransactionID, obligation.ActivatedAt); err != nil {
 			return fmt.Errorf("persist obligation: %w", err)
+		}
+
+		if obligation.BaseFeeKobo > 0 {
+			baseRate, _ := r.FeeTerms.Rates()
+			if _, err := tx.Exec(ctx, `INSERT INTO app.fees(supplier_organization_id,obligation_id,fee_type,basis_amount_kobo,rate_basis_points,amount_kobo,currency,state,accrued_at) VALUES($1::uuid,$2::uuid,'base_service',$3,$4,$5,$6,'accrued',$7) ON CONFLICT(obligation_id,fee_type) WHERE fee_type='base_service' DO NOTHING`, obligation.SupplierOrganizationID, obligation.ID, int64(obligation.PrincipalKobo), baseRate, int64(obligation.BaseFeeKobo), obligation.Currency, obligation.ActivatedAt); err != nil {
+				return fmt.Errorf("persist base fee: %w", err)
+			}
 		}
 	}
 	return nil

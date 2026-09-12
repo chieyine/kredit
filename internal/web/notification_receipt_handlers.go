@@ -5,20 +5,29 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"kredit/internal/notifications"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 func (s *Server) notificationDeliveryReceipt(w http.ResponseWriter, r *http.Request) {
 	channel := r.PathValue("channel")
 	token := ""
+	adapter := notifications.DefaultAdapter(channel)
+	sendlySecret := s.config.NotificationEmailWebhookSecret
 	switch channel {
 	case "email":
 		token = s.config.NotificationEmailToken
+		if s.config.NotificationEmailAdapter != "" {
+			adapter = s.config.NotificationEmailAdapter
+		}
 	case "sms":
 		token = s.config.NotificationSMSToken
+		if s.config.NotificationSMSAdapter != "" {
+			adapter = s.config.NotificationSMSAdapter
+		}
 	case "whatsapp":
 		token = s.config.NotificationWhatsAppToken
 	default:
@@ -31,9 +40,13 @@ func (s *Server) notificationDeliveryReceipt(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if connector != nil {
+		if connector.Adapter != "" {
+			adapter = connector.Adapter
+		}
 		token = ""
 		if connector.Enabled {
 			token = connector.Token
+			sendlySecret = connector.WebhookSecret
 		}
 	}
 	if token == "" {
@@ -43,6 +56,49 @@ func (s *Server) notificationDeliveryReceipt(w http.ResponseWriter, r *http.Requ
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 16<<10))
 	if err != nil {
 		writeProblem(w, 400, "invalid_request", "Invalid receipt body")
+		return
+	}
+	if channel == notifications.ChannelSMS && adapter == "mesaj" {
+		// Mesaj bulk callbacks are unauthenticated signals. They never establish
+		// delivery evidence; the published bulk API has no authenticated lookup.
+		var envelope struct {
+			MessageID string `json:"message_id"`
+			Recipient string `json:"recipient"`
+			Status    string `json:"status"`
+		}
+		if json.Unmarshal(body, &envelope) != nil || envelope.MessageID == "" || len(envelope.MessageID) > 512 || envelope.Recipient == "" || len(envelope.Recipient) > 32 || envelope.Status == "" || len(envelope.Status) > 64 {
+			writeProblem(w, 400, "invalid_request", "Invalid Mesaj event")
+			return
+		}
+
+		writeJSON(w, 200, map[string]any{"status": "accepted"})
+		return
+	}
+	if channel == notifications.ChannelEmail && adapter == "sendly" {
+		stamp := r.Header.Get("sendly-timestamp")
+		seconds, stampErr := strconv.ParseInt(stamp, 10, 64)
+		age := time.Now().Unix() - seconds
+		signature, sigErr := hex.DecodeString(r.Header.Get("sendly-signature"))
+		mac := hmac.New(sha256.New, []byte(sendlySecret))
+		mac.Write([]byte(stamp + "."))
+		mac.Write(body)
+		if sendlySecret == "" || stampErr != nil || sigErr != nil || age < -300 || age > 300 || !hmac.Equal(signature, mac.Sum(nil)) {
+			writeProblem(w, 401, "invalid_signature", "Sendly authentication failed")
+			return
+		}
+		var envelope struct {
+			ID        string          `json:"id"`
+			Type      string          `json:"type"`
+			CreatedAt time.Time       `json:"createdAt"`
+			Data      json.RawMessage `json:"data"`
+		}
+		if json.Unmarshal(body, &envelope) != nil || envelope.ID == "" || envelope.Type == "" || envelope.CreatedAt.IsZero() || len(envelope.Data) == 0 {
+			writeProblem(w, 400, "invalid_request", "Invalid Sendly event")
+			return
+		}
+		// The worker independently reconciles saved message IDs through Sendly's
+		// authenticated lookup. Receipt of this event alone never starts a timer.
+		writeJSON(w, 200, map[string]any{"status": "accepted"})
 		return
 	}
 	signature, err := hex.DecodeString(r.Header.Get("X-Notification-Signature"))
@@ -57,18 +113,8 @@ func (s *Server) notificationDeliveryReceipt(w http.ResponseWriter, r *http.Requ
 		writeProblem(w, 400, "invalid_request", "Invalid delivery receipt")
 		return
 	}
-	if err = s.runtime.Notifications.RecordDeliveryReceipt(r.Context(), channel, receipt); err != nil {
-		switch {
-		case errors.Is(err, notifications.ErrInvalidDeliveryReceipt):
-			writeProblem(w, 400, "invalid_receipt", "The delivery receipt is incomplete or invalid.")
-		case errors.Is(err, notifications.ErrDeliveryReceiptConflict):
-			writeProblem(w, 409, "receipt_conflict", "The receipt reference was already used for different evidence.")
-		case errors.Is(err, notifications.ErrDeliveryReceiptPending):
-			writeProblem(w, 409, "receipt_pending", "The sent message is not yet available. Retry this receipt later.")
-		default:
-			writeProblem(w, 503, "receipt_unavailable", "The delivery receipt could not be saved. Retry this receipt later.")
-		}
-		return
-	}
-	writeJSON(w, 200, map[string]any{"status": "recorded"})
+	// Authenticated connector callbacks are signals only. A replacement
+	// connector cannot attest to messages sent through an earlier connection.
+	// The worker looks up the original event through its pinned provider route.
+	writeJSON(w, 200, map[string]any{"status": "accepted"})
 }

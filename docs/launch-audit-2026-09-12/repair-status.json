@@ -1,0 +1,254 @@
+[
+  {
+    "id": "F001",
+    "title": "Sendly is not integrated (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F002",
+    "title": "Production stack contradicts startup requirements (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F003",
+    "title": "Caddy gateway configuration is invalid (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F004",
+    "title": "PostgreSQL 18 volume is mounted at the old location (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F005",
+    "title": "Generic connector interfaces are not implemented vendor integrations (launch dependency)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F006",
+    "title": "Deployment command does not load compose interpolation values (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F007",
+    "title": "Successful bank debits cannot be posted to the production payment ledger (critical)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F008",
+    "title": "All failed Mono debits are permanently non-retryable (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F009",
+    "title": "Sub-NGN-200 balances are eligible for an unsupported Mono debit (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F010",
+    "title": "A lost mandate-creation response has no durable recovery workflow (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F011",
+    "title": "Public proxy chain groups sign-in throttling by Vercel egress address (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F012",
+    "title": "Account recovery cannot reach its evidence step (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F013",
+    "title": "Admin financial changes cannot resolve their target obligation (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F014",
+    "title": "Ownership transfer cannot read the recipient account (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F015",
+    "title": "Admin directories and money totals can hide real records (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F016",
+    "title": "Granting an admin role can commit while the API reports failure (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F017",
+    "title": "Financial review can miss discrepancies and close unresolved cases (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F018",
+    "title": "Supplier settlement setup has no production verification path (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F019",
+    "title": "Billing setup records a choice without establishing billing (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F020",
+    "title": "Buyer onboarding cannot resume pending identity verification (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F021",
+    "title": "Collection eligibility loses tenant scope before reading the debt (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F022",
+    "title": "Opening a sent sale breaks the next buyer action's saved version (launch blocker)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F023",
+    "title": "Plain-text agreement labels kobo as naira (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F024",
+    "title": "Customer limits and purchases lack the required database scope (launch blocker when enabled)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F025",
+    "title": "The management scorecard reads hidden financial records as real zeroes (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F026",
+    "title": "Current Mono dispute automation events are rejected (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F027",
+    "title": "Business money settings can silently target the wrong business (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F028",
+    "title": "Buyer invitation acceptance records consents the page never presents (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F029",
+    "title": "The advertised payment page sends the customer in a circle (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F030",
+    "title": "Dispute documents cannot be properly submitted and reviewed (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F031",
+    "title": "Invoice attachments are lost or inaccessible in the sale workflow (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F032",
+    "title": "Sending a draft can ignore the edits currently shown (medium)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F033",
+    "title": "The report mislabels 31\u201360-day debts as 60+ days overdue (medium)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F034",
+    "title": "The robots rule accidentally blocks the public contact page (medium)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F035",
+    "title": "Published sharing images still advertise the old domain (medium)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F036",
+    "title": "The recovery workflow cannot locate its own backup (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F037",
+    "title": "Release certification calls a removed SQL generation workflow (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F038",
+    "title": "Document uploads use an unsupported Cloudflare R2 header (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F039",
+    "title": "Local SSH credentials can enter the API build context and cache (high)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F040",
+    "title": "Existing tests bypass several broken production paths (high assurance gap)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  },
+  {
+    "id": "F041",
+    "title": "Required privacy and retention approvals are not evidenced (launch dependency)",
+    "status": "code complete; owner approval evidence required in super admin",
+    "verification": "Field-level inventory updated through schema 148. Legal and provider approval evidence is external to code."
+  },
+  {
+    "id": "F042",
+    "title": "Operating instructions refer to obsolete schema and legal versions (medium)",
+    "status": "implemented; essential checks recorded",
+    "verification": "See docs/platform-improvements/ESSENTIAL-CHECKS.md for the exact checked paths. No live deployment or blanket platform certification is claimed."
+  }
+]

@@ -13,6 +13,7 @@ import (
 	"kredit/internal/notifications"
 	"kredit/internal/onboarding"
 	"kredit/internal/organizations"
+	"kredit/internal/settlement"
 )
 
 type representativeRequest struct {
@@ -24,13 +25,11 @@ type providerReferenceRequest struct {
 	ExpectedVersion int64 `json:"expected_version"`
 }
 type settlementRequest struct {
-	ExpectedVersion   int64  `json:"expected_version"`
-	Provider          string `json:"provider"`
-	ProviderReference string `json:"provider_reference"`
-	BankName          string `json:"bank_name"`
-	AccountName       string `json:"account_name"`
-	AccountLast4      string `json:"account_last4"`
+	ExpectedVersion int64  `json:"expected_version"`
+	BankCode        string `json:"bank_code"`
+	AccountNumber   string `json:"account_number"`
 }
+
 type billingRequest struct {
 	ExpectedVersion   int64  `json:"expected_version"`
 	Method            string `json:"method"`
@@ -184,12 +183,12 @@ func (s *Server) submitSupplierKYB(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusNotFound, "organization_not_found", "We could not find that business.")
 		return
 	}
-	verification, providerErr := s.runtime.Identity.CreateBusinessVerification(r.Context(), identity.BusinessVerificationInput{SubjectID: orgID, LegalName: organization.LegalName, BusinessType: organization.BusinessType, Address: organization.BusinessAddress, Registration: organization.RegistrationInfo})
+	verification, providerErr := s.runtime.Identity.CreateBusinessVerification(identity.WithActor(r.Context(), user.ID), identity.BusinessVerificationInput{RequireReview: true, SubjectID: orgID, LegalName: organization.LegalName, BusinessType: organization.BusinessType, Address: organization.BusinessAddress, Registration: organization.RegistrationInfo})
 	if providerErr != nil {
 		writeProblem(w, http.StatusServiceUnavailable, "kyb_provider_unavailable", providerErr.Error())
 		return
 	}
-	p, sum, err := s.runtime.Onboarding.SubmitKYB(orgID, user.ID, verification.ProviderID, in.ExpectedVersion)
+	p, sum, err := s.runtime.Onboarding.SubmitKYB(orgID, user.ID, identity.RoutedReference(verification.Provider, verification.ProviderID), in.ExpectedVersion)
 	if err == nil && (verification.State == "verified" || verification.State == "approved") {
 		p, sum, err = s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, p.KYBProviderReference, p.Version, "approved", "provider_approved", verification.ExpiresAt)
 	} else if err == nil && verification.State == "rejected" {
@@ -211,7 +210,7 @@ func (s *Server) reconcileSupplierKYB(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusConflict, "kyb_not_submitted", "business verification has not been submitted")
 		return
 	}
-	verification, err := s.runtime.Identity.GetVerification(r.Context(), profile.KYBProviderReference)
+	verification, err := identity.GetRouted(identity.WithActor(r.Context(), user.ID), s.runtime.Identity, profile.KYBProviderReference)
 	if err != nil {
 		writeProblem(w, http.StatusServiceUnavailable, "kyb_provider_unavailable", "business verification status is temporarily unavailable")
 		return
@@ -224,6 +223,8 @@ func (s *Server) reconcileSupplierKYB(w http.ResponseWriter, r *http.Request) {
 	switch strings.ToLower(strings.TrimSpace(verification.State)) {
 	case "verified", "approved":
 		state, reason = "approved", "provider_approved"
+	case "expired":
+		state, reason = "expired", "provider_expired"
 	case "rejected", "failed":
 		state, reason = "rejected", "provider_rejected"
 	case "pending", "submitted", "in_review", "provider_review":
@@ -250,10 +251,44 @@ func (s *Server) updateSupplierSettlement(w http.ResponseWriter, r *http.Request
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	p, sum, err := s.runtime.Onboarding.UpdateSettlement(orgID, user.ID, onboarding.SettlementInput{ExpectedVersion: in.ExpectedVersion, Provider: in.Provider, ProviderReference: in.ProviderReference, BankName: in.BankName, AccountName: in.AccountName, AccountLast4: in.AccountLast4})
-	if err == nil && s.config.Environment == "development" {
-		p, sum, err = s.runtime.Onboarding.RecordSettlementDecision(orgID, user.ID, "verified", "development_provider_verified")
+
+	if s.runtime.Settlement == nil || s.runtime.Database == nil {
+		writeProblem(w, 503, "settlement_unavailable", "Bank registration is not configured. Contact support.")
+		return
 	}
+	profile, _, err := s.runtime.Onboarding.Get(orgID)
+	if err != nil || profile.Version != in.ExpectedVersion || in.ExpectedVersion <= 0 {
+		writeProblem(w, 409, "onboarding_conflict", "Your settings changed. Refresh before submitting.")
+		return
+	}
+	banks, err := s.runtime.Settlement.Banks(r.Context())
+	if err != nil {
+		writeProblem(w, 503, "banks_unavailable", "Banks could not be loaded. Try again later.")
+		return
+	}
+	bankName := ""
+	for _, bank := range banks {
+		if bank.Code == in.BankCode {
+			bankName = bank.Name
+			break
+		}
+	}
+	if bankName == "" {
+		writeProblem(w, 422, "invalid_bank", "Choose a bank from the current list.")
+		return
+	}
+	if err = settlement.ValidateInput(settlement.Input{Reference: "validation", OrganizationID: orgID, BankCode: in.BankCode, AccountNumber: in.AccountNumber}); err != nil {
+		writeProblem(w, 422, "invalid_bank_account", err.Error())
+		return
+	}
+	result, err := settlement.Register(r.Context(), s.runtime.Database.Raw(), s.config.SettingsEncryptionKey, s.runtime.Settlement, settlement.Input{OrganizationID: orgID, BankCode: in.BankCode, AccountNumber: in.AccountNumber})
+	in.AccountNumber = ""
+	if err != nil {
+		writeProblem(w, 409, "bank_registration_unconfirmed", "The bank registration is unconfirmed. Contact support before submitting a different account.")
+		return
+	}
+	p, sum, err := s.runtime.Onboarding.UpdateSettlement(orgID, user.ID, onboarding.SettlementInput{ExpectedVersion: in.ExpectedVersion, Provider: s.runtime.Settlement.Name(), ProviderReference: result.ProviderReference, BankName: bankName, AccountName: result.AccountName, AccountLast4: result.AccountLast4})
+
 	s.finishOnboardingChange(w, r, user, orgID, "supplier.onboarding.settlement.updated", p, sum, err)
 }
 func (s *Server) updateSupplierBilling(w http.ResponseWriter, r *http.Request) {
@@ -335,14 +370,14 @@ func (s *Server) finishOnboardingChange(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: action, ResourceType: "supplier_onboarding", ResourceID: orgID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"readiness_state": sum.State}})
-	if strings.Contains(action, "settlement") || strings.Contains(action, "billing") {
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: action + ":" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierSensitiveSettingChanged", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: action, NextAction: "Review the change in supplier settings.", SecurePath: "/app/onboarding"})
+	if s.runtime.Database == nil && (strings.Contains(action, "settlement") || strings.Contains(action, "billing")) {
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: action + ":" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierSensitiveSettingChanged", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: action, NextAction: "Review the change in supplier settings.", SecurePath: "/app/onboarding"})
 	}
 	if strings.Contains(action, "kyb") {
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/app/onboarding"})
 	}
 	if sum.Ready && p.ReadinessChangedAt.Equal(p.UpdatedAt) {
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", RecipientID: user.ID, Email: user.Email, Phone: user.Phone, OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/app/onboarding"})
 	}
 	writeJSON(w, 200, map[string]any{"profile": p, "readiness": sum})
 }

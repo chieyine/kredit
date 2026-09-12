@@ -36,6 +36,7 @@ type Eligibility struct {
 type ObligationSnapshot struct {
 	CollectionPolicy     string
 	MandateReference     string
+	MandateProvider      string
 	ID                   string
 	BuyerUserID          string
 	Currency             string
@@ -66,41 +67,45 @@ type CollectionReservation struct {
 	CreatedAt          time.Time    `json:"created_at"`
 }
 type Attempt struct {
-	MandateReference     string       `json:"mandate_reference,omitempty"`
-	NextRetryAt          time.Time    `json:"next_retry_at,omitempty"`
-	ID                   string       `json:"id"`
-	ReservationID        string       `json:"reservation_id"`
-	ObligationID         string       `json:"obligation_id"`
-	Provider             string       `json:"provider"`
-	ProviderCollectionID string       `json:"provider_collection_id,omitempty"`
-	ExternalReference    string       `json:"external_reference"`
-	RequestedAmountKobo  ledger.Money `json:"requested_amount_kobo"`
-	SucceededAmountKobo  ledger.Money `json:"succeeded_amount_kobo"`
-	State                string       `json:"state"`
-	AttemptNumber        int          `json:"attempt_number"`
-	RetryClassification  string       `json:"retry_classification,omitempty"`
-	FailureCode          string       `json:"failure_code,omitempty"`
-	RequestedAt          time.Time    `json:"requested_at"`
-	FinalAt              time.Time    `json:"final_at,omitempty"`
-	SettlementState      string       `json:"settlement_state,omitempty"`
-	SettlementReference  string       `json:"settlement_reference,omitempty"`
+	SettlementRoute      *SettlementRoute `json:"settlement_route,omitempty"`
+	MandateReference     string           `json:"mandate_reference,omitempty"`
+	NextRetryAt          time.Time        `json:"next_retry_at,omitempty"`
+	ID                   string           `json:"id"`
+	ReservationID        string           `json:"reservation_id"`
+	ObligationID         string           `json:"obligation_id"`
+	Provider             string           `json:"provider"`
+	ProviderCollectionID string           `json:"provider_collection_id,omitempty"`
+	ExternalReference    string           `json:"external_reference"`
+	RequestedAmountKobo  ledger.Money     `json:"requested_amount_kobo"`
+	SucceededAmountKobo  ledger.Money     `json:"succeeded_amount_kobo"`
+	State                string           `json:"state"`
+	AttemptNumber        int              `json:"attempt_number"`
+	RetryClassification  string           `json:"retry_classification,omitempty"`
+	FailureCode          string           `json:"failure_code,omitempty"`
+	RequestedAt          time.Time        `json:"requested_at"`
+	FinalAt              time.Time        `json:"final_at,omitempty"`
+	SettlementState      string           `json:"settlement_state,omitempty"`
+	SettlementReference  string           `json:"settlement_reference,omitempty"`
 }
 
 type Engine struct {
-	mu             sync.Mutex
-	provider       Provider
-	payments       payments.Service
-	snapshot       SnapshotFunc
-	due            DueFunc
-	reservations   map[string]*CollectionReservation
-	attempts       map[string]*Attempt
-	byKey          map[string]string
-	byExternal     map[string]string
-	events         map[string]bool
-	now            func() time.Time
-	featureEnabled bool
-	reservationTTL time.Duration
-	maxRetries     int
+	settlementRoute   settlementRouteLoader
+	mu                sync.Mutex
+	provider          Provider
+	retainedProviders map[string]Provider
+	payments          payments.Service
+	snapshot          SnapshotFunc
+	contextSnapshot   func(context.Context, string) (ObligationSnapshot, error)
+	due               DueFunc
+	reservations      map[string]*CollectionReservation
+	attempts          map[string]*Attempt
+	byKey             map[string]string
+	byExternal        map[string]string
+	events            map[string]bool
+	now               func() time.Time
+	featureEnabled    bool
+	reservationTTL    time.Duration
+	maxRetries        int
 }
 
 type Service interface {
@@ -160,11 +165,32 @@ func (e *Engine) SetMaxRetries(max int) {
 		e.maxRetries = max
 	}
 }
-func (e *Engine) Eligibility(obligationID string, now time.Time) (Eligibility, error) {
+
+// NewContextEngine carries authenticated tenant identity through production reads.
+func NewContextEngine(provider Provider, paymentStore payments.Service, snapshot func(context.Context, string) (ObligationSnapshot, error), due DueFunc) *Engine {
+	e := NewEngine(provider, paymentStore, nil, due)
+	e.contextSnapshot = snapshot
+	return e
+}
+
+func (e *Engine) readSnapshot(ctx context.Context, id string) (ObligationSnapshot, error) {
+	if e.contextSnapshot != nil {
+		return e.contextSnapshot(ctx, id)
+	}
 	if e.snapshot == nil {
+		return ObligationSnapshot{}, errors.New("collection dependencies unavailable")
+	}
+	return e.snapshot(id)
+}
+
+func (e *Engine) Eligibility(obligationID string, now time.Time) (Eligibility, error) {
+	return e.EligibilityContext(context.Background(), obligationID, now)
+}
+func (e *Engine) EligibilityContext(ctx context.Context, obligationID string, now time.Time) (Eligibility, error) {
+	if e.snapshot == nil && e.contextSnapshot == nil {
 		return Eligibility{}, errors.New("collection dependencies unavailable")
 	}
-	snapshot, err := e.snapshot(obligationID)
+	snapshot, err := e.readSnapshot(ctx, obligationID)
 	if err != nil {
 		return Eligibility{}, err
 	}
@@ -180,6 +206,9 @@ func (e *Engine) eligibilityForSnapshot(obligationID string, now time.Time, snap
 		return Eligibility{}, err
 	}
 	reasons := []string{}
+	if snapshot.MandateProvider != "" && snapshot.MandateProvider != e.provider.Name() {
+		reasons = append(reasons, "mandate_provider_mismatch")
+	}
 	capabilities := Capabilities{}
 	if provider, ok := e.provider.(CapabilityProvider); ok {
 		capabilities = provider.Capabilities()
@@ -252,6 +281,12 @@ func (e *Engine) eligibilityForSnapshot(obligationID string, now time.Time, snap
 			reasons = append(reasons, "buyer_payment_claim_blocks_due_amount")
 		}
 	}
+	if capabilities.MaximumAmountKobo > 0 && target > capabilities.MaximumAmountKobo {
+		target = capabilities.MaximumAmountKobo
+	}
+	if target > 0 && target < capabilities.MinimumAmountKobo {
+		reasons = append(reasons, "amount_below_provider_minimum")
+	}
 	return Eligibility{Eligible: len(reasons) == 0, AmountKobo: target, Reasons: reasons}, nil
 }
 
@@ -269,10 +304,10 @@ func (e *Engine) Start(ctx context.Context, obligationID, idempotencyKey string,
 		return out, nil
 	}
 	e.mu.Unlock()
-	if e.snapshot == nil {
+	if e.snapshot == nil && e.contextSnapshot == nil {
 		return Attempt{}, errors.New("collection dependencies unavailable")
 	}
-	snapshot, err := e.snapshot(obligationID)
+	snapshot, err := e.readSnapshot(ctx, obligationID)
 	if err != nil {
 		return Attempt{}, err
 	}
@@ -320,13 +355,21 @@ func (e *Engine) Start(ctx context.Context, obligationID, idempotencyKey string,
 	if latest != nil && idempotencyKey == "retry:"+latest.ID {
 		number = latest.AttemptNumber + 1
 	}
-	attempt := &Attempt{MandateReference: snapshot.MandateReference, ID: attemptID, ReservationID: reservation.ID, ObligationID: obligationID, Provider: e.provider.Name(), ExternalReference: "kredit-" + attemptID, RequestedAmountKobo: eligibility.AmountKobo, State: AttemptPending, AttemptNumber: number, RequestedAt: e.now()}
+	var route *SettlementRoute
+	if e.settlementRoute != nil {
+		route, err = e.settlementRoute(ctx, obligationID, eligibility.AmountKobo)
+		if err != nil {
+			e.mu.Unlock()
+			return Attempt{}, err
+		}
+	}
+	attempt := &Attempt{SettlementRoute: route, MandateReference: snapshot.MandateReference, ID: attemptID, ReservationID: reservation.ID, ObligationID: obligationID, Provider: e.provider.Name(), ExternalReference: "kredit-" + attemptID, RequestedAmountKobo: eligibility.AmountKobo, State: AttemptPending, AttemptNumber: number, RequestedAt: e.now()}
 	e.reservations[reservation.ID] = reservation
 	e.attempts[attempt.ID] = attempt
 	e.byKey[obligationID+"\x00"+idempotencyKey] = attempt.ID
 	e.byExternal[attempt.ExternalReference] = attempt.ID
 	e.mu.Unlock()
-	response, submitErr := e.provider.Submit(ctx, Request{MandateReference: attempt.MandateReference, ExternalReference: attempt.ExternalReference, ObligationID: obligationID, BuyerUserID: snapshot.BuyerUserID, AmountKobo: attempt.RequestedAmountKobo, Currency: snapshot.Currency})
+	response, submitErr := e.provider.Submit(ctx, Request{SettlementRoute: attempt.SettlementRoute, MandateReference: attempt.MandateReference, ExternalReference: attempt.ExternalReference, ObligationID: obligationID, BuyerUserID: snapshot.BuyerUserID, AmountKobo: attempt.RequestedAmountKobo, Currency: snapshot.Currency})
 	if submitErr != nil {
 		response = Response{State: ProviderTimeout}
 	}
@@ -347,7 +390,7 @@ func (e *Engine) Start(ctx context.Context, obligationID, idempotencyKey string,
 // callback-supplied money or terminal state. Reconcile performs the independent
 // provider lookup that is allowed to change financial state.
 func (e *Engine) SignalWebhook(_ context.Context, event Webhook) (Attempt, error) {
-	if e.provider == nil || event.EventID == "" || event.ExternalReference == "" || !e.provider.VerifyWebhook(event) {
+	if event.EventID == "" || event.ExternalReference == "" {
 		return Attempt{}, errors.New("invalid collection webhook signature")
 	}
 	e.mu.Lock()
@@ -355,6 +398,10 @@ func (e *Engine) SignalWebhook(_ context.Context, event Webhook) (Attempt, error
 	attempt := e.attempts[e.byExternal[event.ExternalReference]]
 	if attempt == nil {
 		return Attempt{}, errors.New("collection attempt not found")
+	}
+	provider := e.providerForLocked(attempt.Provider)
+	if provider == nil || !provider.VerifyWebhook(event) {
+		return Attempt{}, errors.New("original provider webhook authentication failed")
 	}
 	if e.events[event.EventID] {
 		return cloneAttempt(*attempt), nil
@@ -369,11 +416,21 @@ func (e *Engine) SignalWebhook(_ context.Context, event Webhook) (Attempt, error
 	return cloneAttempt(*attempt), nil
 }
 
-func (e *Engine) ProcessWebhook(_ context.Context, event Webhook) (Attempt, error) {
-	if e.provider == nil || event.EventID == "" || event.ExternalReference == "" || !e.provider.VerifyWebhook(event) {
+func (e *Engine) ProcessWebhook(ctx context.Context, event Webhook) (Attempt, error) {
+	if event.EventID == "" || event.ExternalReference == "" {
 		return Attempt{}, errors.New("invalid collection webhook signature")
 	}
 	e.mu.Lock()
+	original := e.attempts[e.byExternal[event.ExternalReference]]
+	if original == nil {
+		e.mu.Unlock()
+		return Attempt{}, errors.New("collection attempt not found")
+	}
+	source := e.providerForLocked(original.Provider)
+	if source == nil || !source.VerifyWebhook(event) {
+		e.mu.Unlock()
+		return Attempt{}, errors.New("original provider webhook authentication failed")
+	}
 	if e.events[event.EventID] {
 		id := e.byExternal[event.ExternalReference]
 		attempt := e.attempts[id]
@@ -488,7 +545,7 @@ func (e *Engine) ProcessWebhook(_ context.Context, event Webhook) (Attempt, erro
 		// a half-applied attempt. Narrowing it means moving the reservation
 		// invariants into the database and is scheduled as its own change
 		// rather than bolted on here.
-		_, _, err := e.payments.Record(payments.RecordInput{ObligationID: attempt.ObligationID, SourceType: payments.SourceCollected, AmountKobo: event.SucceededAmountKobo, Provider: e.provider.Name(), ProviderReference: event.ProviderCollectionID, PaidAt: time.Time{}, RecordedBy: payments.CollectionRecorder, IdempotencyKey: payments.CollectionKeyPrefix + attempt.ID})
+		_, _, err := e.payments.RecordContext(ctx, payments.RecordInput{ObligationID: attempt.ObligationID, SourceType: payments.SourceCollected, AmountKobo: event.SucceededAmountKobo, Provider: attempt.Provider, ProviderReference: event.ProviderCollectionID, PaidAt: time.Time{}, RecordedBy: payments.CollectionRecorder, IdempotencyKey: payments.CollectionKeyPrefix + attempt.ID})
 		if err != nil {
 			e.mu.Unlock()
 			return Attempt{}, err
@@ -538,12 +595,16 @@ func (e *Engine) Reconcile(ctx context.Context, attemptID string) (Attempt, erro
 	}
 	saved := cloneAttempt(*attempt)
 	e.mu.Unlock()
+	provider, routeErr := e.providerFor(saved.Provider)
+	if routeErr != nil {
+		return Attempt{}, routeErr
+	}
 	var response Response
 	var err error
-	if lookup, ok := e.provider.(ReferenceLookupProvider); ok && saved.MandateReference != "" {
-		response, err = lookup.GetByReference(ctx, Request{CollectionReference: saved.ProviderCollectionID, MandateReference: saved.MandateReference, ExternalReference: saved.ExternalReference, ObligationID: saved.ObligationID, AmountKobo: saved.RequestedAmountKobo, Currency: "NGN"})
+	if lookup, ok := provider.(ReferenceLookupProvider); ok && saved.MandateReference != "" {
+		response, err = lookup.GetByReference(ctx, Request{SettlementRoute: saved.SettlementRoute, CollectionReference: saved.ProviderCollectionID, MandateReference: saved.MandateReference, ExternalReference: saved.ExternalReference, ObligationID: saved.ObligationID, AmountKobo: saved.RequestedAmountKobo, Currency: "NGN"})
 	} else if saved.ProviderCollectionID != "" {
-		response, err = e.provider.Get(ctx, saved.ProviderCollectionID)
+		response, err = provider.Get(ctx, saved.ProviderCollectionID)
 	} else {
 		return Attempt{}, errors.New("provider collection identity not available; reconciliation required")
 	}
@@ -562,7 +623,7 @@ func (e *Engine) Reconcile(ctx context.Context, attemptID string) (Attempt, erro
 	encoded, _ := json.Marshal(response)
 	digest := sha256.Sum256(encoded)
 	event := Webhook{EventID: fmt.Sprintf("reconcile-%s-%x", attemptID, digest), ExternalReference: saved.ExternalReference, State: response.State, ProviderCollectionID: response.ProviderCollectionID, SucceededAmountKobo: response.SucceededAmountKobo, FailureCode: response.FailureCode, Retryable: response.Retryable, SettlementState: response.SettlementState, SettlementReference: response.SettlementReference}
-	if signer, ok := e.provider.(WebhookSigner); ok {
+	if signer, ok := provider.(WebhookSigner); ok {
 		event.Signature = signer.Sign(event)
 	}
 	return e.ProcessWebhook(ctx, event)
@@ -606,9 +667,10 @@ func (e *Engine) Cancel(ctx context.Context, attemptID string) (Attempt, error) 
 		return Attempt{}, errors.New("attempt cannot be cancelled in its current state")
 	}
 	providerID := attempt.ProviderCollectionID
-	provider, ok := e.provider.(CancellationProvider)
+	source := e.providerForLocked(attempt.Provider)
+	provider, ok := source.(CancellationProvider)
 	capabilities := Capabilities{}
-	if cp, supported := e.provider.(CapabilityProvider); supported {
+	if cp, supported := source.(CapabilityProvider); supported {
 		capabilities = cp.Capabilities()
 	}
 	if !ok || !capabilities.Reversal {
@@ -668,7 +730,13 @@ func retryClass(retryable bool, _ string) string {
 	}
 	return "final"
 }
-func cloneAttempt(v Attempt) Attempt { return v }
+func cloneAttempt(v Attempt) Attempt {
+	if v.SettlementRoute != nil {
+		route := *v.SettlementRoute
+		v.SettlementRoute = &route
+	}
+	return v
+}
 
 // OptimizeCollectionWindow returns the earliest safe banking window for an automated
 // debit in Nigeria (Africa/Lagos timezone, UTC+1). It avoids weekend interbank

@@ -14,11 +14,14 @@ import (
 // checking only the ledger and job tables; a migrated-but-partial database
 // must never be reported as ready.
 var RequiredPersistenceObjects = []string{
+	"app.fee_authorizations", "app.fee_debits", "app.fee_bank_receipts", "app.split_fee_allocations", "app.native_identity_history",
+	"app.buyer_verification_intents", "app.mandate_authorization_intents",
+	"app.collection_settlement_routes", "app.seller_settlement_receipts", "app.native_identity_sessions", "app.fee_invoices", "app.fee_invoice_lines", "app.fee_invoice_receipts", "app.invoice_billing_approvals",
 	"app.request_rate_limits",
 	"app.platform_settings", "app.platform_settings_history", "app.platform_governance", "app.platform_owner_guard",
 	"app.admin_review_queue", "app.admin_change_history", "app.admin_change_requests", "app.admin_change_events", "app.admin_review_assignments", "app.admin_assignment_events",
 	"app.business_policy_defaults", "app.business_policy_changes", "app.business_policy_events",
-	"app.notification_delivery_receipts",
+	"app.notification_delivery_receipts", "app.message_submissions", "app.message_routes", "app.runtime_process_status", "app.settlement_registrations",
 	"app.collection_notice_acknowledgements",
 	"app.financial_review_cases",
 	"app.financial_review_events",
@@ -101,6 +104,13 @@ var RequiredPersistenceObjects = []string{
 // PostgreSQL authentication adapter. A complete table set without these
 // functions would still fail at runtime.
 var RequiredPersistenceFunctions = []string{
+	"app.fee_billing_work()", "app.fee_notice_scope(text,text,text)", "app.guard_fee_authorization()", "app.guard_fee_debit()", "app.guard_native_identity()",
+	"app.settlement_registration_review()", "app.invoice_billing_work()", "app.invoice_billing_review()",
+	"app.provider_work()",
+	"app.recovery_account(text,text)", "app.collection_mandate_capacity(uuid)", "app.drawdown_expiry_tenants(text,integer)",
+	"app.financial_change_identity(text,boolean)", "app.lock_transfer_recipient(uuid)", "app.financial_review_differences(boolean)",
+	"app.admin_user_directory(text,integer,uuid)", "app.admin_organization_directory(text,integer,uuid)", "app.admin_audit_directory(text,integer,uuid)", "app.admin_team_directory(uuid)", "app.admin_money_summary(uuid)", "app.admin_money_activity(integer,uuid)",
+	"app.pilot_metric(timestamptz,timestamptz,text,text)", "app.pilot_reconciliation(timestamptz,timestamptz,text)",
 	"app.public_payment_receipt(uuid)", "app.current_governance_mode()", "app.enforce_owner_lifecycle()", "app.reject_settings_history_mutation()",
 	"app.touch_session(uuid,timestamptz)", "app.sync_drawdown_exposure()", "app.record_rate_limit_attempt(bytea,interval)", "app.prune_rate_limits(interval)",
 	"app.has_admin_role(uuid,text[])", "app.admin_actor_name(uuid)", "app.admin_policy_impact(jsonb)", "app.admin_attention(uuid,text[])", "app.admin_attention_details()", "app.is_active_policy_admin(uuid)", "app.business_policy()", "app.guard_offer_policy()", "app.guard_exposure_policy()",
@@ -123,6 +133,9 @@ var RequiredPersistenceFunctions = []string{
 }
 
 var RequiredPersistenceColumns = []string{
+	"app.fee_invoice_lines.collected_at_issue_kobo", "app.fees.collected_kobo", "app.fee_debits.review_required",
+	"app.fees.waived_kobo", "app.fee_invoice_receipts.direction", "app.notifications.created_at",
+	"app.credit_requests.invoice_document_id", "app.notifications.provider_checked_at",
 	"app.agreement_versions.canonical_bytes",
 	"app.notifications.send_started_at",
 	"app.provider_webhook_inbox.lease_expires_at",
@@ -196,8 +209,8 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	if err := p.inner.QueryRow(ctx, `SELECT COALESCE(MAX(version_id),0) FROM (SELECT DISTINCT ON(version_id) version_id,is_applied FROM public.goose_db_version ORDER BY version_id,id DESC) v WHERE is_applied`).Scan(&version); err != nil {
 		return fmt.Errorf("check required migration version: %w", err)
 	}
-	if version < 117 {
-		return fmt.Errorf("database migrations are incomplete: version %d, require at least 117", version)
+	if version < 148 {
+		return fmt.Errorf("database migrations are incomplete: version %d, require at least 148", version)
 	}
 	return nil
 }

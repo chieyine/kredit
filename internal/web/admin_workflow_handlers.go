@@ -201,8 +201,8 @@ func (s *Server) proposeAdminChange(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	var supplierOrgID string
-	if err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT supplier_organization_id::text FROM app.obligations WHERE id=$1::uuid`, in.ObligationID).Scan(&supplierOrgID); err != nil {
+	_, supplierOrgID, err := s.financialChangeIdentity(r, user.ID, in.ObligationID, false)
+	if err != nil {
 		policyFailure(w, err)
 		return
 	}
@@ -247,8 +247,11 @@ func (s *Server) decideFinancialChange(w http.ResponseWriter, r *http.Request, b
 	if !decodeJSONRequest(w, r, &in) {
 		return
 	}
-	var supplierOrgID string
-	_ = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT o.supplier_organization_id::text FROM app.admin_change_requests c JOIN app.obligations o ON o.id=c.obligation_id WHERE c.id=$1::uuid`, r.PathValue("changeID")).Scan(&supplierOrgID)
+	_, supplierOrgID, err := s.financialChangeIdentity(r, user.ID, r.PathValue("changeID"), true)
+	if err != nil {
+		policyFailure(w, err)
+		return
+	}
 	reqCtx := r.Context()
 	if supplierOrgID != "" {
 		reqCtx = db.WithTenantContext(reqCtx, user.ID, supplierOrgID)
@@ -354,4 +357,18 @@ func (s *Server) adminHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"items": json.RawMessage(result)})
+}
+
+func (s *Server) financialChangeIdentity(r *http.Request, actor, reference string, change bool) (string, string, error) {
+	tx, err := s.runtime.Database.Raw().Begin(r.Context())
+	if err != nil {
+		return "", "", err
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	if _, err = tx.Exec(r.Context(), `SELECT set_config('app.current_user_id',$1,true)`, actor); err != nil {
+		return "", "", err
+	}
+	var id, organization string
+	err = tx.QueryRow(r.Context(), `SELECT obligation_id,organization_id FROM app.financial_change_identity($1,$2)`, reference, change).Scan(&id, &organization)
+	return id, organization, err
 }

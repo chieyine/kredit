@@ -34,7 +34,7 @@
 		})(card);
 		return card;
 	}
-	const format = (metric: any) => metric.unit === 'percent' ? `${metric.value.toFixed(1)}%` : metric.unit === 'kobo' ? new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(metric.value/100) : metric.unit === 'cases_per_100_active_suppliers' ? `${metric.value.toFixed(1)} per 100` : `${metric.value.toFixed(metric.unit === 'hours' || metric.unit === 'days' ? 1 : 0)} ${metric.unit}`;
+	const format = (metric: any) => metric.target_status === 'no_data' ? 'No data yet' : metric.unit === 'percent' ? `${metric.value.toFixed(1)}%` : metric.unit === 'kobo' ? new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN'}).format(metric.value/100) : metric.unit === 'cases_per_100_active_suppliers' ? `${metric.value.toFixed(1)} per 100` : `${metric.value.toFixed(metric.unit === 'hours' || metric.unit === 'days' ? 1 : 0)} ${metric.unit}`;
 	const findMetric = (key: string) => [...(scorecard?.kpis ?? []), ...(scorecard?.drivers ?? []), ...(scorecard?.guardrails ?? [])].find((item: any) => item.key === key);
 	const showMetric = (key: string) => { const item = findMetric(key); return item ? format(item) : 'Not measured yet'; };
 	const feedbackValue = () => scorecard?.feedback?.total ? `${scorecard.feedback.clear_percent.toFixed(1)}%` : 'No answers yet';

@@ -115,7 +115,9 @@ type Service interface {
 	RecordKYBDecisionForReference(organizationID, actorUserID, providerReference string, expectedVersion int64, state, reason string, expiresAt time.Time) (Profile, Summary, error)
 	UpdateSettlement(organizationID, actorUserID string, input SettlementInput) (Profile, Summary, error)
 	RecordSettlementDecision(organizationID, actorUserID, state, reason string) (Profile, Summary, error)
+	RecordSettlementDecisionForReference(organizationID, actorUserID, providerReference string, expectedVersion int64, state, reason string) (Profile, Summary, error)
 	UpdateBilling(organizationID, actorUserID string, input BillingInput) (Profile, Summary, error)
+	ApproveInvoiceBilling(organizationID, actorUserID, reference string, version int64, instructions string) (Profile, Summary, error)
 	UpdateCreditPolicy(organizationID, actorUserID string, input CreditPolicyInput) (Profile, Summary, error)
 	AcceptConsents(organizationID, actorUserID string, expectedVersion int64, termsVersion, privacyVersion string) (Profile, Summary, error)
 	SyncSecurity(organizationID, actorUserID string, ownerMFA, financeMFAComplete bool) (Profile, Summary, error)
@@ -279,9 +281,15 @@ func (s *Store) UpdateSettlement(org, actor string, in SettlementInput) (Profile
 	})
 }
 func (s *Store) RecordSettlementDecision(org, actor, state, reason string) (Profile, Summary, error) {
-	return s.mutate(org, actor, "settlement.decision", 0, func(p *Profile, _ legalpublication.Versions) error {
+	return s.RecordSettlementDecisionForReference(org, actor, "", 0, state, reason)
+}
+func (s *Store) RecordSettlementDecisionForReference(org, actor, ref string, version int64, state, reason string) (Profile, Summary, error) {
+	return s.mutate(org, actor, "settlement.decision", version, func(p *Profile, _ legalpublication.Versions) error {
 		if state != "provider_review" && state != "verified" && state != "rejected" && state != "expired" {
 			return errors.New("invalid settlement provider state")
+		}
+		if ref != "" && p.SettlementProviderReference != ref {
+			return errors.New("settlement reference changed; refresh before applying the decision")
 		}
 		if p.SettlementProviderReference == "" {
 			return errors.New("settlement destination has not been submitted")
@@ -298,10 +306,19 @@ func (s *Store) UpdateBilling(org, actor string, in BillingInput) (Profile, Summ
 		if in.Method != "split_settlement" && in.Method != "authorized_debit" && in.Method != "consolidated_invoice" {
 			return errors.New("invalid billing method")
 		}
+		if in.Method == "consolidated_invoice" || in.Method == "split_settlement" {
+			in.ProviderReference = "invoice-" + identifier.New()
+		}
 		if strings.TrimSpace(in.ProviderReference) == "" {
 			return errors.New("billing provider reference is required")
 		}
-		p.BillingMethod, p.BillingProviderReference, p.BillingCycle, p.BillingState, p.BillingChangedAt = in.Method, strings.TrimSpace(in.ProviderReference), strings.TrimSpace(in.Cycle), "configured", s.now()
+		if in.Cycle != "per_settlement" && in.Cycle != "weekly" && in.Cycle != "monthly" {
+			return errors.New("choose a supported billing cycle")
+		}
+		if (in.Method == "split_settlement") != (in.Cycle == "per_settlement") {
+			return errors.New("split settlement uses each payment; debit and invoice billing use a weekly or monthly cycle")
+		}
+		p.BillingMethod, p.BillingProviderReference, p.BillingCycle, p.BillingState, p.BillingChangedAt = in.Method, strings.TrimSpace(in.ProviderReference), in.Cycle, "pending_verification", s.now()
 		return nil
 	})
 }
@@ -423,3 +440,21 @@ func (s *Store) revisionLocked(p *Profile, actor, change string) {
 
 // SetLegalReader is configured before the store begins serving requests.
 func (s *Store) SetLegalReader(reader legalpublication.Reader) { s.legalReader = reader }
+
+// Approval is bound to the exact arrangement the seller requested.
+func (s *Store) ApproveInvoiceBilling(org, actor, ref string, version int64, instructions string) (Profile, Summary, error) {
+	if version <= 0 || ref == "" || len(strings.TrimSpace(instructions)) < 20 || len(instructions) > 2000 {
+		return Profile{}, Summary{}, errors.New("review the current arrangement and provide payment instructions")
+	}
+	return s.mutate(org, actor, "billing.approved", version, func(p *Profile, _ legalpublication.Versions) error {
+		if p.BillingState != "pending_verification" || (p.BillingMethod != "consolidated_invoice" && p.BillingMethod != "split_settlement") || p.BillingProviderReference != ref {
+			return errors.New("billing arrangement changed; refresh before approving")
+		}
+		if p.BillingMethod == "split_settlement" && p.SettlementState != "verified" {
+			return errors.New("verify the seller bank before approving fee deductions")
+		}
+		p.BillingState = "configured"
+		p.BillingChangedAt = s.now()
+		return nil
+	})
+}

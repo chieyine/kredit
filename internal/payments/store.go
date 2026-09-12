@@ -85,6 +85,7 @@ type AllocationTarget struct {
 // allocation, balance, fee, and journal changes atomically and preserve
 // idempotency across process restarts.
 type Service interface {
+	RecordContext(context.Context, RecordInput) (Payment, Allocation, error)
 	Record(RecordInput) (Payment, Allocation, error)
 	Reverse(paymentID, actor, reason string) (Payment, error)
 	// List must report failure rather than return an empty history. Showing a

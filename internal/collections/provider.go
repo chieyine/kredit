@@ -26,15 +26,17 @@ const (
 )
 
 type Capabilities struct {
-	AuthorizationSession bool `json:"authorization_session"`
-	OneTime              bool `json:"one_time_collection"`
-	Recurring            bool `json:"recurring_collection"`
-	Variable             bool `json:"variable_amount_collection"`
-	Settlement           bool `json:"settlement_reconciliation"`
-	Reversal             bool `json:"reversal"`
-	MultiAccount         bool `json:"multi_account_collection"`
-	PartialRecovery      bool `json:"partial_recovery"`
-	AutomaticRetries     bool `json:"automatic_retries"`
+	MinimumAmountKobo    ledger.Money `json:"minimum_amount_kobo,omitempty"`
+	MaximumAmountKobo    ledger.Money `json:"maximum_amount_kobo,omitempty"`
+	AuthorizationSession bool         `json:"authorization_session"`
+	OneTime              bool         `json:"one_time_collection"`
+	Recurring            bool         `json:"recurring_collection"`
+	Variable             bool         `json:"variable_amount_collection"`
+	Settlement           bool         `json:"settlement_reconciliation"`
+	Reversal             bool         `json:"reversal"`
+	MultiAccount         bool         `json:"multi_account_collection"`
+	PartialRecovery      bool         `json:"partial_recovery"`
+	AutomaticRetries     bool         `json:"automatic_retries"`
 }
 
 // ReferenceLookupProvider reconciles ambiguous submissions without requiring a
@@ -61,6 +63,7 @@ const (
 )
 
 type Request struct {
+	SettlementRoute     *SettlementRoute `json:"settlement_route,omitempty"`
 	CollectionReference string
 	MandateReference    string
 	ExternalReference   string

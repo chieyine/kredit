@@ -29,6 +29,7 @@ const DefaultBaseURL = "https://api.withmono.com"
 type CustomerResolver func(context.Context, string, string) (string, error)
 
 type Client struct {
+	accountName                                 string
 	initiationDisabled                          bool
 	live                                        bool
 	baseURL, secret, webhookSecret, redirectURL string
@@ -78,9 +79,19 @@ func (c *Client) ReconciliationOnly() *Client {
 	copy.initiationDisabled = true
 	return &copy
 }
-func (c *Client) Name() string { return "mono-sweep" }
+func (c *Client) Name() string {
+	if c.accountName != "" {
+		return c.accountName
+	}
+	return "mono-sweep"
+}
+func (c *Client) WithAccountName(name string) *Client {
+	copy := *c
+	copy.accountName = name
+	return &copy
+}
 func (c *Client) Capabilities() collections.Capabilities {
-	return collections.Capabilities{AuthorizationSession: true, Recurring: true, Variable: true, MultiAccount: true, PartialRecovery: c.partial}
+	return collections.Capabilities{MinimumAmountKobo: 20000, MaximumAmountKobo: 2500000000, AuthorizationSession: true, Recurring: true, Variable: true, MultiAccount: true, PartialRecovery: c.partial}
 }
 
 type envelope[T any] struct {
@@ -136,7 +147,13 @@ func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.Aut
 	if in.RequiredUntil.After(end) {
 		end = in.RequiredUntil.Add(24 * time.Hour)
 	}
-	reference := strings.ReplaceAll(identifier.FromKey("mono-mandate", in.BusinessID+":"+in.Purpose), "-", "")
+	reference := in.Reference
+	if reference == "" {
+		reference = strings.ReplaceAll(identifier.FromKey("mono-mandate", in.BusinessID+":"+in.Purpose), "-", "")
+	}
+	if !validReference(reference) {
+		return mandates.Mandate{}, errors.New("valid authorization reference is required")
+	}
 	body := map[string]any{"amount": in.AmountCeiling, "type": "recurring-debit", "method": "mandate", "mandate_type": "sweep", "debit_type": "variable", "allow_partial_sweep": c.partial, "description": "Kredit trade credit repayments", "reference": reference, "redirect_url": c.redirectURL, "customer": map[string]string{"id": customer}, "start_date": start.Format("2006-01-02"), "end_date": end.Format("2006-01-02"), "meta": map[string]string{"kredit_business_id": in.BusinessID}}
 	var out envelope[mandateData]
 	if err = c.request(ctx, http.MethodPost, "/v2/payments/initiate", body, &out); err != nil {
@@ -146,10 +163,10 @@ func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.Aut
 	if id == "" {
 		id = out.Data.ID
 	}
-	if !successfulEnvelope(out.Status) || !validReference(id) || validateHostedAuthorizationURL(out.Data.MonoURL) != nil {
+	if !successfulEnvelope(out.Status) || !validReference(id) || (out.Data.Reference != "" && out.Data.Reference != reference) || validateHostedAuthorizationURL(out.Data.MonoURL) != nil {
 		return mandates.Mandate{}, errors.New("mono returned an incomplete mandate authorization")
 	}
-	return mandates.Mandate{SupplierOrganizationID: in.SupplierOrganizationID, Provider: "mono-sweep", ProviderID: id, UserID: in.UserID, BusinessID: in.BusinessID, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, AuthorizationURL: out.Data.MonoURL, StartsAt: start, EndsAt: end, Variable: true, MultiAccount: true, PartialRecovery: c.partial, CreatedAt: c.now()}, nil
+	return mandates.Mandate{ProviderAdapter: "mono", Reference: reference, SupplierOrganizationID: in.SupplierOrganizationID, Provider: c.Name(), ProviderID: id, UserID: in.UserID, BusinessID: in.BusinessID, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, AuthorizationURL: out.Data.MonoURL, StartsAt: start, EndsAt: end, Variable: true, MultiAccount: true, PartialRecovery: c.partial, CreatedAt: c.now()}, nil
 }
 func (c *Client) GetMandate(ctx context.Context, id string) (mandates.Mandate, error) {
 	if !validReference(id) {
@@ -192,7 +209,7 @@ func (c *Client) GetMandate(ctx context.Context, id string) (mandates.Mandate, e
 			status = mandates.Pending
 		}
 	}
-	return mandates.Mandate{Provider: "mono-sweep", ProviderID: id, Status: status, AmountCeiling: d.Amount, StartsAt: start, EndsAt: end, Variable: true, MultiAccount: true, PartialRecovery: c.partial}, nil
+	return mandates.Mandate{ProviderAdapter: "mono", Reference: d.Reference, Provider: c.Name(), ProviderID: id, Status: status, AmountCeiling: d.Amount, StartsAt: start, EndsAt: end, Variable: true, MultiAccount: true, PartialRecovery: c.partial}, nil
 }
 func (c *Client) CancelMandate(ctx context.Context, id, _ string) (mandates.Mandate, error) {
 	if !validReference(id) {
@@ -205,7 +222,7 @@ func (c *Client) CancelMandate(ctx context.Context, id, _ string) (mandates.Mand
 	if out.Status != "success" {
 		return mandates.Mandate{}, errors.New("mono did not confirm mandate cancellation")
 	}
-	return mandates.Mandate{Provider: "mono-sweep", ProviderID: id, Status: mandates.Cancelled}, nil
+	return mandates.Mandate{ProviderAdapter: "mono", Provider: c.Name(), ProviderID: id, Status: mandates.Cancelled}, nil
 }
 func (c *Client) RestoreAuthorization(context.Context, string) (mandates.Mandate, error) {
 	return mandates.Mandate{}, errors.New("a cancelled Mono mandate requires fresh customer authorization")
@@ -215,14 +232,20 @@ func (c *Client) Submit(ctx context.Context, in collections.Request) (collection
 	if c.initiationDisabled {
 		return collections.Response{}, errors.New("new Mono collections are disabled")
 	}
-	if in.AmountKobo <= 0 || in.Currency != "NGN" || !validReference(in.ExternalReference) {
-		return collections.Response{}, errors.New("valid NGN debit amount and reference are required")
+	if in.AmountKobo < 20000 || in.AmountKobo > 2500000000 || in.Currency != "NGN" || !validReference(in.ExternalReference) {
+		return collections.Response{}, errors.New("kredit supports debits between NGN 200 and NGN 25 million with a valid reference")
 	}
 	if !validReference(in.MandateReference) {
 		return collections.Response{}, errors.New("active provider mandate is required")
 	}
 	narration := fmt.Sprintf("Kredit repayment Ref:%s", in.ExternalReference)
 	body := map[string]any{"amount": in.AmountKobo, "reference": in.ExternalReference, "narration": narration}
+	if route := in.SettlementRoute; route != nil && route.Method == "provider_split" {
+		if c.partial || route.Provider != c.Name() || route.Connection != c.ConnectionIdentity() || route.NetAmountKobo <= 0 || route.FeeAmountKobo < 0 || route.NetAmountKobo+route.FeeAmountKobo != in.AmountKobo || !validReference(route.Destination) {
+			return collections.Response{}, errors.New("the original settlement account and exact split must match this collection")
+		}
+		body["split"] = map[string]any{"type": "fixed", "fee_bearer": "business", "distribution": []map[string]any{{"account": route.Destination, "value": route.NetAmountKobo}}}
+	}
 	var out envelope[debitData]
 	if err := c.request(ctx, http.MethodPost, "/v3/payments/mandates/"+url.PathEscape(in.MandateReference)+"/debit", body, &out); err != nil {
 		return collections.Response{}, err
@@ -268,6 +291,14 @@ func debitResponse(d debitData, mandate, reference string, requested ledger.Mone
 	case "failed":
 		state = collections.ProviderFailed
 	}
+	// Timeout/duplicate/processing codes do not prove that money stayed put,
+	// even when the envelope labels the attempt failed.
+	if state == collections.ProviderFailed {
+		switch strings.ToLower(d.ResponseCode) {
+		case "01", "09", "26", "68", "94", "97", "m01":
+			state = collections.ProviderPending
+		}
+	}
 	// A final full-success result cannot also report an outstanding sweep.
 	if state == collections.ProviderSucceeded && d.Pending > 0 {
 		state = collections.ProviderPending
@@ -285,7 +316,7 @@ func debitResponse(d debitData, mandate, reference string, requested ledger.Mone
 		state = collections.ProviderPending
 		amount = 0
 	}
-	return collections.Response{State: state, ProviderCollectionID: mandate + ":" + reference, SucceededAmountKobo: amount, FailureCode: d.ResponseCode, Retryable: false}
+	return collections.Response{State: state, ProviderCollectionID: mandate + ":" + reference, SucceededAmountKobo: amount, FailureCode: d.ResponseCode, Retryable: state == collections.ProviderFailed && retryableFailureCode(d.ResponseCode)}
 }
 func successfulEnvelope(status string) bool { return status == "successful" || status == "success" }
 
@@ -349,4 +380,15 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 }
 func (c *Client) VerifySecret(value string) bool {
 	return value != "" && subtle.ConstantTimeCompare([]byte(value), []byte(c.webhookSecret)) == 1
+}
+
+// The default account limit is personal-account safe until a contracted corporate
+// account classification is available. Never infer the account type from a name.
+func retryableFailureCode(code string) bool {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "51", "61", "65", "91", "92":
+		return true
+	default:
+		return false
+	}
 }

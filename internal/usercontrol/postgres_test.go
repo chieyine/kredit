@@ -146,12 +146,12 @@ func TestPostgresRecoveryAndPrivacyControls(t *testing.T) {
 	if err = json.Unmarshal(payload, &exported); err != nil {
 		t.Fatal(err)
 	}
-	for _, section := range []string{"payments", "seller_consents", "notification_preferences", "bank_permissions", "uploaded_files", "correction_decisions"} {
+	for _, section := range []string{"payments", "seller_consents", "notification_preferences", "bank_permissions", "uploaded_files", "correction_decisions", "native_identity_checks", "identity_decision_history", "fee_bank_consents"} {
 		if _, ok := exported[section]; !ok {
 			t.Fatalf("missing export section %s", section)
 		}
 	}
-	if strings.Contains(string(payload), "token_hash") || strings.Contains(string(payload), "destination_ciphertext") {
+	if strings.Contains(string(payload), "identity_fingerprint") || strings.Contains(string(payload), "authorization_url") || strings.Contains(string(payload), "token_hash") || strings.Contains(string(payload), "destination_ciphertext") {
 		t.Fatal("credential data entered privacy export")
 	}
 	if _, err = s.PrivacyExport(ctx, ex.ID, owner); err == nil {

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
+	import RetainedAccounts from '$lib/components/RetainedAccounts.svelte';
+ import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import OwnerDialog from '$lib/components/OwnerDialog.svelte';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { record, text } from '$lib/api/reliable';
@@ -46,9 +47,14 @@
  let clearRuntimeSecrets = $state(false);
  let runtimeDraft = $state<Record<string,string|number|boolean>>({});
  let connectorEnabled = $state(true);
+ let requestedConnectionOpened=false;
+ let connectorAdapter = $state('');
  let connectorEndpoint = $state('');
  let connectorToken = $state('');
- function clearConnector() { connectorEndpoint = ''; connectorToken = ''; runtimeDraft = {}; clearRuntimeSecrets=false; }
+ let connectorFrom = $state('');
+ let connectorWebhookSecret = $state('');
+ let metaVerifyToken=$state(''),metaLanguage=$state('en_US'),metaAuthentication=$state(''),metaUtility=$state(''),metaMarketing=$state('');
+ function clearConnector() { metaVerifyToken='';metaLanguage='en_US';metaAuthentication='';metaUtility='';metaMarketing=''; connectorAdapter = '';  connectorEndpoint = ''; connectorToken = ''; connectorFrom = ''; connectorWebhookSecret = ''; runtimeDraft = {}; clearRuntimeSecrets=false; }
 
 	let settingIntent: MutationIntent | null = null;
  let governanceIntent: MutationIntent | null = null;
@@ -117,10 +123,15 @@
              keys.add(item.key as string);
              if(item.requires_restart){
               if(!Array.isArray(item.connection_fields))throw new Error('Connection fields unavailable.');
-              for(const value of item.connection_fields){const field=record(value);text(field.key);text(field.label);if(!['password','boolean','number','url','text'].includes(text(field.kind)))throw new Error('Unsupported connection field.');}
+              for(const value of item.connection_fields){const field=record(value);text(field.key);text(field.label);if(!['password','boolean','number','url','text','retained'].includes(text(field.kind)))throw new Error('Unsupported connection field.');}
              }
              return item as Setting;
             });
+            if(!requestedConnectionOpened){
+             const requested=new URL(window.location.href).searchParams.get('connection');
+             const target=settings.find(item=>item.key===requested);
+             if(target&&isOwner){requestedConnectionOpened=true;openEdit(target)}
+            }
 			if (res.governance) {
 				governance = res.governance;
 				newGovMode = res.governance?.mode;
@@ -154,10 +165,10 @@
 				key: editingSetting.key,
                 clear_credentials: editingSetting.requires_restart && clearRuntimeSecrets,
  expected_version: editingSetting.version,
-				value: editingSetting.requires_restart ? JSON.stringify(runtimeDraft) : editingSetting.is_secret ? JSON.stringify({ enabled: connectorEnabled, endpoint: connectorEnabled ? connectorEndpoint.trim() : "", token: connectorEnabled ? connectorToken.trim() : "" }) : editDraftValue,
+				value: editingSetting.requires_restart ? JSON.stringify(runtimeDraft) : editingSetting.is_secret ? JSON.stringify({ adapter: connectorAdapter, verify_token: connectorEnabled?metaVerifyToken.trim():"",language:metaLanguage.trim(),authentication_template:metaAuthentication.trim(),utility_template:metaUtility.trim(),marketing_template:metaMarketing.trim(), enabled: connectorEnabled, endpoint: connectorEnabled ? connectorEndpoint.trim() : "", token: connectorEnabled ? connectorToken.trim() : "", from: connectorEnabled ? connectorFrom.trim() : "", webhook_secret: connectorEnabled ? connectorWebhookSecret.trim() : "" }) : editDraftValue,
 				reason: editReason
 			}, value => {const item=record(record(value).setting);if(item.key!==expectedSetting.key||!Number.isSafeInteger(item.version)||Number(item.version)<=expectedSetting.version)throw new Error('Setting save was not confirmed');return item;});
-			message = editingSetting.requires_restart ? 'Connection saved. Restart the API and worker to apply it; live operation still needs verification.' : `${editingSetting.description} — saved.`;
+			message = editingSetting.requires_restart ? 'Connection saved. Check Launch setup for application status; live operation still needs confirmation.' : `${editingSetting.description} — saved.`;
 			previewDiffModal = false;
             clearConnector();
 			editingSetting = null;
@@ -388,6 +399,7 @@
                                     <input id={`connection-${field.key}`} type="password" bind:value={runtimeDraft[field.key]} autocomplete="new-password" disabled={busy} placeholder="Leave blank to keep current" />
                                 {:else if field.kind === 'url'}
                                     <input id={`connection-${field.key}`} type="url" bind:value={runtimeDraft[field.key]} disabled={busy} />
+                                {:else if field.kind==='retained'}<RetainedAccounts bind:value={runtimeDraft[field.key]} disabled={busy} identity={field.key==='RetainedIdentityProviders'} />
                                 {:else}<input id={`connection-${field.key}`} type="text" bind:value={runtimeDraft[field.key]} disabled={busy} />{/if}
                             {/each}
                         {:else if editingSetting.is_secret}
@@ -395,9 +407,39 @@
                                 <option value={true}>Connect or replace credentials</option>
                                 <option value={false}>Disable this channel</option>
                             </select>
-                            <p>Use a service that supports Kredit’s notification connector format. A vendor API key alone may not work. Changes apply to the next delivery in staging and production; development keeps using test delivery.</p>
+                            <p>Choose the provider connection for new messages. Existing messages keep their original connection.</p>
                             {#if connectorEnabled}
-                                <label for="connector-endpoint">Connector HTTPS address</label>
+                                <label for="connector-adapter">Provider adapter</label>
+                                <select id="connector-adapter" bind:value={connectorAdapter} disabled={busy}>
+                                  <option value="">Default for this channel</option>
+                                  {#if editingSetting.key === 'integrations.notifications.email'}<option value="sendly">Sendly</option>{/if}
+                                  {#if editingSetting.key === 'integrations.notifications.sms'}<option value="mesaj">Mesaj</option>{/if}
+                                  {#if editingSetting.key === 'integrations.notifications.whatsapp'}<option value="meta">Meta WhatsApp Cloud API</option>{/if}
+                                  <option value="connector">Another provider through Kredit connector v1</option>
+                                </select>
+                                {#if connectorAdapter === 'meta'}
+                                <p>Use the versioned Meta messages address containing your phone-number ID. Templates must be approved by Meta.</p>
+                                <label for="meta-language">Template language code</label><input id="meta-language" bind:value={metaLanguage} required disabled={busy} placeholder="en_US" />
+                                <label for="meta-auth">Authentication template with copy-code button</label><input id="meta-auth" bind:value={metaAuthentication} required disabled={busy} />
+                                <label for="meta-utility">Utility template with one message-text placeholder</label><input id="meta-utility" bind:value={metaUtility} required disabled={busy} />
+                                <label for="meta-marketing">Marketing template with one message-text placeholder</label><input id="meta-marketing" bind:value={metaMarketing} required disabled={busy} />
+                                <label for="meta-secret">Meta app secret</label><input id="meta-secret" type="password" bind:value={connectorWebhookSecret} required minlength="32" autocomplete="new-password" disabled={busy} />
+                                <label for="meta-verify">Webhook verification token</label><input id="meta-verify" type="password" bind:value={metaVerifyToken} required minlength="32" autocomplete="new-password" disabled={busy} />
+                                <p>Set Meta's callback URL to your public API address followed by <code>/api/v1/webhooks/meta</code>. Use the same verification token and subscribe to messages.</p>
+                                {:else if connectorAdapter === 'connector'}
+                                <p>Use a connector implementing Kredit's send and authenticated delivery-status contract. Changing this connection applies to new messages; existing messages retain their original provider.</p>
+                                {:else if editingSetting.key === 'integrations.notifications.email'}
+                                <p>Use https://api.sendlyai.com/v1/messages and a live Sendly API key. Verify your kredit.ng sending domain in Sendly first.</p>
+                                <label for="connector-from">Sender email</label>
+                                <input id="connector-from" type="email" bind:value={connectorFrom} placeholder="hello@kredit.ng" required disabled={busy} />
+                                <label for="connector-webhook-secret">Sendly webhook signing secret</label>
+                                <input id="connector-webhook-secret" type="password" bind:value={connectorWebhookSecret} autocomplete="new-password" minlength="32" required disabled={busy} />
+                                {:else if editingSetting.key === 'integrations.notifications.sms'}
+                                <p>Use https://api.mesaj.cloud:25274/client/sms/send/bulk and your Mesaj bearer token. The provider must have a valid HTTPS certificate.</p>
+                                <label for="connector-from">Approved Mesaj sender ID</label>
+                                <input id="connector-from" type="text" bind:value={connectorFrom} maxlength="11" pattern="[A-Za-z0-9]+" required disabled={busy} />
+                                {/if}
+                                <label for="connector-endpoint">Provider HTTPS address</label>
                                 <input id="connector-endpoint" type="url" bind:value={connectorEndpoint} placeholder="https://your-connector.example/send" required disabled={busy} />
                                 <label for="connector-token">Connector access token</label>
                                 <input id="connector-token" type="password" bind:value={connectorToken} autocomplete="new-password" required disabled={busy} />
@@ -421,7 +463,7 @@
                         <div class="diff-preview"><h3>Fields being changed</h3>
                             {#each editingSetting.connection_fields || [] as field}
                                 {#if field.kind === 'password' ? clearRuntimeSecrets || runtimeDraft[field.key] !== '' : runtimeDraft[field.key] !== editingSetting.connection_values?.[field.key]}
-                                    <p><strong>{field.label}:</strong> {field.kind === 'password' ? (runtimeDraft[field.key] ? 'Replace hidden value' : 'Remove current value') : `${readable(editingSetting.connection_values?.[field.key])} → ${readable(runtimeDraft[field.key])}`}</p>
+                                    <p><strong>{field.label}:</strong> {field.kind === 'retained' ? 'Update saved accounts; credentials remain hidden' : field.kind === 'password' ? (runtimeDraft[field.key] ? 'Replace hidden value' : 'Remove current value') : `${readable(editingSetting.connection_values?.[field.key])} → ${readable(runtimeDraft[field.key])}`}</p>
                                 {/if}
                             {/each}
                         </div>
@@ -429,7 +471,7 @@
                     <div class="diff-preview">
 						<h3>What changes</h3>
 						<div class="diff-row before"><span class="diff-label">Now</span><strong>{editingSetting.is_secret ? (editingSetting.version ? 'Saved configuration' : 'Deployment configuration, if available') : readable(editingSetting.value)}</strong></div>
-						<div class="diff-row after"><span class="diff-label">After</span><strong>{editingSetting.requires_restart ? 'Saved configuration; applies after API and worker restart' : editingSetting.is_secret ? (connectorEnabled ? 'Replace connection; delivery still needs verification' : 'Channel disabled') : readable(editDraftValue)}</strong></div>
+						<div class="diff-row after"><span class="diff-label">After</span><strong>{editingSetting.requires_restart ? 'Saved configuration; follow application status in Launch setup' : editingSetting.is_secret ? (connectorEnabled ? 'Replace connection; delivery still needs verification' : 'Channel disabled') : readable(editDraftValue)}</strong></div>
 					</div>
 
 					<div class="form-group">

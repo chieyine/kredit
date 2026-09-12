@@ -11,23 +11,11 @@ operational approval.
 3. Stop feature changes. Only release-blocking fixes may enter the candidate.
 4. Record the release, rollback, incident and compliance owners.
 
-## 2. Supply approved public legal details
+## 2. Confirm the published legal documents
 
-Set these values from approved company documents. They are public values, but
-must still move through reviewed deployment configuration:
+Review the actual initial publication in `web/src/lib/server/legal-publication.ts`, `web/src/lib/legal-defaults.json` and `internal/legalpublication/versions.go`. The initial versions are `supplier-terms-v2-2026-09-07` and `privacy-v2-2026-09-07`. Entity details and publication dates are source-controlled; old `LEGAL_*` environment values do not replace them.
 
-- `LEGAL_DOCUMENTS_ACTIVE=true`
-- `LEGAL_ENTITY_NAME` — the exact registered entity operating Kredit.
-- `LEGAL_SERVICE_ADDRESS` — the approved address for notices.
-- `LEGAL_CONTACT_EMAIL` — a monitored legal/support address.
-- `PRIVACY_CONTACT_EMAIL` — a monitored privacy-rights address.
-- `LEGAL_EFFECTIVE_DATE` — `YYYY-MM-DD`.
-- `TERMS_VERSION=supplier-terms-v1`
-- `PRIVACY_VERSION=privacy-v1`
-
-Production web startup fails when a value is missing or invalid. Once active,
-the legal pages show the effective date, operator, address and contacts and
-become indexable. The versions must match supplier onboarding.
+Published updates go through the website-content workflow, keeping archived versions and the versions attached to prior agreements. Confirm that the monitored contact addresses, company details and text are approved. Public page availability and engineering completion do not prove legal approval.
 
 ## 3. Configure production
 

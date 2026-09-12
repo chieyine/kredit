@@ -2,6 +2,7 @@ package idempotency
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -23,9 +24,14 @@ type Record struct {
 	ExpiresAt    time.Time
 }
 
-func HashRequest(method, path string, body []byte) string {
-	digest := sha256.Sum256(append(append([]byte(method+"\n"+path+"\n"), body...), '\n'))
-	return hex.EncodeToString(digest[:])
+// HashRequest uses a server-held key so low-entropy private fields, such as
+// account numbers, cannot be recovered by guessing against a database digest.
+func HashRequest(method, path string, body []byte, key string) string {
+	mac := hmac.New(sha256.New, []byte(key))
+	_, _ = mac.Write([]byte(method + "\n" + path + "\n"))
+	_, _ = mac.Write(body)
+	_, _ = mac.Write([]byte{'\n'})
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 type Service interface {

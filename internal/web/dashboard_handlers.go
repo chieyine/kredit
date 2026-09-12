@@ -201,7 +201,7 @@ func (s *Server) listBuyerTradeLines(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	financialRows8, readErr8 := s.runtime.readTradeLinesForBuyer(user.ID)
+	financialRows8, readErr8 := s.runtime.readTradeLinesForBuyer(r.Context(), user.ID)
 	if financialReadError(w, readErr8) {
 		return
 	}
