@@ -13,7 +13,7 @@ import (
 )
 
 func TestNotificationReceiptsAuthenticateExactBody(t *testing.T) {
-	cfg := config.Config{Environment: "development", Currency: "NGN", MoneyUnit: "kobo", TokenHashKey: "test-only", CollectionProvider: "mock", NotificationEmailToken: strings.Repeat("e", 32)}
+	cfg := config.Config{Environment: "development", Currency: "NGN", MoneyUnit: "kobo", TokenHashKey: "test-only", CollectionProvider: "mock", NotificationEmailAdapter: "connector", NotificationEmailToken: strings.Repeat("e", 32)}
 	s := NewServer(cfg, slog.Default())
 	original := `{"event_id":"receipt","notification_event_id":"notice","message_id":"message","delivered_at":"2026-01-01T00:00:00Z"}`
 	mac := hmac.New(sha256.New, []byte(cfg.NotificationEmailToken))
@@ -22,7 +22,7 @@ func TestNotificationReceiptsAuthenticateExactBody(t *testing.T) {
 	for _, test := range []struct {
 		body, signature string
 		status          int
-	}{{original, "", 401}, {strings.Replace(original, "message\"", "changed\"", 1), signature, 401}, {original, signature, 503}} {
+	}{{original, "", 401}, {strings.Replace(original, "message\"", "changed\"", 1), signature, 401}, {original, signature, 200}} {
 		request := httptest.NewRequest("POST", "/api/v1/webhooks/notifications/email", strings.NewReader(test.body))
 		request.SetPathValue("channel", "email")
 		request.Header.Set("X-Notification-Signature", test.signature)

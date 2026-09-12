@@ -55,14 +55,15 @@ type Event struct {
 	SecurePath     string
 }
 type Message struct {
-	EventID         string
-	RecipientID     string
-	Channel         string
-	Template        string
-	TemplateVersion string
-	Body            string
-	SecureLink      string
-	Destination     string
+	AuthenticationCode string
+	EventID            string
+	RecipientID        string
+	Channel            string
+	Template           string
+	TemplateVersion    string
+	Body               string
+	SecureLink         string
+	Destination        string
 }
 type Delivery struct {
 	ID                string    `json:"id"`
@@ -116,9 +117,9 @@ func (s *Store) SendRecoveryInstructions(ctx context.Context, recipient, channel
 	}
 	body := "Your Kredit account recovery request is under review. If you did not request this, contact support."
 	if link != "" {
-		body = "Your Kredit account recovery request was approved. Continue securely: " + link
+		body = "Continue your Kredit account recovery securely: " + link + ". If you did not request this, contact support."
 	}
-	_, err := provider.Send(ctx, Message{EventID: s.newID(), RecipientID: recipient, Destination: recipient, Channel: channel, Template: "AccountRecoveryContinuation", TemplateVersion: "v1", Body: body, SecureLink: link})
+	_, err := provider.Send(ctx, Message{EventID: "recovery-" + fmt.Sprintf("%x", sha256.Sum256([]byte(link))), RecipientID: recipient, Destination: recipient, Channel: channel, Template: "AccountRecoveryContinuation", TemplateVersion: "v1", Body: body, SecureLink: link})
 	return err
 }
 
@@ -142,13 +143,14 @@ func (s *Store) SendOTP(ctx context.Context, recipient, channel, code string) er
 		return fmt.Errorf("%s OTP provider is unavailable", channel)
 	}
 	_, err := provider.Send(ctx, Message{
-		EventID:         s.newID(),
-		RecipientID:     recipient,
-		Destination:     recipient,
-		Channel:         channel,
-		Template:        "AuthenticationCode",
-		TemplateVersion: "v1",
-		Body:            "Your Kredit verification code is " + code + ". It expires shortly. Never share this code.",
+		EventID:            s.newID(),
+		RecipientID:        recipient,
+		Destination:        recipient,
+		Channel:            channel,
+		Template:           "AuthenticationCode",
+		AuthenticationCode: code,
+		TemplateVersion:    "v1",
+		Body:               "Your Kredit verification code is " + code + ". It expires shortly. Never share this code.",
 	})
 	return err
 }
@@ -490,7 +492,7 @@ func (s *Store) deliver(ctx context.Context, event Event, channel string, prefs 
 	}
 	stored.Body, stored.SecureLink = delivery.Body, delivery.SecureLink
 	if err != nil {
-		stored.State = StateFailed
+		stored.State = deliveryFailureState(err)
 		stored.FailedAt = s.now()
 		stored.FailureReason = logging.Redact(err.Error())
 	} else {
@@ -589,6 +591,12 @@ func defaultTemplate(eventType string) string {
 		return "There is an update on the problem about {{amount}}. Open Kredit to see the decision and what is left. Reference: {{reference}}. {{next_action}}"
 	case "DisputeOpened":
 		return "A problem was reported about {{amount}}. See what happens next: {{support_link}}"
+	case "FeeInvoiceIssued":
+		return "Your Kredit fee bill is ready. Open Kredit to see the charges and payment instructions. Reference: {{reference}}. {{next_action}}"
+	case "FeeInvoiceRefundRecorded":
+		return "A refund of Kredit fees has been recorded. Open your fee bill to see the bank record and remaining credit. Reference: {{reference}}. {{next_action}}"
+	case "FeeInvoicePaymentRecorded":
+		return "A payment toward your Kredit fee bill has been recorded. Open Kredit to see the remaining balance. Reference: {{reference}}. {{next_action}}"
 	case "SupplierSensitiveSettingChanged":
 		return "An important setting on your Kredit account was changed: {{reference}}. If this was not you, contact us now."
 	case "ScheduleAmendment":
@@ -763,10 +771,10 @@ func (s *Store) deliverPostgres(ctx context.Context, event Event, channel string
 	}
 	providerID, sendErr := provider.Send(ctx, Message{EventID: event.ID, RecipientID: event.RecipientID, Destination: destination, Channel: channel, Template: event.Type, TemplateVersion: templateVersion, Body: delivery.Body, SecureLink: delivery.SecureLink})
 	if sendErr != nil {
-		delivery.State = StateFailed
+		delivery.State = deliveryFailureState(sendErr)
 		delivery.FailedAt = s.now()
 		delivery.FailureReason = logging.Redact(sendErr.Error())
-		_, err = s.pool.Exec(ctx, `UPDATE app.notifications SET state='failed',failed_at=$2,failure_reason=$3,lease_expires_at=NULL,updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=0`, delivery.ID, delivery.FailedAt, delivery.FailureReason)
+		_, err = s.pool.Exec(ctx, `UPDATE app.notifications SET state=$4,failed_at=$2,failure_reason=$3,lease_expires_at=NULL,delivery_attempts=CASE WHEN $5 THEN 8 ELSE delivery_attempts END,updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=0`, delivery.ID, delivery.FailedAt, delivery.FailureReason, delivery.State, stopAutomaticDeliveryRetry(sendErr))
 		return delivery, err
 	}
 	delivery.State = StateSent
@@ -928,7 +936,7 @@ func (s *Store) failDelivery(ctx context.Context, id string, attempt int, delive
 	if deliveryErr == nil {
 		deliveryErr = errors.New("notification delivery failed")
 	}
-	_, updateErr := s.pool.Exec(ctx, `UPDATE app.notifications SET state='failed',failed_at=now(),failure_reason=$2,lease_expires_at=NULL,next_attempt_at=now() + LEAST(interval '1 hour', interval '30 seconds' * power(2, GREATEST(delivery_attempts-1,0))),updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=$3`, id, logging.Redact(deliveryErr.Error()), attempt)
+	_, updateErr := s.pool.Exec(ctx, `UPDATE app.notifications SET state=$4,failed_at=now(),failure_reason=$2,lease_expires_at=NULL,next_attempt_at=CASE WHEN $5 THEN NULL ELSE now() + LEAST(interval '1 hour', interval '30 seconds' * power(2, GREATEST(delivery_attempts-1,0))) END,delivery_attempts=CASE WHEN $5 THEN GREATEST(delivery_attempts,8) ELSE delivery_attempts END,updated_at=now() WHERE id=$1::uuid AND state='sending' AND delivery_attempts=$3`, id, logging.Redact(deliveryErr.Error()), attempt, deliveryFailureState(deliveryErr), stopAutomaticDeliveryRetry(deliveryErr))
 	if updateErr != nil {
 		return errors.Join(deliveryErr, updateErr)
 	}

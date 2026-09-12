@@ -33,7 +33,7 @@ func (s *Server) monoAdminStatus() map[string]any {
 		}
 	}
 	blockers := []string{}
-	if s.config.CollectionProvider != "mono-sweep" {
+	if s.config.CollectionProvider != s.config.MonoAccount() {
 		blockers = append(blockers, "Collection provider is not set to Mono Sweep")
 	}
 	if strings.TrimSpace(s.config.MonoSecretKey) == "" {

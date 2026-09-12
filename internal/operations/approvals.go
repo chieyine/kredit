@@ -76,7 +76,7 @@ func financialSnapshot(ctx context.Context, tx pgx.Tx, obligation string, requir
 	if err != nil {
 		return v, org, buyer, err
 	}
-	err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT sum((metadata->>'amount_kobo')::bigint) FROM app.operation_actions WHERE resource_id=$1::uuid AND action='fee_waiver'),0),COALESCE((SELECT sum(amount_kobo) FROM app.fees WHERE obligation_id=$1::uuid AND state='accrued'),0),COALESCE((SELECT jsonb_agg(jsonb_build_object('id',i.id,'principal_due_kobo',i.principal_due_kobo,'allocated_kobo',i.allocated_kobo,'collected_kobo',i.collected_kobo,'disputed_kobo',i.disputed_kobo,'due_at',i.due_at,'grace_hours',i.grace_hours,'collection_at',i.collection_at,'cancelled',i.state='CANCELLED') ORDER BY i.sequence) FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id WHERE s.obligation_id=$1::uuid),'[]'::jsonb)`, obligation).Scan(&v.Waived, &v.Accrued, &v.Items)
+	err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT sum((metadata->>'amount_kobo')::bigint) FROM app.operation_actions WHERE resource_id=$1::uuid AND action='fee_waiver'),0),COALESCE((SELECT sum(amount_kobo-waived_kobo) FROM app.fees WHERE obligation_id=$1::uuid AND state='accrued'),0),COALESCE((SELECT jsonb_agg(jsonb_build_object('id',i.id,'principal_due_kobo',i.principal_due_kobo,'allocated_kobo',i.allocated_kobo,'collected_kobo',i.collected_kobo,'disputed_kobo',i.disputed_kobo,'due_at',i.due_at,'grace_hours',i.grace_hours,'collection_at',i.collection_at,'cancelled',i.state='CANCELLED') ORDER BY i.sequence) FROM app.schedule_items i JOIN app.repayment_schedules s ON s.id=i.schedule_id WHERE s.obligation_id=$1::uuid),'[]'::jsonb)`, obligation).Scan(&v.Waived, &v.Accrued, &v.Items)
 	return v, org, buyer, err
 }
 func validateChange(ctx context.Context, tx pgx.Tx, kind, obligation string, v ChangeValues, before FinancialSnapshot) error {
@@ -87,11 +87,7 @@ func validateChange(ctx context.Context, tx pgx.Tx, kind, obligation string, v C
 		}
 		return db.GuardUnreservedReduction(ctx, tx, obligation, int64(before.Outstanding-v.Amount))
 	case "fee_waiver":
-		total, err := ledger.CheckedAdd(before.BaseFee, before.Accrued)
-		if err != nil {
-			return err
-		}
-		if v.Amount <= 0 || before.Waived > total || v.Amount > total-before.Waived || len(v.Dates) > 0 {
+		if v.Amount <= 0 || v.Amount > before.Accrued || len(v.Dates) > 0 {
 			return errors.New("waiver must be within accrued, unwaived fees")
 		}
 	case "schedule_amendment":

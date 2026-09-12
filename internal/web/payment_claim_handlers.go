@@ -217,7 +217,7 @@ func (s *Server) publicPaymentIntent(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payment_intent": map[string]any{"reference": view.Request.ID, "supplier_name": view.Request.SupplierTradingName, "description": view.Request.GoodsDescription, "amount_kobo": view.Obligation.OutstandingKobo, "currency": view.Obligation.Currency, "payment_status": view.Obligation.PaymentStatus, "provider_action": "Sign in to the buyer portal to choose an approved payment method."}})
+	writeJSON(w, 200, map[string]any{"payment_intent": map[string]any{"reference": view.Request.ID, "supplier_name": view.Request.SupplierTradingName, "description": view.Request.GoodsDescription, "amount_kobo": view.Obligation.OutstandingKobo, "currency": view.Obligation.Currency, "payment_status": view.Obligation.PaymentStatus, "provider_action": "This page shows the sale balance. Sign in to review the sale or report a transfer you have already made. It does not take a payment."}})
 }
 
 func (s *Server) issuePublicToken(purpose, id string, duration time.Duration) (string, error) {

@@ -8,6 +8,9 @@ export function loadLegalConfig(): LegalConfig { return legalPublication; }
 export function assertLaunchWebConfig() {
 	loadLegalConfig();
 	if (env.APP_ENV?.trim().toLowerCase() !== 'production') return;
+	if (!env.FRONTEND_PROXY_SIGNING_KEY || env.FRONTEND_PROXY_SIGNING_KEY.length < 32) {
+		throw error(503, 'FRONTEND_PROXY_SIGNING_KEY must match the API signing key.');
+	}
 	const origin = env.ORIGIN?.trim();
 	const api = env.API_INTERNAL_URL?.trim();
 	if (origin !== 'https://kredit.ng') {

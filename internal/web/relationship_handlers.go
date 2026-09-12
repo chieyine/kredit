@@ -67,7 +67,7 @@ func (s *Server) buyerPermissionSuppliers(r *http.Request, buyerID string, conse
 		v := view.Request
 		byID[v.SupplierOrganizationID] = relationships.Supplier{ID: v.SupplierOrganizationID, LegalName: v.SupplierLegalName, TradingName: v.SupplierTradingName}
 	}
-	lines, err := s.runtime.readTradeLinesForBuyer(buyerID)
+	lines, err := s.runtime.readTradeLinesForBuyer(r.Context(), buyerID)
 	if err != nil {
 		return nil, err
 	}

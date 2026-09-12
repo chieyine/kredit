@@ -3,7 +3,7 @@
 	import { adminPost } from '$lib/admin-client';
 	let identifier=$state(''),channel=$state('email'),requestID=$state(''),recoveryCode=$state(''),secondIdentifier=$state(''),secondChannel=$state('phone'),challengeID=$state(''),contactCode=$state(''),completionToken=$state(''),message=$state(''),error=$state(''),busy=$state('');
 	$effect(()=>{
-		const request=page.url.searchParams.get('request');
+		const request=new URLSearchParams(page.url.hash.slice(1)).get('request')??page.url.searchParams.get('request');
 		const token=new URLSearchParams(page.url.hash.slice(1)).get('token')??page.url.searchParams.get('token');
 		if(request!==null)requestID=request;
 		if(token!==null)completionToken=token;

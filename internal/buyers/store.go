@@ -55,13 +55,20 @@ type CreateInvitationInput struct {
 	Industry        string
 }
 
+const IdentityNoticeVersion = "buyer-identity-v1-2026-09-12"
+const IdentityNotice = "I authorise Kredit and its verification provider to check my identity, business details and authority to act for this business. These checks help prevent fraud and confirm who can accept a sale. Read the privacy notice for how this information is used and kept."
+
 type AcceptInput struct {
-	FullName        string
-	LegalName       string
-	TradingName     string
-	BusinessType    string
-	BusinessAddress string
-	Industry        string
+	ConsentsAccepted      bool
+	TermsVersion          string
+	PrivacyVersion        string
+	IdentityNoticeVersion string
+	FullName              string
+	LegalName             string
+	TradingName           string
+	BusinessType          string
+	BusinessAddress       string
+	Industry              string
 }
 
 type Person struct {
@@ -163,22 +170,23 @@ type invitationRecord struct {
 }
 
 type Store struct {
-	acceptMu        sync.Mutex
-	mu              sync.RWMutex
-	tokenHashKey    []byte
-	identity        identity.IdentityProvider
-	invitations     map[string]*invitationRecord
-	persons         map[string]*Person
-	personsByUser   map[string]string
-	businesses      map[string]*Business
-	representatives map[string]*Representative
-	verifications   map[string]*VerificationCase
-	consents        map[string][]*Consent
-	bankAccounts    map[string][]*BankAccountReference
-	now             func() time.Time
-	newID           func() string
-	invitationGuard func(CreateInvitationInput) error
-	acceptanceGuard func(AcceptInput) error
+	acceptMu            sync.Mutex
+	mu                  sync.RWMutex
+	tokenHashKey        []byte
+	identity            identity.IdentityProvider
+	invitations         map[string]*invitationRecord
+	persons             map[string]*Person
+	personsByUser       map[string]string
+	businesses          map[string]*Business
+	representatives     map[string]*Representative
+	verifications       map[string]*VerificationCase
+	verificationIntents map[string]string
+	consents            map[string][]*Consent
+	bankAccounts        map[string][]*BankAccountReference
+	now                 func() time.Time
+	newID               func() string
+	invitationGuard     func(CreateInvitationInput) error
+	acceptanceGuard     func(AcceptInput) error
 }
 
 // Service is the buyer identity and invitation boundary consumed by HTTP
@@ -186,6 +194,9 @@ type Store struct {
 // share this contract so the runtime cannot accidentally mix persistence
 // semantics between environments.
 type Service interface {
+	RefreshVerification(context.Context, string) (Portal, error)
+	RefreshBusinessVerification(context.Context, string, string) (Portal, error)
+	ReadBusinessPortal(context.Context, string, string) (Portal, error)
 	SetInvitationGuard(func(CreateInvitationInput) error)
 	SetAcceptanceGuard(func(AcceptInput) error)
 	CountBusinesses() int
@@ -245,18 +256,19 @@ func NewStore(tokenHashKey string, provider identity.IdentityProvider) *Store {
 		tokenHashKey = "development-only-change-me"
 	}
 	return &Store{
-		tokenHashKey:    []byte(tokenHashKey),
-		identity:        provider,
-		invitations:     make(map[string]*invitationRecord),
-		persons:         make(map[string]*Person),
-		personsByUser:   make(map[string]string),
-		businesses:      make(map[string]*Business),
-		representatives: make(map[string]*Representative),
-		verifications:   make(map[string]*VerificationCase),
-		consents:        make(map[string][]*Consent),
-		bankAccounts:    make(map[string][]*BankAccountReference),
-		now:             func() time.Time { return time.Now().UTC() },
-		newID:           randomID,
+		tokenHashKey:        []byte(tokenHashKey),
+		identity:            provider,
+		invitations:         make(map[string]*invitationRecord),
+		persons:             make(map[string]*Person),
+		personsByUser:       make(map[string]string),
+		businesses:          make(map[string]*Business),
+		representatives:     make(map[string]*Representative),
+		verifications:       make(map[string]*VerificationCase),
+		verificationIntents: make(map[string]string),
+		consents:            make(map[string][]*Consent),
+		bankAccounts:        make(map[string][]*BankAccountReference),
+		now:                 func() time.Time { return time.Now().UTC() },
+		newID:               randomID,
 	}
 }
 
@@ -322,11 +334,18 @@ func (s *Store) Accept(ctx context.Context, rawToken, userID string, input Accep
 	}
 	s.acceptMu.Lock()
 	defer s.acceptMu.Unlock()
+	if !input.ConsentsAccepted || input.TermsVersion == "" || input.PrivacyVersion == "" || input.IdentityNoticeVersion != IdentityNoticeVersion {
+		return Portal{}, errors.New("read and accept the current notices before continuing")
+	}
 	if userID == "" || strings.TrimSpace(input.FullName) == "" {
 		return Portal{}, errors.New("authenticated user and full name are required")
 	}
 	if s.identity == nil {
 		return Portal{}, errors.New("identity provider is not configured")
+	}
+	caps := s.identity.Capabilities()
+	if !caps.PersonVerification || !caps.BusinessVerification || !caps.AuthorityVerification {
+		return Portal{}, errors.New("identity verification is not configured")
 	}
 	s.mu.RLock()
 	guard := s.acceptanceGuard
@@ -362,15 +381,12 @@ func (s *Store) Accept(ctx context.Context, rawToken, userID string, input Accep
 	representativeID := s.newID()
 	person := &Person{ID: personID, UserID: userID, FullName: strings.TrimSpace(input.FullName), Status: "invited", CreatedAt: now}
 	business := &Business{ID: businessID, OwnerUserID: userID, LegalName: legalName, TradingName: tradingName, BusinessType: businessType, BusinessAddress: address, Industry: industry, Status: "pending_verification", CreatedAt: now}
-	newPerson, newBusiness, newRepresentative := true, true, true
 	if old := s.persons[s.personsByUser[userID]]; old != nil {
 		person = old
-		newPerson = false
 	}
 	for _, old := range s.businesses {
 		if old.OwnerUserID == userID && strings.EqualFold(old.LegalName, legalName) && old.BusinessAddress == address && old.BusinessType == businessType {
 			business = old
-			newBusiness = false
 			break
 		}
 	}
@@ -378,7 +394,6 @@ func (s *Store) Accept(ctx context.Context, rawToken, userID string, input Accep
 	for _, old := range s.representatives {
 		if old.BusinessID == business.ID && old.PersonID == person.ID {
 			representative = old
-			newRepresentative = false
 			break
 		}
 	}
@@ -387,60 +402,18 @@ func (s *Store) Accept(ctx context.Context, rawToken, userID string, input Accep
 	s.personsByUser[userID] = person.ID
 	s.businesses[business.ID] = business
 	s.representatives[representative.ID] = representative
-	s.mu.Unlock()
-	accepted := false
-	defer func() {
-		if accepted {
-			return
+	for _, subject := range []string{person.ID, business.ID, representative.ID} {
+		if _, exists := s.verificationIntents[subject]; !exists {
+			s.verificationIntents[subject] = "NEW"
 		}
-		s.mu.Lock()
-		if newPerson {
-			delete(s.persons, person.ID)
-			delete(s.personsByUser, userID)
-		}
-		if newBusiness {
-			delete(s.businesses, business.ID)
-		}
-		if newRepresentative {
-			delete(s.representatives, representative.ID)
-		}
-		s.mu.Unlock()
-	}()
-
-	personSession, err := s.identity.CreatePersonVerification(ctx, identity.PersonVerificationInput{SubjectID: person.ID, FullName: person.FullName})
-	if err != nil {
-		return Portal{}, err
-	}
-	businessSession, err := s.identity.CreateBusinessVerification(ctx, identity.BusinessVerificationInput{SubjectID: business.ID, LegalName: business.LegalName, BusinessType: business.BusinessType, Address: business.BusinessAddress})
-	if err != nil {
-		return Portal{}, err
-	}
-	authoritySession, err := s.identity.CreateAuthorityVerification(ctx, identity.AuthorityVerificationInput{SubjectID: representative.ID, PersonID: person.ID, BusinessID: business.ID, RoleTitle: representative.RoleTitle})
-	if err != nil {
-		return Portal{}, err
-	}
-	if !verificationComplete(personSession) || !verificationComplete(businessSession) || !verificationComplete(authoritySession) {
-		return Portal{}, errors.New("identity, business, and authority verification must complete before onboarding")
-	}
-	s.mu.Lock()
-	if record.Invitation.Status != "pending" || !s.now().Before(record.Invitation.ExpiresAt) {
-		s.mu.Unlock()
-		return Portal{}, errors.New("invitation was accepted or expired during verification")
 	}
 	record.Invitation.Status = "accepted"
 	record.Invitation.AcceptedAt = s.now()
 	record.Invitation.AcceptedByUserID = userID
-	person.Status = "verified"
-	business.Status = "verified"
-	representative.AuthorityStatus = "verified"
-	s.addVerificationLocked(person.ID, "person", personSession)
-	s.addVerificationLocked(business.ID, "business", businessSession)
-	s.addVerificationLocked(representative.ID, "authority", authoritySession)
-	s.addConsentLocked(userID, "buyer_portal", "v1")
-	s.addConsentLocked(userID, "identity_verification", "v1")
-	s.addConsentLocked(userID, "privacy_notice", "v1")
-	portal := s.portalLocked(userID)
-	accepted = true
+	s.addConsentLocked(userID, "buyer_portal", input.TermsVersion)
+	s.addConsentLocked(userID, "identity_verification", input.IdentityNoticeVersion)
+	s.addConsentLocked(userID, "privacy_notice", input.PrivacyVersion)
+	portal, _ := s.portalForBusinessLocked(userID, business.ID)
 	s.mu.Unlock()
 	return portal, nil
 }
@@ -454,12 +427,15 @@ func (s *Store) Portal(userID string) (Portal, error) {
 }
 
 func (s *Store) ReadPortal(ctx context.Context, userID string) (Portal, error) {
+	return s.ReadBusinessPortal(ctx, userID, "")
+}
+func (s *Store) ReadBusinessPortal(ctx context.Context, userID, businessID string) (Portal, error) {
 	if err := ctx.Err(); err != nil {
 		return Portal{}, err
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	portal, ok := s.portalForUserLocked(userID)
+	portal, ok := s.portalForBusinessLocked(userID, businessID)
 	if !ok {
 		return Portal{}, ErrPortalNotFound
 	}
@@ -506,7 +482,25 @@ func (s *Store) lookupLocked(rawToken string) (*invitationRecord, error) {
 }
 
 func (s *Store) addVerificationLocked(subjectID, subjectType string, session identity.VerificationSession) {
-	verification := &VerificationCase{ID: s.newID(), SubjectType: subjectType, SubjectID: subjectID, Provider: session.Provider, ProviderReference: session.ProviderID, VerificationLevel: session.VerificationLevel, State: session.State, SafeResult: identity.SafeVerificationResult(session.SafeResult), StartedAt: s.now(), CompletedAt: s.now(), ExpiresAt: session.ExpiresAt}
+	var verification *VerificationCase
+	for _, old := range s.verifications {
+		if old.SubjectID == subjectID && old.Provider == session.Provider && old.ProviderReference == session.ProviderID {
+			verification = old
+			break
+		}
+	}
+	if verification == nil {
+		verification = &VerificationCase{ID: s.newID(), SubjectType: subjectType, SubjectID: subjectID, Provider: session.Provider, ProviderReference: session.ProviderID, StartedAt: s.now()}
+	}
+	verification.State = strings.ToLower(session.State)
+	verification.VerificationLevel = session.VerificationLevel
+	verification.SafeResult = identity.SafeVerificationResult(session.SafeResult)
+	verification.ExpiresAt = session.ExpiresAt
+	if verification.State == "verified" || verification.State == "failed" || verification.State == "rejected" {
+		verification.CompletedAt = s.now()
+	} else {
+		verification.CompletedAt = time.Time{}
+	}
 	s.verifications[verification.ID] = verification
 }
 
@@ -514,12 +508,7 @@ func (s *Store) addConsentLocked(userID, consentType, version string) {
 	s.consents[userID] = append(s.consents[userID], &Consent{ID: s.newID(), UserID: userID, ConsentType: consentType, Version: version, AcceptedAt: s.now()})
 }
 
-func (s *Store) portalLocked(userID string) Portal {
-	portal, _ := s.portalForUserLocked(userID)
-	return portal
-}
-
-func (s *Store) portalForUserLocked(userID string) (Portal, bool) {
+func (s *Store) portalForBusinessLocked(userID, businessID string) (Portal, bool) {
 	personID := s.personsByUser[userID]
 	person, ok := s.persons[personID]
 	if !ok {
@@ -528,10 +517,9 @@ func (s *Store) portalForUserLocked(userID string) (Portal, bool) {
 	var business *Business
 	var representative *Representative
 	for _, candidate := range s.representatives {
-		if candidate.PersonID == person.ID {
+		if candidate.PersonID == person.ID && (businessID == "" || candidate.BusinessID == businessID) && (representative == nil || candidate.CreatedAt.After(representative.CreatedAt) || (candidate.CreatedAt.Equal(representative.CreatedAt) && candidate.ID > representative.ID)) {
 			representative = candidate
 			business = s.businesses[candidate.BusinessID]
-			break
 		}
 	}
 	if business == nil || representative == nil {

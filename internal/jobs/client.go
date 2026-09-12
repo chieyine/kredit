@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"kredit/internal/billing"
+	"kredit/internal/db"
 	"kredit/internal/observability"
 	"kredit/internal/platform/logging"
 
@@ -237,6 +239,9 @@ func (w *MaintenanceWorker) Work(ctx context.Context, job *river.Job[Maintenance
 			return fmt.Errorf("evaluate repayment schedules: %w", err)
 		}
 	case OpReconcileSupplierOnboarding:
+		if err := billing.NewStore(w.Pool).IssueDue(ctx, time.Now().UTC()); err != nil {
+			return fmt.Errorf("issue platform fee invoices: %w", err)
+		}
 		if _, err := w.Pool.Exec(ctx, `SELECT app.reconcile_supplier_onboarding(now())`); err != nil {
 			return fmt.Errorf("reconcile supplier onboarding: %w", err)
 		}
@@ -256,7 +261,48 @@ func ExpireDrawdownReservations(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return errors.New("maintenance worker database is not configured")
 	}
-	_, err := pool.Exec(ctx, `
+	cursor := ""
+	for {
+		rows, err := pool.Query(ctx, `SELECT organization_id FROM app.drawdown_expiry_tenants($1,100)`, cursor)
+		if err != nil {
+			return err
+		}
+		var organizations []string
+		for rows.Next() {
+			var id string
+			if err = rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			organizations = append(organizations, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(organizations) == 0 {
+			return nil
+		}
+		for _, organization := range organizations {
+			tenantCtx := db.WithTenantContext(ctx, "", organization)
+			if err := expireTenantDrawdownReservations(tenantCtx, pool); err != nil {
+				return err
+			}
+			cursor = organization
+		}
+	}
+}
+func expireTenantDrawdownReservations(ctx context.Context, pool *pgxpool.Pool) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
 		WITH expired AS (
 			UPDATE app.drawdown_reservations r
 			SET state = 'EXPIRED'
@@ -297,7 +343,7 @@ func ExpireDrawdownReservations(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return fmt.Errorf("expire drawdown reservations atomically: %w", err)
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 type FinancialWorker struct {

@@ -42,8 +42,8 @@ ufw allow 443/tcp comment 'HTTPS'
 ufw --force enable
 
 echo "===> [4/6] Setting up /opt/kredit deployment directory..."
-mkdir -p /opt/kredit/certs
-mkdir -p /opt/kredit/infra/environments
+mkdir -p /opt/kredit/infra/environments/certs
+mkdir -p /opt/kredit/infra/environments/db-certs
 
 echo "===> [5/6] Generating systemd service for Kredit stack..."
 cat << 'EOF' > /etc/systemd/system/kredit.service
@@ -57,8 +57,8 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/kredit/infra/environments
-ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up -d
-ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
+ExecStart=/usr/bin/docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+ExecStop=/usr/bin/docker compose --env-file .env.production -f docker-compose.prod.yml stop
 TimeoutStartSec=0
 
 [Install]
@@ -74,5 +74,6 @@ echo "1. Place your Cloudflare Origin Certificate at:"
 echo "   /opt/kredit/infra/environments/certs/origin.pem"
 echo "   /opt/kredit/infra/environments/certs/origin.key"
 echo "2. Copy env.production.example to /opt/kredit/infra/environments/.env.production"
-echo "3. Fill in your R2 credentials and generate keys with: openssl rand -hex 32"
-echo "4. Run: cd /opt/kredit/infra/environments && docker compose -f docker-compose.prod.yml up -d --build"
+echo "3. Copy env.runtime.example to .env.runtime and complete the runtime settings."
+echo "4. Install PostgreSQL TLS certificates as described in the production guide."
+echo "5. Run: cd /opt/kredit/infra/environments && docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build"

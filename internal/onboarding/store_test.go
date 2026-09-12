@@ -60,9 +60,16 @@ func TestReadinessIsDerivedAndProviderExpiryRevokesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !summary.Ready || p.ReadinessState != StatePilotReady {
-		t.Fatalf("expected pilot ready, got %#v", summary)
+	if summary.Ready || p.BillingState != "pending_verification" || len(summary.Missing) != 1 || summary.Missing[0].Code != "billing_configured" {
+		t.Fatal("an unverified billing preference must not make a business ready")
 	}
+	// Supply verified billing as fixture evidence to exercise the separate
+	// expiry transition. Saving preferences above must never create this state.
+	s.profiles["org-1"].BillingState = "configured"
+	if _, summary, err = s.Get("org-1"); err != nil || !summary.Ready {
+		t.Fatal("complete evidence should satisfy readiness")
+	}
+
 	now = now.Add(2 * time.Hour)
 	changed := s.Reconcile(now)
 	if len(changed) != 1 || changed[0].KYBState != "expired" || changed[0].ReadinessState != "expired" {

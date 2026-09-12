@@ -87,7 +87,7 @@ func (s *Server) resolveCustomerRegistration(w http.ResponseWriter, r *http.Requ
 	if in.Action == "not_created" {
 		in.Reference = ""
 	}
-	if s.runtime.Mono == nil && in.Action == "link" {
+	if len(s.runtime.monoAccountClients()) == 0 && in.Action == "link" {
 		writeProblem(w, 503, "provider_unavailable", "Connect Mono before verifying a customer reference.")
 		return
 	}
@@ -104,8 +104,8 @@ func (s *Server) resolveCustomerRegistration(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	id, _ := pathID(r, "attemptID")
-	var business, buyer, fingerprint, consent, state, existingRef string
-	if err = tx.QueryRow(ctx, `SELECT business_id::text,user_id::text,identity_fingerprint,consent_version,state,COALESCE(provider_reference,'') FROM app.customer_registration_attempts WHERE id=$1 FOR UPDATE`, id).Scan(&business, &buyer, &fingerprint, &consent, &state, &existingRef); err != nil {
+	var business, buyer, fingerprint, consent, state, existingRef, provider string
+	if err = tx.QueryRow(ctx, `SELECT business_id::text,user_id::text,identity_fingerprint,consent_version,state,COALESCE(provider_reference,''),provider FROM app.customer_registration_attempts WHERE id=$1 FOR UPDATE`, id).Scan(&business, &buyer, &fingerprint, &consent, &state, &existingRef, &provider); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeProblem(w, 404, "registration_not_found", "Registration was not found.")
 		} else {
@@ -131,7 +131,12 @@ func (s *Server) resolveCustomerRegistration(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if in.Action == "link" {
-		identity, lookupErr := s.runtime.Mono.CustomerIdentity(ctx, strings.TrimSpace(in.Reference))
+		client := s.runtime.monoAccountClients()[provider]
+		if client == nil {
+			writeProblem(w, 409, "original_account_unavailable", "Restore the original Mono account before resolving this registration.")
+			return
+		}
+		identity, lookupErr := client.CustomerIdentity(ctx, strings.TrimSpace(in.Reference))
 		if lookupErr != nil {
 			writeProblem(w, 409, "identity_unconfirmed", "The provider reference could not be verified against the original identity.")
 			return
@@ -154,7 +159,7 @@ func (s *Server) resolveCustomerRegistration(w http.ResponseWriter, r *http.Requ
 			writeProblem(w, 503, "resolution_unavailable", "The result could not be saved.")
 			return
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO app.provider_customer_bindings(provider,buyer_user_id,buyer_business_id,provider_customer_reference,consent_version) VALUES('mono-sweep',$1,$2,$3,$4)`, buyer, business, in.Reference, consent); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO app.provider_customer_bindings(provider,buyer_user_id,buyer_business_id,provider_customer_reference,consent_version) VALUES($5,$1,$2,$3,$4)`, buyer, business, in.Reference, consent, provider); err != nil {
 			writeProblem(w, 409, "binding_conflict", "An existing registration must be reviewed before attaching this reference.")
 			return
 		}

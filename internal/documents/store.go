@@ -75,6 +75,16 @@ type UploadSigner interface {
 	SignedUploadURL(context.Context, string, time.Duration, string) (string, error)
 }
 
+// UploadHeaders mirrors the requirements of the configured URL signer.
+func (s *Store) UploadHeaders(contentType string) map[string]string {
+	if provider, ok := s.objects.(interface {
+		UploadHeaders(string) map[string]string
+	}); ok {
+		return provider.UploadHeaders(contentType)
+	}
+	return map[string]string{"If-None-Match": "*", "Content-Type": contentType}
+}
+
 type ObjectContentReader interface {
 	Open(context.Context, string) (io.ReadCloser, error)
 }
@@ -124,7 +134,11 @@ func (s *Store) Add(ctx context.Context, organizationID, actorID, purpose, fileN
 		return Document{}, errors.New("document body and object store are required")
 	}
 	now := s.now()
-	key := fmt.Sprintf("%s/%s/%s", organizationID, purpose, newID())
+	keyOwner := organizationID
+	if keyOwner == "" {
+		keyOwner = "identity/" + actorID
+	}
+	key := fmt.Sprintf("%s/%s/%s", keyOwner, purpose, newID())
 	doc := Document{ID: newID(), OrganizationID: organizationID, UploadedBy: actorID, Purpose: purpose, ObjectKey: key, FileName: fileName, ContentType: contentType, SizeBytes: size, ScanState: ScanPending, RetentionClass: retentionClass, CreatedAt: now, UploadExpiresAt: now.Add(time.Hour)}
 	// Save ownership before creating bytes: an interrupted upload remains a
 	// recoverable incomplete slot instead of an untracked private object.
@@ -194,7 +208,11 @@ func (s *Store) CreateUpload(ctx context.Context, organizationID, actorID, purpo
 	if !ok {
 		return Document{}, "", errors.New("object store does not support direct uploads")
 	}
-	key := fmt.Sprintf("%s/%s/%s", organizationID, purpose, newID())
+	keyOwner := organizationID
+	if keyOwner == "" {
+		keyOwner = "identity/" + actorID
+	}
+	key := fmt.Sprintf("%s/%s/%s", keyOwner, purpose, newID())
 	url, err := signer.SignedUploadURL(ctx, key, ttl, contentType)
 	if err != nil {
 		return Document{}, "", err
@@ -476,11 +494,11 @@ func (s *Store) insertUploadWithQuota(ctx context.Context, doc Document) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true),pg_advisory_xact_lock(hashtextextended('document-upload-org:'||$2,0))`, doc.UploadedBy, doc.OrganizationID); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true),pg_advisory_xact_lock(hashtextextended('document-upload-org:'||CASE WHEN $2='' THEN $1 ELSE $2 END,0))`, doc.UploadedBy, doc.OrganizationID); err != nil {
 		return err
 	}
 	var userCount, organizationCount int
-	if err = tx.QueryRow(ctx, `SELECT count(*) FILTER(WHERE uploaded_by=$2::uuid),count(*) FROM app.documents WHERE organization_id=$1::uuid AND upload_completed_at IS NULL AND upload_expires_at>now()`, doc.OrganizationID, doc.UploadedBy).Scan(&userCount, &organizationCount); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT count(*) FILTER(WHERE uploaded_by=$2::uuid),count(*) FROM app.documents WHERE (organization_id=NULLIF($1,'')::uuid OR ($1='' AND organization_id IS NULL AND uploaded_by=$2::uuid)) AND upload_completed_at IS NULL AND upload_expires_at>now()`, doc.OrganizationID, doc.UploadedBy).Scan(&userCount, &organizationCount); err != nil {
 		return err
 	}
 	if userCount >= 20 || organizationCount >= 100 {
@@ -602,7 +620,8 @@ func validateMetadata(organizationID, actorID, purpose, fileName, retentionClass
 		}
 		return true
 	}
-	if !slug(organizationID, 128) || !slug(actorID, 128) || !slug(purpose, 64) || !slug(retentionClass, 64) {
+	validOrg := slug(organizationID, 128) || (organizationID == "" && strings.HasPrefix(purpose, "identity_"))
+	if !validOrg || !slug(actorID, 128) || !slug(purpose, 64) || !slug(retentionClass, 64) {
 		return errors.New("organization, actor, purpose and retention class must be valid bounded identifiers")
 	}
 	if fileName == "" || !utf8.ValidString(fileName) || utf8.RuneCountInString(fileName) > 255 || strings.ContainsAny(fileName, "/\\") {

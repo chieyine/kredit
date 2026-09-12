@@ -7,9 +7,12 @@ services:
     environment:
       POSTGRES_DB: kredit
       POSTGRES_USER: kredit
-      POSTGRES_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_ROOT_PASSWORD:?Set POSTGRES_ROOT_PASSWORD in .env.production}
+    command: ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/etc/postgresql/tls/server.crt", "-c", "ssl_key_file=/etc/postgresql/tls/server.key", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - ./db-certs:/etc/postgresql/tls:ro
+      - ../postgres/pg_hba.prod.conf:/etc/postgresql/pg_hba.conf:ro
+      - postgres-data:/var/lib/postgresql
     networks:
       - kredit-backend
     healthcheck:
@@ -25,7 +28,9 @@ services:
       target: api
     entrypoint: ["/app/kredit-migrate"]
     environment:
-      DATABASE_URL: postgres://kredit:${POSTGRES_ROOT_PASSWORD}@postgres:5432/kredit?sslmode=disable
+      DATABASE_URL: postgres://kredit:${POSTGRES_ROOT_PASSWORD:?Set POSTGRES_ROOT_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt
+    volumes:
+      - ./db-certs/root.crt:/etc/postgresql/root.crt:ro
     networks:
       - kredit-backend
     depends_on:
@@ -39,18 +44,19 @@ services:
       - >-
         psql "$${DATABASE_DIRECT_URL}" -X -v ON_ERROR_STOP=1 -f /config/roles.sql &&
         psql "$${DATABASE_DIRECT_URL}" -X -v ON_ERROR_STOP=1
-        -v app_login_password="$${KREDIT_APP_DB_PASSWORD}"
-        -v worker_login_password="$${KREDIT_WORKER_DB_PASSWORD}"
-        -v backup_login_password="$${KREDIT_BACKUP_DB_PASSWORD}"
+        -v app_login_password="$${KREDIT_APP_DB_PASSWORD:?Set KREDIT_APP_DB_PASSWORD in .env.production}"
+        -v worker_login_password="$${KREDIT_WORKER_DB_PASSWORD:?Set KREDIT_WORKER_DB_PASSWORD in .env.production}"
+        -v backup_login_password="$${KREDIT_BACKUP_DB_PASSWORD:?Set KREDIT_BACKUP_DB_PASSWORD in .env.production}"
         -v demote_owner=false
         -f /config/development-logins.sql
     environment:
-      DATABASE_DIRECT_URL: postgres://kredit:${POSTGRES_ROOT_PASSWORD}@postgres:5432/kredit?sslmode=disable
-      KREDIT_APP_DB_PASSWORD: ${KREDIT_APP_DB_PASSWORD}
-      KREDIT_WORKER_DB_PASSWORD: ${KREDIT_WORKER_DB_PASSWORD}
-      KREDIT_BACKUP_DB_PASSWORD: ${KREDIT_BACKUP_DB_PASSWORD}
+      DATABASE_DIRECT_URL: postgres://kredit:${POSTGRES_ROOT_PASSWORD:?Set POSTGRES_ROOT_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt
+      KREDIT_APP_DB_PASSWORD: ${KREDIT_APP_DB_PASSWORD:?Set KREDIT_APP_DB_PASSWORD in .env.production}
+      KREDIT_WORKER_DB_PASSWORD: ${KREDIT_WORKER_DB_PASSWORD:?Set KREDIT_WORKER_DB_PASSWORD in .env.production}
+      KREDIT_BACKUP_DB_PASSWORD: ${KREDIT_BACKUP_DB_PASSWORD:?Set KREDIT_BACKUP_DB_PASSWORD in .env.production}
     volumes:
       - ../postgres:/config:ro
+      - ./db-certs/root.crt:/etc/postgresql/root.crt:ro
     networks:
       - kredit-backend
     depends_on:
@@ -64,11 +70,14 @@ services:
       target: api
     restart: unless-stopped
     env_file:
-      - .env.production
+      - .env.runtime
     environment:
+      ADMIN_CONFIG_AUTO_APPLY: "true"
       API_ADDR: :8080
-      DATABASE_URL: postgres://kredit_app_login:${KREDIT_APP_DB_PASSWORD}@postgres:5432/kredit?sslmode=disable
-      RIVER_DATABASE_URL: postgres://kredit_worker_login:${KREDIT_WORKER_DB_PASSWORD}@postgres:5432/kredit?sslmode=disable
+      DATABASE_URL: postgres://kredit_app_login:${KREDIT_APP_DB_PASSWORD:?Set KREDIT_APP_DB_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:${KREDIT_WORKER_DB_PASSWORD:?Set KREDIT_WORKER_DB_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt
+    volumes:
+      - ./db-certs/root.crt:/etc/postgresql/root.crt:ro
     networks:
       - kredit-backend
     healthcheck:
@@ -88,10 +97,13 @@ services:
       target: worker
     restart: unless-stopped
     env_file:
-      - .env.production
+      - .env.runtime
     environment:
-      DATABASE_URL: postgres://kredit_app_login:${KREDIT_APP_DB_PASSWORD}@postgres:5432/kredit?sslmode=disable
-      RIVER_DATABASE_URL: postgres://kredit_worker_login:${KREDIT_WORKER_DB_PASSWORD}@postgres:5432/kredit?sslmode=disable
+      ADMIN_CONFIG_AUTO_APPLY: "true"
+      DATABASE_URL: postgres://kredit_app_login:${KREDIT_APP_DB_PASSWORD:?Set KREDIT_APP_DB_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:${KREDIT_WORKER_DB_PASSWORD:?Set KREDIT_WORKER_DB_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt
+    volumes:
+      - ./db-certs/root.crt:/etc/postgresql/root.crt:ro
     networks:
       - kredit-backend
     healthcheck:

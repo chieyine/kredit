@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/mail"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -124,9 +126,17 @@ func ValidateKeyAndValue(key string, raw json.RawMessage) (SettingMeta, error) {
 // NotificationConnector is stored as one encrypted setting so endpoint and token
 // changes become visible atomically to every API and worker process.
 type NotificationConnector struct {
-	Enabled  bool   `json:"enabled"`
-	Endpoint string `json:"endpoint"`
-	Token    string `json:"token"`
+	VerifyToken            string `json:"verify_token,omitempty"`
+	Language               string `json:"language,omitempty"`
+	AuthenticationTemplate string `json:"authentication_template,omitempty"`
+	UtilityTemplate        string `json:"utility_template,omitempty"`
+	MarketingTemplate      string `json:"marketing_template,omitempty"`
+	Adapter                string `json:"adapter,omitempty"`
+	From                   string `json:"from,omitempty"`
+	WebhookSecret          string `json:"webhook_secret,omitempty"`
+	Enabled                bool   `json:"enabled"`
+	Endpoint               string `json:"endpoint"`
+	Token                  string `json:"token"`
 }
 
 func init() {
@@ -134,7 +144,52 @@ func init() {
 		KnownSettings["integrations.notifications."+channel] = SettingMeta{
 			Category: "integrations", IsSecret: true,
 			Description: channel + " delivery connector (takes effect on the next delivery)",
-			Validate:    validateNotificationConnector,
+			Validate: func(raw json.RawMessage) error {
+				if err := validateNotificationConnector(raw); err != nil {
+					return err
+				}
+
+				var encoded string
+				var config NotificationConnector
+				_ = json.Unmarshal(raw, &encoded)
+				_ = json.Unmarshal([]byte(encoded), &config)
+				if !config.Enabled {
+					return nil
+				}
+				adapter := config.Adapter
+				if adapter == "" {
+					adapter = "connector"
+					if channel == "email" {
+						adapter = "sendly"
+					}
+					if channel == "sms" {
+						adapter = "mesaj"
+					}
+				}
+				if adapter == "meta" && channel == "whatsapp" {
+					if !regexp.MustCompile(`^https://graph\.facebook\.com/v[0-9]+\.[0-9]+/[0-9]+/messages$`).MatchString(config.Endpoint) || len(config.WebhookSecret) < 32 || len(config.VerifyToken) < 32 || !regexp.MustCompile(`^[a-z]{2,3}(_[A-Z]{2})?$`).MatchString(config.Language) || !regexp.MustCompile(`^[a-z0-9_]{1,512}$`).MatchString(config.AuthenticationTemplate) || !regexp.MustCompile(`^[a-z0-9_]{1,512}$`).MatchString(config.UtilityTemplate) || !regexp.MustCompile(`^[a-z0-9_]{1,512}$`).MatchString(config.MarketingTemplate) {
+						return errors.New("complete the Meta endpoint, app secret, verification token, language and approved template names")
+					}
+					return nil
+				}
+				if adapter == "connector" {
+					return nil
+				}
+				if (adapter != "sendly" || channel != "email") && (adapter != "mesaj" || channel != "sms") {
+					return errors.New("select an installed adapter for this channel")
+				}
+				if channel == "sms" {
+					if config.Endpoint != "https://api.mesaj.cloud:25274/client/sms/send/bulk" || !regexp.MustCompile(`^[A-Za-z0-9]{1,11}$`).MatchString(config.From) {
+						return errors.New("SMS requires the Mesaj send endpoint and an approved sender ID")
+					}
+					return nil
+				}
+				sender, err := mail.ParseAddress(config.From)
+				if config.Endpoint != "https://api.sendlyai.com/v1/messages" || !strings.HasPrefix(config.Token, "sk_live_") || len(config.WebhookSecret) < 32 || err != nil || !strings.HasSuffix(strings.ToLower(sender.Address), "@kredit.ng") {
+					return errors.New("email requires Sendly's endpoint, a live API key, its webhook secret, and a kredit.ng sender")
+				}
+				return nil
+			},
 		}
 	}
 }

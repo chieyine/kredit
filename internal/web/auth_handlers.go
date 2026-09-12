@@ -11,6 +11,7 @@ import (
 
 	"kredit/internal/audit"
 	"kredit/internal/auth"
+	"kredit/internal/db"
 )
 
 const (
@@ -194,6 +195,12 @@ func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) (auth.Sessi
 		writeProblem(w, http.StatusUnauthorized, "session_invalid", "You have been signed out. Please sign in again.")
 		return auth.Session{}, auth.User{}, false
 	}
+	identity, _ := db.TenantFromContext(r.Context())
+	organization := ""
+	if identity.UserID == user.ID {
+		organization = identity.OrganizationID
+	}
+	*r = *r.WithContext(db.WithTenantContext(r.Context(), user.ID, organization))
 	return session, user, true
 }
 

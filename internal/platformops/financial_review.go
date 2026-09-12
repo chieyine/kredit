@@ -23,7 +23,7 @@ func (s *Store) RefreshFinancialReviews(ctx context.Context) error {
 		return err
 	}
 	rows, err := tx.Query(ctx, `INSERT INTO app.financial_review_cases(kind,target_id,expected,actual)
- SELECT kind,target_id,expected,actual FROM app.financial_discrepancies
+ SELECT kind,target_id,expected,actual FROM app.financial_review_differences(false)
  ON CONFLICT(kind,target_id) DO UPDATE SET expected=EXCLUDED.expected,actual=EXCLUDED.actual,last_seen_at=now(),state='OPEN',resolved_at=NULL
  WHERE app.financial_review_cases.state='RESOLVED' OR app.financial_review_cases.expected<>EXCLUDED.expected OR app.financial_review_cases.actual<>EXCLUDED.actual
  RETURNING id::text`)
@@ -49,7 +49,7 @@ func (s *Store) RefreshFinancialReviews(ctx context.Context) error {
 			return err
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE app.financial_review_cases c SET last_seen_at=now() WHERE state='OPEN' AND EXISTS(SELECT 1 FROM app.financial_discrepancies d WHERE d.kind=c.kind AND d.target_id=c.target_id)`)
+	_, err = tx.Exec(ctx, `UPDATE app.financial_review_cases c SET last_seen_at=now() WHERE state='OPEN' AND EXISTS(SELECT 1 FROM app.financial_review_differences(false) d WHERE d.kind=c.kind AND d.target_id=c.target_id)`)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 			return errors.New("claim this case before resolving it")
 		}
 		var mismatch bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.financial_discrepancies WHERE kind=$1 AND target_id=$2)`, kind, target).Scan(&mismatch); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.financial_review_differences(true) WHERE kind=$1 AND target_id=$2)`, kind, target).Scan(&mismatch); err != nil {
 			return err
 		}
 		if mismatch {

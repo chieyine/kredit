@@ -15,6 +15,9 @@ func transferOwnershipTx(ctx context.Context, tx pgx.Tx, actorID, targetID, reas
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(746219830045::bigint)`); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, actorID); err != nil {
+		return err
+	}
 	var eligible bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(
 	 SELECT 1 FROM app.platform_role_assignments r JOIN app.users u ON u.id=r.user_id
@@ -25,7 +28,7 @@ func transferOwnershipTx(ctx context.Context, tx pgx.Tx, actorID, targetID, reas
 	if !eligible || actorID == targetID {
 		return errOwnershipChanged
 	}
-	if err := tx.QueryRow(ctx, `SELECT status='active' FROM app.users WHERE id=$1::uuid FOR SHARE`, targetID).Scan(&eligible); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT app.lock_transfer_recipient($1::uuid)`, targetID).Scan(&eligible); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errOwnershipChanged
 		}

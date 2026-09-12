@@ -14,7 +14,7 @@ The first mandate can have a buyer-selected ceiling above a single obligation vi
 
 1. Use a separate sandbox database and a Mono payments app with Sweep enabled. Partial Sweep requires separate provider access.
 2. Set `COLLECTION_PROVIDER=mono-sweep`, `MONO_SECRET_KEY` to a sandbox `test_sk_` key, `MONO_WEBHOOK_SECRET`, and `MONO_REDIRECT_URL` in secret/environment management. Do not put credentials in the repository.
-3. Apply all current migrations (through 096 at this audit checkpoint). Migration 052 adds provider customer bindings, mandate metadata/supplier scope, shared capacity guards, manual-payment reservation guards, immutable collection events, and retry timestamps. Migration 053 preserves valid payment reversals and checks currency; 054 rechecks active obligation, due schedule, disputes, claims and holds under the reservation lock. Apply `infra/postgres/roles.sql` after migrations (including River) to install the restricted application/worker grants, including ledger, job queue and reconciliation lookups.
+3. Apply all current migrations (through 148 for this repair candidate). Migration 052 adds provider customer bindings, mandate metadata/supplier scope, shared capacity guards, manual-payment reservation guards, immutable collection events, and retry timestamps. Migration 053 preserves valid payment reversals and checks currency; 054 rechecks active obligation, due schedule, disputes, claims and holds under the reservation lock. Apply `infra/postgres/roles.sql` after migrations (including River) to install the restricted application/worker grants, including ledger, job queue and reconciliation lookups.
 4. Set `MONO_SWEEP_ENABLED=true` outside production. `PARTIAL_SWEEP_ENABLED`, `AUTOMATIC_COLLECTION_ENABLED`, and `AUTOMATIC_RETRY_ENABLED` default to false; enable each intentionally for the sandbox scenario.
 5. Run both API and worker. Register the HTTPS webhook URL `/api/v1/webhooks/mono` (alias `/webhooks/mono`) in Mono with the same webhook secret.
 6. Register the buyer's provider customer using `POST /api/v1/buyer/businesses/{businessID}/repayment-customer`. Requires ownership, recent MFA, CSRF and an idempotency key. Supply the documented customer details, BVN and consent version. The BVN is transient and is not persisted, returned or logged. Customer registration does not assert successful identity verification.
@@ -43,7 +43,7 @@ Provider references and buyer authorization URLs are restricted data. Use encryp
 
 A dead-lettered webhook, provider/local financial mismatch, or uncertain customer registration requires operator review. Do not create replacement debits to clear a timeout. Do not enable production until actual provider sandbox evidence, approvals, access review and environment controls pass.
 
-## Current official sources (checked 2 September 2026)
+## Current official sources (checked 12 September 2026)
 
 - [Sweep integration](https://docs.mono.co/docs/payments/direct-debit/mono-sweep/integration-guide)
 - [Variable mandate setup and lifetime ceiling](https://docs.mono.co/docs/payments/direct-debit/mandate-setup-variable)
@@ -78,3 +78,13 @@ Operators use `/admin/reconciliation` to claim and resolve detected differences.
 For Prometheus, configure a separate random `METRICS_SCRAPE_TOKEN` of at least 32 characters and send it as a bearer credential to `/api/v1/ops/metrics/prometheus`. Keep it in secret storage. It provides no case-management access. Without it, the existing authenticated platform-role/MFA path applies. Never label these current-state counts as cumulative counters; alerts use the gauge values directly.
 
 See [the completion record](../testing/code-completion-2026-09-02.md) for tests and remaining provider/approval boundaries.
+
+## September launch repairs — verification pending
+
+Mandate creation now commits an authorization intent before calling Mono. If the response or final save is lost, the original reference stays in `app.mandate_authorization_intents`; no replacement request is submitted automatically. Use Admin → Mono integration → interrupted mandate authorizations. Find that exact reference in Mono, recover the original hosted link if necessary, and let the buyer complete authorization. Linking requires an authoritative active mandate with the same reference, ceiling and validity. Mark “not created” only after checking provider evidence and recording the reason; that permits a fresh attempt with a fresh reference.
+
+Mono debits require at least ₦200. The current adapter caps each debit at ₦25 million until a verified corporate-account classification is available. A smaller remaining debt stays payable; never round a debit up beyond it. An alternative payment method still requires its own verified settlement/checkout integration.
+
+Final failure codes 51, 61, 65, 91 and 92 can enter the bounded retry workflow. Timeout, duplicate and processing codes remain unresolved pending authoritative lookup. Per-mandate calendar-day limits use Africa/Lagos and prevent further submissions after five insufficient-funds failures or ten other failed attempts. Existing notice, 24-hour retry and chain limits also apply. [Mono errors](https://docs.mono.co/docs/errors), [debit requirements](https://docs.mono.co/docs/payments/direct-debit/debit-an-account), [daily attempt limits](https://docs.mono.co/api/direct-debit/account/debit-account).
+
+Dispute/reversal notices are authenticated, retained and reconciled; conflicting financial outcomes require review, not automatic ledger reversal. See `failed-webhooks.md`. None of these repairs is evidence of provider sandbox certification or successful live banking.

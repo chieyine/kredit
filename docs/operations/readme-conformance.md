@@ -38,7 +38,7 @@ evidence remains fail-closed in `docs/release/readiness-checklist.md`.
 | Public product experience and SEO | shared responsive header/footer, conversion hierarchy, signed minimal payment/receipt projections, structured metadata, robots, sitemap, social metadata | Implemented; production analytics validation is deployment evidence |
 | Infrastructure and monitoring | Kubernetes/OpenTofu API/worker/web stack, autoscaling, disruption/network controls, ingress/TLS, Prometheus rules, privacy-filtered OTLP collector | Implemented; target-environment provisioning and alert routing remain external |
 | Operations/runbooks | controlled versioned commands, immutable events, suspension/restoration, scoped expiring holds, provider-safe replay/reconciliation/cancellation, redacted bounded diagnostics, and procedure-specific runbooks | Implemented |
-| Generated SQLC artifacts | pinned Go fallback in `scripts/sqlc-generate.sh`, drift checker in `scripts/sqlc-check.sh`, checked `db/generated` output | Implemented |
+| Handwritten SQL | ADR 0005; migrations and persistence queries are reviewed together and checked against PostgreSQL | Replaces retired SQLC generation |
 | Browser/integration/performance verification | 46 Playwright scenarios, tagged DB integration, provider contract tests, k6/SQL performance harnesses | Chromium and PostgreSQL suites passed; load evidence remains environment-dependent |
 | External provider/legal/security gates | provider approvals, credentials, live certification, signed launch evidence | Intentionally external release gates |
 

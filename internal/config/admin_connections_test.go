@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"kredit/internal/platformsettings"
@@ -169,5 +170,75 @@ func TestDisabledRetargetCannotCarryCredentialsIntoLaterEnable(t *testing.T) {
 				t.Fatalf("credential followed disabled retarget: token present=%v err=%v", token != "", err)
 			}
 		})
+	}
+}
+
+func TestRetainedAccountEditorProtectsCredentialsAndRetargets(t *testing.T) {
+	key := "integrations.runtime.retained_collections"
+	entry := RetainedCollectionConnection{Name: "original-account", Endpoint: "https://connector.example.test", Token: "access-012345678901234567890123456789", WebhookSecret: "signing-012345678901234567890123456789"}
+	raw, _ := json.Marshal([]RetainedCollectionConnection{entry})
+	base := productionBase()
+	base.RetainedCollectionProviders = string(raw)
+	visible := PublicConnectionValues(base, key)
+	public, _ := json.Marshal(visible)
+	if strings.Contains(string(public), entry.Token) || strings.Contains(string(public), entry.WebhookSecret) {
+		t.Fatal("saved credentials exposed")
+	}
+	saved := encodedConnection(t, key, map[string]any{"RetainedCollectionProviders": string(raw)})
+	store := connectionStore{items: map[string]platformsettings.Setting{key: {Key: key, Value: saved, Version: 1}}}
+	draft := encodedConnection(t, key, map[string]any{"RetainedCollectionProviders": visible["RetainedCollectionProviders"]})
+	prepared, err := PrepareConnectionUpdate(t.Context(), base, store, key, draft, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied, err := ApplyStoredConnections(t.Context(), base, store, key, prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := applied.RetainedCollections()
+	if err != nil || len(entries) != 1 || entries[0] != entry {
+		t.Fatal("blank editor fields lost original account", err)
+	}
+	entry.Endpoint = "https://other.example.test"
+	entry.Token = ""
+	entry.WebhookSecret = ""
+	changed, _ := json.Marshal([]RetainedCollectionConnection{entry})
+	draft = encodedConnection(t, key, map[string]any{"RetainedCollectionProviders": string(changed)})
+	if _, err = PrepareConnectionUpdate(t.Context(), base, store, key, draft, false); err == nil {
+		t.Fatal("old credentials retargeted to another address")
+	}
+	original := entries[0]
+	base.CollectionProvider = original.Name
+	base.CollectionProviderEndpoint = original.Endpoint
+	base.CollectionProviderToken = original.Token
+	base.CollectionWebhookSecret = original.WebhookSecret
+	if _, err = base.RetainedCollections(); err != nil {
+		t.Fatal("cannot retain current account before switching", err)
+	}
+	base.CollectionProviderToken += "changed"
+	if _, err = base.RetainedCollections(); err == nil {
+		t.Fatal("same identity points to two different accounts")
+	}
+}
+
+func TestRetainedMonoAccountCanSurviveAccountSwitch(t *testing.T) {
+	c := Config{Environment: "production", MonoAccountName: "mono-sweep", MonoSecretKey: "live_sk_0123456789abcdef0123456789abcdef", MonoWebhookSecret: "webhook-0123456789abcdef0123456789abcdef", CollectionProvider: "mono-sweep"}
+	accounts := []RetainedCollectionConnection{{Adapter: "mono", Name: c.MonoAccount(), Endpoint: "https://api.withmono.com", Token: c.MonoSecretKey, WebhookSecret: c.MonoWebhookSecret, Partial: true}}
+	raw, _ := json.Marshal(accounts)
+	c.RetainedCollectionProviders = string(raw)
+	if _, err := c.RetainedCollections(); err != nil {
+		t.Fatal(err)
+	}
+	c.MonoAccountName = "mono-new-account"
+	c.CollectionProvider = c.MonoAccount()
+	c.MonoSecretKey = "live_sk_another0123456789abcdef0123456789"
+	saved, err := c.RetainedCollections()
+	if err != nil || len(saved) != 1 || saved[0].Name != "mono-sweep" {
+		t.Fatal("original Mono route lost", err)
+	}
+	visible := PublicConnectionValues(c, "integrations.runtime.retained_collections")
+	encoded, _ := json.Marshal(visible)
+	if strings.Contains(string(encoded), accounts[0].Token) || strings.Contains(string(encoded), accounts[0].WebhookSecret) {
+		t.Fatal("saved native account credentials exposed")
 	}
 }

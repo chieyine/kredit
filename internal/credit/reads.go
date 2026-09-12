@@ -55,6 +55,9 @@ func (s *PostgresStore) readViews(ctx context.Context, field, id string) ([]View
 			rows.Close()
 			return nil, fmt.Errorf("credit projection identity does not match its saved record")
 		}
+		if field == "buyer_user_id" && v.Request.State == Draft {
+			continue
+		}
 		views = append(views, v)
 	}
 	err = rows.Err()

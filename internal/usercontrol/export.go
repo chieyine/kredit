@@ -16,7 +16,7 @@ import (
 func privacyExportPayload(ctx context.Context, tx pgx.Tx, requestID, userID string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	result := map[string]any{"request_id": requestID, "generated_at": time.Now().UTC(), "format_version": 2, "scope": "Personal account records and buyer-side transactions. Business-wide reports and uploaded file contents are obtained through their separately authorized download routes. Authentication secrets, live access links and internal security diagnostics are excluded."}
+	result := map[string]any{"request_id": requestID, "generated_at": time.Now().UTC(), "format_version": 3, "scope": "Personal account records and buyer-side transactions. Business-wide reports and uploaded file contents are obtained through their separately authorized download routes. Authentication secrets, live access links and internal security diagnostics are excluded."}
 	var profile json.RawMessage
 	if err := tx.QueryRow(ctx, `SELECT to_jsonb(p) FROM (SELECT id,normalized_email,normalized_phone,display_name,status,last_authenticated_at,created_at,version FROM app.users WHERE id=$1::uuid) p`, userID).Scan(&profile); err != nil {
 		return nil, err
@@ -24,6 +24,9 @@ func privacyExportPayload(ctx context.Context, tx pgx.Tx, requestID, userID stri
 	result["profile"] = profile
 	sections := []struct{ name, query string }{
 		{"memberships", `SELECT id,organization_id,role,status,invited_at,accepted_at,created_at FROM app.memberships WHERE user_id=$1::uuid ORDER BY id`},
+		{"native_identity_checks", `SELECT id,provider,subject_id,kind,full_name,state,safe_result,consent_version,consent_at,created_at,updated_at,expires_at FROM app.native_identity_sessions WHERE user_id=$1::uuid ORDER BY created_at,id`},
+		{"identity_decision_history", `SELECT session_id,previous_version,previous_decision->>'state' AS previous_state,previous_decision->'safe_result' AS verified_details,recorded_at FROM app.native_identity_history WHERE user_id=$1::uuid ORDER BY recorded_at,id`},
+		{"fee_bank_consents", `SELECT id,organization_id,provider,state,ceiling_kobo,starts_at,ends_at,consent_version,created_at FROM app.fee_authorizations WHERE created_by=$1::uuid ORDER BY created_at,id`},
 		{"persons", `SELECT id,full_name,status,created_at FROM app.persons WHERE user_id=$1::uuid ORDER BY id`},
 		{"owned_businesses", `SELECT id,organization_id,legal_name,trading_name,business_type,business_address,industry,status,created_at FROM app.businesses WHERE owner_user_id=$1::uuid ORDER BY id`},
 		{"seller_consents", `SELECT id,supplier_organization_id,consent_type,version,granted,created_at FROM app.relationship_consents WHERE buyer_user_id=$1::uuid ORDER BY created_at,id`},

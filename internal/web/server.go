@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -194,7 +195,7 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 		if token := sessionTokenFromRequest(r); token != "" {
 			if session, user, err := s.runtime.Auth.SessionFromToken(token); err == nil {
 				scope += " user:" + user.ID + " session:" + session.ID + " aal:" + session.AuthenticationLevel
-				if strings.HasPrefix(r.URL.Path, "/api/v1/ops/") && s.runtime.Database != nil {
+				if (strings.HasPrefix(r.URL.Path, "/api/v1/ops/") || strings.HasPrefix(r.URL.Path, "/api/v1/identity/checks/")) && s.runtime.Database != nil {
 					var roles string
 					if err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(string_agg(role,',' ORDER BY role),'') FROM app.platform_role_assignments WHERE user_id=$1::uuid AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now())`, user.ID).Scan(&roles); err != nil {
 						writeProblem(w, http.StatusServiceUnavailable, "authorization_unavailable", "current permissions could not be verified")
@@ -227,7 +228,7 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 				}
 			}
 		}
-		record, existing, err := s.runtime.Idempotency.Reserve(r.Context(), scope, key, idempotency.HashRequest(r.Method, r.URL.Path, body))
+		record, existing, err := s.runtime.Idempotency.Reserve(r.Context(), scope, key, idempotency.HashRequest(r.Method, r.URL.Path, body, runtimeDomainKey(s.config.TokenHashKey, s.config.SessionSigningKey, "idempotency-request")))
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "different request") {
 				writeProblem(w, http.StatusConflict, "idempotency_conflict", "idempotency key was reused for a different request")
@@ -335,7 +336,8 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		// therefore must be safe to replay after a client timeout.
 		"/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
 		"/onboarding/", "/notification-preferences", "/recovery-codes", "/account-recovery/", "/privacy-requests", "/support-cases", "/product-feedback",
-		"/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
+		"/ops/seller-settlements/", "/identity/checks/", "/ops/billing-review/", "/ops/message-submissions/", "/ops/verification-requests/", "/ops/mandate-authorizations/",
+		"/fee-operations/", "/fee-authorizations", "/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
 	} {
 		if strings.Contains(path, suffix) {
 			return true
@@ -423,6 +425,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/onboarding/kyb", s.submitSupplierKYB)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/onboarding/kyb/reconcile", s.reconcileSupplierKYB)
 	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/onboarding/settlement", s.updateSupplierSettlement)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/onboarding/settlement/banks", s.supplierSettlementBanks)
 	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/onboarding/billing", s.updateSupplierBilling)
 	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/onboarding/credit-policy", s.updateSupplierCreditPolicy)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/onboarding/consents", s.acceptSupplierConsents)
@@ -439,7 +442,17 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/buyer-invitations/{token}", s.previewBuyerInvitation)
 	s.mux.HandleFunc("POST /api/v1/buyer-invitations/{token}/otp", s.requestBuyerInvitationOTP)
 	s.mux.HandleFunc("POST /api/v1/buyer-invitations/{token}/accept", s.acceptBuyerInvitation)
+	s.mux.HandleFunc("POST /api/v1/buyer/disputes/{disputeID}/documents", s.uploadDisputeDocument)
+	s.mux.HandleFunc("GET /api/v1/buyer/disputes/{disputeID}/documents/{documentID}", s.disputeDocument)
+	s.mux.HandleFunc("GET /api/v1/buyer/disputes/{disputeID}/documents/{documentID}/download", s.disputeDocument)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/disputes/{disputeID}/documents", s.uploadDisputeDocument)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/disputes/{disputeID}/documents/{documentID}", s.disputeDocument)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/disputes/{disputeID}/documents/{documentID}/download", s.disputeDocument)
+	s.mux.HandleFunc("GET /api/v1/ops/disputes/{disputeID}/documents/{documentID}", s.disputeDocument)
+	s.mux.HandleFunc("GET /api/v1/ops/disputes/{disputeID}/documents/{documentID}/download", s.disputeDocument)
+	s.mux.HandleFunc("GET /api/v1/buyer/credit-requests/{requestID}/invoice", s.buyerInvoice)
 	s.mux.HandleFunc("GET /api/v1/buyer/me", s.buyerPortal)
+	s.mux.HandleFunc("POST /api/v1/buyer/me/verification/refresh", s.refreshBuyerVerification)
 	s.mux.HandleFunc("GET /api/v1/buyer/credit-requests", s.listBuyerCreditRequests)
 	s.mux.HandleFunc("GET /api/v1/buyer/mandates", s.listBuyerMandates)
 	s.mux.HandleFunc("POST /api/v1/buyer/mandates/{mandateID}/cancel", s.cancelBuyerMandate)
@@ -457,6 +470,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/payments", s.listOrganizationPayments)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/collections", s.listOrganizationCollections)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/overdue", s.listOrganizationOverdue)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/due", s.listOrganizationDue)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/customers", s.listOrganizationCustomers)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/credit-requests/{requestID}", s.getCreditRequest)
 	s.mux.HandleFunc("PATCH /api/v1/organizations/{organizationID}/credit-requests/{requestID}", s.updateDraftCreditRequest)
@@ -511,6 +525,17 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /webhooks/mono", s.monoWebhook)
 	s.mux.HandleFunc("POST /api/v1/webhooks/mono", s.monoWebhook)
 	s.mux.HandleFunc("POST /api/v1/buyer/businesses/{businessID}/repayment-customer", s.createRepaymentCustomer)
+	s.mux.HandleFunc("GET /api/v1/identity/checks/{provider}/{caseID}/document", s.nativeIdentityDocument)
+	s.mux.HandleFunc("POST /api/v1/identity/checks/{provider}/{caseID}/document", s.nativeIdentityDocument)
+	s.mux.HandleFunc("GET /api/v1/identity/checks", s.listNativeIdentity)
+	s.mux.HandleFunc("POST /api/v1/identity/checks/{provider}/{caseID}", s.actNativeIdentity)
+	s.mux.HandleFunc("GET /api/v1/ops/seller-settlements", s.sellerSettlements)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/seller-settlements", s.sellerSettlements)
+	s.mux.HandleFunc("POST /api/v1/ops/seller-settlements/{organizationID}/{attemptID}", s.recordSellerSettlement)
+	s.mux.HandleFunc("GET /api/v1/ops/verification-requests", s.listVerificationRequests)
+	s.mux.HandleFunc("POST /api/v1/ops/verification-requests/{attemptID}", s.resolveVerificationRequest)
+	s.mux.HandleFunc("GET /api/v1/ops/mandate-authorizations", s.listMandateAuthorizations)
+	s.mux.HandleFunc("POST /api/v1/ops/mandate-authorizations/{attemptID}", s.resolveMandateAuthorization)
 	s.mux.HandleFunc("GET /api/v1/ops/customer-registrations", s.listCustomerRegistrations)
 	s.mux.HandleFunc("POST /api/v1/ops/customer-registrations/{attemptID}", s.resolveCustomerRegistration)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/disputes", s.openDispute)
@@ -523,6 +548,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/fee-waiver", s.waiveObligationFee)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/operations", s.listOperationActions)
 	s.mux.HandleFunc("POST /api/v1/webhooks/messaging/whatsapp", s.whatsappWebhook)
+	s.mux.HandleFunc("GET /api/v1/webhooks/meta", s.metaWebhook)
+	s.mux.HandleFunc("POST /api/v1/webhooks/meta", s.metaWebhook)
 	s.mux.HandleFunc("POST /api/v1/webhooks/notifications/{channel}", s.notificationDeliveryReceipt)
 	s.mux.HandleFunc("GET /api/v1/me/notifications", s.myNotifications)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/reports/receivables", s.reportReceivables)
@@ -536,6 +563,22 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/ops/attention/details", s.adminAttentionDetails)
 	s.mux.HandleFunc("GET /api/v1/ops/attention", s.adminAttention)
 	s.mux.HandleFunc("GET /api/v1/platform/capabilities", s.platformCapabilities)
+	s.mux.HandleFunc("GET /api/v1/ops/setup", s.ownerSetup)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/fee-invoices", s.feeInvoices)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/fee-authorizations", s.feeAuthorizations)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/fee-authorizations", s.feeAuthorizations)
+	s.mux.HandleFunc("GET /api/v1/ops/fee-authorizations/{organizationID}", s.feeAuthorizations)
+	s.mux.HandleFunc("POST /api/v1/ops/fee-authorizations/{organizationID}", s.feeAuthorizations)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/fee-operations", s.feeOperations)
+	s.mux.HandleFunc("GET /api/v1/ops/fee-operations/{organizationID}", s.feeOperations)
+	s.mux.HandleFunc("POST /api/v1/ops/fee-operations/{organizationID}", s.feeOperations)
+	s.mux.HandleFunc("GET /api/v1/ops/billing-review", s.listBillingReview)
+	s.mux.HandleFunc("POST /api/v1/ops/billing-review/{organizationID}", s.approveInvoiceBilling)
+	s.mux.HandleFunc("GET /api/v1/ops/fee-invoices/{organizationID}", s.adminFeeInvoices)
+	s.mux.HandleFunc("POST /api/v1/ops/fee-invoices/{organizationID}/{invoiceID}/receipts", s.recordFeeInvoiceReceipt)
+	s.mux.HandleFunc("GET /api/v1/ops/settlement-review", s.listSettlementReview)
+	s.mux.HandleFunc("POST /api/v1/ops/settlement-review/{organizationID}", s.reviewSettlementDestination)
+	s.mux.HandleFunc("POST /api/v1/ops/settlement-registrations/{organizationID}/{registrationID}/retry", s.permitSettlementRegistrationRetry)
 	s.mux.HandleFunc("GET /api/v1/ops/platform-settings", s.listPlatformSettings)
 	s.mux.HandleFunc("POST /api/v1/ops/platform-settings", s.updatePlatformSetting)
 	s.mux.HandleFunc("GET /api/v1/ops/platform-settings/history", s.platformSettingsHistory)
@@ -568,6 +611,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/ops/commands/preview", s.previewOperationsCommand)
 	s.mux.HandleFunc("POST /api/v1/ops/commands", s.executeOperationsCommand)
 	s.mux.HandleFunc("GET /api/v1/ops/diagnostics", s.operationsDiagnostics)
+	s.mux.HandleFunc("GET /api/v1/ops/provider-work", s.providerWork)
+	s.mux.HandleFunc("GET /api/v1/ops/message-submissions", s.listMessageSubmissions)
+	s.mux.HandleFunc("POST /api/v1/ops/message-submissions/{submissionID}/resolve", s.resolveMessageSubmission)
 	s.mux.HandleFunc("GET /api/v1/ops/search", s.operationsSearch)
 	s.mux.HandleFunc("GET /api/v1/ops/users", s.operationsUsers)
 	s.mux.HandleFunc("GET /api/v1/ops/organizations", s.operationsOrganizations)
@@ -688,7 +734,7 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		key := clientIP(r)
+		key := s.clientIP(r)
 		now := time.Now()
 		s.rateMu.Lock()
 		s.pruneRateWindows(now)
@@ -759,39 +805,25 @@ func (s *Server) pruneRateWindows(now time.Time) {
 	}
 }
 
-// clientIP resolves the requesting client address. When the request arrives
-// from a private/loopback address the deployment is behind a reverse proxy,
-// so X-Forwarded-For carries the real client (the ingress overwrites this
-// header in production). Direct public connections are keyed on RemoteAddr
-// so callers cannot rotate their identity with a spoofed header.
-func clientIP(r *http.Request) string {
+// clientIP accepts frontend client addresses only with a short-lived signature.
+// Caddy overwrites X-Real-IP for direct API traffic; the API has no public port.
+func (s *Server) clientIP(r *http.Request) string {
+	address := r.Header.Get("X-Kredit-Client-IP")
+	stamp := r.Header.Get("X-Kredit-Client-Timestamp")
+	signature, err := hex.DecodeString(r.Header.Get("X-Kredit-Client-Signature"))
+	seconds, stampErr := strconv.ParseInt(stamp, 10, 64)
+	age := time.Now().Unix() - seconds
+	if s.config.FrontendProxySigningKey != "" && err == nil && stampErr == nil && age >= -30 && age <= 60 && net.ParseIP(address) != nil {
+		mac := hmac.New(sha256.New, []byte(s.config.FrontendProxySigningKey))
+		_, _ = fmt.Fprintf(mac, "%s\n%s\n%s\n%s", stamp, r.Method, r.URL.RequestURI(), address)
+		if hmac.Equal(signature, mac.Sum(nil)) {
+			return net.ParseIP(address).String()
+		}
+	}
 	remote := remoteHost(r)
 	if isPrivateOrLoopback(remote) {
-		if realIP := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); realIP != "" {
-			if parsed := net.ParseIP(realIP); parsed != nil {
-				return parsed.String()
-			}
-		}
-		if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
-			if parsed := net.ParseIP(realIP); parsed != nil {
-				return parsed.String()
-			}
-		}
-		if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
-			parts := strings.Split(forwarded, ",")
-			// Check right-to-left to prefer the client address appended by the trusted ingress
-			for i := len(parts) - 1; i >= 0; i-- {
-				candidate := strings.TrimSpace(parts[i])
-				if parsed := net.ParseIP(candidate); parsed != nil && !isPrivateOrLoopback(candidate) {
-					return parsed.String()
-				}
-			}
-			for _, candidate := range parts {
-				candidate = strings.TrimSpace(candidate)
-				if parsed := net.ParseIP(candidate); parsed != nil {
-					return parsed.String()
-				}
-			}
+		if parsed := net.ParseIP(strings.TrimSpace(r.Header.Get("X-Real-IP"))); parsed != nil {
+			return parsed.String()
 		}
 	}
 	if remote != "" {

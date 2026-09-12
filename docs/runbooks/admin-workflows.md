@@ -43,8 +43,55 @@ Changed dates produce new reminder identities and invalidate prior pre-debit not
 
 ## Deployment and limits
 
-Apply all migrations through 096 using the migration owner. API and worker readiness require schema 96 and the new tables, views and functions. The migrations grant runtime access when the application roles exist. Standard roles.sql grants cover installations where roles are created later.
+Apply all migrations through 148 using the migration owner. API and worker readiness require schema 148 and the new tables, views and functions. The migrations grant runtime access when the application roles exist. Standard roles.sql grants cover installations where roles are created later.
 
 Migration 064 deliberately refuses rollback because approval/consent history must survive. Use a forward correction. No real provider calls are needed to deploy these code paths, but live Mono operation still requires separately available credentials, provider access and buyer-hosted authorization. No legal or provider certification is implied by an administrator decision.
 
 Review deadlines are operational targets. They do not redefine contractual or statutory deadlines. Free-text reasons and retained before/after snapshots are audit data; use the approved retention and access policies. No secrets belong in proposal notes.
+
+
+## Super-admin launch setup
+
+Open `/admin/setup` as the platform owner. Confirm your identity with an authenticator when prompted. The page lists provider connections, private storage, document scanning, legal content and launch evidence, with API and worker configuration status. “Recorded” or “applied” is not a successful provider transaction or an approval from the provider.
+
+Runtime settings are encrypted. With `ADMIN_CONFIG_AUTO_APPLY=true` and the production restart supervisor, the API and worker gracefully restart to apply changed runtime versions. Messaging settings apply to new events directly; existing events retain their original encrypted connection. A brief service interruption is possible while processes restart.
+
+- `/admin/message-submissions`: review uncertain native message sends. Record the original accepted message reference or close without resending. Neither action proves delivery.
+- `/admin/settlement-review`: review the registered account holder against the verified business. Approve only the unchanged provider-backed destination. For a held registration, permit a retry only after the original provider confirms no sub-account was created.
+- `/admin/provider-work`: review pending provider operations and follow their recovery links.
+
+An initial deployment still needs the database, encryption roots, server/domain setup and first owner bootstrap. Provider account activation, sender/template approval, domain records and legal decisions take place with the relevant provider or reviewer. Enter the resulting supported settings in admin; never substitute invented references.
+
+Current source work still lacks complete native Mono identity and payment-level settlement/billing flows. Do not treat these admin pages as confirmation that the whole platform is production ready. See `docs/platform-improvements/IMPLEMENTATION.md` for the current completion record. No implementation-stage tests or migrations have run.
+
+
+## Platform fee bills
+
+Open **Fee billing** in super admin. A seller's invoice preference stays pending until the owner approves that exact arrangement and supplies verified Kredit receiving-bank instructions. Weekly periods close Monday at midnight in Lagos; monthly periods close on the first day. The worker bills eligible unbilled fees from closed periods, including missed periods, with a seven-day payment window. No fees are duplicated when the worker restarts.
+
+Use **Record a received payment** only after checking an actual credit in Kredit's bank statement. Enter the bank transaction reference, naira amount, Lagos timestamp and evidence reference. A seller's transfer screenshot alone is insufficient. A repeated bank reference cannot create another receipt. Payments are for platform fees and leave buyer debt unchanged.
+
+Waivers and recognised collection reversals appear as credits. **Record a completed refund** records a refund already completed through the bank, up to the bill's credit balance. It does not send money. Receipts and refunds are immutable evidence; uncertain outcomes should be refreshed before retrying. Incorrect bank evidence must be escalated for controlled correction, never overwritten.
+
+The seller can read and print the latest 100 bills in **Settings → Kredit fees**. Split-settlement and authorised-debit preferences are still pending their dedicated implementation and cannot be activated through invoice approval.
+
+## Previous collection accounts
+
+In **Platform settings → Saved collection accounts**, save a generic account before switching the active provider. Its saved copy must exactly match the active connection. Once switched, existing collection attempts continue to use their original account; new attempts use the active provider. Use a distinct name for each provider account. Blank credential fields preserve the saved values only at the same address. An address change requires new credentials. Keep accounts while any reconciliation or return can still arrive. Mono continues to use its dedicated configuration; native account rotation remains unfinished.
+
+## Fee bank permissions and settlement
+
+Use **Fee billing** to review every saved fee setup, including interrupted registrations that were not yet selected as a billing preference. The seller starts setup in **Settings → Kredit fees**, completes the hosted bank permission, selects its saved setup and saves the preference. Approval verifies the original provider's customer, mandate, lifetime ceiling, reference, dates and readiness. Enter verified receiving-bank instructions in the review evidence; those instructions support transfer payment if a bill cannot be debited.
+
+A pending debit is checked using its original reference. Do not pay or retry it while its outcome is unknown. Failed or below-minimum bills remain payable by bank transfer. A provider dispute/reversal signal blocks conflicting receipts and subsequent automatic fee debits until reviewed. **Review provider evidence** requires both recorded bank evidence and a matching provider lookup. **Record a completed bank reversal** reopens the fee bill without changing buyer debt.
+
+The fee bank movement panel distinguishes provider-held fees from confirmed cash. Record each completed bank receipt or return once using its bank reference. A receipt here does not charge the seller again. Seller proceeds use **Seller settlements**, which records the original destination, customer payment, actual payout and any return separately.
+
+A rejected identity check can be reopened after an evidence-backed appeal in **Verification recovery**. The old decision is preserved; reopening never verifies the person or business. Expired checks require fresh evidence.
+
+Before changing financial providers, save the old named account under **Launch setup → Saved collection accounts**. Fee permissions and unresolved collections remain bound to it. New credentials for another account should use a distinct account name. Retain old identity connections similarly until their work is reconciled.
+
+
+Mesaj activation also requires a valid HTTPS certificate on its API host. The main website's certificate alone does not establish that the API certificate is valid. Kredit does not bypass TLS validation; configure an approved alternative messaging connector if the account's API remains unavailable.
+
+Split-settlement arrangements also issue a monthly bill for any fees left unpaid. Previously deducted amounts are shown separately, including any later reversal. The receiving-bank instructions supplied when approving the arrangement are used for these bills.

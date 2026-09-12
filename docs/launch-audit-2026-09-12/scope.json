@@ -1,0 +1,90 @@
+{
+  "audit_date": "2026-09-12",
+  "workspace": "/Users/macbookpro/Documents/Kredit.com",
+  "git_head": "1ef5f69b645f37218fc2bb1aff096eb486cb3c26",
+  "tracked_files": 940,
+  "inspected_files": 940,
+  "findings": 42,
+  "inventory_text_lines": 128349,
+  "migration_files": 117,
+  "test_source_files": 215,
+  "images_opened": 24,
+  "methods": {
+    "Direct operational source/configuration review; not executed": 77,
+    "Direct source or complete structured record review": 29,
+    "Direct document review; historical claims not current proof": 95,
+    "Test source read; not executed": 215,
+    "Full SQL source review; not applied": 117,
+    "Direct SQL source review; not loaded": 1,
+    "Complete parsed artifact and diagnostic review; no execution": 47,
+    "Individually opened image; no new render": 24,
+    "Dependency record review; no installation, scanner or third-party source audit": 5,
+    "Direct source and cross-file review": 146,
+    "Direct source and consumer review": 62,
+    "Direct frontend source and backend contract review": 122
+  },
+  "external_change": ".gitignore changed during audit; reread and both hashes retained. No application changes made by this audit.",
+  "executed": {
+    "agents": false,
+    "tests": false,
+    "builds": false,
+    "migrations": false,
+    "provider_transactions": false,
+    "deployments": false
+  },
+  "exclusions": [
+    "Secret environment file contents",
+    "SSH credential contents",
+    "Git internals",
+    "Installed dependency source",
+    "Build and package caches",
+    "Local service databases",
+    "Production/remote private configuration",
+    "New audit artifacts themselves are deliverables, not recursively counted source"
+  ],
+  "credential_metadata_only": [
+    {
+      "path": "ssh/id_ed25519",
+      "bytes": 444,
+      "permissions": "0o600",
+      "review": "Filename and permissions only; contents not opened"
+    },
+    {
+      "path": "ssh/id_ed25519.pub",
+      "bytes": 95,
+      "permissions": "0o666",
+      "review": "Filename and permissions only; contents not opened"
+    },
+    {
+      "path": "ssh/known_hosts",
+      "bytes": 568,
+      "permissions": "0o666",
+      "review": "Filename and permissions only; contents not opened"
+    },
+    {
+      "path": "ssh/kredit_prod",
+      "bytes": 464,
+      "permissions": "0o600",
+      "review": "Filename and permissions only; contents not opened"
+    },
+    {
+      "path": "ssh/kredit_prod.pub",
+      "bytes": 100,
+      "permissions": "0o666",
+      "review": "Filename and permissions only; contents not opened"
+    }
+  ],
+  "artifact_reconciliation": {
+    "missing_tracked_files": [],
+    "untracked_in_source_index": [],
+    "changed_since_review": [],
+    "invalid_finding_file_paths": []
+  },
+  "limitations": [
+    "Static source review cannot prove every component works.",
+    "Historical logs, screenshots and previous pass claims do not verify this candidate.",
+    "Dependency advisory research is targeted, not exhaustive.",
+    "Provider entitlements, DNS, mail-domain verification and legal approvals require external evidence.",
+    "Structured historical records were parsed and their semantic profiles/diagnostics reviewed; archived patch inspection covered provenance and hunk/file inventory, with current source reviewed separately."
+  ]
+}

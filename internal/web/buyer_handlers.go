@@ -4,10 +4,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/buyers"
+	"kredit/internal/legalpublication"
 )
 
 type buyerInvitationRequest struct {
@@ -21,15 +23,19 @@ type buyerInvitationRequest struct {
 }
 
 type buyerInvitationAcceptRequest struct {
-	ChallengeID     string `json:"challenge_id"`
-	Code            string `json:"code"`
-	DeviceLabel     string `json:"device_label"`
-	FullName        string `json:"full_name"`
-	LegalName       string `json:"legal_name"`
-	TradingName     string `json:"trading_name"`
-	BusinessType    string `json:"business_type"`
-	BusinessAddress string `json:"business_address"`
-	Industry        string `json:"industry"`
+	ConsentsAccepted      bool   `json:"consents_accepted"`
+	TermsVersion          string `json:"terms_version"`
+	PrivacyVersion        string `json:"privacy_version"`
+	IdentityNoticeVersion string `json:"identity_notice_version"`
+	ChallengeID           string `json:"challenge_id"`
+	Code                  string `json:"code"`
+	DeviceLabel           string `json:"device_label"`
+	FullName              string `json:"full_name"`
+	LegalName             string `json:"legal_name"`
+	TradingName           string `json:"trading_name"`
+	BusinessType          string `json:"business_type"`
+	BusinessAddress       string `json:"business_address"`
+	Industry              string `json:"industry"`
 }
 
 func (s *Server) createBuyerInvitation(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +82,12 @@ func (s *Server) previewBuyerInvitation(w http.ResponseWriter, r *http.Request) 
 		writeProblem(w, http.StatusNotFound, "organization_not_found", "We could not find that seller.")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"invitation": preview, "supplier": map[string]string{"legal_name": organization.LegalName, "trading_name": organization.TradingName, "industry": organization.Industry}})
+	versions, err := legalpublication.SettingsReader(s.runtime.PlatformSettings)()
+	if err != nil {
+		writeProblem(w, 503, "notices_unavailable", "We could not load the current notices. Please try again.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"legal_versions": versions, "identity_notice": buyers.IdentityNotice, "identity_notice_version": buyers.IdentityNoticeVersion, "invitation": preview, "supplier": map[string]string{"legal_name": organization.LegalName, "trading_name": organization.TradingName, "industry": organization.Industry}})
 }
 
 func (s *Server) requestBuyerInvitationOTP(w http.ResponseWriter, r *http.Request) {
@@ -115,12 +126,21 @@ func (s *Server) acceptBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	versions, err := legalpublication.SettingsReader(s.runtime.PlatformSettings)()
+	if err != nil {
+		writeProblem(w, 503, "notices_unavailable", "We could not load the current notices. Please try again.")
+		return
+	}
+	if !input.ConsentsAccepted || input.TermsVersion != versions.Terms || input.PrivacyVersion != versions.Privacy || input.IdentityNoticeVersion != buyers.IdentityNoticeVersion {
+		writeProblem(w, 422, "notices_required", "Read and accept the current notices before continuing. Refresh this page if they have changed.")
+		return
+	}
 	user, session, rawSessionToken, err := s.runtime.Auth.VerifyOTPForTarget(input.ChallengeID, input.Code, input.DeviceLabel, targetType, target)
 	if err != nil {
 		writeProblem(w, http.StatusUnauthorized, "otp_invalid", err.Error())
 		return
 	}
-	portal, err := s.runtime.Buyers.Accept(r.Context(), token, user.ID, buyers.AcceptInput{FullName: input.FullName, LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
+	portal, err := s.runtime.Buyers.Accept(r.Context(), token, user.ID, buyers.AcceptInput{ConsentsAccepted: input.ConsentsAccepted, TermsVersion: input.TermsVersion, PrivacyVersion: input.PrivacyVersion, IdentityNoticeVersion: input.IdentityNoticeVersion, FullName: input.FullName, LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
 	if err != nil {
 		_ = s.runtime.Auth.RevokeSession(rawSessionToken)
 		writeProblem(w, http.StatusUnprocessableEntity, "buyer_onboarding_failed", err.Error())
@@ -140,7 +160,7 @@ func (s *Server) buyerPortal(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	portal, err := s.runtime.Buyers.ReadPortal(r.Context(), user.ID)
+	portal, err := s.runtime.Buyers.ReadBusinessPortal(r.Context(), user.ID, r.URL.Query().Get("business_id"))
 	if err != nil {
 		if errors.Is(err, buyers.ErrPortalNotFound) {
 			writeProblem(w, http.StatusNotFound, "buyer_profile_not_found", "We could not find your customer account.")
@@ -149,5 +169,18 @@ func (s *Server) buyerPortal(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"portal": portal})
+	writeJSON(w, http.StatusOK, map[string]any{"portal": portal, "verification_current": buyers.VerificationCurrent(portal, time.Now())})
+}
+
+func (s *Server) refreshBuyerVerification(w http.ResponseWriter, r *http.Request) {
+	_, user, ok := s.requireAuth(w, r)
+	if !ok || !s.requireCSRF(w, r) {
+		return
+	}
+	portal, err := s.runtime.Buyers.RefreshBusinessVerification(r.Context(), user.ID, r.URL.Query().Get("business_id"))
+	if err != nil {
+		writeProblem(w, 503, "verification_pending", "Your details are saved, but verification could not finish. Try checking again later. If this continues, contact support.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"portal": portal, "verification_current": buyers.VerificationCurrent(portal, time.Now())})
 }

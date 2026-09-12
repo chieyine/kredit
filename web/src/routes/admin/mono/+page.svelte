@@ -73,7 +73,7 @@
 		</section>
 		{#if mono.redirect_url}<section class="card"><h2>Redirect</h2><code>{mono.redirect_url}</code></section>{/if}
 		<section class="card"><h2>What still needs attention</h2>{#if mono.blockers.length}<ul>{#each mono.blockers as blocker}<li>{blocker}</li>{/each}</ul>{:else}<p>No technical configuration blocker is currently reported for this environment.</p>{/if}</section>
-		<section class="actions"><div><h2>Operational controls</h2><p><a href="/admin/customer-registrations">Review interrupted customer registrations</a></p><p>Collections, automatic collection, retry policy, notice periods, fees and pilot limits are managed through the audited settings workflow.</p></div><a class="primary" href="/admin/settings">Open business settings →</a></section>
+		<section class="actions"><div><h2>Operational controls</h2><p><a href="/admin/customer-registrations">Review interrupted customer registrations</a> · <a href="/admin/mandate-authorizations">Review interrupted mandate authorizations</a></p><p>Collections, automatic collection, retry policy, notice periods, fees and pilot limits are managed through the audited settings workflow.</p></div><a class="primary" href="/admin/settings">Open business settings →</a></section>
 		<section class="security"><strong>Manage the connection</strong><p>The platform owner can replace Mono credentials in Platform settings → Connections. Provider certification is recorded under Launch approvals and provider limits. Values are encrypted and remain hidden. Saved changes apply after the API and worker restart; this screen shows the configuration currently running.</p><a href="/admin/platform-settings">Open connection settings →</a></section>
 	{/if}
 </main>

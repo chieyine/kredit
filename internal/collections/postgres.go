@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kredit/internal/billing"
 	"kredit/internal/businesspolicy"
 	"kredit/internal/db"
+	"kredit/internal/ledger"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,9 +16,10 @@ import (
 )
 
 type PostgresEngine struct {
-	noticeMinimum time.Duration
-	pool          collectionDatabase
-	base          *Engine
+	requireSettlementRoute bool
+	noticeMinimum          time.Duration
+	pool                   collectionDatabase
+	base                   *Engine
 }
 
 type collectionDatabase interface {
@@ -44,7 +47,7 @@ func (e *PostgresEngine) EligibilityContext(ctx context.Context, id string, now 
 	if err != nil {
 		return Eligibility{}, err
 	}
-	return local.Eligibility(id, now)
+	return local.EligibilityContext(ctx, id, now)
 }
 
 // reserveProvider captures a debit intent without doing network I/O. The
@@ -88,7 +91,11 @@ func (e *PostgresEngine) submitPrepared(ctx context.Context, id string, prepare 
 		return result, err
 	}
 	// No resubmission after a crash here: reconciliation uses the saved request.
-	response, submitErr := e.base.provider.Submit(ctx, *request)
+	provider, routeErr := e.base.providerFor(result.Provider)
+	if routeErr != nil {
+		return result, routeErr
+	}
+	response, submitErr := provider.Submit(ctx, *request)
 	if submitErr != nil {
 		response = Response{State: ProviderTimeout}
 	}
@@ -96,7 +103,7 @@ func (e *PostgresEngine) submitPrepared(ctx context.Context, id string, prepare 
 		ProviderCollectionID: response.ProviderCollectionID, State: response.State,
 		SucceededAmountKobo: response.SucceededAmountKobo, FailureCode: response.FailureCode,
 		Retryable: response.Retryable, SettlementState: response.SettlementState, SettlementReference: response.SettlementReference}
-	if signer, ok := e.base.provider.(WebhookSigner); ok {
+	if signer, ok := provider.(WebhookSigner); ok {
 		event.Signature = signer.Sign(event)
 	}
 	return e.ProcessWebhook(ctx, event)
@@ -215,7 +222,11 @@ type persistedCollection struct {
 func (e *PostgresEngine) fresh() *Engine {
 	e.base.mu.Lock()
 	defer e.base.mu.Unlock()
-	return &Engine{provider: e.base.provider, payments: e.base.payments, snapshot: e.base.snapshot, due: e.base.due, reservations: map[string]*CollectionReservation{}, attempts: map[string]*Attempt{}, byKey: map[string]string{}, byExternal: map[string]string{}, events: map[string]bool{}, now: e.base.now, featureEnabled: e.base.featureEnabled, reservationTTL: e.base.reservationTTL, maxRetries: e.base.maxRetries}
+	retained := map[string]Provider{}
+	for name, provider := range e.base.retainedProviders {
+		retained[name] = provider
+	}
+	return &Engine{retainedProviders: retained, provider: e.base.provider, payments: e.base.payments, snapshot: e.base.snapshot, contextSnapshot: e.base.contextSnapshot, due: e.base.due, reservations: map[string]*CollectionReservation{}, attempts: map[string]*Attempt{}, byKey: map[string]string{}, byExternal: map[string]string{}, events: map[string]bool{}, now: e.base.now, featureEnabled: e.base.featureEnabled, reservationTTL: e.base.reservationTTL, maxRetries: e.base.maxRetries}
 }
 func installCollection(local *Engine, state persistedCollection) {
 	for _, value := range state.Reservations {
@@ -296,6 +307,29 @@ func (e *PostgresEngine) mutate(ctx context.Context, id string, operation func(*
 		return err
 	}
 	local := e.fresh()
+	if e.requireSettlementRoute {
+		local.settlementRoute = func(callCtx context.Context, obligation string, amount ledger.Money) (*SettlementRoute, error) {
+			route, err := freezeSettlementRoute(callCtx, tx, obligation)
+			if err != nil {
+				return nil, err
+			}
+			route.NetAmountKobo = amount
+			if route.BillingMethod == "split_settlement" {
+				route.BaseFees, route.FeeAmountKobo, err = billing.FreezeSplitTx(callCtx, tx, obligation, amount)
+				if err != nil {
+					return nil, err
+				}
+				route.NetAmountKobo = amount - route.FeeAmountKobo
+			}
+			route.Method = "reviewed_transfer"
+			if e.base.provider.Name() == route.Provider {
+				if cp, ok := e.base.provider.(CapabilityProvider); ok && !cp.Capabilities().PartialRecovery && route.NetAmountKobo > 0 {
+					route.Method = "provider_split"
+				}
+			}
+			return route, nil
+		}
+	}
 	if policy.Initialized {
 		local.featureEnabled = local.featureEnabled && policy.Values.CollectionsEnabled
 		local.maxRetries = int(policy.Values.MaxRetries)
@@ -320,6 +354,25 @@ func (e *PostgresEngine) mutate(ctx context.Context, id string, operation func(*
 	}
 	if err := syncCollectionTx(ctx, tx, state); err != nil {
 		return err
+	}
+	for _, a := range state.Attempts {
+		if a.SettlementRoute == nil {
+			continue
+		}
+		route, err := json.Marshal(a.SettlementRoute)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO app.collection_settlement_routes(attempt_id,obligation_id,supplier_organization_id,route) SELECT $1::uuid,o.id,o.supplier_organization_id,$3::jsonb FROM app.obligations o WHERE o.id=$2::uuid ON CONFLICT(attempt_id) DO NOTHING`, a.ID, a.ObligationID, route); err != nil {
+			return err
+		}
+		var matches bool
+		if err = tx.QueryRow(ctx, `SELECT route=$2::jsonb FROM app.collection_settlement_routes WHERE attempt_id=$1::uuid`, a.ID, route).Scan(&matches); err != nil {
+			return err
+		}
+		if !matches {
+			return errors.New("the saved settlement destination cannot change")
+		}
 	}
 	return tx.Commit(ctx)
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kredit/internal/businesspolicy"
+	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/legalpublication"
 	"kredit/internal/outbox"
@@ -20,6 +21,7 @@ import (
 // commits the line, drawdowns, and reservations together.
 type PostgresStore struct {
 	*Store
+	requestContext                 context.Context
 	pool                           *pgxpool.Pool
 	outbox                         *outbox.Store
 	transactionalActivationHandler func(context.Context, pgx.Tx, ActivationInput) (string, func(), error)
@@ -56,12 +58,15 @@ func (s *PostgresStore) CreateLine(input CreateLineInput) (TradeLine, error) {
 	if err != nil {
 		return TradeLine{}, err
 	}
-	ctx := context.Background()
+	ctx := s.context()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return TradeLine{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		return TradeLine{}, err
+	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, input.BuyerBusinessID); err != nil {
 		return TradeLine{}, err
 	}
@@ -88,7 +93,16 @@ func (s *PostgresStore) Get(id string) (TradeLine, bool) {
 	if s == nil || s.pool == nil {
 		return TradeLine{}, false
 	}
-	line, err := scanLine(s.pool.QueryRow(context.Background(), lineSelect+` WHERE id=$1::uuid`, id))
+	ctx := s.context()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return TradeLine{}, false
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		return TradeLine{}, false
+	}
+	line, err := scanLine(tx.QueryRow(ctx, lineSelect+` WHERE id=$1::uuid`, id))
 	return line, err == nil
 }
 func (s *PostgresStore) ListForSupplier(org string) []TradeLine {
@@ -98,26 +112,11 @@ func (s *PostgresStore) ListForBuyer(user string) []TradeLine {
 	return s.list(`buyer_user_id=$1::uuid`, user)
 }
 func (s *PostgresStore) list(where, value string) []TradeLine {
-	if s == nil || s.pool == nil || value == "" {
-		return []TradeLine{}
-	}
-	rows, err := s.pool.Query(context.Background(), lineSelect+` WHERE `+where+` ORDER BY updated_at DESC`, value)
+	rows, err := s.readList(where, value)
 	if err != nil {
 		return []TradeLine{}
 	}
-	defer rows.Close()
-	out := []TradeLine{}
-	for rows.Next() {
-		line, err := scanLine(rows)
-		if err != nil {
-			return []TradeLine{}
-		}
-		out = append(out, line)
-	}
-	if rows.Err() != nil {
-		return []TradeLine{}
-	}
-	return out
+	return rows
 }
 
 func (s *PostgresStore) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Reservation, TradeLine, error) {
@@ -125,7 +124,7 @@ func (s *PostgresStore) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Re
 	if err != nil {
 		return Drawdown{}, Reservation{}, TradeLine{}, err
 	}
-	ctx := context.Background()
+	ctx := s.context()
 	tx, local, lineID, err := s.loadForMutation(ctx, input.LineID, "")
 	if err != nil {
 		return Drawdown{}, Reservation{}, TradeLine{}, err
@@ -153,7 +152,7 @@ func (s *PostgresStore) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Re
 	return drawdown, reservation, line, nil
 }
 func (s *PostgresStore) ConfirmDrawdown(drawdownID, buyer, agreementHash string) (Drawdown, TradeLine, error) {
-	ctx := context.Background()
+	ctx := s.context()
 	tx, local, lineID, err := s.loadForMutation(ctx, "", drawdownID)
 	if err != nil {
 		return Drawdown{}, TradeLine{}, err
@@ -175,7 +174,7 @@ func (s *PostgresStore) ConfirmDrawdown(drawdownID, buyer, agreementHash string)
 	return drawdown, line, nil
 }
 func (s *PostgresStore) ReleaseDrawdown(input ReleaseInput) (Drawdown, TradeLine, error) {
-	ctx := context.Background()
+	ctx := s.context()
 	tx, local, lineID, err := s.loadForMutation(ctx, "", input.DrawdownID)
 	if err != nil {
 		return Drawdown{}, TradeLine{}, err
@@ -197,7 +196,7 @@ func (s *PostgresStore) ReleaseDrawdown(input ReleaseInput) (Drawdown, TradeLine
 	return drawdown, line, nil
 }
 func (s *PostgresStore) RecordDrawdownReceipt(input ReceiptInput) (Drawdown, TradeLine, error) {
-	ctx := context.Background()
+	ctx := s.context()
 	tx, local, lineID, err := s.loadForMutation(ctx, "", input.DrawdownID)
 	if err != nil {
 		return Drawdown{}, TradeLine{}, err
@@ -241,7 +240,7 @@ func (s *PostgresStore) CancelDrawdown(authorizedLineID, drawdownID, actorID str
 	if authorizedLineID == "" {
 		return Drawdown{}, TradeLine{}, errors.New("authorized trade line is required")
 	}
-	ctx := context.Background()
+	ctx := s.context()
 	tx, local, lineID, err := s.loadForMutation(ctx, authorizedLineID, drawdownID)
 	if err != nil {
 		return Drawdown{}, TradeLine{}, err
@@ -266,7 +265,7 @@ func (s *PostgresStore) CancelDrawdown(authorizedLineID, drawdownID, actorID str
 // UpdateOutstanding acknowledges an authoritative balance. Financial writes update
 // exposure in the same database transaction through obligation_drawdown_exposure.
 func (s *PostgresStore) UpdateOutstanding(drawdownID string, outstanding ledger.Money) (TradeLine, error) {
-	ctx := context.Background()
+	ctx := s.context()
 	tx, local, lineID, err := s.loadForMutation(ctx, "", drawdownID)
 	if err != nil {
 		return TradeLine{}, err
@@ -291,7 +290,7 @@ func (s *PostgresStore) SetMandateState(lineID, mandateID string, active bool) (
 	return s.mutateLine(lineID, func(local *Store) (TradeLine, error) { return local.SetMandateState(lineID, mandateID, active) })
 }
 func (s *PostgresStore) mutateLine(lineID string, operation func(*Store) (TradeLine, error)) (TradeLine, error) {
-	ctx := context.Background()
+	ctx := s.context()
 	tx, local, id, err := s.loadForMutation(ctx, lineID, "")
 	if err != nil {
 		return TradeLine{}, err
@@ -313,12 +312,15 @@ func (s *PostgresStore) Statement(lineID string) (Statement, error) {
 	if s == nil || s.pool == nil {
 		return Statement{}, errors.New("trade-line database is not configured")
 	}
-	ctx := context.Background()
+	ctx := s.context()
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return Statement{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		return Statement{}, err
+	}
 	local := s.local()
 	if err := loadAggregateTx(ctx, tx, local, lineID, false); err != nil {
 		return Statement{}, err
@@ -332,6 +334,10 @@ func (s *PostgresStore) loadForMutation(ctx context.Context, lineID, drawdownID 
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
+		return nil, nil, "", err
+	}
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		_ = tx.Rollback(ctx)
 		return nil, nil, "", err
 	}
 	if lineID == "" {
@@ -509,7 +515,16 @@ func (s *PostgresStore) readList(where, value string) ([]TradeLine, error) {
 	if s == nil || s.pool == nil || value == "" {
 		return nil, errors.New("trade line database or scope is unavailable")
 	}
-	rows, err := s.pool.Query(context.Background(), lineSelect+` WHERE `+where+` ORDER BY updated_at DESC`, value)
+	ctx := s.context()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(ctx, lineSelect+` WHERE `+where+` ORDER BY updated_at DESC`, value)
 	if err != nil {
 		return nil, err
 	}
@@ -544,4 +559,16 @@ func legalVersionsJSON(versions *legalpublication.Versions) []byte {
 	}
 	data, _ := json.Marshal(versions)
 	return data
+}
+
+// ForContext returns an immutable request-scoped facade. Shared configuration
+// remains in Store; no request can overwrite another request's tenant identity.
+func (s *PostgresStore) ForContext(ctx context.Context) Service {
+	return &PostgresStore{Store: s.Store, pool: s.pool, outbox: s.outbox, transactionalActivationHandler: s.transactionalActivationHandler, requestContext: ctx}
+}
+func (s *PostgresStore) context() context.Context {
+	if s.requestContext != nil {
+		return s.requestContext
+	}
+	return context.Background()
 }

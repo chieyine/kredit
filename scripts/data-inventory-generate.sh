@@ -14,6 +14,8 @@ trap 'rm -f "$temporary"' EXIT
     SELECT c.table_schema,c.table_name,c.column_name,
       CASE
         WHEN c.table_name='platform_settings' AND c.column_name IN ('value','secret_fingerprint') THEN 'restricted_authentication'
+        WHEN c.table_name IN ('native_identity_sessions','native_identity_history') THEN 'restricted_identity'
+        WHEN c.table_name IN ('fee_authorizations','fee_debits','fee_bank_receipts','split_fee_allocations','collection_settlement_routes','seller_settlement_receipts') THEN 'restricted_financial'
         WHEN c.table_name='privacy_exports' AND c.column_name='payload' THEN 'restricted_identity'
         WHEN c.table_schema='jobs' AND c.column_name IN ('args','errors','metadata') THEN 'restricted_financial'
         WHEN c.table_name LIKE 'admin_%' AND c.column_name IN ('proposed_by','approved_by','buyer_decided_by','buyer_id','owner_id','actor_id') THEN 'restricted_identity'

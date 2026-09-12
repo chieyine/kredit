@@ -1,4 +1,6 @@
 <script lang="ts">
+ import SaleProgress from "$lib/components/SaleProgress.svelte";
+ import SaleCosts from "$lib/components/SaleCosts.svelte";
  import { localInput, lagosISO } from '$lib/admin-client';
  import {feeDisclosure} from "$lib/fee-terms";
  import { formatKobo, nairaInput, parseNaira } from '$lib/money';
@@ -7,7 +9,7 @@
  import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
  import { checkedJSON, LatestRequest, readResource, record, rows, text, publicError } from '$lib/api/reliable';
  import { MutationIntent } from '$lib/api/mutation';
- import { dateLabel, kobo, organization, timeLabel } from '$lib/records';
+ import { saleView, dateLabel, kobo, organization, timeLabel } from '$lib/records';
  import PaymentReview from '$lib/components/PaymentReview.svelte';
 
 	import Money from '$lib/components/Money.svelte';
@@ -30,7 +32,7 @@
    if(!Number.isSafeInteger(sale.version)||Number(sale.version)<0)throw new Error('Missing sale version');
    if(result.agreement){text(record(result.agreement).id);text(record(result.agreement).document_hash);}
    if (result.obligation) { text(record(result.obligation).id); kobo(record(result.obligation).outstanding_kobo); }
-   return result;
+   return {...result,timeline:saleView(result).timeline};
  }
  function moneyRow(value: unknown, field: string) { const row = record(value); text(row.id); kobo(row[field]); text(row.state); return row; }
 
@@ -90,6 +92,10 @@
    } catch (cause) { if (id === requestID && organizationID === org) error = cause instanceof Error ? cause.message : 'We have not confirmed the result. Check the record before submitting another request.'; return false; }
    finally { busy = false; }
  }
+ function draftChanged(){
+  if(!view || view.request.state!=='DRAFT')return false;
+  return draftPrincipal!==nairaInput(view.request.principal_kobo)||draftGoods!==view.request.goods_description||draftDueDate!==view.request.due_date||draftCollectionAt!==localInput(view.request.collection_at)||Number(draftGraceHours)!==view.request.grace_hours;
+ }
  async function updateDraft() {
    error = '';
    try {
@@ -102,6 +108,7 @@
    } catch { error = 'Check the sale amount and payment dates before saving.'; }
  }
  async function command(path: string, body: unknown = undefined) {
+   if(path==='send' && draftChanged()){error='Save your changes before sending this sale.';return false;}
    return mutate(`/api/v1/organizations/${organizationID}/credit-requests/${id}/${path}`, body, path === 'payments' ? 'payment' : path === 'disputes' ? 'dispute' : 'request');
  }
  async function recordPayment() {
@@ -166,11 +173,11 @@
 	{#if notice}<p class="success notice" role="status">{notice}</p>{/if}
 	{#if !view}{#if loading}<p role="status">Opening sale…</p>{:else}<button onclick={() => load()}>Try again</button>{/if}{:else}
 		<p class="eyebrow">Sale · {productLabel(view.request.state)}</p><h1>{view.request.buyer_legal_name}</h1>
-		<p class="muted">The sale, the goods and every payment stay together here.</p>
+		<p class="muted">The sale, the goods and every payment stay together here.</p><SaleProgress view={view} audience="seller"/><SaleCosts view={view}/>
 		<div class="quick-actions"><a class="repeat" href={`/app/credit/new?organization=${encodeURIComponent(organizationID)}&customer=${encodeURIComponent(view.request.buyer_user_id ?? '')}&goods=${encodeURIComponent(view.request.goods_description)}&amount=${encodeURIComponent(nairaInput(view.request.principal_kobo))}`}>Sell these same goods again</a><ShareActions compact title="Kredit payment reminder" text={`Hello ${view.request.buyer_legal_name}, this is a reminder that ${formatKobo(view.obligation?.outstanding_kobo ?? view.request.principal_kobo)} is left for ${view.request.goods_description}. Payment day: ${scheduleItems.find((i:any)=>i.state!=='CANCELLED'&&i.principal_due_kobo>i.allocated_kobo)?.due_at?.slice(0,10)??(view.obligation?'Check your current payment schedule':view.request.due_date)}.`} /></div>
 		<section class="detail-grid"><article class="card"><h2>The sale</h2><p>{feeDisclosure(view.request.fee_terms)}</p><dl><div><dt>Money to pay</dt><dd><Money amountKobo={view.request.principal_kobo} /></dd></div><div><dt>Goods</dt><dd>{view.request.goods_description}</dd></div><div><dt>{view.obligation?'Original payment day':'Pay before'}</dt><dd>{view.request.due_date}</dd></div><div><dt>{view.obligation?'Original bank debit date':'Bank debit after'}</dt><dd>{timeLabel(view.request.collection_at)}</dd></div><div><dt>Extra time</dt><dd>{view.request.grace_hours} hours</dd></div></dl>{#if view.request.invoice_document_id}<p><button type="button" onclick={openInvoice}>Open the invoice →</button></p>{/if}</article>
 		<article class="card"><h2>What has happened so far</h2><p><strong>{productLabel(view.request.state)}</strong></p>{#if view.agreement?.document_hash}<details><summary>Technical record (for reference)</summary><p>Sale record code<br/><code>{view.agreement.document_hash}</code></p></details>{/if}{#if view.obligation}<p>Money left<br/><strong><Money amountKobo={view.obligation.outstanding_kobo} /></strong></p><p><a href={`/api/v1/organizations/${organizationID}/credit-requests/${id}/agreement-document`} target="_blank" rel="noreferrer">Print or save a copy of this sale →</a></p>{/if}</article></section>
-		{#if view.request.state === 'DRAFT'}<section class="card action"><h2>Check it before you send</h2><p>You can still change anything now. Once you send it, your customer must see exactly this sale.</p><label>How much must they pay? (₦)<input disabled={busy||loading} bind:value={draftPrincipal} inputmode="decimal" /></label><label>Goods<textarea disabled={busy||loading} bind:value={draftGoods}></textarea></label><label>Day they must pay<input disabled={busy||loading} type="date" bind:value={draftDueDate} /></label><label>Bank debit may be considered from (Nigerian time)<input disabled={busy||loading} type="datetime-local" bind:value={draftCollectionAt} /></label><label>Extra hours you are giving them<input disabled={busy||loading} type="number" min="0" max="720" bind:value={draftGraceHours} /></label><div class="button-row"><button disabled={busy || loading} onclick={updateDraft}>Save for later</button><button class="primary" disabled={busy || loading} onclick={() => command('send')}>Send it to my customer</button><button class="danger" disabled={busy || loading} onclick={() => command('cancel')}>Cancel this draft</button></div></section>{/if}
+		{#if view.request.state === 'DRAFT'}<section class="card action"><h2>Check it before you send</h2><p>You can still change anything now. Once you send it, your customer must see exactly this sale.</p><label>How much must they pay? (₦)<input disabled={busy||loading} bind:value={draftPrincipal} inputmode="decimal" /></label><label>Goods<textarea disabled={busy||loading} bind:value={draftGoods}></textarea></label><label>Day they must pay<input disabled={busy||loading} type="date" bind:value={draftDueDate} /></label><label>Bank debit may be considered from (Nigerian time)<input disabled={busy||loading} type="datetime-local" bind:value={draftCollectionAt} /></label><label>Extra hours you are giving them<input disabled={busy||loading} type="number" min="0" max="720" bind:value={draftGraceHours} /></label>{#if draftChanged()}<p>Save your changes before sending.</p>{/if}<div class="button-row"><button disabled={busy || loading} onclick={updateDraft}>Save for later</button><button class="primary" disabled={busy || loading || draftChanged()} onclick={() => command('send')}>Send it to my customer</button><button class="danger" disabled={busy || loading} onclick={() => command('cancel')}>Cancel this draft</button></div></section>{/if}
 		{#if view.request.state === 'SENT' || view.request.state === 'BUYER_REVIEWING'}<section class="card action"><h2>Waiting for your customer</h2><p>Changed your mind? You can cancel it. The record of what happened stays.</p><button class="danger" disabled={busy || loading} onclick={() => command('cancel')}>Cancel this sale</button></section>{/if}
 		{#if view.request.state === 'READY_TO_RELEASE'}<section class="card action"><h2>Have the goods left your shop?</h2><label>How did they get the goods?<select disabled={busy||loading} bind:value={deliveryMethod}><option value="supplier_delivery">We delivered them</option><option value="buyer_collection">The customer came and collected</option><option value="third_party_delivery">Somebody else delivered them</option></select></label><label>Delivery note number<textarea disabled={busy||loading} bind:value={releaseNotes}></textarea></label><button class="primary" disabled={busy || loading} onclick={() => command('release',{delivery_method:deliveryMethod,notes:releaseNotes})}>Yes, the goods have left</button></section>{/if}
 		{#if view.obligation}

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"kredit/internal/access"
@@ -82,6 +83,10 @@ func (s *Server) documentDownload(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusServiceUnavailable, "document_unavailable", "The document could not be opened. Try again.")
 		return
 	}
+	if strings.HasPrefix(doc.Purpose, "dispute_") {
+		writeProblem(w, 403, "dispute_access_required", "Open this document from its dispute so the evidence access checks can run.")
+		return
+	}
 	url, err := s.runtime.Documents.SignedDownloadForTenant(r.Context(), documentID, user.ID, organizationID, 10*time.Minute)
 	if err != nil {
 		status := http.StatusServiceUnavailable
@@ -92,4 +97,33 @@ func (s *Server) documentDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"document": doc, "url": url, "expires_in_seconds": 600})
+}
+
+func (s *Server) buyerInvoice(w http.ResponseWriter, r *http.Request) {
+	_, user, ok := s.requireAuth(w, r)
+	if !ok {
+		return
+	}
+	id, err := pathID(r, "requestID")
+	if err != nil {
+		writeProblem(w, 400, "invalid_path", "The sale reference is invalid.")
+		return
+	}
+	view, err := s.runtime.Credit.GetForBuyer(id, user.ID)
+	if err != nil || view.Request.State == "DRAFT" || view.Request.InvoiceDocumentID == "" {
+		writeProblem(w, 404, "invoice_not_found", "No invoice is available for this sale.")
+		return
+	}
+	doc, err := s.runtime.Documents.ReadForTenant(r.Context(), view.Request.InvoiceDocumentID, user.ID, view.Request.SupplierOrganizationID)
+	if err != nil || doc.Purpose != "credit_invoice" || doc.SHA256 != view.Request.InvoiceDocumentHash {
+		writeProblem(w, 404, "invoice_not_found", "The invoice could not be confirmed.")
+		return
+	}
+	url, err := s.runtime.Documents.SignedDownloadForTenant(r.Context(), doc.ID, user.ID, view.Request.SupplierOrganizationID, 5*time.Minute)
+	if err != nil {
+		writeProblem(w, 409, "invoice_unavailable", "The invoice must pass its safety check before it can be opened.")
+		return
+	}
+	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: view.Request.SupplierOrganizationID, Action: "sale.invoice_downloaded", ResourceType: "document", ResourceID: doc.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context())})
+	writeJSON(w, 200, map[string]any{"url": url, "expires_in_seconds": 300})
 }

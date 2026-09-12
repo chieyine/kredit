@@ -159,11 +159,18 @@ func (s *PostgresStore) InvitationTarget(rawToken string) (string, string, error
 }
 
 func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, input AcceptInput) (Portal, error) {
+	if !input.ConsentsAccepted || input.TermsVersion == "" || input.PrivacyVersion == "" || input.IdentityNoticeVersion != IdentityNoticeVersion {
+		return Portal{}, errors.New("read and accept the current notices before continuing")
+	}
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(input.FullName) == "" {
 		return Portal{}, errors.New("authenticated user and full name are required")
 	}
 	if s.identity == nil {
 		return Portal{}, errors.New("identity provider is not configured")
+	}
+	caps := s.identity.Capabilities()
+	if !caps.PersonVerification || !caps.BusinessVerification || !caps.AuthorityVerification {
+		return Portal{}, errors.New("identity verification is not configured")
 	}
 	s.guardMu.RLock()
 	guard := s.acceptGuard
@@ -231,45 +238,26 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 		return Portal{}, err
 	}
 
-	personSession, err := s.identity.CreatePersonVerification(ctx, identity.PersonVerificationInput{SubjectID: personID, FullName: strings.TrimSpace(input.FullName)})
-	if err != nil {
-		return Portal{}, err
-	}
-	businessSession, err := s.identity.CreateBusinessVerification(ctx, identity.BusinessVerificationInput{SubjectID: businessID, LegalName: legalName, BusinessType: businessType, Address: address})
-	if err != nil {
-		return Portal{}, err
-	}
-	authoritySession, err := s.identity.CreateAuthorityVerification(ctx, identity.AuthorityVerificationInput{SubjectID: representativeID, PersonID: personID, BusinessID: businessID, RoleTitle: "authorised representative"})
-	if err != nil {
-		return Portal{}, err
-	}
-	if !verificationComplete(personSession) || !verificationComplete(businessSession) || !verificationComplete(authoritySession) {
-		return Portal{}, errors.New("identity, business, and authority verification must complete before onboarding")
-	}
 	now := time.Now().UTC()
-	if _, err := tx.Exec(ctx, `INSERT INTO app.persons (id, user_id, full_name, status, created_at) VALUES ($1, $2, $3, 'verified', $4) ON CONFLICT (user_id) DO NOTHING`, personID, userID, strings.TrimSpace(input.FullName), now); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO app.persons (id, user_id, full_name, status, created_at) VALUES ($1, $2, $3, 'pending_verification', $4) ON CONFLICT (user_id) DO NOTHING`, personID, userID, strings.TrimSpace(input.FullName), now); err != nil {
 		return Portal{}, fmt.Errorf("create buyer person: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO app.businesses (id, owner_user_id, legal_name, trading_name, business_type, business_address, industry, status, created_at) VALUES ($1, $2, $3, NULLIF($4,''), $5, $6, $7, 'verified', $8) ON CONFLICT (id) DO NOTHING`, businessID, userID, legalName, tradingName, businessType, address, industry, now); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO app.businesses (id, owner_user_id, legal_name, trading_name, business_type, business_address, industry, status, created_at) VALUES ($1, $2, $3, NULLIF($4,''), $5, $6, $7, 'pending_verification', $8) ON CONFLICT (id) DO NOTHING`, businessID, userID, legalName, tradingName, businessType, address, industry, now); err != nil {
 		return Portal{}, fmt.Errorf("create buyer business: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO app.business_representatives (id, business_id, person_id, role_title, authority_type, authority_verification_status, created_at) VALUES ($1, $2, $3, $4, $5, 'verified', $6) ON CONFLICT (id) DO NOTHING`, representativeID, businessID, personID, "authorised representative", "buyer_acceptance", now); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO app.business_representatives (id, business_id, person_id, role_title, authority_type, authority_verification_status, created_at) VALUES ($1, $2, $3, $4, $5, 'pending', $6) ON CONFLICT (id) DO NOTHING`, representativeID, businessID, personID, "authorised representative", "buyer_acceptance", now); err != nil {
 		return Portal{}, fmt.Errorf("create buyer representative: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO app.trade_relationships (supplier_organization_id,buyer_business_id,status) VALUES ($1::uuid,$2::uuid,'active') ON CONFLICT (supplier_organization_id,buyer_business_id) DO UPDATE SET status='active',updated_at=now()`, row.OrganizationID, businessID); err != nil {
 		return Portal{}, fmt.Errorf("create supplier buyer relationship: %w", err)
 	}
-	if err := insertVerification(ctx, tx, personID, "person", personSession, now); err != nil {
-		return Portal{}, err
+	for kind, subject := range map[string]string{"person": personID, "business": businessID, "authority": representativeID} {
+		if _, err := tx.Exec(ctx, `INSERT INTO app.buyer_verification_intents(user_id,subject_type,subject_id,provider) VALUES($1::uuid,$2,$3::uuid,$4) ON CONFLICT(subject_type,subject_id,provider) DO NOTHING`, userID, kind, subject, s.identity.Name()); err != nil {
+			return Portal{}, err
+		}
 	}
-	if err := insertVerification(ctx, tx, businessID, "business", businessSession, now); err != nil {
-		return Portal{}, err
-	}
-	if err := insertVerification(ctx, tx, representativeID, "authority", authoritySession, now); err != nil {
-		return Portal{}, err
-	}
-	for _, consent := range []string{"buyer_portal", "identity_verification", "privacy_notice"} {
-		if _, err := tx.Exec(ctx, `INSERT INTO app.identity_consents (id, user_id, consent_type, version, accepted_at) VALUES ($1, $2, $3, 'v1', $4)`, newUUID(), userID, consent, now); err != nil {
+	for consent, version := range map[string]string{"buyer_portal": input.TermsVersion, "identity_verification": input.IdentityNoticeVersion, "privacy_notice": input.PrivacyVersion} {
+		if _, err := tx.Exec(ctx, `INSERT INTO app.identity_consents (id, user_id, consent_type, version, accepted_at) VALUES ($1, $2, $3, $4, $5)`, newUUID(), userID, consent, version, now); err != nil {
 			return Portal{}, fmt.Errorf("record buyer consent: %w", err)
 		}
 	}
@@ -280,7 +268,9 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 	if err := tx.Commit(ctx); err != nil {
 		return Portal{}, fmt.Errorf("commit buyer acceptance: %w", err)
 	}
-	return s.ReadPortal(ctx, userID)
+	// Verification starts through the saved account's explicit refresh action.
+	// Do not delay the sign-in response behind three remote provider requests.
+	return s.ReadBusinessPortal(ctx, userID, businessID)
 }
 
 func (s *PostgresStore) ListCustomers(organizationID string) []Customer {
@@ -317,6 +307,9 @@ func (s *PostgresStore) Portal(userID string) (Portal, error) {
 }
 
 func (s *PostgresStore) ReadPortal(ctx context.Context, userID string) (Portal, error) {
+	return s.ReadBusinessPortal(ctx, userID, "")
+}
+func (s *PostgresStore) ReadBusinessPortal(ctx context.Context, userID, businessID string) (Portal, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	tx, err := s.beginTxContext(ctx, userID, "")
@@ -333,7 +326,7 @@ func (s *PostgresStore) ReadPortal(ctx context.Context, userID string) (Portal, 
 	}
 	var business Business
 	var representative Representative
-	if err := tx.QueryRow(ctx, `SELECT b.id::text, b.owner_user_id::text, b.legal_name, COALESCE(b.trading_name,''), b.business_type, b.business_address, b.industry, b.status, b.created_at, r.id::text, r.person_id::text, r.role_title, r.authority_type, r.authority_verification_status, r.created_at FROM app.businesses b JOIN app.business_representatives r ON r.business_id = b.id WHERE b.owner_user_id = $1 AND r.person_id = $2 ORDER BY b.created_at DESC, b.id DESC, r.created_at DESC, r.id DESC LIMIT 1`, userID, person.ID).Scan(&business.ID, &business.OwnerUserID, &business.LegalName, &business.TradingName, &business.BusinessType, &business.BusinessAddress, &business.Industry, &business.Status, &business.CreatedAt, &representative.ID, &representative.PersonID, &representative.RoleTitle, &representative.AuthorityType, &representative.AuthorityStatus, &representative.CreatedAt); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT b.id::text, b.owner_user_id::text, b.legal_name, COALESCE(b.trading_name,''), b.business_type, b.business_address, b.industry, b.status, b.created_at, r.id::text, r.person_id::text, r.role_title, r.authority_type, r.authority_verification_status, r.created_at FROM app.businesses b JOIN app.business_representatives r ON r.business_id = b.id WHERE b.owner_user_id = $1 AND r.person_id = $2 AND ($3='' OR b.id=NULLIF($3,'')::uuid) ORDER BY b.created_at DESC, b.id DESC, r.created_at DESC, r.id DESC LIMIT 1`, userID, person.ID, businessID).Scan(&business.ID, &business.OwnerUserID, &business.LegalName, &business.TradingName, &business.BusinessType, &business.BusinessAddress, &business.Industry, &business.Status, &business.CreatedAt, &representative.ID, &representative.PersonID, &representative.RoleTitle, &representative.AuthorityType, &representative.AuthorityStatus, &representative.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Portal{}, ErrPortalNotFound
 		}
@@ -517,12 +510,16 @@ func (s *PostgresStore) decrypt(value []byte) ([]byte, error) {
 }
 
 func insertVerification(ctx context.Context, tx pgx.Tx, subjectID, subjectType string, session identity.VerificationSession, now time.Time) error {
+	var expires any
+	if !session.ExpiresAt.IsZero() {
+		expires = session.ExpiresAt
+	}
 	reasons, _ := json.Marshal([]string{})
 	safe, err := json.Marshal(identity.SafeVerificationResult(session.SafeResult))
 	if err != nil {
 		return err
 	}
-	result, err := tx.Exec(ctx, `INSERT INTO app.verification_cases (id, subject_type, subject_id, provider, provider_reference, verification_level, state, reasons, safe_result, started_at, completed_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $10, $11) ON CONFLICT(provider,provider_reference) DO UPDATE SET state=EXCLUDED.state,reasons=EXCLUDED.reasons,safe_result=EXCLUDED.safe_result,completed_at=EXCLUDED.completed_at,expires_at=EXCLUDED.expires_at WHERE app.verification_cases.subject_id=EXCLUDED.subject_id AND app.verification_cases.subject_type=EXCLUDED.subject_type`, newUUID(), subjectType, subjectID, session.Provider, session.ProviderID, session.VerificationLevel, session.State, reasons, safe, now, session.ExpiresAt)
+	result, err := tx.Exec(ctx, `INSERT INTO app.verification_cases (id, subject_type, subject_id, provider, provider_reference, verification_level, state, reasons, safe_result, started_at, completed_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, CASE WHEN $7 IN ('verified','failed','expired') THEN $10 END, $11) ON CONFLICT(provider,provider_reference) DO UPDATE SET state=EXCLUDED.state,reasons=EXCLUDED.reasons,safe_result=EXCLUDED.safe_result,verification_level=EXCLUDED.verification_level,completed_at=EXCLUDED.completed_at,expires_at=EXCLUDED.expires_at WHERE app.verification_cases.subject_id=EXCLUDED.subject_id AND app.verification_cases.subject_type=EXCLUDED.subject_type`, newUUID(), subjectType, subjectID, session.Provider, session.ProviderID, session.VerificationLevel, session.State, reasons, safe, now, expires)
 	if err != nil {
 		return fmt.Errorf("save verification case: %w", err)
 	}

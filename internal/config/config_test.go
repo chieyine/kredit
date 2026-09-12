@@ -78,7 +78,7 @@ func TestProductionRejectsWeakSecretsAndLocalEndpoints(t *testing.T) {
 	cfg := Config{
 		Environment: "production", Version: "1", APIListenAddr: ":8080", Currency: "NGN", MoneyUnit: "kobo", CollectionProvider: "provider",
 		PublicBaseURL: "https://app.example.com", AppBaseURL: "https://app.example.com", APIInternalURL: "https://api.example.com", ObjectStorageEndpoint: "https://s3.example.com", ObjectStorageBucket: "bucket", ObjectStorageRegion: "region", ObjectStorageAccessKey: "access-key", ObjectStorageSecretKey: "short", FieldEncryptionKeyID: "kms-key",
-		SessionSigningKey: "short", OTPHMACKey: "short", TokenHashKey: "short", DatabaseURL: "postgres://db.example/kredit?sslmode=require", DatabaseDirectURL: "postgres://db.example/kredit?sslmode=require", RiverDatabaseURL: "postgres://db.example/kredit?sslmode=require",
+		SessionSigningKey: "short", OTPHMACKey: "short", TokenHashKey: "short", DatabaseURL: "postgres://db.example/kredit?sslmode=verify-full", DatabaseDirectURL: "postgres://db.example/kredit?sslmode=verify-full", RiverDatabaseURL: "postgres://db.example/kredit?sslmode=verify-full",
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected weak production secret validation error")
@@ -111,26 +111,27 @@ func productionBase() Config {
 		CollectionProvider: "provider",
 		AdminSurfaces:      []string{"all"},
 
-		SessionSigningKey:      "session-signing-key-fixture-0123456789abcdef",
-		OTPHMACKey:             "otp-hmac-key-fixture-0123456789abcdef0123",
-		TokenHashKey:           "token-hash-key-fixture-0123456789abcdef01",
-		SettingsEncryptionKey:  "settings-encryption-fixture-0123456789abcd",
-		FieldEncryptionKey:     "field-encryption-key-fixture-0123456789ab",
-		FieldEncryptionKeyID:   "kms-key-001",
-		ObjectStorageSecretKey: "object-storage-secret-fixture-0123456789ab",
-		ObjectStorageAccessKey: "storage-access-001",
-		ObjectStorageEndpoint:  "https://s3.kredit.test",
-		ObjectStorageBucket:    "kredit",
-		ObjectStorageRegion:    "eu-west-1",
+		SessionSigningKey:       "session-signing-key-fixture-0123456789abcdef",
+		OTPHMACKey:              "otp-hmac-key-fixture-0123456789abcdef0123",
+		TokenHashKey:            "token-hash-key-fixture-0123456789abcdef01",
+		SettingsEncryptionKey:   "settings-encryption-fixture-0123456789abcd",
+		FieldEncryptionKey:      "field-encryption-key-fixture-0123456789ab",
+		FieldEncryptionKeyID:    "kms-key-001",
+		FrontendProxySigningKey: "frontend-proxy-fixture-key-0123456789abcdef",
+		ObjectStorageSecretKey:  "object-storage-secret-fixture-0123456789ab",
+		ObjectStorageAccessKey:  "storage-access-001",
+		ObjectStorageEndpoint:   "https://s3.kredit.test",
+		ObjectStorageBucket:     "kredit",
+		ObjectStorageRegion:     "eu-west-1",
 
 		PublicBaseURL:  "https://kredit.test",
 		AppBaseURL:     "https://app.kredit.test",
 		APIInternalURL: "https://api.kredit.test",
 		OTelEndpoint:   "https://otel.kredit.test",
 
-		DatabaseURL:       "postgres://db.kredit.test/kredit?sslmode=require",
-		DatabaseDirectURL: "postgres://db.kredit.test/kredit?sslmode=require",
-		RiverDatabaseURL:  "postgres://db.kredit.test/kredit?sslmode=require",
+		DatabaseURL:       "postgres://db.kredit.test/kredit?sslmode=verify-full",
+		DatabaseDirectURL: "postgres://db.kredit.test/kredit?sslmode=verify-full",
+		RiverDatabaseURL:  "postgres://db.kredit.test/kredit?sslmode=verify-full",
 
 		// Holding records is unconditional in production, so the base satisfies it.
 		ApprovedRetentionPolicy:    true,
@@ -240,10 +241,10 @@ func TestValidateProductionDatabaseURLRequiresPostgresTLSAndRemoteHost(t *testin
 		value string
 	}{
 		{name: "not a URL", value: "db.internal"},
-		{name: "wrong scheme", value: "https://db.example.com/kredit?sslmode=require"},
+		{name: "wrong scheme", value: "https://db.example.com/kredit?sslmode=verify-full"},
 		{name: "missing TLS mode", value: "postgres://db.example.com/kredit"},
 		{name: "TLS disabled", value: "postgres://db.example.com/kredit?sslmode=disable"},
-		{name: "IPv6 loopback", value: "postgres://[::1]/kredit?sslmode=require"},
+		{name: "IPv6 loopback", value: "postgres://[::1]/kredit?sslmode=verify-full"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"kredit/internal/notifications"
 	"net/http"
 	"os"
 	"os/signal"
@@ -143,6 +144,7 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go config.WatchConnections(ctx, cfg, settings, database.Raw(), "worker", stop)
 
 	healthServer, healthErrors := startHealthServer(envOr("WORKER_HEALTH_ADDR", ":8081"), func() error {
 		if err := ctx.Err(); err != nil {
@@ -249,6 +251,13 @@ func main() {
 }
 
 func enqueueDueNotifications(ctx context.Context, runtime *web.Runtime, client *jobs.Client, logger interface{ Error(string, ...any) }) {
+	for _, channel := range []string{notifications.ChannelEmail, notifications.ChannelSMS, notifications.ChannelWhatsApp} {
+		lookupCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		if err := runtime.Notifications.ReconcileDelivery(lookupCtx, channel, 20); err != nil {
+			logger.Error("message delivery lookup failed", "channel", channel, "error", err)
+		}
+		cancel()
+	}
 	ids, err := runtime.Notifications.DueDeliveryIDs(ctx, 100)
 	if err != nil {
 		logger.Error("notification delivery discovery failed", "error", err)

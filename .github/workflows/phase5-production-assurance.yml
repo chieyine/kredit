@@ -126,7 +126,8 @@ jobs:
           export RESTORE_EXPECTED_FINGERPRINT="$RUNNER_TEMP/phase5-source.json"
           python3 scripts/recovery_fingerprint.py capture "$RESTORE_EXPECTED_FINGERPRINT" --quiesced
           bash scripts/backup.sh > "$RUNNER_TEMP/phase5-backup.log"
-          dump="$(find "$BACKUP_DIR" -maxdepth 1 -name '*.dump' -type f)"
+          dump="$(sed -n 's/^backup=//p' "$RUNNER_TEMP/phase5-backup.log")"
+          [[ -n "$dump" && "$dump" != *$'\n'* && -f "$dump" ]] || { echo 'Backup did not return one archive.' >&2; exit 1; }
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE kredit_phase5_restore'
           started=$(date +%s)
           bash scripts/restore-drill.sh "$dump"

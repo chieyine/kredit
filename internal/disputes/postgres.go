@@ -77,11 +77,20 @@ func (s *PostgresStore) AddEvidence(disputeID, submittedBy, documentID, statemen
 		return Evidence{}, errors.New("evidence submitter and document or statement are required")
 	}
 	evidence := Evidence{ID: identifier.New(), DisputeID: disputeID, SubmittedBy: submittedBy, DocumentID: strings.TrimSpace(documentID), Statement: strings.TrimSpace(statement)}
-	err := s.pool.QueryRow(context.Background(), `INSERT INTO app.dispute_evidence(id,dispute_id,submitted_by,document_id,statement) VALUES($1::uuid,$2::uuid,$3::uuid,NULLIF($4,'')::uuid,NULLIF($5,'')) RETURNING submitted_at`, evidence.ID, evidence.DisputeID, evidence.SubmittedBy, evidence.DocumentID, evidence.Statement).Scan(&evidence.SubmittedAt)
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Evidence{}, err
 	}
-	return evidence, nil
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, submittedBy); err != nil {
+		return Evidence{}, err
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO app.dispute_evidence(id,dispute_id,submitted_by,document_id,statement) VALUES($1::uuid,$2::uuid,$3::uuid,NULLIF($4,'')::uuid,NULLIF($5,'')) RETURNING submitted_at`, evidence.ID, evidence.DisputeID, evidence.SubmittedBy, evidence.DocumentID, evidence.Statement).Scan(&evidence.SubmittedAt)
+	if err != nil {
+		return Evidence{}, err
+	}
+	return evidence, tx.Commit(ctx)
 }
 
 func (s *PostgresStore) Respond(disputeID, actor, response string) (Evidence, error) {

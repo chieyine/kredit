@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"kredit/internal/access"
+	"kredit/internal/auth"
 	"maps"
 	"strings"
 	"sync"
@@ -157,7 +158,7 @@ func (s *Store) GenerateRecoveryCodes(ctx context.Context, userID string) ([]str
 // RequestRecovery deliberately returns an empty ID for an unknown identifier.
 // HTTP callers always send the same response, preventing account enumeration.
 func (s *Store) RequestRecovery(ctx context.Context, identifier, channel, fingerprint string) (string, error) {
-	identifier, channel = normalize(identifier), strings.ToLower(strings.TrimSpace(channel))
+	identifier, channel = auth.NormalizeIdentifier(identifier), strings.ToLower(strings.TrimSpace(channel))
 	if identifier == "" || (channel != "email" && channel != "phone") {
 		return "", errors.New("recovery request is invalid")
 	}
@@ -169,12 +170,8 @@ func (s *Store) RequestRecovery(ctx context.Context, identifier, channel, finger
 		if attempts > 5 {
 			return "", nil
 		}
-		column := "normalized_email"
-		if channel == "phone" {
-			column = "normalized_phone"
-		}
 		var userID string
-		if err := s.pool.QueryRow(ctx, `SELECT id::text FROM app.users WHERE `+column+`=$1`, identifier).Scan(&userID); errors.Is(err, pgx.ErrNoRows) {
+		if err := s.pool.QueryRow(ctx, `SELECT user_id::text FROM app.recovery_account($1,$2)`, identifier, channel).Scan(&userID); errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		} else if err != nil {
 			return "", err
@@ -193,7 +190,15 @@ func (s *Store) RequestRecovery(ctx context.Context, identifier, channel, finger
 		var id string
 		err = tx.QueryRow(ctx, `INSERT INTO app.account_recovery_requests(target_user_id,requested_channel,request_fingerprint,risk_facts) VALUES($1::uuid,$2,$3,$4) ON CONFLICT(target_user_id) WHERE state IN ('PENDING_VERIFICATION','PENDING_REVIEW','COOLING_OFF','APPROVED') DO NOTHING RETURNING id::text`, userID, channel, s.digest(fingerprint), jsonBytes(map[string]string{"request_channel": channel})).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
+			// Repeat the private instructions when the first delivery was lost.
+			err = tx.QueryRow(ctx, `SELECT id::text FROM app.account_recovery_requests WHERE target_user_id=$1::uuid AND requested_channel=$2 AND state='PENDING_VERIFICATION' AND expires_at>now()`, userID, channel).Scan(&id)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return "", nil
+			}
+			if err != nil {
+				return "", err
+			}
+			return id, tx.Commit(ctx)
 		}
 		if err == nil {
 			_, err = tx.Exec(ctx, `INSERT INTO app.account_recovery_events(request_id,event_type,actor_reference) VALUES($1::uuid,'account.recovery_requested','public:self-service')`, id)
@@ -228,6 +233,9 @@ func (s *Store) RequestRecovery(ctx context.Context, identifier, channel, finger
 				r.State = "EXPIRED"
 				r.Version++
 				continue
+			}
+			if r.State == RecoveryPendingVerification && r.RequestedChannel == channel {
+				return r.ID, nil
 			}
 			return "", nil
 		}

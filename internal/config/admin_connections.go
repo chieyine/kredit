@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 
 	"kredit/internal/platformsettings"
 
@@ -59,11 +60,13 @@ func ApplyStoredConnections(ctx context.Context, base Config, settings platforms
 		}
 		if key == "integrations.runtime.mono" {
 			if result.MonoSecretKey != "" {
-				if result.RealCollections {
-					return base, errors.New("disable the other collection connector before configuring Mono")
+				if result.RealCollections && result.MonoSweepEnabled {
+					return base, errors.New("pause Mono collections before enabling another collection connector")
 				}
-				result.CollectionProvider = "mono-sweep"
-			} else if result.CollectionProvider == "mono-sweep" {
+				if !result.RealCollections {
+					result.CollectionProvider = result.MonoAccount()
+				}
+			} else if result.CollectionProvider == result.MonoAccount() {
 				result.CollectionProvider = "mock"
 			}
 		}
@@ -84,6 +87,25 @@ func PublicConnectionValues(c Config, key string) map[string]any {
 	source := reflect.ValueOf(c)
 	for _, field := range platformsettings.RuntimeConnections[key].Fields {
 		if field.Kind == "password" {
+			continue
+		}
+		if field.Kind == "retained" {
+			entries, err := c.RetainedCollections()
+			if field.Key == "RetainedIdentityProviders" {
+				entries, err = c.RetainedIdentities()
+			}
+			if err != nil {
+				continue
+			}
+			if entries == nil {
+				entries = []RetainedCollectionConnection{}
+			}
+			for i := range entries {
+				entries[i].Token = ""
+				entries[i].WebhookSecret = ""
+			}
+			raw, _ := json.Marshal(entries)
+			values[field.Key] = string(raw)
 			continue
 		}
 		if field.Key == "DocumentScannerEnabled" {
@@ -115,22 +137,70 @@ func PrepareConnectionUpdate(ctx context.Context, base Config, settings platform
 	} else if !errors.Is(readErr, pgx.ErrNoRows) {
 		return nil, errors.New("existing connection could not be read")
 	}
+	if key == "integrations.runtime.retained_collections" || key == "integrations.runtime.retained_identity" {
+		retainedField := "RetainedCollectionProviders"
+		if key == "integrations.runtime.retained_identity" {
+			retainedField = "RetainedIdentityProviders"
+		}
+		var encoded, oldEncoded string
+		_ = json.Unmarshal(values[retainedField], &encoded)
+		if raw, ok := previous[retainedField]; ok {
+			_ = json.Unmarshal(raw, &oldEncoded)
+		} else {
+			oldEncoded = reflect.ValueOf(base).FieldByName(retainedField).String()
+		}
+		var entries, old []RetainedCollectionConnection
+		if json.Unmarshal([]byte(encoded), &entries) != nil || len(entries) > 8 {
+			return nil, errors.New("provide at most eight saved collection accounts")
+		}
+		if strings.TrimSpace(oldEncoded) != "" && json.Unmarshal([]byte(oldEncoded), &old) != nil {
+			return nil, errors.New("saved collection accounts could not be read")
+		}
+		for i := range entries {
+			for _, prior := range old {
+				if entries[i].Name != prior.Name {
+					continue
+				}
+				if (entries[i].Endpoint != prior.Endpoint || entries[i].Adapter != prior.Adapter) && (entries[i].Token == "" || (entries[i].Adapter != "mono" && entries[i].WebhookSecret == "")) {
+					return nil, errors.New("provide new credentials when changing a saved account address")
+				}
+				if entries[i].Endpoint == prior.Endpoint && entries[i].Adapter == prior.Adapter && !clearCredentials {
+					if entries[i].Token == "" {
+						entries[i].Token = prior.Token
+					}
+					if entries[i].WebhookSecret == "" {
+						entries[i].WebhookSecret = prior.WebhookSecret
+					}
+				}
+			}
+		}
+		merged, _ := json.Marshal(entries)
+		values[retainedField], _ = json.Marshal(string(merged))
+	}
 	source := reflect.ValueOf(base)
 	// A different recipient must not receive an existing credential implicitly.
 	tokenField, enabledField, endpointField := "", "", ""
 	endpointChanged := false
 	switch key {
+	case "integrations.runtime.settlement":
+		tokenField, enabledField, endpointField = "SettlementToken", "SettlementEnabled", "SettlementEndpoint"
 	case "integrations.runtime.identity":
 		tokenField, enabledField, endpointField = "IdentityProviderToken", "RealIdentity", "IdentityProviderEndpoint"
 	case "integrations.runtime.collections":
 		tokenField, enabledField, endpointField = "CollectionProviderToken", "RealCollections", "CollectionProviderEndpoint"
+	case "integrations.runtime.storage":
+		tokenField, enabledField, endpointField = "ObjectStorageSecretKey", "", "ObjectStorageEndpoint"
 	case "integrations.runtime.scanner":
 		tokenField, enabledField, endpointField = "DocumentScannerToken", "DocumentScannerEnabled", "DocumentScannerEndpoint"
 	}
 	if tokenField != "" {
 		var enabled bool
 		var endpoint, token, oldEndpoint string
-		_ = json.Unmarshal(values[enabledField], &enabled)
+		if enabledField == "" {
+			enabled = true
+		} else {
+			_ = json.Unmarshal(values[enabledField], &enabled)
+		}
 		_ = json.Unmarshal(values[endpointField], &endpoint)
 		_ = json.Unmarshal(values[tokenField], &token)
 		if prior, ok := previous[endpointField]; ok {
@@ -139,6 +209,13 @@ func PrepareConnectionUpdate(ctx context.Context, base Config, settings platform
 			oldEndpoint = source.FieldByName(endpointField).String()
 		}
 		endpointChanged = endpoint != oldEndpoint
+		if key == "integrations.runtime.storage" && endpointChanged {
+			var accessKey string
+			_ = json.Unmarshal(values["ObjectStorageAccessKey"], &accessKey)
+			if accessKey == "" {
+				return nil, errors.New("enter the access key when changing the storage address")
+			}
+		}
 		if enabled && endpointChanged && token == "" {
 			return nil, errors.New("enter the access token when changing an enabled connector address")
 		}

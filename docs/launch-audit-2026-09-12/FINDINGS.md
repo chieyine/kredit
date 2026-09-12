@@ -1,0 +1,185 @@
+# Kredit launch audit — 12 September 2026
+
+Status: file inspection complete; findings remain open. This is a fresh static audit, not a launch certification. All 940 files in the source inventory were inspected. Application source was read directly; structured historical records and logs were reviewed using their complete parsed content and distinct diagnostics; images were opened individually. No agents, tests, builds, migrations, provider transactions or deployments were run. See FILE-BY-FILE.md for coverage and PROVIDERS.md for researched contracts. Reading a file is not proof its behaviour works at runtime.
+
+## Confirmed findings
+
+### F001 — Sendly is not integrated (launch blocker)
+
+`internal/notifications/webhook.go` sends `destination`, `body`, internal template names and `secure_link`, then requires `message_id`. Sendly requires `to` and message content, and returns `id`, `accepted`, `skipped` and `status`. The receipt endpoint also expects a different signature and event format. Putting Sendly's endpoint into the current email settings will not implement email delivery. This affects sign-in and financial notices. Add a dedicated adapter or a deployed translating connector, including suppression handling, stable idempotency, authenticated delivery callbacks and message correlation. Do not count queue acceptance as delivery.
+
+Source read: [Sendly official documentation](https://developer.sendlyai.com/), public documentation bundle fetched for reading only. API is `https://api.sendlyai.com/v1/messages`; webhooks sign timestamp plus raw body using an endpoint signing secret.
+
+### F002 — Production stack contradicts startup requirements (launch blocker)
+
+`infra/environments/docker-compose.prod.yml` supplies `sslmode=disable` to API and worker. `internal/config/config.go` rejects that in production. The production example also omits `ADMIN_SURFACES` and a production OpenTelemetry endpoint; defaults do not satisfy validation. Validation additionally requires `DATABASE_DIRECT_URL`, although README.md:1203 explicitly reserves it for maintenance and forbids supplying it to API/worker deployments. No runtime consumer uses that field outside configuration. Remove the inappropriate runtime requirement; do not solve it by exposing maintenance credentials to application containers. `config.Load()` runs before saved admin settings can apply. Following the deployment guide therefore cannot start the application as written, even after replacing credentials. Supply a complete deployment configuration and PostgreSQL TLS setup while preserving restricted runtime accounts.
+
+### F003 — Caddy gateway configuration is invalid (launch blocker)
+
+`infra/environments/Caddyfile.prod` places `trusted_proxies` directly in the site block without the `static` module. It belongs in the global `servers` block (or the relevant proxy configuration). The outgoing client headers are also overwritten with the immediate peer, losing the original address. Correct syntax and review the full Vercel → Cloudflare → Caddy → API address chain before relying on per-client throttling.
+
+Source: [Caddy global server options](https://caddyserver.com/docs/caddyfile/options#trusted_proxies).
+
+### F004 — PostgreSQL 18 volume is mounted at the old location (launch blocker)
+
+The production compose file uses `postgres:18` but mounts its named volume at `/var/lib/postgresql/data`. PostgreSQL 18 uses `/var/lib/postgresql/18/docker` and expects the volume at `/var/lib/postgresql`. Correct the mount for a fresh installation. For an existing installation, inspect and preserve its actual data before any volume changes.
+
+Source: [Official PostgreSQL image documentation](https://hub.docker.com/_/postgres).
+
+### F005 — Generic connector interfaces are not implemented vendor integrations (launch dependency)
+
+Identity, alternate payments, SMS and WhatsApp depend on external services implementing Kredit-specific contracts. The files reviewed contain no concrete live vendor implementation for these interfaces. A provider label or approval reference does not demonstrate such a service exists. Complete the connector inventory and document each actual service and contract. The production example's simulated-bank comment and mock provider names do not create live integrations: production code and readiness deliberately refuse unavailable/mock collection capability.
+
+### F006 — Deployment command does not load compose interpolation values (launch blocker)
+
+The guide copies `env.production.example` to `.env.production` but runs Compose without `--env-file .env.production`. A service-level `env_file` does not supply `${POSTGRES_ROOT_PASSWORD}` and other substitutions in the Compose model. Unless an operator separately exports those variables, the documented procedure leaves credentials unresolved. Correct the invocation and system service consistently. The guide's localhost `:8080` check also targets a port that production Compose does not publish.
+
+### F007 — Successful bank debits cannot be posted to the production payment ledger (critical)
+
+`internal/collections/engine.go` discards the `ProcessWebhook` context and calls `e.payments.Record(...)`. Production wiring in `internal/web/runtime.go` supplies `payments.PostgresStore`. Its `Record` starts from `context.Background()`, while `RecordTx` calls `db.SetObligationContext`, which rejects a missing authorized supplier context. `PostgresEngine.mutate` does not replace this payment service with a scoped wrapper. Both the immediate provider response and subsequent reconciliation therefore reach the same failure. The debit can succeed externally while payment recognition and debt reduction fail locally; the reservation remains unresolved. Carry the already-authorized tenant context through the collection-to-payment boundary. Do not remove the database isolation check. Static call-chain evidence only; no test or debit was performed.
+
+### F008 — All failed Mono debits are permanently non-retryable (high)
+
+`internal/providers/mono/mono.go` returns `Retryable: false` for every outcome. `internal/collections/engine.go` classifies every failed debit as `final`, and both manual and automatic retries refuse it. This includes insufficient-funds results that may be recoverable on a later day. Partial results have a separate retry path, but zero-recovery failures do not. Define a documented allowlist of safely retryable terminal bank failures and distinguish them from unknown outcomes; respect provider daily limits and fresh eligibility/notice checks. Do not blindly retry transport failures.
+
+### F009 — Sub-NGN-200 balances are eligible for an unsupported Mono debit (high)
+
+The collection target and Mono submission validation accept any positive kobo amount. The published debit minimum is NGN 200. A smaller remaining balance can therefore be reserved and submitted. An HTTP rejection becomes `UNKNOWN`, retaining the reservation and requiring reconciliation of a debit that may not exist. Add a provider-specific minimum to eligibility and a clear remaining-balance workflow. Never round the debit upward beyond the debt.
+
+### F010 — A lost mandate-creation response has no durable recovery workflow (high)
+
+`internal/mandates/provider.go` calls the remote create endpoint inside an uncommitted database transaction and saves the mandate only after the response. If Mono accepts but the response or commit is lost, there is no saved intent or provider ID. A deterministic reference helps prevent duplication but does not recover the missing authorization; retry can hit an already-used reference. Customer registration has an intent/recovery workflow, but mandate creation does not. Add durable mandate intent, lookup/recovery by the original reference, and explicit unknown-outcome handling.
+
+### F011 — Public proxy chain groups sign-in throttling by Vercel egress address (high)
+
+The documented browser → SvelteKit on Vercel → Cloudflare → Caddy → API path sends a server-side request to Cloudflare. Cloudflare's connecting client is Vercel, not the browser. `internal/web/server.go` prioritizes `CF-Connecting-IP`; Caddy also overwrites forwarded headers with its immediate peer. The original browser address supplied by SvelteKit is consequently lost/overridden. Unrelated users can share the 20-attempt/10-minute authentication budget. Establish a trusted, authenticated frontend-to-backend client-address contract and strip untrusted alternatives at ingress; do not merely trust arbitrary incoming headers.
+
+### F012 — Account recovery cannot reach its evidence step (launch blocker)
+
+`internal/usercontrol/store.go` looks up `app.users` by contact on the raw pool without user context. Migration 002's user isolation policy hides these rows from the restricted API role; no later migration adds a recovery lookup. The handler suppresses that failure and returns “instructions have been sent.” There is a second independent break: `internal/web/runtime.go` sends the initial instructions with an empty link, and `internal/notifications/store.go` sends only an “under review” message. Production never returns the request ID, while `/recover` hides its evidence form until it receives that ID. Even after fixing the lookup, a customer cannot supply the evidence needed for review. Add a narrow recovery lookup and deliver a private continuation link at request creation, with durable delivery recovery. Also use the same phone normalization as sign-in; the current recovery normalizer does not convert local Nigerian numbers to E.164.
+
+### F013 — Admin financial changes cannot resolve their target obligation (high)
+
+`internal/web/admin_workflow_handlers.go` and `admin_insight_handlers.go` query obligations on the raw pool before establishing tenant context. `requirePlatformAccess` checks the role but does not establish database context. After migrations 081/097, neither an administrator role nor an arbitrary request UUID makes the obligation visible to those queries. The change preview returns not found; proposal fails; decision and solo-owner approval can proceed with an empty supplier context and fail downstream. Resolve only the necessary obligation identity through a permission-checked lookup, then perform the financial operation inside its tenant transaction. Do not restore unrestricted financial table access.
+
+### F014 — Ownership transfer cannot read the recipient account (high)
+
+`internal/web/ownership_transfer.go` checks the current owner using a role/user join and reads the recipient from `app.users FOR SHARE`, but its transaction never sets a user context or uses an authorized cross-account lookup. Migration 002's user isolation still applies to the restricted API role. The owner check therefore fails before a valid transfer can complete. Keep the lifecycle lock and use an explicitly authorized lookup for both actors.
+
+### F015 — Admin directories and money totals can hide real records (high)
+
+`internal/platformops/store.go` reads users, organizations, team identities, payments and obligations directly from the pool. The handlers do not establish the database scope required by their policies. Lists can be empty and the money summary can report zero for a populated platform. Audit filtering also misses organization-scoped history. Use narrowly authorized admin read capabilities and make unavailable data visibly different from a real zero. Once visibility is repaired, correct `Money`'s reversed total: `payments.PostgresStore.ReverseContext` marks the original payment reversed and inserts a positive reversal row; summing both rows doubles the reversed amount.
+
+### F016 — Granting an admin role can commit while the API reports failure (high)
+
+`platformops.Store.GrantRole` inserts/upserts a role in a data-modifying CTE, then joins its result to `app.users` without user scope. The hidden user makes `Scan` return no rows, but the autocommitted role change still takes effect. The handler returns `role_grant_failed`, leaving the operator with a false account of who has access. Make the mutation and authorized result lookup one explicit transaction, with rollback on any failure. PostgreSQL explicitly documents that a modifying CTE executes even if none of its returned rows are consumed. [PostgreSQL WITH documentation](https://www.postgresql.org/docs/current/queries-with.html).
+
+### F017 — Financial review can miss discrepancies and close unresolved cases (high)
+
+`internal/platformops/financial_review.go` refreshes the security-invoker `app.financial_discrepancies` view without tenant scope. Its worker caller in `internal/web/collection_jobs.go` supplies none. Tenant financial rows are hidden, so balance/schedule/collection differences do not reliably create cases. Resolution establishes the administrator identity but still no supplier scope; `EXISTS` can return false because the discrepant records are invisible, allowing closure without repair. The separate privileged metrics function does not repair this review workflow. Introduce permission-checked discrepancy reads for refresh and resolution, and resolve only after checking the actual underlying records.
+
+### F018 — Supplier settlement setup has no production verification path (launch blocker)
+
+`internal/web/onboarding_handlers.go` accepts a provider name, reference and masked bank details, then sets the destination to `pending_verification`. The only application caller that marks it verified is explicitly development-only. No production provider verification/reconciliation caller is implemented. `onboarding.summarize` requires verified settlement before the supplier can become ready, so a new production supplier cannot complete this step through the supplied platform. Add the actual contracted settlement provider flow, validate account ownership and correlate the decision to the exact current destination. Do not automatically approve user-entered references.
+
+### F019 — Billing setup records a choice without establishing billing (high)
+
+`onboarding.Store.UpdateBilling` marks billing `configured` as soon as the user submits a nonempty reference and one of three method names. It makes no provider request or verification. The saved billing reference is not consumed by a charging, split-settlement or invoice workflow elsewhere in the application sources. The UI must not imply that a working billing arrangement exists merely because this form was saved. Implement and verify the supported method, including its accounting and failure handling, before making that claim.
+
+### F020 — Buyer onboarding cannot resume pending identity verification (high)
+
+`internal/buyers/postgres.go` creates person, business and authority checks inside its database transaction, requires all three responses to already be `verified` at level 2, and saves their cases only afterward. A pending response returns an error and rolls back all local case identities. The HTTP handler also revokes the new session; retry needs another OTP and can create new provider subjects. The generic identity contract supports pending sessions, but this buyer flow has no durable continuation. Persist verification intent and pending cases, resume/reconcile them, and grant onboarding access only after all required checks actually finish. This issue is conditional on a pending/asynchronous provider response; no live provider call was made.
+
+### F021 — Collection eligibility loses tenant scope before reading the debt (launch blocker)
+
+The production collection snapshot closure in `internal/web/runtime.go` calls `credit.PostgresStore.CollectionState`. That method starts with an unscoped pool query joining the credit snapshot and obligation. Both are tenant-isolated after migration 081. The outer collection transaction's settings do not apply to this separate connection. `CollectionStateForOrganization` also delegates to the same unscoped method. Consequently normal eligibility/start paths fail before a debit is submitted. Carry identity through the snapshot interface and perform its reads in a scoped transaction. F007 is an additional posting failure that remains after this earlier blocker is repaired.
+
+### F022 — Opening a sent sale breaks the next buyer action's saved version (launch blocker)
+
+`credit.PostgresStore.GetForBuyer` loads a saved `SENT` request, then calls the in-memory getter, which changes it to `BUYER_REVIEWING` and increments its version without persisting it. Acceptance, decline and mandate authorization handlers call that getter before making their own versioned mutation. A saved version 2 becomes local version 3 on read and version 4 on action; `persist` then requires saved version 3, so it rejects the change and rolls back. Retrying reloads the same sent record. No production HTTP caller invokes the separate durable `Review` method. Keep reads side-effect-free and persist the review/action transition atomically against the actual saved version. Mandate authorization can already have contacted its provider before this failure.
+
+### F023 — Plain-text agreement labels kobo as naira (high)
+
+`credit.PrintableAgreement`, served by `getBuyerAgreement`, prints the integer `PrincipalKobo` followed by `NGN` without converting it. A NGN 100 sale (10,000 kobo) appears as `Principal: 10000 NGN`. Format monetary values consistently in naira with two decimal places, while preserving canonical agreement bytes and their recorded hash.
+
+### F024 — Customer limits and purchases lack the required database scope (launch blocker when enabled)
+
+Every durable trade-line entry point in `internal/tradelines/postgres.go` uses an unscoped connection or transaction: create, list, get, reserve, confirm, release, receipt, statement and mandate updates. Migration 081 removed the broad runtime policies and requires the supplier organization. New inserts therefore fail the policy, while existing records are hidden. The maintenance job `jobs.ExpireDrawdownReservations` also selects without scope and cannot release expired capacity. Carry an authorized user/supplier identity into these services and maintenance work; retain buyer access checks and tenant isolation. Do not restore unrestricted policies to conceal this incompatibility.
+
+### F025 — The management scorecard reads hidden financial records as real zeroes (high)
+
+`reports.PilotScorecard` opens its own repeatable-read transaction but never establishes tenant scope. Passing an organization into SQL filters does not satisfy row policies. The platform handler's role check does not change that transaction. Financial metrics can show zero and provider reliability defaults to 100% when no attempts are visible, while global analytics events remain visible and produce misleading reconciliation differences. Use an authorized aggregate reporting capability and explicit unavailable/no-data states. Keep the separately scoped supplier financial snapshots, which already establish context.
+
+### F026 — Current Mono dispute automation events are rejected (high)
+
+Mono's current direct-debit reference documents `mono.transaction.dispute_initiated` and `mono.transaction.reversal_completed`, with a nested event envelope and transaction/reference identifiers. `mono.ParseWebhook` accepts neither the envelope nor these names and the HTTP handler returns 401. Thus escalation and bank reversal confirmation never enter the durable inbox or operator workflow. Add authenticated, deduplicated correlation and reconciliation for these events. A reversal of a failed-but-debited transaction is not automatically a reversal of an already-recognized Kredit payment; reconcile the original financial state before making ledger changes. [Mono official webhook reference](https://docs.mono.co/docs/payments/direct-debit/webhook-events), updated 24 August 2026.
+
+### F027 — Business money settings can silently target the wrong business (high)
+
+`web/src/lib/api/onboarding-settings.ts` always chooses `organizations[0]`, ignoring the `?organization=` supplied by the onboarding checklist. Billing, settlement and credit-policy pages use it and show neither the business identity nor a selector. An owner following the setup link for their second business can therefore edit their first business instead. Preserve and validate the selected business, display its name, and bind every save and refresh to that scope.
+
+### F028 — Buyer invitation acceptance records consents the page never presents (high)
+
+`web/src/routes/buyer-invitations/[token]/+page.svelte` asks the person to confirm their business using their name and OTP. It does not display or link the identity-verification/privacy terms or transmit their versions. Nevertheless both buyer stores record accepted `buyer_portal`, `identity_verification` and `privacy_notice` consents as hardcoded `v1`. This is inaccurate consent evidence independently of any legal conclusion. Present the actual notices and purpose before processing, record the exact published versions and affirmative action, and preserve historical versions.
+
+### F029 — The advertised payment page sends the customer in a circle (high)
+
+The buyer sale page's “Get payment page” creates a signed `/pay/` link. That page's “Continue to pay” returns to the same buyer sale page, whose only payment options are creating another link or reporting an existing bank transfer. `publicPaymentIntent` explicitly returns a sign-in instruction; it creates no provider checkout. Thus the interface offers payment without an implemented payment destination. Implement the contracted payment initiation/verification flow, or clearly describe this as viewing/reporting a payment and supply verified transfer instructions. A public balance link is not a payment integration.
+
+### F030 — Dispute documents cannot be properly submitted and reviewed (high)
+
+`DisputeDetail.svelte` accepts a manually entered document ID and displays only that reference. The admin dispute page does not display even the document ID or provide an attachment link. The only document-download HTTP route requires organization membership; there is no dispute-scoped reviewer download. Meanwhile both evidence handlers pass the supplied ID straight to `disputes.PostgresStore.AddEvidence`, and the evidence column has no document foreign key or ownership/scan validation. An authorized dispute participant can attach an unrelated or nonexistent UUID as evidence. This is an evidence-integrity failure; it does not by itself establish unauthorized document disclosure. Add an authorized upload/selection flow, validate document ownership and clean scan state, and provide audited, dispute-scoped downloads for the parties and authorized reviewers.
+
+### F031 — Invoice attachments are lost or inaccessible in the sale workflow (high)
+
+The advanced sale form uploads an invoice but retains only its hash. The sale page shows its download button only when `request.invoice_document_id` exists, but no backend request model, response or migration supplies that field. The uploaded invoice therefore has no working retrieval action from the sale. In addition, the detail page's `updateDraft()` omits both invoice fields, while `credit.Store.UpdateDraft` assigns those omitted strings directly and PostgreSQL persists them as null. Editing a draft's amount or description silently removes its invoice reference and hash. Preserve omitted invoice values and establish an authorized, durable attachment relationship exposed to the appropriate sale participants.
+
+### F032 — Sending a draft can ignore the edits currently shown (medium)
+
+On `app/credit/[id]`, the editable draft fields and “Send it to my customer” appear together. That button calls `command('send')` without saving or checking for changes to those fields. A seller can change the amount/date shown and send the previously saved terms instead. Require saving/reviewing changes before sending, or clearly block sending while the form differs from the saved record.
+
+### F033 — The report mislabels 31–60-day debts as 60+ days overdue (medium)
+
+`app/reports` checks whether a bucket name contains `60` before parsing its range. The backend's `31_60` bucket is therefore displayed as “60+ days overdue”; `61_plus` separately displays “61+ days overdue.” The amounts remain in their original buckets, but the labels misstate their age and can misdirect follow-up. Use an explicit mapping for the backend's current, 1–7, 8–30, 31–60, 61+ and paid buckets.
+
+### F034 — The robots rule accidentally blocks the public contact page (medium)
+
+`robots.txt/+server.ts` emits `Disallow: /c` for private links. Robots rules match path prefixes, so this also blocks `/contact`. Use exact-root and directory rules for private route families without blocking public names that share a prefix. [Google's official robots specification](https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec).
+
+### F035 — Published sharing images still advertise the old domain (medium)
+
+Both `web/static/og.png` and `web/static/og.jpg` visibly contain `kredit.com.ng`. The source SVG says `kredit.ng`, but the raster exports were not regenerated. The root layout uses `og.png` for Open Graph, Twitter and article images, so shared links carry the wrong domain. Regenerate both exported images from the corrected source and refresh the deployed assets. Confirmed by viewing both image files; no browser or automated tests run.
+
+### F036 — The recovery workflow cannot locate its own backup (high)
+
+`scripts/backup.sh` now writes each archive inside a private random subdirectory, as `$BACKUP_DIR/kredit-<timestamp>-<random>/backup.dump`. The Phase 5 workflow still searches only `find "$BACKUP_DIR" -maxdepth 1 -name '*.dump'`, which returns no archive. Its restore step receives an empty path and cannot demonstrate recovery. Consume the exact `backup=` output or an explicit structured result instead of rediscovering the archive with an outdated directory assumption. The private directory and checksum protections should remain.
+
+### F037 — Release certification calls a removed SQL generation workflow (high)
+
+`scripts/release-certify.sh` always invokes `scripts/sqlc-check.sh`. That script copies `db/generated/.` before generating; the directory and SQLC configuration do not exist in the current repository. The generation script also attempts `sqlc generate` despite the project now using hand-written SQL. This certification gate cannot pass as written. Remove the obsolete generation gate and related stale tasks, or restore a deliberately supported generation contract; do not merely skip a failed gate and claim certification.
+
+### F038 — Document uploads use an unsupported Cloudflare R2 header (high)
+
+The production guide selects Cloudflare R2. Both `PutObject` and `SignedUploadURL` in `internal/documents/s3.go:42` and `:67` unconditionally set `ServerSideEncryption: "AES256"`, which adds `x-amz-server-side-encryption`. Cloudflare lists that header as unsupported for PutObject. Uploads therefore do not meet the documented R2 contract. Make encryption request options appropriate to the configured storage provider and preserve the existing conditional-write protection. This is a confirmed contract mismatch; no live upload was attempted. [Cloudflare's current S3 compatibility reference](https://developers.cloudflare.com/r2/api/s3/api/).
+
+### F039 — Local SSH credentials can enter the API build context and cache (high)
+
+The workspace now contains `ssh/id_ed25519` and `ssh/kredit_prod` (private-key filenames, owner-only permissions; key contents not opened). `.gitignore` now excludes `/ssh/`, but `.dockerignore` excludes only key extensions such as `.pem` and `.key`, not this directory or these extensionless filenames. `infra/containers/Dockerfile.api:15` uses `COPY . .`, so a local workspace build includes these files in the builder stage and potentially its cache. The final runtime stage copies selected binaries/migrations, so this is not evidence that the keys are present in the final image. Exclude SSH directories from Docker contexts or keep credentials outside the source tree. Determine whether any affected context was already sent to a builder before deciding on key rotation. No build or credential use was performed. [Docker build-context rules](https://docs.docker.com/build/concepts/context/).
+
+### F040 — Existing tests bypass several broken production paths (high assurance gap)
+
+`internal/collections/sweep_postgres_test.go:23` injects tenant context through `tenantPaymentStore`. `internal/providers/mono/phase4_persistence_test.go:115` does the same and replaces the production snapshot reader with a hand-built tenant-scoped closure at line 225. Production wiring supplies neither substitute. These fixtures can pass while F007/F021 remain broken. The credit runtime fixture explicitly reviews a sale before acceptance, bypassing F022's normal first-open path. Several admin, reporting and trade-line persistence fixtures use the fixture-owner connection rather than the restricted runtime role. `web/tests/audit-fixes.spec.ts:5` invents `invoice_document_id`, masking F031; `web/tests/public-money-links.spec.ts:11` still expects the old email domain. Keep useful unit fixtures, but add the minimal regressions through the actual runtime wiring and restricted roles after repairs. No test results are claimed by this audit.
+
+### F041 — Required privacy and retention approvals are not evidenced (launch dependency)
+
+Every row in `docs/compliance/data-inventory.tsv` still uses `pending_legal_approval` and an unapproved environment retention register. `docs/compliance/README.md` explicitly requires those approvals before launch. The production example enables approved-retention mode using `internal-pilot-launch`, which is a string rather than evidence of approval. Obtain and attach the actual approved legal basis, retention/deletion rules, processor and transfer arrangements, including Sendly, before setting the approval flag. This is a missing-evidence finding; it does not assert that an approval cannot exist outside this repository. [NDPC guidance](https://ndpc.gov.ng/faqs/).
+
+### F042 — Operating instructions refer to obsolete schema and legal versions (medium)
+
+`docs/runbooks/admin-workflows.md:46` and `business-settings.md:45` say the application requires schema 96, while `internal/db/persistence_contract.go` requires 117. `docs/release/go-live-runbook.md:25` and the production guide prescribe version-1 legal identifiers, although the bundled initial publications use dated version-2 identifiers. These instructions can cause an incomplete migration or inconsistent consent/publication configuration. Use the current migration frontier and actual published legal versions, preserving old accepted versions. Also correct `docs/runbooks/failed-webhooks.md`: unknown Mono event types currently return 401 rather than reaching the claimed quarantine workflow (F026). Historical audit files should remain dated evidence, not be rewritten to claim current success.
+
+## Researched provider boundaries
+
+- Mono partial sweep is opt-in and has asynchronous individual and aggregate events. The code already uses aggregate reconciliation rather than posting each individual event. [Official partial sweep guide](https://docs.mono.co/docs/payments/direct-debit/mono-sweep/partial-sweep).
+- The official retrieve-debit page gives `/debit/{reference}` in its heading and `/debits/{reference}` in its example. Do not guess which is authoritative or change the implementation based on one conflicting example. [Official retrieve-debit reference](https://docs.mono.co/api/direct-debit/account/retrieve-a-debit).
+- The documented minimum debit is NGN 200; the current eligibility gap is F009. [Official debit reference](https://docs.mono.co/api/direct-debit/account/debit-account).

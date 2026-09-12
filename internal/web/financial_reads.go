@@ -74,21 +74,21 @@ func (r *Runtime) readDisputesForObligation(id string) ([]disputes.Dispute, erro
 	}
 	return r.Disputes.ListForObligation(id), nil
 }
-func (r *Runtime) readTradeLinesForSupplier(id string) ([]tradelines.TradeLine, error) {
-	if source, ok := r.TradeLines.(interface {
+func (r *Runtime) readTradeLinesForSupplier(ctx context.Context, id string) ([]tradelines.TradeLine, error) {
+	if source, ok := r.ScopedTradeLines(ctx).(interface {
 		ReadForSupplier(id string) ([]tradelines.TradeLine, error)
 	}); ok {
 		return source.ReadForSupplier(id)
 	}
-	return r.TradeLines.ListForSupplier(id), nil
+	return r.ScopedTradeLines(ctx).ListForSupplier(id), nil
 }
-func (r *Runtime) readTradeLinesForBuyer(id string) ([]tradelines.TradeLine, error) {
-	if source, ok := r.TradeLines.(interface {
+func (r *Runtime) readTradeLinesForBuyer(ctx context.Context, id string) ([]tradelines.TradeLine, error) {
+	if source, ok := r.ScopedTradeLines(ctx).(interface {
 		ReadForBuyer(id string) ([]tradelines.TradeLine, error)
 	}); ok {
 		return source.ReadForBuyer(id)
 	}
-	return r.TradeLines.ListForBuyer(id), nil
+	return r.ScopedTradeLines(ctx).ListForBuyer(id), nil
 }
 func (r *Runtime) readPaymentClaimsForBuyer(ctx context.Context, id string) ([]paymentclaims.Claim, error) {
 	if source, ok := r.PaymentClaims.(interface {
@@ -149,4 +149,13 @@ func financialReadError(w http.ResponseWriter, err error) bool {
 	}
 	writeProblem(w, 503, "financial_data_unavailable", "Financial data could not be loaded; please retry")
 	return true
+}
+
+func (r *Runtime) ScopedTradeLines(ctx context.Context) tradelines.Service {
+	if scoped, ok := r.TradeLines.(interface {
+		ForContext(context.Context) tradelines.Service
+	}); ok {
+		return scoped.ForContext(ctx)
+	}
+	return r.TradeLines
 }

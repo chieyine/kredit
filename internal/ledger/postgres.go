@@ -292,3 +292,54 @@ func (s *PostgresStore) PostActivationWithFeeTx(ctx context.Context, tx pgx.Tx, 
 	}
 	return s.postTx(ctx, tx, t)
 }
+
+// PostFeeReceiptTx closes supplier fee receivables without changing buyer debt.
+func (s *PostgresStore) PostFeeReceiptTx(ctx context.Context, tx pgx.Tx, id string, amount Money, at time.Time) (Transaction, error) {
+	return s.postTx(ctx, tx, Transaction{EventType: "platform_fee_received", ReferenceType: "fee_receipt", ReferenceID: id, IdempotencyKey: "fee-receipt:" + id, EffectiveAt: at, Postings: []Posting{{Account: "PLATFORM_FEE_CASH", Debit: amount}, {Account: AccountSupplierFeeReceivable, Credit: amount}}})
+}
+
+func (s *PostgresStore) PostFeeRefundTx(ctx context.Context, tx pgx.Tx, id string, amount Money, at time.Time) (Transaction, error) {
+	return s.postTx(ctx, tx, Transaction{EventType: "platform_fee_refunded", ReferenceType: "fee_receipt", ReferenceID: id, IdempotencyKey: "fee-refund:" + id, EffectiveAt: at, Postings: []Posting{{Account: AccountSupplierFeeReceivable, Debit: amount}, {Account: "PLATFORM_FEE_CASH", Credit: amount}}})
+}
+
+func (s *PostgresStore) PostSellerSettlementTx(ctx context.Context, tx pgx.Tx, id string, amount Money, direction string, at time.Time) (Transaction, error) {
+	if amount <= 0 || (direction != "paid" && direction != "returned") {
+		return Transaction{}, errors.New("valid seller settlement evidence is required")
+	}
+	postings := []Posting{{Account: "SELLER_BANK_SETTLEMENT", Debit: amount}, {Account: AccountCollectionSettlement, Credit: amount}}
+	if direction == "returned" {
+		postings = []Posting{{Account: AccountCollectionSettlement, Debit: amount}, {Account: "SELLER_BANK_SETTLEMENT", Credit: amount}}
+	}
+	return s.postTx(ctx, tx, Transaction{EventType: "seller_settlement_" + direction, ReferenceType: "seller_settlement_receipt", ReferenceID: id, IdempotencyKey: "seller-settlement:" + id, EffectiveAt: at, Postings: postings})
+}
+
+// A fee retained from the seller's proceeds reduces the seller's principal
+// control and fee receivable. Its bank settlement is still outstanding.
+func (s *PostgresStore) PostSplitFeeTx(ctx context.Context, tx pgx.Tx, id string, amount Money, reversed bool, at time.Time) (Transaction, error) {
+	postings := []Posting{{Account: AccountPrincipalOriginated, Debit: amount}, {Account: AccountSupplierFeeReceivable, Credit: amount}, {Account: "PLATFORM_FEE_PROVIDER_CLEARING", Debit: amount}, {Account: AccountCollectionSettlement, Credit: amount}}
+	event := "split_fee_allocated"
+	if reversed {
+		event = "split_fee_reversed"
+		for i := range postings {
+			postings[i].Debit, postings[i].Credit = postings[i].Credit, postings[i].Debit
+		}
+	}
+	return s.postTx(ctx, tx, Transaction{EventType: event, ReferenceType: "payment", ReferenceID: id, IdempotencyKey: event + ":" + id, EffectiveAt: at, Postings: postings})
+}
+
+func (s *PostgresStore) PostFeeProviderDebitTx(ctx context.Context, tx pgx.Tx, id string, amount Money, at time.Time) (Transaction, error) {
+	return s.postTx(ctx, tx, Transaction{EventType: "fee_debit_received", ReferenceType: "fee_debit", ReferenceID: id, IdempotencyKey: "fee-debit:" + id, EffectiveAt: at, Postings: []Posting{{Account: "PLATFORM_FEE_PROVIDER_CLEARING", Debit: amount}, {Account: AccountSupplierFeeReceivable, Credit: amount}}})
+}
+
+func (s *PostgresStore) PostFeeBankTx(ctx context.Context, tx pgx.Tx, id string, amount Money, returned bool, at time.Time) (Transaction, error) {
+	postings := []Posting{{Account: "PLATFORM_FEE_CASH", Debit: amount}, {Account: "PLATFORM_FEE_PROVIDER_CLEARING", Credit: amount}}
+	if returned {
+		for i := range postings {
+			postings[i].Debit, postings[i].Credit = postings[i].Credit, postings[i].Debit
+		}
+	}
+	return s.postTx(ctx, tx, Transaction{EventType: "fee_bank_recorded", ReferenceType: "fee_bank_receipt", ReferenceID: id, IdempotencyKey: "fee-bank:" + id, EffectiveAt: at, Postings: postings})
+}
+func (s *PostgresStore) PostFeeDebitReversalTx(ctx context.Context, tx pgx.Tx, id string, amount Money, at time.Time) (Transaction, error) {
+	return s.postTx(ctx, tx, Transaction{EventType: "fee_debit_reversed", ReferenceType: "fee_debit", ReferenceID: id, IdempotencyKey: "fee-debit-reversed:" + id, EffectiveAt: at, Postings: []Posting{{Account: AccountSupplierFeeReceivable, Debit: amount}, {Account: "PLATFORM_FEE_PROVIDER_CLEARING", Credit: amount}}})
+}

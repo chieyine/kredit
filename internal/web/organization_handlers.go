@@ -10,6 +10,7 @@ import (
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/auth"
+	"kredit/internal/db"
 	"kredit/internal/organizations"
 
 	"github.com/jackc/pgx/v5"
@@ -290,6 +291,7 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 		writeProblem(w, http.StatusForbidden, "step_up_required", "step-up authentication is required")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
 	}
+	*r = *r.WithContext(db.WithTenantContext(r.Context(), user.ID, organizationID))
 	return session, user, membership, true
 }
 

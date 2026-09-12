@@ -42,7 +42,7 @@ Public pricing reads `/api/v1/pricing` without caching. Buyer and supplier offer
 
 ## Deployment and rollback
 
-Apply all migrations through 096 with the migration owner, then apply `infra/postgres/roles.sql` according to the deployment procedure. API and worker startup require schema version 96, the policy functions/tables and the fee-term columns. The role template covers policy authorization and sequence permissions.
+Apply all migrations through 148 with the migration owner, then apply `infra/postgres/roles.sql` according to the deployment procedure. API and worker startup require schema version 148, the policy functions/tables and the fee-term columns. The role template covers policy authorization and sequence permissions.
 
 The demo seed command is development-only and initializes deployment defaults before synthetic fixtures. Use a disposable database for the integration suite; it intentionally creates financial records and exercises immutable history.
 

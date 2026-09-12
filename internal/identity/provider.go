@@ -24,11 +24,12 @@ type PersonVerificationInput struct {
 }
 
 type BusinessVerificationInput struct {
-	SubjectID    string
-	LegalName    string
-	BusinessType string
-	Address      string
-	Registration string
+	RequireReview bool
+	SubjectID     string
+	LegalName     string
+	BusinessType  string
+	Address       string
+	Registration  string
 }
 
 type AuthorityVerificationInput struct {

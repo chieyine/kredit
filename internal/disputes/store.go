@@ -145,6 +145,9 @@ func (s *Store) AddEvidence(disputeID, submittedBy, documentID, statement string
 	if s.disputes[disputeID] == nil {
 		return Evidence{}, errors.New("dispute not found")
 	}
+	if s.disputes[disputeID].State == StateResolved || s.disputes[disputeID].State == StateWithdrawn {
+		return Evidence{}, errors.New("dispute is closed")
+	}
 	evidence := &Evidence{ID: s.newID(), DisputeID: disputeID, SubmittedBy: submittedBy, DocumentID: strings.TrimSpace(documentID), Statement: strings.TrimSpace(statement), SubmittedAt: s.now()}
 	s.evidence[disputeID] = append(s.evidence[disputeID], evidence)
 	return cloneEvidence(*evidence), nil

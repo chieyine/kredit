@@ -18,7 +18,9 @@ const frontend = listing.stdout.trim().split('\n').filter(Boolean).map((file) =>
 
 const normalise = (path) => path.split('?')[0].replace(/\$\{[^}]+\}|\{[^}]+\}/g, '{id}').replace(/\/$/, '');
 const routes = [...server.matchAll(/HandleFunc\("([A-Z]+) ([^"]+)"/g)].map((match) => ({ method: match[1], path: normalise(match[2]) }));
-const expandedFrontend = frontend.replace(/\$\{[^}]+\}/g, '{id}');
+const expandedFrontend = frontend
+	.replace(/\$\{[^}]*['"]\?[^}]*\}|\$\{[^}]*(?:query|Query)[^}]*\}/g, '')
+	.replace(/\$\{[^}]+\}/g, '{id}');
 const directPaths = new Set([...expandedFrontend.matchAll(/\/api\/v1\/[A-Za-z0-9_./?&={}:~-]*/g)].map((match) => normalise(match[0])));
 for (const match of frontend.matchAll(/api\.(?:GET|POST|PUT|PATCH|DELETE)\(\s*['"]([^'"]+)/g)) directPaths.add(normalise(`/api/v1${match[1]}`));
 
@@ -99,7 +101,16 @@ const coveredThroughComponent = new Map([
 	['GET /api/v1/ops/metrics', 'web/src/routes/admin/diagnostics/+page.svelte'],
 	['GET /api/v1/organizations/{id}/reports/ageing', 'web/src/routes/app/reports/+page.svelte'],
 	['GET /api/v1/organizations/{id}/reports/fees', 'web/src/routes/app/reports/+page.svelte'],
-	['GET /api/v1/organizations/{id}/corrections', 'web/src/routes/app/activity/+page.svelte']
+	['GET /api/v1/organizations/{id}/corrections', 'web/src/routes/app/activity/+page.svelte'],
+	['POST /api/v1/buyer/disputes/{id}/documents', 'web/src/lib/components/DisputeDetail.svelte'],
+	['GET /api/v1/buyer/disputes/{id}/documents/{id}', 'web/src/lib/components/DisputeDetail.svelte'],
+	['GET /api/v1/buyer/disputes/{id}/documents/{id}/download', 'web/src/lib/components/DisputeDetail.svelte'],
+	['POST /api/v1/organizations/{id}/disputes/{id}/documents', 'web/src/lib/components/DisputeDetail.svelte'],
+	['GET /api/v1/organizations/{id}/disputes/{id}/documents/{id}', 'web/src/lib/components/DisputeDetail.svelte'],
+	['GET /api/v1/organizations/{id}/disputes/{id}/documents/{id}/download', 'web/src/lib/components/DisputeDetail.svelte'],
+	['GET /api/v1/ops/disputes/{id}/documents/{id}', 'web/src/routes/admin/disputes/[id]/+page.svelte'],
+	['GET /api/v1/buyer/credit-requests/{id}/invoice', 'web/src/routes/buyer/credit-requests/[requestID]/+page.svelte'],
+	['GET /api/v1/organizations/{id}/due', 'web/src/routes/app/overview/+page.svelte']
 ]);
 
 for (const [route, file] of coveredThroughComponent) {

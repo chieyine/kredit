@@ -83,3 +83,13 @@ func (c *Client) CustomerIdentity(ctx context.Context, reference string) (string
 	}
 	return value, nil
 }
+
+// BusinessCustomerNames uses the bank account's legal business name, as required
+// by Mono's business customer contract. The identity belongs to a shareholder.
+func BusinessCustomerNames(name string) (string, string, error) {
+	parts := strings.Fields(name)
+	if len(parts) < 2 {
+		return "", "", errors.New("the bank-registered business name must have at least two parts")
+	}
+	return parts[0], strings.Join(parts[1:], " "), nil
+}

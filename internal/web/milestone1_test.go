@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"kredit/internal/auth"
+	"kredit/internal/buyers"
 	"kredit/internal/config"
+	"kredit/internal/legalpublication"
 )
 
 func TestSupplierOnboardingAndTenantBoundaries(t *testing.T) {
@@ -119,7 +121,7 @@ func TestSupplierOnboardingAndTenantBoundaries(t *testing.T) {
 		Code        string `json:"development_code"`
 	}
 	decodeResponse(t, buyerOTPResponse, &buyerOTP)
-	acceptBuyerResponse := doJSON(t, client, "/api/v1/buyer-invitations/"+token+"/accept", http.MethodPost, map[string]string{"challenge_id": buyerOTP.ChallengeID, "code": buyerOTP.Code, "full_name": "Royal Pharmacy Representative"}, map[string]string{"Idempotency-Key": "buyer-accept-1"}, http.StatusCreated)
+	acceptBuyerResponse := doJSON(t, client, "/api/v1/buyer-invitations/"+token+"/accept", http.MethodPost, map[string]any{"challenge_id": buyerOTP.ChallengeID, "code": buyerOTP.Code, "full_name": "Royal Pharmacy Representative", "consents_accepted": true, "terms_version": legalpublication.TermsVersion, "privacy_version": legalpublication.PrivacyVersion, "identity_notice_version": buyers.IdentityNoticeVersion}, map[string]string{"Idempotency-Key": "buyer-accept-1"}, http.StatusCreated)
 	_ = acceptBuyerResponse.Body.Close()
 	buyerPortalResponse := doJSON(t, client, "/api/v1/buyer/me", http.MethodGet, nil, nil, http.StatusOK)
 	_ = buyerPortalResponse.Body.Close()

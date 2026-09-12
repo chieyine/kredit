@@ -30,8 +30,7 @@ func (s *Server) adminChangeContext(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "reference_required", "Enter the obligation or credit request reference")
 		return
 	}
-	var id, supplierOrgID string
-	err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT o.id::text, o.supplier_organization_id::text FROM app.obligations o WHERE o.id::text=$1 OR o.credit_request_id::text=$1 LIMIT 1`, q).Scan(&id, &supplierOrgID)
+	id, supplierOrgID, err := s.financialChangeIdentity(r, user.ID, q, false)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeProblem(w, 404, "reference_not_found", "No obligation was found for that reference")

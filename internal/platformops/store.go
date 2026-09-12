@@ -6,9 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/db"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -256,7 +258,16 @@ func (s *Store) Audit(ctx context.Context, organizationID string, limit int) ([]
 	if s == nil || s.pool == nil {
 		return nil, errors.New("operations database is not configured")
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id::text,occurred_at,COALESCE(actor_user_id::text,''),COALESCE(organization_id::text,''),action,resource_type,COALESCE(resource_id,''),outcome,severity,COALESCE(request_id,''),metadata FROM app.audit_events WHERE ($1='' OR organization_id=$1::uuid) ORDER BY occurred_at DESC LIMIT $2`, organizationID, normalizeLimit(limit))
+	actor, actorErr := adminReadActor(ctx)
+	if actorErr != nil {
+		return nil, actorErr
+	}
+	tx, err := s.beginAdminRead(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT * FROM app.admin_audit_directory($1,$2,$3)`, organizationID, normalizeLimit(limit), actor)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +292,16 @@ func (s *Store) Users(ctx context.Context, query string, limit int) ([]UserSumma
 		return nil, errors.New("operations database is not configured")
 	}
 	query = strings.TrimSpace(query)
-	rows, err := s.pool.Query(ctx, `SELECT u.id::text,COALESCE(NULLIF(u.display_name,''),'Kredit user'),COALESCE(u.normalized_email,u.normalized_phone,''),u.status,count(DISTINCT m.organization_id),u.last_authenticated_at,u.created_at,u.version FROM app.users u LEFT JOIN app.memberships m ON m.user_id=u.id AND m.status IN('active','invited','suspended') WHERE ($1='' OR u.id::text=$1 OR lower(COALESCE(u.normalized_email,''))=lower($1) OR COALESCE(u.normalized_phone,'')=$1 OR lower(COALESCE(u.display_name,'')) LIKE '%'||lower($1)||'%') GROUP BY u.id ORDER BY u.created_at DESC LIMIT $2`, query, normalizeLimit(limit))
+	actor, actorErr := adminReadActor(ctx)
+	if actorErr != nil {
+		return nil, actorErr
+	}
+	tx, err := s.beginAdminRead(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT * FROM app.admin_user_directory($1,$2,$3)`, query, normalizeLimit(limit), actor)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +322,16 @@ func (s *Store) Organizations(ctx context.Context, query string, limit int) ([]O
 		return nil, errors.New("operations database is not configured")
 	}
 	query = strings.TrimSpace(query)
-	rows, err := s.pool.Query(ctx, `SELECT o.id::text,o.legal_name,COALESCE(o.trading_name,''),o.business_type,o.industry,o.status,(SELECT count(*) FROM app.memberships m WHERE m.organization_id=o.id AND m.status='active'),(SELECT count(*) FROM app.obligations ob WHERE ob.supplier_organization_id=o.id AND ob.lifecycle_status='ACTIVE'),(SELECT COALESCE(sum(ob.outstanding_kobo),0) FROM app.obligations ob WHERE ob.supplier_organization_id=o.id AND ob.lifecycle_status='ACTIVE'),o.version,o.created_at FROM app.organizations o WHERE ($1='' OR o.id::text=$1 OR lower(o.legal_name) LIKE '%'||lower($1)||'%' OR lower(COALESCE(o.trading_name,'')) LIKE '%'||lower($1)||'%') ORDER BY o.created_at DESC LIMIT $2`, query, normalizeLimit(limit))
+	actor, actorErr := adminReadActor(ctx)
+	if actorErr != nil {
+		return nil, actorErr
+	}
+	tx, err := s.beginAdminRead(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT * FROM app.admin_organization_directory($1,$2,$3)`, query, normalizeLimit(limit), actor)
 	if err != nil {
 		return nil, err
 	}
@@ -322,12 +351,21 @@ func (s *Store) Money(ctx context.Context, limit int) (MoneySummary, []MoneyActi
 	if s == nil || s.pool == nil {
 		return MoneySummary{}, nil, errors.New("operations database is not configured")
 	}
-	var summary MoneySummary
-	err := s.pool.QueryRow(ctx, `SELECT COALESCE(sum(amount_kobo) FILTER(WHERE state='recognized'),0),COALESCE(sum(amount_kobo) FILTER(WHERE state='reversed'),0),(SELECT COALESCE(sum(requested_amount_kobo),0) FROM app.collection_attempts),(SELECT COALESCE(sum(succeeded_amount_kobo),0) FROM app.collection_attempts),COALESCE((SELECT sum(outstanding_kobo) FROM app.obligations WHERE lifecycle_status='ACTIVE'),0),count(*) FROM app.payments`).Scan(&summary.ReceivedKobo, &summary.ReversedKobo, &summary.CollectionRequestedKobo, &summary.CollectionSucceededKobo, &summary.OutstandingKobo, &summary.PaymentCount)
+	actor, actorErr := adminReadActor(ctx)
+	if actorErr != nil {
+		return MoneySummary{}, nil, actorErr
+	}
+	tx, err := s.beginAdminRead(ctx, actor)
 	if err != nil {
 		return MoneySummary{}, nil, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT kind,id,organization_id,amount_kobo,state,reference,occurred_at FROM (SELECT 'payment' kind,p.id::text id,p.supplier_organization_id::text organization_id,p.amount_kobo,p.state,COALESCE(p.provider_reference,p.id::text) reference,p.paid_at occurred_at FROM app.payments p UNION ALL SELECT 'collection',ca.id::text,o.supplier_organization_id::text,ca.requested_amount_kobo,ca.state,ca.external_reference,ca.requested_at FROM app.collection_attempts ca JOIN app.obligations o ON o.id=ca.obligation_id) activity ORDER BY occurred_at DESC LIMIT $1`, normalizeLimit(limit))
+	defer func() { _ = tx.Rollback(ctx) }()
+	var summary MoneySummary
+	err = tx.QueryRow(ctx, `SELECT * FROM app.admin_money_summary($1)`, actor).Scan(&summary.ReceivedKobo, &summary.ReversedKobo, &summary.CollectionRequestedKobo, &summary.CollectionSucceededKobo, &summary.OutstandingKobo, &summary.PaymentCount)
+	if err != nil {
+		return MoneySummary{}, nil, err
+	}
+	rows, err := tx.Query(ctx, `SELECT * FROM app.admin_money_activity($1,$2)`, normalizeLimit(limit), actor)
 	if err != nil {
 		return MoneySummary{}, nil, err
 	}
@@ -409,7 +447,16 @@ func (s *Store) Team(ctx context.Context) ([]TeamMember, error) {
 	if s == nil || s.pool == nil {
 		return nil, errors.New("operations database is not configured")
 	}
-	rows, err := s.pool.Query(ctx, `SELECT pra.id::text,u.id::text,COALESCE(NULLIF(u.display_name,''),'Kredit administrator'),COALESCE(u.normalized_email,u.normalized_phone,''),pra.role,pra.granted_at,pra.expires_at FROM app.platform_role_assignments pra JOIN app.users u ON u.id=pra.user_id WHERE pra.revoked_at IS NULL AND (pra.expires_at IS NULL OR pra.expires_at>now()) ORDER BY pra.granted_at DESC`)
+	actor, actorErr := adminReadActor(ctx)
+	if actorErr != nil {
+		return nil, actorErr
+	}
+	tx, err := s.beginAdminRead(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT * FROM app.admin_team_directory($1)`, actor)
 	if err != nil {
 		return nil, err
 	}
@@ -433,18 +480,34 @@ func (s *Store) GrantRole(ctx context.Context, actorID, userID, role, reason str
 	if len(reason) < 8 || len(reason) > 1000 {
 		return TeamMember{}, errors.New("reason must be between 8 and 1000 characters")
 	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return TeamMember{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err = access.LockPlatformAuthority(ctx, tx, actorID, access.PermissionManageAccess); err != nil {
+		return TeamMember{}, err
+	}
+	if !access.PlatformRole(role).Valid() || role == string(access.PlatformOwner) {
+		return TeamMember{}, errors.New("use the ownership transfer workflow for the owner role")
+	}
 	var item TeamMember
-	err := s.pool.QueryRow(ctx, `WITH assignment AS (
+	err = tx.QueryRow(ctx, `WITH assignment AS (
 		INSERT INTO app.platform_role_assignments(user_id,role,granted_by,reason,expires_at)
 		VALUES($1::uuid,$2,$3::uuid,$4,$5)
 		ON CONFLICT(user_id,role) WHERE revoked_at IS NULL
 		DO UPDATE SET reason=EXCLUDED.reason,expires_at=EXCLUDED.expires_at,granted_by=EXCLUDED.granted_by,granted_at=clock_timestamp()
 		RETURNING id,user_id,role,granted_at,expires_at
 	)
-	SELECT a.id::text,a.user_id::text,COALESCE(NULLIF(u.display_name,''),'Kredit administrator'),COALESCE(u.normalized_email,u.normalized_phone,''),a.role,a.granted_at,a.expires_at
-	FROM assignment a
-	JOIN app.users u ON u.id=a.user_id`, userID, role, actorID, reason, expiresAt).Scan(&item.AssignmentID, &item.UserID, &item.DisplayName, &item.Identifier, &item.Role, &item.GrantedAt, &item.ExpiresAt)
-	return item, err
+	SELECT a.id::text,a.user_id::text,COALESCE(app.admin_actor_name(a.user_id),'Kredit administrator'),a.user_id::text,a.role,a.granted_at,a.expires_at
+	FROM assignment a`, userID, role, actorID, reason, expiresAt).Scan(&item.AssignmentID, &item.UserID, &item.DisplayName, &item.Identifier, &item.Role, &item.GrantedAt, &item.ExpiresAt)
+	if err != nil {
+		return TeamMember{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return TeamMember{}, err
+	}
+	return item, nil
 }
 
 func (s *Store) RevokeRole(ctx context.Context, actorID, assignmentID string) error {
@@ -480,4 +543,24 @@ func normalizeLimit(limit int) int {
 		return 100
 	}
 	return limit
+}
+
+func adminReadActor(ctx context.Context) (string, error) {
+	identity, ok := db.TenantFromContext(ctx)
+	if !ok || identity.UserID == "" {
+		return "", errors.New("authenticated operator context is required")
+	}
+	return identity.UserID, nil
+}
+
+func (s *Store) beginAdminRead(ctx context.Context, actor string) (pgx.Tx, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id','',true)`, actor); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
 }

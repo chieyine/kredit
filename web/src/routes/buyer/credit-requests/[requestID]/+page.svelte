@@ -1,8 +1,10 @@
 <script lang="ts">
+ import SaleProgress from "$lib/components/SaleProgress.svelte";
+ import SaleCosts from "$lib/components/SaleCosts.svelte";
   import { getContext, untrack } from 'svelte';
   import { page } from '$app/state';
   import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
-  import { LatestRequest, readResource, record, rows, text, type Decoder, type Resource } from '$lib/api/reliable';
+  import { checkedJSON, publicError, LatestRequest, readResource, record, rows, text, type Decoder, type Resource } from '$lib/api/reliable';
   import { MutationError, MutationIntent } from '$lib/api/mutation';
   import { saleView, paymentRow, kobo, dateLabel, timeLabel, type PaymentRow, type SaleView } from '$lib/records';
   import { feeDisclosure, validFeeTerms } from '$lib/fee-terms';
@@ -24,7 +26,7 @@
   const view = $derived(resource.state === 'ready' ? resource.data : null);
   const bankURL = $derived(view?.mandate ? hostedAuthorizationURL(view.mandate.authorization_url, view.mandate.provider) : null);
   const accepted = $derived(view && ['BUYER_ACCEPTED', 'READY_TO_RELEASE', 'RECEIPT_CONFIRMATION_PENDING', 'ACTIVE', 'COMPLETED', 'PAID'].includes(view.request.state));
-  const mayAccept = $derived(view?.request.state === 'BUYER_REVIEWING' && view.agreement?.id && /^[0-9a-f]{64}$/i.test(view.agreement.document_hash) && validFeeTerms(view.request.fee_terms) && !!view.request.supplier_legal_name.trim() && !!view.request.buyer_legal_name.trim() && !!view.request.goods_description.trim() && dateLabel(view.request.due_date) !== 'Date unavailable' && timeLabel(view.request.collection_at) !== 'Time unavailable');
+  const mayAccept = $derived(!!view && ['SENT','BUYER_REVIEWING'].includes(view.request.state) && view.agreement?.id && /^[0-9a-f]{64}$/i.test(view.agreement.document_hash) && validFeeTerms(view.request.fee_terms) && !!view.request.supplier_legal_name.trim() && !!view.request.buyer_legal_name.trim() && !!view.request.goods_description.trim() && dateLabel(view.request.due_date) !== 'Date unavailable' && timeLabel(view.request.collection_at) !== 'Time unavailable');
   const mayPay = $derived(view?.obligation && (exactKobo(view.obligation.outstanding_kobo) ?? 0n) > 0n);
   function intent(action: string) {
     const key = `${requestID}:${action}`;
@@ -33,6 +35,7 @@
     return result;
   }
   const blocked = (action: string) => Boolean(busy || (uncertain && uncertain !== action));
+  async function openInvoice(){try{const url=await checkedJSON(`${root}/invoice`,value=>{const url=new URL(text(record(value).url),location.origin);if(!['https:','http:'].includes(url.protocol)||url.username||url.password||(location.protocol==='https:'&&url.protocol!=='https:'))throw new Error('Invalid invoice link');return url.href});location.assign(url)}catch(cause){actionError=publicError(cause,'the invoice')}}
   async function load(id = requestID) {
     const request = reads.begin();
     resource = { state: 'loading', scope: id }; paymentResource = { state: 'loading', scope: id };
@@ -87,7 +90,7 @@
       const result = record(value), raw = text(result.payment_url), url = new URL(raw, location.origin);
       if (url.username || url.password || !url.pathname.startsWith('/pay/') || (url.origin !== location.origin && url.origin !== 'https://kredit.ng')) throw new Error('The payment link could not be verified.');
       return url.href;
-    }, url => { paymentURL = url; message = 'Payment page ready. Check the seller and amount before paying.'; });
+    }, url => { paymentURL = url; message = 'Balance link ready. This link shows the sale and remaining amount.'; });
   }
   async function openDispute(event: SubmitEvent) {
     event.preventDefault(); const amount = parseNaira(disputeAmount);
@@ -103,17 +106,18 @@
   {#if actionError}<div class="action-error" role="alert"><p>{actionError}</p><button type="button" onclick={()=>load()} disabled={!!busy}>Check current record</button><a href="/legal/complaints">Contact support</a></div>{/if}
   {#if message}<p class="inline-notice" role="status">{message}</p>{/if}
   {#if view}
-    {#if view.request.system_acceptance_id}<p class="inline-notice" role="status">The waiting period after your delivery notice ended without a response. Kredit activated this sale under its agreed terms using a system record. This is not recorded as your receipt confirmation. You can still report a problem below.</p>{/if}
+<SaleProgress view={view} audience="buyer"/>    {#if view.request.system_acceptance_id}<p class="inline-notice" role="status">The waiting period after your delivery notice ended without a response. Kredit activated this sale under its agreed terms using a system record. This is not recorded as your receipt confirmation. You can still report a problem below.</p>{/if}
     <p class="state-label">{productLabel(view.request.state)}</p>
     <section class="terms" aria-labelledby="terms-heading"><h2 id="terms-heading">{accepted ? 'Agreed sale details' : 'What you are agreeing to'}</h2>
       <dl class="sale-summary"><div><dt>Seller</dt><dd>{view.request.supplier_legal_name || 'Seller name unavailable'}</dd></div><div><dt>Customer</dt><dd>{view.request.buyer_legal_name}</dd></div><div><dt>Goods</dt><dd>{view.request.goods_description}</dd></div><div><dt>Sale amount</dt><dd class="amount"><Money amountKobo={view.request.principal_kobo} /></dd></div><div><dt>First payment date</dt><dd>{dateLabel(view.request.due_date)}</dd></div><div><dt>Bank debit may be considered from</dt><dd>{timeLabel(view.request.collection_at)}</dd></div><div><dt>Extra time</dt><dd>{view.request.grace_hours} hours</dd></div><div><dt>Payment arrangement</dt><dd>{view.request.schedule_type === 'equal' ? `${view.request.schedule_count} ${view.request.schedule_cadence} payments` : view.request.schedule_type === 'custom' ? 'Amounts and dates below' : 'One payment'}</dd></div></dl>
       {#if view.request.custom_schedule_items.length}<h3>Payment schedule</h3><ol>{#each view.request.custom_schedule_items as item}<li><Money amountKobo={item.amount_kobo} /> by {dateLabel(item.due_date)}</li>{/each}</ol>{/if}
+      {#if view.request.invoice_document_id}<button type="button" onclick={openInvoice}>Open invoice</button>{/if}
       <p class="fee-note">{feeDisclosure(view.request.fee_terms)}</p><p class="field-help">{collectionBoundary}</p>
       {#if view.agreement?.terms_version && view.agreement?.privacy_version}<p>Documents for this sale: <a href={`/legal/terms?version=${encodeURIComponent(view.agreement.terms_version)}`}>Terms</a> · <a href={`/legal/privacy?version=${encodeURIComponent(view.agreement.privacy_version)}`}>Privacy notice</a></p>{/if}
       {#if view.agreement?.document_hash}<details><summary>Sale reference and record details</summary><p>Sale: <code>{view.request.id}</code></p><p>Agreement fingerprint:</p><code class="fingerprint">{view.agreement.document_hash}</code><p>This identifies the recorded version of the agreement.</p></details>{/if}
     </section>
-    {#if view.request.state === 'BUYER_REVIEWING'}
-      <section class="consent-panel"><h2>Your decision</h2><p>Accepting records your agreement to this sale. Bank-debit permission is a separate step. Ask the seller to correct anything that is wrong before you accept.</p>
+    {#if ['SENT','BUYER_REVIEWING'].includes(view.request.state)}
+      <SaleCosts view={view}/><section class="consent-panel"><h2>Your decision</h2><p><a href={`/buyer?business_id=${encodeURIComponent(view.request.buyer_business_id)}`}>Review identity checks for this business</a></p><p>Accepting records your agreement to this sale. Bank-debit permission is a separate step. Ask the seller to correct anything that is wrong before you accept.</p>
         {#if !mayAccept}<p role="alert">The complete agreement or fees could not be verified. Refresh before accepting.</p>{/if}
         <div class="actions"><button class="primary" disabled={!mayAccept || blocked('accept')} onclick={acceptSale}>{busy === 'accept' ? 'Recording your decision…' : 'Accept sale for'} {#if busy !== 'accept'}<Money amountKobo={view.request.principal_kobo} />{/if}</button><button class="secondary" disabled={blocked('decline')} onclick={() => perform('decline', undefined, saleView, () => { message = 'You declined this sale.'; })}>Decline sale</button></div>
       </section>
@@ -136,7 +140,7 @@
         {#if paymentResource.state === 'ready'}{#if !paymentResource.data.length}<p>No confirmed payments are recorded on this sale.</p>{:else}<ul class="payment-list">{#each paymentResource.data as payment (payment.id)}<li><strong><Money amountKobo={payment.amount_kobo} /></strong><span>{productLabel(payment.state)} · {productLabel(payment.source_type)}</span></li>{/each}</ul>{/if}{/if}
         <a href={`/api/v1/buyer/credit-requests/${encodeURIComponent(requestID)}/agreement-document`} target="_blank" rel="noreferrer">Print or save the agreement</a>
       </section>
-      {#if mayPay}<section class="payment-options"><h2>Make or report a payment</h2><p>Use a payment page, or tell the seller about a transfer you already made.</p><button class="primary" disabled={blocked('payment-link')} onclick={createPaymentLink}>Get payment page</button>{#if paymentURL}<a href={paymentURL}>Open payment page</a>{/if}
+      {#if mayPay}<section class="payment-options"><h2>Your balance and payments</h2><p>View the remaining balance, or report a transfer you have already made.</p><button class="primary" disabled={blocked('payment-link')} onclick={createPaymentLink}>Get balance link</button>{#if paymentURL}<a href={paymentURL}>Open balance link</a>{/if}
         <details><summary>Already paid by bank transfer?</summary><p>A transfer report is not a payment confirmation. Your balance changes only after the money is verified.</p><label>Amount transferred (₦)<input bind:value={claimAmount} inputmode="decimal" disabled={!!busy} /></label><label>Transfer reference<input bind:value={claimReference} maxlength="256" disabled={!!busy} /></label><p class="field-help">Find this on your bank receipt. Contact support if the reference is unavailable, or a different person sent the payment and you need help matching it.</p><button class="secondary" disabled={blocked('payment-claims')} onclick={claimPayment}>Report my transfer</button></details>
       </section>{/if}
       <details class="dispute-panel"><summary>Report a problem with this sale</summary><p>Your report and its outcome stay with the sale.</p><form onsubmit={openDispute}><label>Amount in question (₦)<input bind:value={disputeAmount} inputmode="decimal" required disabled={!!busy} /></label><label>What went wrong?<input bind:value={disputeReason} maxlength="200" placeholder="For example: 5 cartons were missing" required disabled={!!busy} /></label><label>Details<textarea bind:value={disputeExplanation} maxlength="5000" rows="4" disabled={!!busy}></textarea></label><label>What should happen to new bank debits?<select bind:value={disputeEffect} disabled={!!busy}><option value="CONTESTED_ONLY">Hold the amount in question</option></select></label><p class="inline-notice">{disputeEffectCopy(disputeEffect, parseNaira(disputeAmount) > 0 ? parseNaira(disputeAmount) : undefined)}</p><button class="primary" disabled={blocked('disputes')}>Report problem</button></form></details>

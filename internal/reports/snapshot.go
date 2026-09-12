@@ -44,7 +44,7 @@ func (s *Store) financialSnapshotTx(ctx context.Context, tx pgx.Tx, org, buyer s
  (SELECT to_jsonb(r) FROM app.repayment_schedules r WHERE r.obligation_id=o.id),
  COALESCE((SELECT jsonb_agg(to_jsonb(i) ORDER BY i.sequence) FROM app.schedule_items i JOIN app.repayment_schedules r ON r.id=i.schedule_id WHERE r.obligation_id=o.id),'[]'::jsonb),
  COALESCE((SELECT jsonb_agg(to_jsonb(d)) FROM app.disputes d WHERE d.obligation_id=o.id),'[]'::jsonb),
- COALESCE((SELECT SUM((a.metadata->>'amount_kobo')::bigint) FROM app.operation_actions a WHERE a.resource_id=o.id AND a.organization_id=o.supplier_organization_id AND a.action='fee_waiver'),0)
+ COALESCE((SELECT SUM(f.waived_kobo) FROM app.fees f WHERE f.obligation_id=o.id AND f.supplier_organization_id=o.supplier_organization_id AND f.state!='refunded'),0)
  FROM app.obligations o JOIN app.credit_requests c ON c.id=o.credit_request_id
  LEFT JOIN app.credit_aggregate_snapshots s ON o.credit_request_id::text=s.credit_request_id
  WHERE ($1='' OR o.supplier_organization_id=NULLIF($1,'')::uuid) AND ($2='' OR c.buyer_user_id=NULLIF($2,'')::uuid) ORDER BY o.activated_at,o.id`, org, buyer)
