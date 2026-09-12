@@ -80,6 +80,8 @@ services:
       - ./db-certs/root.crt:/etc/postgresql/root.crt:ro
     networks:
       - kredit-backend
+    ports:
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "/app/kredit-api", "-healthcheck"]
       interval: 10s
@@ -119,6 +121,8 @@ services:
   caddy:
     image: caddy:2.9-alpine
     restart: unless-stopped
+    profiles:
+      - standalone
     ports:
       - "80:80"
       - "443:443"
