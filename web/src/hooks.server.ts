@@ -51,6 +51,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const headers = new Headers(event.request.headers);
 	headers.delete('host');
 	headers.delete('connection');
+	headers.delete('accept-encoding');
 	// Discard browser-supplied forwarding claims before signing the adapter's address.
 	for (const spoofable of ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'true-client-ip', 'forwarded', 'x-kredit-client-ip', 'x-kredit-client-timestamp', 'x-kredit-client-signature']) {
 		headers.delete(spoofable);
@@ -92,7 +93,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 		const timeout = AbortSignal.timeout(30_000);
 		const signal = AbortSignal.any([event.request.signal, timeout]);
-		return await fetch(target, { method, headers, body, redirect: 'manual', signal });
+		const upstreamResponse = await fetch(target, { method, headers, body, redirect: 'manual', signal });
+		const responseHeaders = new Headers(upstreamResponse.headers);
+		// Node.js fetch() automatically decompresses the body stream. Forwarding upstream
+		// content-encoding or content-length will cause net::ERR_CONTENT_DECODING_FAILED in the browser.
+		responseHeaders.delete('content-encoding');
+		responseHeaders.delete('content-length');
+		responseHeaders.delete('transfer-encoding');
+
+		return new Response(upstreamResponse.body, {
+			status: upstreamResponse.status,
+			statusText: upstreamResponse.statusText,
+			headers: responseHeaders
+		});
 	} catch {
 		return new Response(JSON.stringify({ type: 'about:blank', title: 'Service unavailable', status: 503, detail: 'The API is temporarily unavailable.' }), {
 			status: 503,
