@@ -1,9 +1,16 @@
 name: kredit-prod
 
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:18
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: kredit
       POSTGRES_USER: kredit
@@ -69,6 +76,7 @@ services:
       dockerfile: infra/containers/Dockerfile.api
       target: api
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - .env.runtime
     environment:
@@ -98,6 +106,7 @@ services:
       dockerfile: infra/containers/Dockerfile.api
       target: worker
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - .env.runtime
     environment:
@@ -121,6 +130,7 @@ services:
   caddy:
     image: caddy:2.9-alpine
     restart: unless-stopped
+    logging: *default-logging
     profiles:
       - standalone
     ports:
