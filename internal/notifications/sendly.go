@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/mail"
@@ -51,7 +52,13 @@ func (p *SendlyProvider) Send(ctx context.Context, message Message) (string, err
 	if err != nil {
 		return "", errors.New("email recipient is invalid")
 	}
-	payload := map[string]any{"channel": "email", "to": []string{recipient.Address}, "subject": emailSubject(message.Template), "text": message.Body}
+	payload := map[string]any{
+		"channel": "email",
+		"to":      []string{recipient.Address},
+		"subject": emailSubject(message.Template),
+		"text":    message.Body,
+		"html":    "<p>" + html.EscapeString(message.Body) + "</p>",
+	}
 	if p.from != "" {
 		payload["from"] = p.from
 	}
