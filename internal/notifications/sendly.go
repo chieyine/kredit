@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -57,7 +58,7 @@ func (p *SendlyProvider) Send(ctx context.Context, message Message) (string, err
 		"to":      []string{recipient.Address},
 		"subject": emailSubject(message.Template),
 		"text":    message.Body,
-		"html":    "<p>" + html.EscapeString(message.Body) + "</p>",
+		"html":    buildEmailHTML(message),
 	}
 	if p.from != "" {
 		payload["from"] = p.from
@@ -103,6 +104,92 @@ func emailSubject(template string) string {
 	default:
 		return "An update from Kredit"
 	}
+}
+
+func buildEmailHTML(message Message) string {
+	subject := emailSubject(message.Template)
+	code := message.AuthenticationCode
+	if code == "" && (strings.Contains(message.Template, "OTP") || strings.Contains(message.Template, "Authentication")) {
+		re := regexp.MustCompile(`\b\d{6}\b`)
+		code = re.FindString(message.Body)
+	}
+
+	var content strings.Builder
+	if code != "" {
+		content.WriteString(`<h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.3;">Sign-in Verification Code</h1>
+<p style="margin: 0 0 24px 0; font-size: 15px; color: #334155; line-height: 1.6;">
+  Please use the verification code below to complete your sign-in to your Kredit account.
+</p>
+<div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 22px 24px; text-align: center; margin: 0 0 24px 0;">
+  <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 36px; font-weight: 700; letter-spacing: 10px; color: #0f172a; padding-left: 10px;">` + html.EscapeString(code) + `</span>
+</div>
+<p style="margin: 0; font-size: 13px; color: #64748b; line-height: 1.5;">
+  This code will expire in <strong>10 minutes</strong>. If you did not request this verification code, someone may have entered your email address by mistake. Never share this code with anyone.
+</p>`)
+	} else if message.SecureLink != "" {
+		content.WriteString(`<h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.3;">` + html.EscapeString(subject) + `</h1>
+<p style="margin: 0 0 24px 0; font-size: 15px; color: #334155; line-height: 1.6;">` + html.EscapeString(message.Body) + `</p>
+<div style="text-align: center; margin: 28px 0;">
+  <a href="` + html.EscapeString(message.SecureLink) + `" style="background-color: #0f172a; color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">Continue to Kredit &rarr;</a>
+</div>
+<p style="margin: 0; font-size: 12px; color: #94a3b8; word-break: break-all; line-height: 1.5;">
+  Or copy this link into your browser: <br><span style="color: #64748b;">` + html.EscapeString(message.SecureLink) + `</span>
+</p>`)
+	} else {
+		content.WriteString(`<h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.3;">` + html.EscapeString(subject) + `</h1>
+<p style="margin: 0; font-size: 15px; color: #334155; line-height: 1.6;">` + html.EscapeString(message.Body) + `</p>`)
+	}
+
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>` + html.EscapeString(subject) + `</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          <tr>
+            <td style="padding: 28px 36px 20px 36px; border-bottom: 1px solid #f1f5f9;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <span style="font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; text-transform: uppercase;">KREDIT</span>
+                  </td>
+                  <td align="right">
+                    <span style="font-size: 11px; font-weight: 600; color: #059669; background-color: #ecfdf5; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.5px;">Security</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px 36px;">
+              ` + content.String() + `
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #f8fafc; padding: 22px 36px; border-top: 1px solid #f1f5f9;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #475569; line-height: 1.5;">
+                Kredit Technologies Limited <span style="font-weight: 400; color: #94a3b8;">(RC 9834452)</span>
+              </p>
+              <p style="margin: 0 0 8px 0; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+                House No. 348, Jamaina Road, Pompomari Bypass, Maiduguri, Borno State, Nigeria
+              </p>
+              <p style="margin: 0; font-size: 11px; color: #94a3b8;">
+                Need assistance? Email <a href="mailto:hello@kredit.ng" style="color: #2563eb; text-decoration: none;">hello@kredit.ng</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
 
 type DeliveryStatus struct {
