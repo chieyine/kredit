@@ -13,8 +13,8 @@ export function assertLaunchWebConfig() {
 	}
 	const origin = env.ORIGIN?.trim();
 	const api = env.API_INTERNAL_URL?.trim();
-	if (origin !== 'https://kredit.ng') {
-		throw error(503, 'ORIGIN must be https://kredit.ng in production.');
+	if (origin !== 'https://kredit.ng' && origin !== 'https://www.kredit.ng') {
+		throw error(503, 'ORIGIN must be https://kredit.ng or https://www.kredit.ng in production.');
 	}
 	let apiURL: URL;
 	try {
