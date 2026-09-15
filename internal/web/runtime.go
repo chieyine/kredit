@@ -91,6 +91,7 @@ type Runtime struct {
 	Tracer                    *observability.Tracer
 	Notifications             *notifications.Store
 	WhatsApp                  *whatsapp.Handler
+	WhatsAppAI                *whatsapp.AIParser
 	Outbox                    *outbox.Store
 	PlatformOps               *platformops.Store
 	PlatformSettings          platformsettings.Service
@@ -935,6 +936,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		Tracer:               tracer,
 		Notifications:        notificationStore,
 		WhatsApp:             whatsAppHandler,
+		WhatsAppAI:           whatsapp.NewAIParser(cfg.GeminiAPIKey),
 		Outbox:               outboxStore,
 		PlatformOps:          platformOpsStore,
 		PlatformSettings:     platformSettingsStore,
