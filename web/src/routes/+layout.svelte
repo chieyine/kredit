@@ -12,7 +12,7 @@
 
 	let { children } = $props();
 	let offline = $state(false);
-	let privateShell = $derived(/^\/(app|buyer|admin|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(page.url.pathname));
+	let privateShell = $derived(/^\/(app|buyer|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(page.url.pathname));
 	let publicChrome = $derived(page.url.pathname === '/app' || !privateShell);
 
 	const normalizedPath = $derived(page.url.pathname.length > 1 ? page.url.pathname.replace(/\/$/, '') : page.url.pathname);

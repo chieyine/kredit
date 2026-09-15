@@ -31,7 +31,7 @@
   onMount(() => { void load(); return () => { requests.cancel(); businessRequests.cancel(); }; });
 </script>
 <svelte:head><title>Your credit sales — Kredit</title></svelte:head>
-<main class="shell sales-page"><header class="task-heading"><div><p class="eyebrow">Your records</p><h1>Sales</h1><p>Find a customer, check a payment date or continue a draft.</p></div><a class="primary" href={`/app/credit/quick?organization=${encodeURIComponent(organizationID)}`}>Add a sale</a></header>
+<main class="shell sales-page"><header class="task-heading"><div><p class="eyebrow">Wholesaler → Retailer</p><h1>Business sales</h1><p>Track goods sold for resale or business use. Find a retailer, check a payment date or continue a draft.</p></div><a class="primary" href={`/app/credit/quick?organization=${encodeURIComponent(organizationID)}`}>Add a sale</a></header>
   <ResourceNotice resource={businesses} label="Businesses" retry={load} />
   {#if businesses.state === 'ready' && businesses.data.length}<div class="filters"><label>Business<select bind:value={organizationID} onchange={loadSales}>{#each businesses.data as item}<option value={item.id}>{item.trading_name || item.legal_name}</option>{/each}</select></label><label class="search-field">Find a sale<input type="search" bind:value={query} placeholder="Customer, goods or sale number" /></label><label>Show<select bind:value={filter}><option value="all">All sales</option><option value="open">Open sales</option><option value="draft">Drafts</option><option value="closed">Closed sales</option></select></label></div>
     <ResourceNotice resource={sales} label="Sales" retry={loadSales} />
