@@ -11,13 +11,13 @@
 	let ready = $state(false);
 	onMount(() => { ready = true; });
 	const links: [string, string][] = [
-		['Home', '/app/overview'], ['Sales', '/app/credit'], ['Find anything', '/app/search'], ['Finish setting up', '/app/onboarding'], ['Add a sale', '/app/credit/quick'], ['Customers', '/app/customers'],
+		['Home', '/app/overview'], ['Sales', '/app/credit'], ['Consumer sales', '/app/consumer-sales'], ['Find anything', '/app/search'], ['Finish setting up', '/app/onboarding'], ['Add a sale', '/app/credit/quick'], ['Customers', '/app/customers'],
 		['Customer limits', '/app/trade-lines'], ['Payments received', '/app/payments'], ['Bank debits', '/app/collections'],
 		['Problems', '/app/disputes'], ['Money overdue', '/app/overdue'], ['Reports', '/app/reports'],
 		['Your staff', '/app/team'], ['Business activity', '/app/activity'], ['Messages we sent', '/app/notifications'],
 		['Account safety', '/app/settings/security'], ['Message choices', '/app/settings/notifications'], ['Your information', '/app/settings/privacy'],
 		['Kredit fees', '/app/settings/billing'], ['Your bank account', '/app/settings/settlement'],
-		['Get help', '/app/help']
+		['Field agent rewards', '/agents'], ['Confirm a referral', '/app/referral'], ['Get help', '/app/help']
 	];
 	const mobilePrimary: [string, string, string][] = [
 		['Home', '/app/overview', 'home'],
@@ -28,7 +28,7 @@
 	const mobileMore: [string, string, string][] = [
 		['Add a sale', '/app/credit/quick', 'Sales and money'],
 		['Business setup', '/app/onboarding', 'Your business'],
-		['Find anything', '/app/search', 'Sales and money'],
+		['Consumer sales', '/app/consumer-sales', 'Sales and money'], ['Find anything', '/app/search', 'Sales and money'],
 		['Bank debits', '/app/collections', 'Sales and money'],
 		['Problems', '/app/disputes', 'Sales and money'],
 		['Money overdue', '/app/overdue', 'Sales and money'],
@@ -38,7 +38,7 @@
 		['Business activity', '/app/activity', 'Your business'],
 		['Messages we sent', '/app/notifications', 'Your business'],
 		['Settings', '/app/settings', 'Account and help'],
-		['Get help', '/app/help', 'Account and help']
+		['Field agent rewards', '/agents', 'Account and help'], ['Confirm a referral', '/app/referral', 'Account and help'], ['Get help', '/app/help', 'Account and help']
 	];
 </script>
 

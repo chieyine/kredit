@@ -337,7 +337,7 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		"/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
 		"/onboarding/", "/notification-preferences", "/recovery-codes", "/account-recovery/", "/privacy-requests", "/support-cases", "/product-feedback",
 		"/ops/seller-settlements/", "/identity/checks/", "/ops/billing-review/", "/ops/message-submissions/", "/ops/verification-requests/", "/ops/mandate-authorizations/",
-		"/fee-operations/", "/fee-authorizations", "/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
+		"/dsa", "/consumer-bank", "/consumer-sales", "/consumer-settings", "/purchases", "/fee-operations/", "/fee-authorizations", "/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
 	} {
 		if strings.Contains(path, suffix) {
 			return true
@@ -529,6 +529,25 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/identity/checks/{provider}/{caseID}/document", s.nativeIdentityDocument)
 	s.mux.HandleFunc("GET /api/v1/identity/checks", s.listNativeIdentity)
 	s.mux.HandleFunc("POST /api/v1/identity/checks/{provider}/{caseID}", s.actNativeIdentity)
+	s.mux.HandleFunc("GET /api/v1/dsa", s.dsa)
+	s.mux.HandleFunc("POST /api/v1/dsa", s.dsa)
+	s.mux.HandleFunc("GET /api/v1/dsa/code/{code}", s.dsa)
+	s.mux.HandleFunc("GET /api/v1/ops/dsa", s.dsa)
+	s.mux.HandleFunc("POST /api/v1/ops/dsa", s.dsa)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/dsa", s.dsa)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/consumer-bank", s.consumerSales)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/consumer-sales", s.consumerSales)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/consumer-sales", s.consumerSales)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/consumer-sales/{saleID}", s.consumerSales)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/consumer-sales/{saleID}", s.consumerSales)
+	s.mux.HandleFunc("GET /api/v1/buyer/purchases/{saleID}", s.consumerSales)
+	s.mux.HandleFunc("POST /api/v1/buyer/purchases/{saleID}", s.consumerSales)
+	s.mux.HandleFunc("GET /api/v1/ops/consumer-sales/{saleID}", s.consumerSales)
+	s.mux.HandleFunc("POST /api/v1/ops/consumer-sales/{saleID}", s.consumerSales)
+	s.mux.HandleFunc("GET /api/v1/ops/organizations/{organizationID}/consumer-settings", s.consumerSales)
+	s.mux.HandleFunc("POST /api/v1/ops/organizations/{organizationID}/consumer-settings", s.consumerSales)
+	s.mux.HandleFunc("GET /api/v1/buyer/purchases", s.consumerSales)
+	s.mux.HandleFunc("GET /api/v1/ops/consumer-sales", s.consumerSales)
 	s.mux.HandleFunc("GET /api/v1/ops/seller-settlements", s.sellerSettlements)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/seller-settlements", s.sellerSettlements)
 	s.mux.HandleFunc("POST /api/v1/ops/seller-settlements/{organizationID}/{attemptID}", s.recordSellerSettlement)

@@ -12,7 +12,7 @@
 	let searchReady = $state(false);
 	onMount(() => { searchReady = true; });
 	const links: [string, string][] = [
-		['Overview', '/buyer'], ['Sales waiting for me', '/buyer/requests'], ['What I owe', '/buyer/obligations'],
+		['Overview', '/buyer'], ['Personal purchases', '/buyer/purchases'], ['Sales waiting for me', '/buyer/requests'], ['What I owe', '/buyer/obligations'],
 		['My buying limits', '/buyer/trade-lines'], ['How I have paid before', '/buyer/history'], ['Changes to my payment days','/buyer/amendments'], ['Transfers I reported', '/buyer/payments'], ['Bank debit permission', '/buyer/mandates'],
 		['Messages Kredit sent me', '/buyer/notifications'], ['What sellers may send me', '/buyer/permissions'],
 		['My settings', '/buyer/settings'], ['Get help', '/legal/complaints']
@@ -25,7 +25,7 @@
 	];
 	const mobileMore: [string, string, string][] = [
 		['How I have paid before', '/buyer/history', 'Sales and payments'], ['Changes to my payment days','/buyer/amendments','Sales and payments'],
-		['Transfers I reported', '/buyer/payments', 'Sales and payments'],
+		['Transfers I reported', '/buyer/payments', 'Sales and payments'], ['Personal purchases','/buyer/purchases','Sales and payments'],
 		['Bank debit permission', '/buyer/mandates', 'Sales and payments'],
 		['Messages Kredit sent me', '/buyer/notifications', 'Messages and choices'],
 		['What sellers may send me', '/buyer/permissions', 'Messages and choices'],

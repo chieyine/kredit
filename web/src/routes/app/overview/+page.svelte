@@ -21,7 +21,8 @@
   let disputes = $state<Resource<WorkRow[]>>(pending());
  let due=$state<Resource<WorkRow[]>>(pending());
   let summary = $state<Resource<Receivables>>(pending());
-  let visibleCount = $state(5), legalName = $state(''), tradingName = $state(''), businessType = $state('unregistered_business'), address = $state(''), industry = $state(''), createBusy = $state(false), createError = $state('');
+  let referralPending = $state(false);
+  let visibleCount = $state(5), legalName = $state(''), tradingName = $state(''), registrationInfo = $state(''), businessType = $state('unregistered_business'), address = $state(''), industry = $state(''), createBusy = $state(false), createError = $state('');
   let creation: MutationIntent | null = null;
   const businessRequest = new LatestRequest(), dashboardRequest = new LatestRequest();
   const organizations = $derived(businesses.state === 'ready' ? businesses.data : []);
@@ -62,21 +63,22 @@
     if (createBusy) return; createBusy = true; createError = '';
     try {
       creation ??= new MutationIntent(account.userID, '/api/v1/organizations');
-      await creation.run({ legal_name: legalName.trim(), trading_name: tradingName.trim(), business_type: businessType, business_address: address.trim(), industry: industry.trim(), timezone: 'Africa/Lagos', currency: 'NGN' }, value => organization(record(value).organization));
+      await creation.run({ legal_name: legalName.trim(), trading_name: tradingName.trim(), business_type: businessType, registration_info: registrationInfo.trim(), business_address: address.trim(), industry: industry.trim(), timezone: 'Africa/Lagos', currency: 'NGN' }, value => organization(record(value).organization));
       await load();
     } catch (cause) { createError = cause instanceof Error ? cause.message : 'We could not confirm your business details.'; }
     finally { createBusy = false; }
   }
-  onMount(() => { void load(); return () => { businessRequest.cancel(); dashboardRequest.cancel(); }; });
+  onMount(() => { referralPending=Boolean(sessionStorage.getItem('kredit_dsa_referral')); void load(); return () => { businessRequest.cancel(); dashboardRequest.cancel(); }; });
 </script>
 <svelte:head><title>Business overview — Kredit</title></svelte:head>
 <main class="shell workspace account-home">
   <header class="task-heading"><div><p class="eyebrow">Your business</p><h1>{currentBusiness?.trading_name || currentBusiness?.legal_name || 'Business overview'}</h1><p class="lede">Your sales, payments and next steps.</p></div>{#if organizationID}<a class="primary" href={`/app/credit/quick${scopeQuery}`}>Add a sale</a>{/if}</header>
+  <p><a href="/app/referral">{referralPending?'Finish confirming your field agent introduction before your first sale →':'Introduced by a field agent? Confirm their referral here →'}</a></p>
   <ResourceNotice resource={businesses} label="Businesses" retry={load} />
   {#if businesses.state === 'ready' && !organizations.length}
     <section class="card onboarding"><h2>Add your business</h2><p>Start with the name your customers know. Verification is required before you can send a sale or use payment services.</p>
       <form class="form-grid" onsubmit={event => { event.preventDefault(); void createOrganization(); }}>
-        <label>Your name, or registered business name<input bind:value={legalName} autocomplete="organization" required disabled={createBusy} /></label><label>Trading name <small>if different</small><input bind:value={tradingName} disabled={createBusy} /></label>
+        <label>Your name, or registered business name<input bind:value={legalName} autocomplete="organization" required disabled={createBusy} /></label><label>CAC registration number <small>if registered</small><input bind:value={registrationInfo} maxlength="80" disabled={createBusy} placeholder="RC or BN number" /></label><label>Trading name <small>if different</small><input bind:value={tradingName} disabled={createBusy} /></label>
         <label>Business type<select bind:value={businessType} disabled={createBusy}><option value="unregistered_business">Not registered yet</option><option value="registered_business">Business name registered with CAC</option><option value="sole_proprietor">Sole proprietor</option><option value="limited_company">Limited company</option><option value="partnership">Partnership</option></select></label>
         <label>What do you sell?<input bind:value={industry} placeholder="Food, medicines, building materials…" required disabled={createBusy} /></label><label class="wide">Business address<textarea bind:value={address} placeholder="Shop number, street, area, town and state" required disabled={createBusy}></textarea></label>
         {#if createError}<p class="error wide" role="alert">{createError}</p>{/if}<button class="primary wide" disabled={createBusy}>{createBusy ? 'Saving…' : 'Add my business'}</button>

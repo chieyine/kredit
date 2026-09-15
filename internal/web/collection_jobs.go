@@ -3,7 +3,9 @@ package web
 import (
 	"context"
 	"errors"
+	"kredit/internal/consumer"
 	"kredit/internal/mandates"
+	"kredit/internal/referrals"
 	"strings"
 	"time"
 
@@ -19,6 +21,12 @@ import (
 func (r *Runtime) EnqueueCollectionWork(ctx context.Context, cfg config.Config) error {
 	if r.Database == nil || r.WebhookJobs == nil {
 		return nil
+	}
+	if err := (&consumer.Store{Pool: r.Database.Raw()}).EnqueueReminders(ctx); err != nil {
+		return err
+	}
+	if err := (&referrals.Store{Pool: r.Database.Raw()}).Refresh(ctx); err != nil {
+		return err
 	}
 	if r.FeeBilling != nil {
 		rows, err := r.Database.Raw().Query(ctx, `SELECT organization_id::text FROM app.fee_billing_work()`)

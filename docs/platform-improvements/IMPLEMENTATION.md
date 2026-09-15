@@ -33,3 +33,11 @@ No existing customer database was reset. No production migration, live message, 
 The owner must supply real account credentials, obtain provider account/template approvals, complete domain and email records, verify bank receiving details and enter the required business/legal approval evidence. Supported settings and review actions are in super admin; provider dashboards and domain records remain external account administration.
 
 Provider accounts must be live-approved before live activation. Local checks do not certify the behavior of an account that has not yet been connected.
+
+## Consumer-sales addition — 15 September 2026
+
+Retailer-to-consumer installments and layaway are now a separate purchase flow. Personal onboarding, immutable agreements, direct retailer payment reports/receipts, delivery gates, explicit receipt, cancellations, return escalation, price reductions, refund evidence, reminders and automatic eligibility-based activation are implemented; Super Admin manages exceptional restrictions. There is no automatic consumer-to-wholesaler repayment. See [CONSUMER-SALES.md](CONSUMER-SALES.md) for the exact payment and operating behavior. This addition raises the runtime migration minimum to **152**; the earlier verification record above describes the previous release candidate.
+
+## DSA referral programme
+
+Implemented owner-confirmed referral links, CAC onboarding rewards, collected-fee activation, six-month fee sharing, agent dashboards, Super Admin reward/limit/restriction controls and evidenced payout reservations. Terms and attribution are immutable; refunds adjust the separate commission ledger. See [DSA-REFERRALS.md](DSA-REFERRALS.md). The runtime minimum is now **153**.

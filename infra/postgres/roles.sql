@@ -260,3 +260,29 @@ GRANT SELECT ON app.native_identity_history TO kredit_app;
 REVOKE INSERT,UPDATE,DELETE ON app.native_identity_history FROM kredit_app,kredit_worker;
 
 GRANT EXECUTE ON FUNCTION app.fee_notice_scope(text,text,text) TO kredit_app,kredit_worker;
+
+-- Personal purchases retain their own access policies and immutable money history.
+GRANT SELECT,INSERT,UPDATE ON app.consumer_sales,app.consumer_settings TO kredit_app;
+GRANT SELECT,INSERT ON app.consumer_events TO kredit_app;
+REVOKE UPDATE,DELETE ON app.consumer_events FROM kredit_app,kredit_worker;
+GRANT SELECT ON app.consumer_sales,app.consumer_events TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.consumer_contact_matches(text,text),app.consumer_seller_role(uuid,text[]) TO kredit_app,kredit_worker;
+GRANT EXECUTE ON FUNCTION app.consumer_reminder_work() TO kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.has_admin_role(uuid,text[]) TO kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.consumer_retailer_ready(uuid) TO kredit_app;
+
+GRANT SELECT,INSERT,UPDATE ON app.consumer_restrictions TO kredit_app;
+
+-- DSA programme: immutable earnings, owner-only payouts, scoped worker refresh.
+REVOKE ALL ON app.dsa_program,app.dsa_agents,app.dsa_referrals,app.dsa_earnings,app.dsa_payouts FROM kredit_app,kredit_worker;
+GRANT SELECT ON app.dsa_program,app.dsa_agents,app.dsa_referrals,app.dsa_earnings,app.dsa_payouts TO kredit_app,kredit_worker;
+GRANT INSERT,UPDATE ON app.dsa_agents,app.dsa_referrals,app.dsa_payouts TO kredit_app;
+GRANT INSERT ON app.dsa_earnings TO kredit_app,kredit_worker;
+GRANT UPDATE ON app.dsa_program TO kredit_app;
+GRANT UPDATE ON app.dsa_agents,app.dsa_referrals TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.dsa_code(text),app.dsa_claim(uuid,text) TO kredit_app;
+GRANT EXECUTE ON FUNCTION app.dsa_facts(uuid,timestamptz,timestamptz) TO kredit_app,kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.dsa_agent_active(uuid) TO kredit_app;

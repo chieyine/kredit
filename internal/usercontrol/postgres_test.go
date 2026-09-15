@@ -146,7 +146,7 @@ func TestPostgresRecoveryAndPrivacyControls(t *testing.T) {
 	if err = json.Unmarshal(payload, &exported); err != nil {
 		t.Fatal(err)
 	}
-	for _, section := range []string{"payments", "seller_consents", "notification_preferences", "bank_permissions", "uploaded_files", "correction_decisions", "native_identity_checks", "identity_decision_history", "fee_bank_consents"} {
+	for _, section := range []string{"payments", "seller_consents", "notification_preferences", "bank_permissions", "uploaded_files", "correction_decisions", "native_identity_checks", "identity_decision_history", "fee_bank_consents", "consumer_purchases", "consumer_purchase_history", "dsa_agent_profile", "dsa_rewards", "dsa_payouts", "dsa_referrals"} {
 		if _, ok := exported[section]; !ok {
 			t.Fatalf("missing export section %s", section)
 		}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"kredit/internal/consumer"
 	"kredit/internal/notifications"
 	"kredit/internal/outbox"
 )
@@ -29,6 +30,16 @@ func (r *Runtime) QueueOutboxNotification(ctx context.Context, event outbox.Even
 	}
 	if payload.Notification != nil {
 		notice := *payload.Notification
+		if notice.Type == "ConsumerPaymentDue" {
+			sale, e := (&consumer.Store{Pool: r.Database.Raw()}).Get(ctx, notice.RecipientID, "", event.AggregateID, false)
+			if e != nil {
+				return e
+			}
+			today := time.Now().In(time.FixedZone("Africa/Lagos", 3600)).Format("2006-01-02")
+			if sale.DueAmount(today) <= 0 || sale.DueAmount(today) != notice.AmountKobo {
+				return nil
+			}
+		}
 		notice.DeferDelivery = true
 		_, err := r.EmitNotification(ctx, notice)
 		return err
