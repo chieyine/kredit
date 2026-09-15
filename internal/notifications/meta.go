@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"kredit/internal/platformsettings"
 	"net/http"
@@ -58,22 +59,38 @@ func (p *MetaProvider) Send(ctx context.Context, m Message) (string, error) {
 	if m.Channel != ChannelWhatsApp || m.EventID == "" || !validMessagingPhone(m.Destination) || strings.TrimSpace(m.Body) == "" {
 		return "", permanentDeliveryError{400}
 	}
-	name, value := p.config.UtilityTemplate, m.Body
-	if m.Template == "ProductUpdate" {
-		name = p.config.MarketingTemplate
-	}
-	components := []map[string]any{}
-	if m.Template == "AuthenticationCode" {
-		if len(m.AuthenticationCode) < 4 || len(m.AuthenticationCode) > 16 {
-			return "", permanentDeliveryError{400}
+
+	var payload []byte
+	if m.Template == "WhatsAppCommandResponse" || m.Template == "TextMessage" {
+		payload, _ = json.Marshal(map[string]any{
+			"messaging_product": "whatsapp",
+			"recipient_type":    "individual",
+			"to":                strings.TrimPrefix(m.Destination, "+"),
+			"type":              "text",
+			"text": map[string]any{
+				"preview_url": false,
+				"body":        m.Body,
+			},
+		})
+	} else {
+		name, value := p.config.UtilityTemplate, m.Body
+		if m.Template == "ProductUpdate" {
+			name = p.config.MarketingTemplate
 		}
-		name, value = p.config.AuthenticationTemplate, m.AuthenticationCode
+		components := []map[string]any{}
+		if m.Template == "AuthenticationCode" {
+			if len(m.AuthenticationCode) < 4 || len(m.AuthenticationCode) > 16 {
+				return "", permanentDeliveryError{400}
+			}
+			name, value = p.config.AuthenticationTemplate, m.AuthenticationCode
+		}
+		components = append(components, map[string]any{"type": "body", "parameters": []map[string]string{{"type": "text", "text": value}}})
+		if m.Template == "AuthenticationCode" {
+			components = append(components, map[string]any{"type": "button", "sub_type": "url", "index": "0", "parameters": []map[string]string{{"type": "text", "text": value}}})
+		}
+		payload, _ = json.Marshal(map[string]any{"messaging_product": "whatsapp", "recipient_type": "individual", "to": strings.TrimPrefix(m.Destination, "+"), "type": "template", "template": map[string]any{"name": name, "language": map[string]string{"code": p.config.Language}, "components": components}})
 	}
-	components = append(components, map[string]any{"type": "body", "parameters": []map[string]string{{"type": "text", "text": value}}})
-	if m.Template == "AuthenticationCode" {
-		components = append(components, map[string]any{"type": "button", "sub_type": "url", "index": "0", "parameters": []map[string]string{{"type": "text", "text": value}}})
-	}
-	payload, _ := json.Marshal(map[string]any{"messaging_product": "whatsapp", "recipient_type": "individual", "to": strings.TrimPrefix(m.Destination, "+"), "type": "template", "template": map[string]any{"name": name, "language": map[string]string{"code": p.config.Language}, "components": components}})
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.config.Endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return "", err
@@ -108,4 +125,60 @@ func (p *MetaProvider) Send(ctx context.Context, m Message) (string, error) {
 		return "", ErrSubmissionUnknown
 	}
 	return result.Messages[0].ID, nil
+}
+
+// DownloadMedia fetches an audio or media file from Meta Graph API using the media ID.
+func (p *MetaProvider) DownloadMedia(ctx context.Context, mediaID string) ([]byte, string, error) {
+	if strings.TrimSpace(mediaID) == "" {
+		return nil, "", errors.New("media ID is required")
+	}
+	metaURL := fmt.Sprintf("https://graph.facebook.com/v20.0/%s", mediaID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metaURL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+p.config.Token)
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("query media failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("query media returned status %d", resp.StatusCode)
+	}
+
+	var metaInfo struct {
+		URL      string `json:"url"`
+		MimeType string `json:"mime_type"`
+		FileSize int64  `json:"file_size"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&metaInfo); err != nil {
+		return nil, "", fmt.Errorf("decode media info: %w", err)
+	}
+	if metaInfo.URL == "" {
+		return nil, "", errors.New("media URL not found in metadata")
+	}
+
+	dlReq, err := http.NewRequestWithContext(ctx, http.MethodGet, metaInfo.URL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	dlReq.Header.Set("Authorization", "Bearer "+p.config.Token)
+	dlResp, err := p.client.Do(dlReq)
+	if err != nil {
+		return nil, "", fmt.Errorf("download media failed: %w", err)
+	}
+	defer dlResp.Body.Close()
+
+	if dlResp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("download media returned status %d", dlResp.StatusCode)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(dlResp.Body, 16<<20))
+	if err != nil {
+		return nil, "", fmt.Errorf("read media body: %w", err)
+	}
+
+	return data, metaInfo.MimeType, nil
 }

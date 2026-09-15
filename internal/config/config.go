@@ -63,6 +63,7 @@ type Config struct {
 	OTPHMACKey                     string
 	TokenHashKey                   string
 	SettingsEncryptionKey          string
+	GeminiAPIKey                   string
 	OTelEndpoint                   string
 	Timezone                       string
 	Currency                       string
@@ -155,6 +156,7 @@ func Load() (Config, error) {
 		OTPHMACKey:                     envOr("OTP_HMAC_KEY", "development-only-change-me"),
 		TokenHashKey:                   envOr("TOKEN_HASH_KEY", "development-only-change-me"),
 		SettingsEncryptionKey:          envOr("SETTINGS_ENCRYPTION_KEY", ""),
+		GeminiAPIKey:                   envOr("GEMINI_API_KEY", ""),
 		OTelEndpoint:                   envOr("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		Timezone:                       envOr("BUSINESS_TIMEZONE", defaultTimezone),
 		Currency:                       "NGN",

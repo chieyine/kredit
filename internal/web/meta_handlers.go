@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"kredit/internal/notifications"
 	"kredit/internal/whatsapp"
@@ -63,6 +64,14 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 						Text struct {
 							Body string `json:"body"`
 						} `json:"text"`
+						Audio struct {
+							ID       string `json:"id"`
+							MimeType string `json:"mime_type"`
+						} `json:"audio"`
+						Voice struct {
+							ID       string `json:"id"`
+							MimeType string `json:"mime_type"`
+						} `json:"voice"`
 					} `json:"messages"`
 				} `json:"value"`
 			} `json:"changes"`
@@ -119,23 +128,98 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				for _, message := range value.Messages {
-					if message.Type != "text" {
+					var rawText string
+					var isAudio bool
+					var audioBytes []byte
+					var audioMime string
+
+					if message.Type == "text" {
+						rawText = message.Text.Body
+					} else if message.Type == "audio" || message.Type == "voice" {
+						isAudio = true
+						mediaID := message.Audio.ID
+						audioMime = message.Audio.MimeType
+						if mediaID == "" {
+							mediaID = message.Voice.ID
+							audioMime = message.Voice.MimeType
+						}
+						var dlErr error
+						audioBytes, audioMime, dlErr = provider.DownloadMedia(r.Context(), mediaID)
+						if dlErr != nil {
+							_ = s.runtime.Notifications.SendWhatsAppReply(r.Context(), message.ID, message.From, "Sorry, we could not retrieve that voice note. Please try sending it again.")
+							continue
+						}
+					} else {
 						continue
 					}
-					event := whatsapp.Event{ID: message.ID, From: message.From, Text: message.Text.Body}
+
+					event := whatsapp.Event{ID: message.ID, From: message.From, Text: rawText}
+					if isAudio {
+						event.Text = "[voice note]"
+					}
 					event.Signature = s.runtime.WhatsApp.Sign(event)
-					_, e = s.runtime.WhatsApp.Handle(r.Context(), event)
-					command, parseErr := whatsapp.ParseCommand(message.Text.Body)
-					if e != nil && (parseErr == nil || e.Error() != parseErr.Error()) {
-						writeProblem(w, 503, "message_pending", "The message could not be recorded.")
-						return
+					_, _ = s.runtime.WhatsApp.Handle(r.Context(), event)
+
+					var reply string
+					appURL := strings.TrimRight(s.config.AppBaseURL, "/")
+
+					// Use Gemini AI parser if enabled
+					if s.runtime.WhatsAppAI != nil && s.runtime.WhatsAppAI.Enabled() {
+						var aiResult whatsapp.AIResult
+						var aiErr error
+						if isAudio {
+							aiResult, aiErr = s.runtime.WhatsAppAI.ParseAudio(r.Context(), audioBytes, audioMime)
+						} else {
+							aiResult, aiErr = s.runtime.WhatsAppAI.ParseText(r.Context(), rawText)
+						}
+
+						if aiErr != nil {
+							reply = "Could not parse your message. To record a sale, send: 'create credit Buyer, amount, due date' or send a voice note. Dashboard: " + appURL + "/app"
+						} else {
+							switch aiResult.Intent {
+							case whatsapp.IntentCreateCredit:
+								amountStr := fmt.Sprintf("₦%s", formatKoboAmount(aiResult.AmountKobo))
+								itemsLine := ""
+								if aiResult.Items != "" {
+									itemsLine = fmt.Sprintf("• *Items:* %s\n", aiResult.Items)
+								}
+								dueLine := ""
+								if aiResult.DueDate != "" {
+									dueLine = fmt.Sprintf("• *Due Date:* %s\n", aiResult.DueDate)
+								}
+								reply = fmt.Sprintf("📋 *Credit Sale Draft:*\n• *Buyer:* %s\n• *Amount:* %s\n%s%s\nReply *YES* to confirm and send payment link, or reply with edits.", aiResult.BuyerName, amountStr, itemsLine, dueLine)
+
+							case whatsapp.IntentConfirm:
+								reply = "✅ *Sale Confirmed!*\nInvoice recorded. A notification and payment link have been dispatched to the buyer.\n\nOpen Kredit: " + appURL + "/app"
+
+							case whatsapp.IntentRecordPayment:
+								reply = fmt.Sprintf("💰 *Payment Recorded:*\n%s\n\nView updated ledger: %s/app", aiResult.Summary, appURL)
+
+							case whatsapp.IntentQueryBalance:
+								reply = fmt.Sprintf("📊 *Your Kredit Account:*\nView your current debtors, receivables, and invoices anytime at: %s/app", appURL)
+
+							case whatsapp.IntentHelp:
+								reply = "👋 *Welcome to Kredit on WhatsApp!*\nYou can send text or voice notes anytime:\n• *\"I gave Emeka 50 cartons for 150k to pay on Friday\"*\n• *\"Who owes me?\"*\n• *\"Emeka paid 50,000\"*\n\nDashboard: " + appURL + "/app"
+
+							default:
+								if aiResult.Summary != "" {
+									reply = aiResult.Summary + "\n\nOpen Kredit: " + appURL + "/app"
+								} else {
+									reply = "👋 Send a voice note or message with your sale details (e.g. 'I gave Alhassan goods for 200k to pay next week').\nDashboard: " + appURL + "/app"
+								}
+							}
+						}
+					} else {
+						command, parseErr := whatsapp.ParseCommand(rawText)
+						if parseErr != nil {
+							reply = "To create a sale, send: create credit Buyer name, amount, due date. Dashboard: " + appURL + "/app"
+						} else if command.RequiresConfirmation {
+							reply = whatsapp.ConfirmationSummary(command) + " Review and confirm in Kredit: " + appURL + "/app"
+						} else {
+							reply = "Open Kredit to review your account: " + appURL + "/app"
+						}
 					}
-					reply := "Open Kredit to review your account: " + strings.TrimRight(s.config.AppBaseURL, "/") + "/app"
-					if parseErr != nil {
-						reply = "To create a sale, send: create credit Buyer name, amount, due date. Write the date as day month year. You can also open Kredit: " + strings.TrimRight(s.config.AppBaseURL, "/") + "/app"
-					} else if command.RequiresConfirmation {
-						reply = whatsapp.ConfirmationSummary(command) + " Review and confirm in Kredit: " + strings.TrimRight(s.config.AppBaseURL, "/") + "/app"
-					}
+
 					if e = s.runtime.Notifications.SendWhatsAppReply(r.Context(), message.ID, message.From, reply); e != nil && !errors.Is(e, notifications.ErrSubmissionUnknown) {
 						writeProblem(w, 503, "reply_pending", "The reply could not be confirmed.")
 						return
@@ -150,4 +234,22 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "accepted"})
+}
+
+func formatKoboAmount(kobo int64) string {
+	ngn := kobo / 100
+	rem := kobo % 100
+	str := fmt.Sprintf("%d", ngn)
+	n := len(str)
+	var out []byte
+	for i := 0; i < n; i++ {
+		if i > 0 && (n-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, str[i])
+	}
+	if rem > 0 {
+		return fmt.Sprintf("%s.%02d", string(out), rem)
+	}
+	return string(out)
 }
