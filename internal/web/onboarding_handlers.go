@@ -183,18 +183,36 @@ func (s *Server) submitSupplierKYB(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusNotFound, "organization_not_found", "We could not find that business.")
 		return
 	}
-	verification, providerErr := s.runtime.Identity.CreateBusinessVerification(identity.WithActor(r.Context(), user.ID), identity.BusinessVerificationInput{RequireReview: true, SubjectID: orgID, LegalName: organization.LegalName, BusinessType: organization.BusinessType, Address: organization.BusinessAddress, Registration: organization.RegistrationInfo})
+	profile, _, profileErr := s.runtime.Onboarding.Get(orgID)
+	if profileErr != nil || profile.Version != in.ExpectedVersion || in.ExpectedVersion <= 0 {
+		writeProblem(w, 409, "onboarding_conflict", "Refresh your setup before starting verification.")
+		return
+	}
+	unregistered := organization.BusinessType == "unregistered_business"
+	var verification identity.VerificationSession
+	var providerErr error
+	if unregistered {
+		membership, exists := s.runtime.Organizations.Membership(orgID, user.ID)
+		if !exists || membership.Role != access.RoleOwner || membership.Status != "active" {
+			writeProblem(w, 403, "owner_required", "The business owner must complete personal verification.")
+			return
+		}
+		if strings.TrimSpace(profile.AuthorizedRepresentativeName) == "" {
+			writeProblem(w, 422, "owner_name_required", "Save your full name as it appears on your identity record first.")
+			return
+		}
+		verification, providerErr = s.runtime.Identity.CreatePersonVerification(identity.WithActor(r.Context(), user.ID), identity.PersonVerificationInput{SubjectID: orgID, FullName: profile.AuthorizedRepresentativeName})
+	} else {
+		verification, providerErr = s.runtime.Identity.CreateBusinessVerification(identity.WithActor(r.Context(), user.ID), identity.BusinessVerificationInput{RequireReview: true, SubjectID: orgID, LegalName: organization.LegalName, BusinessType: organization.BusinessType, Address: organization.BusinessAddress, Registration: organization.RegistrationInfo})
+	}
 	if providerErr != nil {
 		writeProblem(w, http.StatusServiceUnavailable, "kyb_provider_unavailable", providerErr.Error())
 		return
 	}
 	p, sum, err := s.runtime.Onboarding.SubmitKYB(orgID, user.ID, identity.RoutedReference(verification.Provider, verification.ProviderID), in.ExpectedVersion)
-	if err == nil && (verification.State == "verified" || verification.State == "approved") {
-		p, sum, err = s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, p.KYBProviderReference, p.Version, "approved", "provider_approved", verification.ExpiresAt)
-	} else if err == nil && verification.State == "rejected" {
-		p, sum, err = s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, p.KYBProviderReference, p.Version, "rejected", "provider_rejected", verification.ExpiresAt)
-	} else if err == nil && verification.State != "submitted" {
-		p, sum, err = s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, p.KYBProviderReference, p.Version, "provider_review", "", verification.ExpiresAt)
+	if err == nil {
+		state, reason := supplierIdentityDecision(unregistered, profile.AuthorizedRepresentativeName, verification.State, verification.VerificationLevel, verification.SafeResult, verification.ExpiresAt)
+		p, sum, err = s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, p.KYBProviderReference, p.Version, state, reason, verification.ExpiresAt)
 	}
 	s.finishOnboardingChange(w, r, user, orgID, "supplier.onboarding.kyb.submitted", p, sum, err)
 }
@@ -219,19 +237,12 @@ func (s *Server) reconcileSupplierKYB(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusConflict, "kyb_provider_identity_mismatch", "the provider result does not match this business verification")
 		return
 	}
-	state, reason := "provider_review", ""
-	switch strings.ToLower(strings.TrimSpace(verification.State)) {
-	case "verified", "approved":
-		state, reason = "approved", "provider_approved"
-	case "expired":
-		state, reason = "expired", "provider_expired"
-	case "rejected", "failed":
-		state, reason = "rejected", "provider_rejected"
-	case "pending", "submitted", "in_review", "provider_review":
-	default:
-		writeProblem(w, http.StatusConflict, "kyb_provider_state_invalid", "the provider returned an unsupported verification state")
+	organization, exists := s.runtime.Organizations.Get(orgID)
+	if !exists {
+		writeProblem(w, 404, "organization_not_found", "Business not found.")
 		return
 	}
+	state, reason := supplierIdentityDecision(organization.BusinessType == "unregistered_business", profile.AuthorizedRepresentativeName, verification.State, verification.VerificationLevel, verification.SafeResult, verification.ExpiresAt)
 	updated, summary, err := s.runtime.Onboarding.RecordKYBDecisionForReference(orgID, user.ID, profile.KYBProviderReference, profile.Version, state, reason, verification.ExpiresAt)
 	s.finishOnboardingChange(w, r, user, orgID, "supplier.onboarding.kyb.reconciled", updated, summary, err)
 }
@@ -261,6 +272,12 @@ func (s *Server) updateSupplierSettlement(w http.ResponseWriter, r *http.Request
 		writeProblem(w, 409, "onboarding_conflict", "Your settings changed. Refresh before submitting.")
 		return
 	}
+	if organization, exists := s.runtime.Organizations.Get(orgID); exists && organization.BusinessType == "unregistered_business" {
+		if profile.KYBState != "approved" || profile.KYBReasonCode != "owner_identity_approved" || profile.KYBExpiresAt.IsZero() || !profile.KYBExpiresAt.After(time.Now()) {
+			writeProblem(w, 422, "owner_identity_required", "Complete or renew your personal identity check before connecting your receiving account.")
+			return
+		}
+	}
 	banks, err := s.runtime.Settlement.Banks(r.Context())
 	if err != nil {
 		writeProblem(w, 503, "banks_unavailable", "Banks could not be loaded. Try again later.")
@@ -286,6 +303,12 @@ func (s *Server) updateSupplierSettlement(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		writeProblem(w, 409, "bank_registration_unconfirmed", "The bank registration is unconfirmed. Contact support before submitting a different account.")
 		return
+	}
+	if organization, exists := s.runtime.Organizations.Get(orgID); exists && organization.BusinessType == "unregistered_business" {
+		if profile.KYBState != "approved" || profile.KYBReasonCode != "owner_identity_approved" || !identity.NamesMatch(profile.AuthorizedRepresentativeName, result.AccountName) {
+			writeProblem(w, 422, "owner_bank_mismatch", "Complete your personal identity check and use a bank account in that same full name. A mismatched account cannot receive your sales payments.")
+			return
+		}
 	}
 	p, sum, err := s.runtime.Onboarding.UpdateSettlement(orgID, user.ID, onboarding.SettlementInput{ExpectedVersion: in.ExpectedVersion, Provider: s.runtime.Settlement.Name(), ProviderReference: result.ProviderReference, BankName: bankName, AccountName: result.AccountName, AccountLast4: result.AccountLast4})
 
@@ -446,3 +469,23 @@ func (s *Server) requireSupplierReady(w http.ResponseWriter, organizationID, act
 }
 
 func ownerContactEvidence(user auth.User) (bool, bool) { return user.Email != "", user.Phone != "" }
+
+// The personal route approves the trader, never claims CAC registration.
+func supplierIdentityDecision(unregistered bool, name, state string, level int, safe map[string]string, expires time.Time) (string, string) {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "verified", "approved":
+		if unregistered {
+			if level < 2 || expires.IsZero() || !expires.After(time.Now()) || (safe["nin_status"] != "verified" && safe["bvn_status"] != "verified") || !identity.NamesMatch(name, safe["verified_name"]) {
+				return "provider_review", "owner_identity_evidence_required"
+			}
+			return "approved", "owner_identity_approved"
+		}
+		return "approved", "provider_approved"
+	case "expired":
+		return "expired", "provider_expired"
+	case "failed", "rejected":
+		return "rejected", "provider_rejected"
+	default:
+		return "provider_review", ""
+	}
+}

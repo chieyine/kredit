@@ -144,6 +144,7 @@ func (p *NativeLookup) request(ctx context.Context, method, path string, input, 
 const NativeConsentVersion = "mono-lookup-2026-09-12"
 
 type NativeCase struct {
+	SubjectID  string            `json:"subject_id"`
 	ID         string            `json:"id"`
 	Provider   string            `json:"provider"`
 	Kind       string            `json:"kind"`
@@ -167,7 +168,7 @@ func (p *NativeLookup) List(ctx context.Context, review bool) ([]NativeCase, err
 			return nil, err
 		}
 	}
-	rows, err := tx.Query(ctx, `SELECT id::text,provider,kind,CASE WHEN state='verified' AND expires_at<=now() THEN 'expired' ELSE state END,full_name,operation,version,safe_result,COALESCE(document_id::text,'') FROM app.native_identity_sessions WHERE provider=$1 AND ($2 OR user_id=app.current_user_id()) ORDER BY (state NOT IN ('verified','failed') OR expires_at<=now()) DESC,created_at DESC,id DESC`, p.name, review)
+	rows, err := tx.Query(ctx, `SELECT subject_id::text,id::text,provider,kind,CASE WHEN state='verified' AND expires_at<=now() THEN 'expired' ELSE state END,full_name,operation,version,safe_result,COALESCE(document_id::text,'') FROM app.native_identity_sessions WHERE provider=$1 AND ($2 OR user_id=app.current_user_id()) ORDER BY (state NOT IN ('verified','failed') OR expires_at<=now()) DESC,created_at DESC,id DESC`, p.name, review)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +176,7 @@ func (p *NativeLookup) List(ctx context.Context, review bool) ([]NativeCase, err
 	items := []NativeCase{}
 	for rows.Next() {
 		var v NativeCase
-		if err = rows.Scan(&v.ID, &v.Provider, &v.Kind, &v.State, &v.Name, &v.Operation, &v.Version, &v.SafeResult, &v.DocumentID); err != nil {
+		if err = rows.Scan(&v.SubjectID, &v.ID, &v.Provider, &v.Kind, &v.State, &v.Name, &v.Operation, &v.Version, &v.SafeResult, &v.DocumentID); err != nil {
 			return nil, err
 		}
 		items = append(items, v)

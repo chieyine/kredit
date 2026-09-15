@@ -5,6 +5,7 @@
 	import BankReturnNotice from '$lib/components/BankReturnNotice.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ConnectivityBanner from '$lib/components/ConnectivityBanner.svelte';
+	import SalesFlowNav from '$lib/components/SalesFlowNav.svelte';
 	import PortalNav from '$lib/components/PortalNav.svelte';
 	import { page } from '$app/state';
 	let { children } = $props();
@@ -12,14 +13,14 @@
 	let searchReady = $state(false);
 	onMount(() => { searchReady = true; });
 	const links: [string, string][] = [
-		['Overview', '/buyer'], ['Personal purchases', '/buyer/purchases'], ['Sales waiting for me', '/buyer/requests'], ['What I owe', '/buyer/obligations'],
+		['Overview', '/buyer'], ['Personal purchases', '/buyer/purchases'], ['Business purchases', '/buyer/requests'], ['What I owe', '/buyer/obligations'],
 		['My buying limits', '/buyer/trade-lines'], ['How I have paid before', '/buyer/history'], ['Changes to my payment days','/buyer/amendments'], ['Transfers I reported', '/buyer/payments'], ['Bank debit permission', '/buyer/mandates'],
 		['Messages Kredit sent me', '/buyer/notifications'], ['What sellers may send me', '/buyer/permissions'],
 		['My settings', '/buyer/settings'], ['Get help', '/legal/complaints']
 	];
 	const mobilePrimary: [string, string, string][] = [
 		['Overview', '/buyer', 'home'],
-		['Sales', '/buyer/requests', 'sales'],
+		['Business', '/buyer/requests', 'sales'],
 		['I owe', '/buyer/obligations', 'owe'],
 		['Limits', '/buyer/trade-lines', 'limits']
 	];
@@ -39,7 +40,7 @@
 	<div class="buyer-shell">
 		<ConnectivityBanner />
 		<PortalNav label="Customer account" homeHref="/buyer" {links} {mobilePrimary} {mobileMore} onsearch={() => (paletteOpen = true)} onsignout={signOut} {searchReady} />
-		<div class="portal-content"><BankReturnNotice /><div class="motion-scope product-route">{@render children()}</div></div>
+		<div class="portal-content"><BankReturnNotice /><div class="motion-scope product-route"><SalesFlowNav buyer/>{@render children()}</div></div>
 	</div>
 	<CommandPalette {links} bind:open={paletteOpen} />
 </AuthGate>{/key}

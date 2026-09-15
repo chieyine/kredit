@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"kredit/internal/identifier"
+	"kredit/internal/identity"
 	"kredit/internal/legalpublication"
 )
 
@@ -208,6 +209,9 @@ func (s *Store) UpdateRepresentative(org, actor string, in RepresentativeInput) 
 		return Profile{}, Summary{}, errors.New("onboarding profile version is required")
 	}
 	return s.mutate(org, actor, "representative.updated", in.ExpectedVersion, func(p *Profile, _ legalpublication.Versions) error {
+		if p.KYBReasonCode == "owner_identity_approved" && !identity.NamesMatch(p.AuthorizedRepresentativeName, in.Name) {
+			return errors.New("your verified owner name cannot be replaced; contact support to correct identity evidence")
+		}
 		p.AuthorizedRepresentativeName = strings.TrimSpace(in.Name)
 		p.AuthorizedRepresentativeTitle = strings.TrimSpace(in.Title)
 		if p.AuthorizedRepresentativeName == "" || p.AuthorizedRepresentativeTitle == "" {
@@ -408,7 +412,7 @@ func summarize(p Profile, now time.Time, selected ...legalpublication.Versions) 
 		{Code: "email_verified", Label: "Owner email verified", Complete: !p.OwnerEmailVerifiedAt.IsZero(), ManagePath: "/app/onboarding"},
 		{Code: "phone_verified", Label: "Owner phone verified", Complete: !p.OwnerPhoneVerifiedAt.IsZero(), ManagePath: "/app/onboarding"},
 		{Code: "kyb_approved", Label: "Business verification approved", Complete: kybApproved, ManagePath: "/app/onboarding"},
-		{Code: "settlement_verified", Label: "Settlement destination verified", Complete: p.SettlementState == "verified", ManagePath: "/app/settings/settlement"},
+		{Code: "settlement_verified", Label: "Settlement destination verified", Complete: p.SettlementState == "verified" && (p.KYBReasonCode != "owner_identity_approved" || identity.NamesMatch(p.AuthorizedRepresentativeName, p.SettlementAccountName)), ManagePath: "/app/settings/settlement"},
 		{Code: "billing_configured", Label: "Billing method configured", Complete: p.BillingState == "configured", ManagePath: "/app/settings/billing"},
 		{Code: "credit_policy", Label: "Default credit policy configured", Complete: !p.DefaultCreditPolicyUpdatedAt.IsZero(), ManagePath: "/app/settings/credit-policy"},
 		{Code: "current_consents", Label: "Current terms and privacy accepted", Complete: p.TermsVersion == versions.Terms && p.PrivacyVersion == versions.Privacy, ManagePath: "/app/onboarding"},

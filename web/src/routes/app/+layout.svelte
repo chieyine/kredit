@@ -4,6 +4,7 @@
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ConnectivityBanner from '$lib/components/ConnectivityBanner.svelte';
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import SalesFlowNav from '$lib/components/SalesFlowNav.svelte';
 	import PortalNav from '$lib/components/PortalNav.svelte';
 	import { page } from '$app/state';
 	let { children } = $props();
@@ -11,7 +12,7 @@
 	let ready = $state(false);
 	onMount(() => { ready = true; });
 	const links: [string, string][] = [
-		['Home', '/app/overview'], ['Sales', '/app/credit'], ['Consumer sales', '/app/consumer-sales'], ['Find anything', '/app/search'], ['Finish setting up', '/app/onboarding'], ['Add a sale', '/app/credit/quick'], ['Customers', '/app/customers'],
+		['Home', '/app/overview'], ['Business sales', '/app/credit'], ['Consumer sales', '/app/consumer-sales'], ['Find anything', '/app/search'], ['Finish setting up', '/app/onboarding'], ['Add a business sale', '/app/credit/quick'], ['Customers', '/app/customers'],
 		['Customer limits', '/app/trade-lines'], ['Payments received', '/app/payments'], ['Bank debits', '/app/collections'],
 		['Problems', '/app/disputes'], ['Money overdue', '/app/overdue'], ['Reports', '/app/reports'],
 		['Your staff', '/app/team'], ['Business activity', '/app/activity'], ['Messages we sent', '/app/notifications'],
@@ -21,12 +22,12 @@
 	];
 	const mobilePrimary: [string, string, string][] = [
 		['Home', '/app/overview', 'home'],
-		['Sales', '/app/credit', 'sales'],
+		['Business sales', '/app/credit', 'sales'],
 		['Customers', '/app/customers', 'customers'],
 		['Payments', '/app/payments', 'payments']
 	];
 	const mobileMore: [string, string, string][] = [
-		['Add a sale', '/app/credit/quick', 'Sales and money'],
+		['Add a business sale', '/app/credit/quick', 'Sales and money'],
 		['Business setup', '/app/onboarding', 'Your business'],
 		['Consumer sales', '/app/consumer-sales', 'Sales and money'], ['Find anything', '/app/search', 'Sales and money'],
 		['Bank debits', '/app/collections', 'Sales and money'],
@@ -50,7 +51,7 @@
 		<div class="app-shell">
 			<ConnectivityBanner />
 			<PortalNav label="Seller account" homeHref="/app/overview" {links} {mobilePrimary} {mobileMore} onsearch={() => (paletteOpen = true)} onsignout={signOut} searchReady={ready} />
-			<div class="portal-content">{#key page.url.pathname}<div class="motion-scope product-route">{@render children()}</div>{/key}</div>
+			<div class="portal-content">{#key page.url.pathname}<div class="motion-scope product-route">{#if /^\/app\/(overview|onboarding|credit|consumer-sales)(\/|$)/.test(page.url.pathname)}<SalesFlowNav/>{/if}{@render children()}</div>{/key}</div>
 		</div>
 		<CommandPalette {links} bind:open={paletteOpen} />
 	</AuthGate>{/key}

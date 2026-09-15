@@ -25,7 +25,7 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	if (!event.url.pathname.startsWith('/api/')) {
-		const protectedAccountRoute = /^(?:\/app\/.+|\/buyer(?:\/|$)|\/admin(?:\/|$))/.test(event.url.pathname);
+		const protectedAccountRoute = /^(?:\/app\/.+|\/buyer(?:\/|$)|\/admin(?:\/|$)|\/agents(?:\/|$))/.test(event.url.pathname);
 		if (protectedAccountRoute && !event.cookies.get('kredit_session')) {
 			const next = `${event.url.pathname}${event.url.search}`;
 			return new Response(null, {
@@ -40,7 +40,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
 			response.headers.set(name, value);
 		}
-		const privateRoute = /^\/(app|buyer|admin|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(event.url.pathname);
+		const privateRoute = /^\/(app|buyer|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(event.url.pathname);
 		if (!response.headers.has('cache-control')) response.headers.set('cache-control', privateRoute
 			? 'private, no-store'
 			: 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
