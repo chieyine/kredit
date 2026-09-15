@@ -64,6 +64,7 @@ func (s *Server) ownerSetup(w http.ResponseWriter, r *http.Request) {
 	add("scanner", "Document safety checks", s.config.DocumentScannerEndpoint != "", "Connect the document scanner. Files stay unavailable until their scan passes.", link("integrations.runtime.scanner"))
 	report := readiness.Evaluate(s.config)
 	add("approvals", "Launch evidence and operating limits", report.Ready, "Record genuine review references and operating limits. Entering a reference does not perform the review.", link("integrations.runtime.launch"))
+	tasks = append(tasks, setupTask{"consumer-sales", "Consumer sales", "review_required", "Eligible retailers activate automatically using their verified business and receiving account. Manage exceptions and escalated returns.", "/admin/consumer-sales"})
 	tasks = append(tasks, setupTask{"legal", "Website and legal documents", "review_required", "Review and publish your business details, terms and privacy policy.", "/admin/website"})
 	tasks = append(tasks, setupTask{"team", "Super-admin security and team access", "review_required", "Keep recovery methods current and grant only the access each person needs.", "/admin/team"})
 	rows, err := s.runtime.Database.Raw().Query(r.Context(), `SELECT process,versions,state,updated_at FROM app.runtime_process_status ORDER BY process`)

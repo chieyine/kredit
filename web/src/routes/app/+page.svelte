@@ -4,7 +4,7 @@
   import { page } from '$app/state';
   import { checkedJSON, normalizeNigerianPhone, record, RequestError, safeNext, text } from '$lib/api/reliable';
   let identifier = $state(''), challengeID = $state(''), code = $state(''), developmentCode = $state(''), error = $state('');
-  let channel = $state<'email' | 'sms'>('sms');
+  let channel = $state<'email' | 'whatsapp'>('email');
   let busy = $state(false), sentTo = $state(''), expiresAt = $state(0), resendAt = $state(0), now = $state(Date.now());
   let { data } = $props();
   const countdown = $derived(Math.max(0, Math.ceil((resendAt - now) / 1000)));
@@ -22,12 +22,12 @@
     if (busy || (challengeID && countdown > 0)) return;
     busy = true; error = '';
     try {
-      const target = channel === 'sms' ? normalizeNigerianPhone(identifier) : identifier.trim();
+      const target = channel === 'whatsapp' ? normalizeNigerianPhone(identifier) : identifier.trim();
       const body = await checkedJSON('/api/v1/auth/otp/challenges', value => {
         const result = record(value); const expiry = Date.parse(text(result.expires_at));
         if (!Number.isFinite(expiry) || expiry <= Date.now()) throw new RequestError('The code expiry was not confirmed.');
         return { id: text(result.challenge_id), expiry, developmentCode: typeof result.development_code === 'string' ? result.development_code : '' };
-      }, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: target, channel: channel === 'sms' ? 'phone' : 'email', purpose: 'login' }) });
+      }, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: target, channel: channel === 'whatsapp' ? 'phone' : 'email', purpose: 'login' }) });
       identifier = target; sentTo = masked(target); challengeID = body.id; expiresAt = body.expiry;
       developmentCode = body.developmentCode; code = ''; resendAt = Date.now() + 60000;
     } catch (cause) {
@@ -58,16 +58,16 @@
 </script>
 <svelte:head><title>Start or sign in — Kredit</title></svelte:head>
 <main class="shell auth-page">
-  <section class="auth-copy"><p class="eyebrow">Your Kredit account</p><h1>Start or sign in.</h1><p class="lede">Keep your sales and payments in one place. We will send you a code—there is no password to remember.</p><p class="privacy-note">New here? Start with your phone number or email. Your business details come next.</p></section>
+  <section class="auth-copy"><p class="eyebrow">Your Kredit account</p><h1>Start or sign in.</h1><p class="lede">Keep your sales and payments in one place. We will send you a code—there is no password to remember.</p><p class="privacy-note">New here? Start with your email or WhatsApp number. Your business details come next.</p></section>
   <form class="card auth-card" onsubmit={(event) => { event.preventDefault(); void (challengeID ? verifyCode() : requestCode()); }}>
     <h2>{challengeID ? 'Enter your six-digit code' : 'Open your account'}</h2>
     {#if page.url.searchParams.get('signed_out') === '1'}<p class="inline-notice" role="status">You are signed out.</p>{/if}
     {#if !challengeID}
-      <fieldset class="channel"><legend>Where should we send your code?</legend><label><input type="radio" value="sms" bind:group={channel} disabled={busy} />Phone (SMS)</label><label><input type="radio" value="email" bind:group={channel} disabled={busy} />Email</label></fieldset>
-      <label>{channel === 'sms' ? 'Phone number' : 'Email address'}<input bind:value={identifier} type={channel === 'sms' ? 'tel' : 'email'} autocomplete={channel === 'sms' ? 'tel' : 'email'} placeholder={channel === 'sms' ? '0801 234 5678' : 'you@example.com'} disabled={busy} required /></label>
-      {#if channel === 'sms'}<p class="field-help">Use your Nigerian number, starting with 0 or +234.</p>{/if}
+      <fieldset class="channel"><legend>Where should we send your code?</legend><label><input type="radio" value="email" bind:group={channel} disabled={busy} />Email</label><label><input type="radio" value="whatsapp" bind:group={channel} disabled={busy} />WhatsApp</label></fieldset>
+      <label>{channel === 'whatsapp' ? 'Phone number' : 'Email address'}<input bind:value={identifier} type={channel === 'whatsapp' ? 'tel' : 'email'} autocomplete={channel === 'whatsapp' ? 'tel' : 'email'} placeholder={channel === 'whatsapp' ? '0801 234 5678' : 'you@example.com'} disabled={busy} required /></label>
+      {#if channel === 'whatsapp'}<p class="field-help">Use your WhatsApp number, starting with 0 or +234. We will send your code on WhatsApp.</p>{/if}
     {:else}
-      <p>A code was sent to <strong>{sentTo}</strong>.</p>
+      <p>A code was sent {channel === 'whatsapp' ? 'on WhatsApp' : 'by email'} to <strong>{sentTo}</strong>.</p>
       <label>Six-digit code<input bind:value={code} inputmode="numeric" autocomplete="one-time-code" pattern={'[0-9]{6}'} minlength="6" maxlength="6" disabled={busy || expired} required /></label>
       <p class:expired>{expired ? 'This code has expired. Request a new one below.' : `This code expires in ${Math.max(1, Math.ceil((expiresAt - now) / 60000))} minute(s).`}</p>
       {#if developmentCode}<p class="notice">Development code: <strong>{developmentCode}</strong></p>{/if}

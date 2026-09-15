@@ -23,6 +23,10 @@ func privacyExportPayload(ctx context.Context, tx pgx.Tx, requestID, userID stri
 	}
 	result["profile"] = profile
 	sections := []struct{ name, query string }{
+		{"dsa_agent_profile", `SELECT user_id,code,name,phone,bank_name,account_name,account_number,status,onboarding_limit,terms_version,terms_accepted_at,bank_updated_at,created_at FROM app.dsa_agents WHERE user_id=$1::uuid`},
+		{"dsa_rewards", `SELECT id,organization_id,kind,amount_kobo,reason,available_at,created_at FROM app.dsa_earnings WHERE agent_id=$1::uuid ORDER BY created_at,id`},
+		{"dsa_payouts", `SELECT id,amount_kobo,bank_name,account_name,account_number,state,bank_reference,created_at,completed_at FROM app.dsa_payouts WHERE agent_id=$1::uuid ORDER BY created_at,id`},
+		{"dsa_referrals", `SELECT organization_id,business_name,created_at,terms,qualified_at,activated_at,share_ends_at,blocked,progress FROM app.dsa_referrals WHERE agent_id=$1::uuid OR confirmed_by=$1::uuid ORDER BY created_at,organization_id`},
 		{"memberships", `SELECT id,organization_id,role,status,invited_at,accepted_at,created_at FROM app.memberships WHERE user_id=$1::uuid ORDER BY id`},
 		{"native_identity_checks", `SELECT id,provider,subject_id,kind,full_name,state,safe_result,consent_version,consent_at,created_at,updated_at,expires_at FROM app.native_identity_sessions WHERE user_id=$1::uuid ORDER BY created_at,id`},
 		{"identity_decision_history", `SELECT session_id,previous_version,previous_decision->>'state' AS previous_state,previous_decision->'safe_result' AS verified_details,recorded_at FROM app.native_identity_history WHERE user_id=$1::uuid ORDER BY recorded_at,id`},
@@ -34,6 +38,8 @@ func privacyExportPayload(ctx context.Context, tx pgx.Tx, requestID, userID stri
 		{"notification_history", `SELECT id,channel,template,template_version,event_reference,state,scheduled_at,sent_at,delivered_at,read_at,failed_at,supplier_organization_id,priority FROM app.notifications WHERE recipient_id=$1::uuid ORDER BY scheduled_at,id`},
 		{"privacy_requests", `SELECT id,organization_id,request_type,state,identity_verified_at,due_at,details,decision_reason,retention_outcome,legal_hold_applies,completion_reason,completed_at,created_at FROM app.privacy_requests WHERE requester_user_id=$1::uuid ORDER BY created_at,id`},
 		{"processing_restrictions", `SELECT id,privacy_request_id,scope,reason,active,created_at,lifted_at FROM app.processing_restrictions WHERE user_id=$1::uuid ORDER BY created_at,id`},
+		{"consumer_purchases", `SELECT id,organization_id,terms,agreement_hash,state,customer_name,delivery_address,accepted_at,released_at,received_at,case_state,created_at FROM app.consumer_sales WHERE buyer_user_id=$1::uuid OR (buyer_user_id IS NULL AND app.consumer_contact_matches(target_type,target_value)) ORDER BY created_at,id`},
+		{"consumer_purchase_history", `SELECT e.id,e.sale_id,e.action,e.amount_kobo,e.reference,e.note,e.occurred_at,e.created_at FROM app.consumer_events e JOIN app.consumer_sales s ON s.id=e.sale_id WHERE s.buyer_user_id=$1::uuid OR e.actor_id=$1::uuid ORDER BY e.created_at,e.id`},
 		{"credit_requests", `SELECT id,supplier_organization_id,buyer_business_id,principal_kobo,currency,goods_description,invoice_reference,due_date,grace_hours,collection_at,state,created_at,updated_at,fee_terms FROM app.credit_requests WHERE buyer_user_id=$1::uuid ORDER BY created_at,id`},
 		{"obligations", `SELECT o.id,o.credit_request_id,o.supplier_organization_id,o.principal_kobo,o.currency,o.lifecycle_status,o.payment_status,o.outstanding_kobo,o.base_fee_kobo,o.activated_at FROM app.obligations o JOIN app.credit_requests c ON c.id=o.credit_request_id WHERE c.buyer_user_id=$1::uuid ORDER BY o.activated_at,o.id`},
 		{"payments", `SELECT id,obligation_id,supplier_organization_id,source_type,amount_kobo,currency,state,paid_at,recognized_at,reversal_of,collection_fee_kobo FROM app.payments WHERE buyer_user_id=$1::uuid ORDER BY paid_at,id`},

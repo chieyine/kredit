@@ -96,7 +96,7 @@
 		<section class="panel" aria-labelledby="invite-title">
 			<p class="eyebrow">Your private link</p>
 			<h1 id="invite-title">{preview.supplier.trading_name || preview.supplier.legal_name} wants to add you as a customer.</h1>
-			<p>Check that the details below are correct. Then we will send a six-digit code, to be sure this phone or email really belongs to you.</p>
+			<p>Check that the details below are correct. Then we will send a six-digit code, to be sure this phone or email really belongs to you. Email codes arrive by email; phone codes arrive on WhatsApp.</p>
 			<dl>
 				<div><dt>Business name</dt><dd>{preview.invitation.proposed_legal_name}</dd></div>
 				<div><dt>Business type</dt><dd>{preview.invitation.proposed_business_type}</dd></div>

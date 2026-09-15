@@ -1,5 +1,11 @@
 # Admin workflows
 
+## Sign-in codes
+
+Email is the default sign-in option. The phone alternative sends codes through WhatsApp, including contact verification and invitation verification. Phone-based account recovery also uses WhatsApp. Configure the WhatsApp connection and approved authentication template in **Admin → Platform settings**; codes do not silently fall back to SMS. The authentication API still uses `channel: phone` to identify a phone-number account. Mono's own identity-verification codes remain controlled by Mono.
+
+Meta's [authentication template setup](https://www.postman.com/meta/whatsapp-business-platform/request/6vkv46u/create-authentication-template-w-otp-copy-code-button) describes the copy-code template used for WhatsApp OTPs.
+
 ## Where to work
 
 - **Approval inbox** (`/admin/inbox`): open policies, financial proposals, disputes, financial reviews, support, recovery and privacy cases. The inbox shows only categories permitted by the signed-in operator's active roles. Claim or release ownership and set a review deadline with a recorded reason. Business decision deadlines and proposal expiries are enforced separately.
@@ -95,3 +101,11 @@ Before changing financial providers, save the old named account under **Launch s
 Mesaj activation also requires a valid HTTPS certificate on its API host. The main website's certificate alone does not establish that the API certificate is valid. Kredit does not bypass TLS validation; configure an approved alternative messaging connector if the account's API remains unavailable.
 
 Split-settlement arrangements also issue a monthly bill for any fees left unpaid. Previously deducted amounts are shown separately, including any later reversal. The receiving-bank instructions supplied when approving the arrangement are used for these bills.
+
+## Consumer purchases
+
+Use **Consumer purchases** (`/admin/consumer-sales`) for exceptions and escalated cases. Retailers activate automatically when current business/bank/billing checks pass and they connect their already registered receiving account. No extra consumer-sale review is required. Customer funds go directly to that retailer; no upstream wholesaler allocation exists. Open a purchase to review payment claims, delivery evidence, cancelled/returned sales and refunds still owed. Only super admin can decide an escalated return. Recording a refund confirms money already repaid; it does not initiate a transfer. See [consumer-sale operating details](../platform-improvements/CONSUMER-SALES.md).
+
+## Field agents
+
+Open `/admin/agents` as Super Admin. Change future reward terms, adjust individual onboarding limits, suspend agents, or restrict fraudulent referrals with a reason. Routine merchant qualification is automatic. Filter by agent to review earnings and prepare a matured payout; verify the recipient in your bank, complete the transfer, then record its unique bank reference and evidence. Cancel an unsent reservation when necessary. Preparation and recording do not send bank transfers. See [the programme runbook](../platform-improvements/DSA-REFERRALS.md).

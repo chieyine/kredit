@@ -14,7 +14,8 @@ import (
 // checking only the ledger and job tables; a migrated-but-partial database
 // must never be reported as ready.
 var RequiredPersistenceObjects = []string{
-	"app.fee_authorizations", "app.fee_debits", "app.fee_bank_receipts", "app.split_fee_allocations", "app.native_identity_history",
+	"app.fee_authorizations", "app.fee_debits", "app.fee_bank_receipts",
+	"app.dsa_program", "app.dsa_agents", "app.dsa_referrals", "app.dsa_earnings", "app.dsa_payouts", "app.consumer_sales", "app.consumer_events", "app.consumer_settings", "app.consumer_restrictions", "app.split_fee_allocations", "app.native_identity_history",
 	"app.buyer_verification_intents", "app.mandate_authorization_intents",
 	"app.collection_settlement_routes", "app.seller_settlement_receipts", "app.native_identity_sessions", "app.fee_invoices", "app.fee_invoice_lines", "app.fee_invoice_receipts", "app.invoice_billing_approvals",
 	"app.request_rate_limits",
@@ -104,6 +105,8 @@ var RequiredPersistenceObjects = []string{
 // PostgreSQL authentication adapter. A complete table set without these
 // functions would still fail at runtime.
 var RequiredPersistenceFunctions = []string{
+	"app.dsa_code(text)", "app.dsa_claim(uuid,text)", "app.dsa_facts(uuid,timestamp with time zone,timestamp with time zone)", "app.dsa_agent_active(uuid)", "app.dsa_registration(text,text)", "app.guard_dsa_agent()", "app.guard_dsa_referral()",
+	"app.consumer_retailer_ready(uuid)", "app.consumer_reminder_work()", "app.consumer_contact_matches(text,text)", "app.consumer_seller_role(uuid,text[])", "app.consumer_acceptance_guard()", "app.consumer_event_permission()",
 	"app.fee_billing_work()", "app.fee_notice_scope(text,text,text)", "app.guard_fee_authorization()", "app.guard_fee_debit()", "app.guard_native_identity()",
 	"app.settlement_registration_review()", "app.invoice_billing_work()", "app.invoice_billing_review()",
 	"app.provider_work()",
@@ -209,8 +212,8 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	if err := p.inner.QueryRow(ctx, `SELECT COALESCE(MAX(version_id),0) FROM (SELECT DISTINCT ON(version_id) version_id,is_applied FROM public.goose_db_version ORDER BY version_id,id DESC) v WHERE is_applied`).Scan(&version); err != nil {
 		return fmt.Errorf("check required migration version: %w", err)
 	}
-	if version < 148 {
-		return fmt.Errorf("database migrations are incomplete: version %d, require at least 148", version)
+	if version < 153 {
+		return fmt.Errorf("database migrations are incomplete: version %d, require at least 153", version)
 	}
 	return nil
 }

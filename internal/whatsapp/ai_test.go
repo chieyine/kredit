@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 )

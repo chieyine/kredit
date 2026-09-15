@@ -17,9 +17,7 @@ func Register(ctx context.Context, pool *pgxpool.Pool, key string, provider Prov
 	if pool == nil || len(key) < 32 || provider == nil {
 		return Destination{}, errors.New("bank registration is unavailable")
 	}
-	mac := hmac.New(sha256.New, []byte(key))
-	_, _ = mac.Write([]byte(in.OrganizationID + "\x00" + provider.Name() + "\x00" + provider.ConnectionIdentity() + "\x00" + in.BankCode + "\x00" + in.AccountNumber))
-	in.Reference = hex.EncodeToString(mac.Sum(nil))
+	in.Reference = RegistrationID(key, in.OrganizationID, provider.Name(), provider.ConnectionIdentity(), in.BankCode, in.AccountNumber)
 	if err := ValidateInput(in); err != nil {
 		return Destination{}, err
 	}
@@ -85,4 +83,11 @@ func Register(ctx context.Context, pool *pgxpool.Pool, key string, provider Prov
 		return Destination{}, ErrUnknown
 	}
 	return result, nil
+}
+
+// RegistrationID binds the complete account to its original provider registration.
+func RegistrationID(key, org, provider, connection, bank, account string) string {
+	mac := hmac.New(sha256.New, []byte(key))
+	_, _ = mac.Write([]byte(org + "\x00" + provider + "\x00" + connection + "\x00" + bank + "\x00" + account))
+	return hex.EncodeToString(mac.Sum(nil))
 }

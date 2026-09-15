@@ -8,6 +8,104 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /dsa/code/{code}:
+    get:
+      operationId: lookupDSACode
+      summary: Look up the display name for an active referral code
+      security: []
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string, maxLength: 40}}
+      responses:
+        '200': {description: Active agent code and display name only}
+        '404': {description: Referral code unavailable}
+  /organizations/{organizationID}/dsa:
+    post:
+      operationId: confirmDSAReferral
+      summary: Business owner confirms an introduction before the first accepted sale
+      description: Requires current business ownership, recent MFA, CSRF and idempotency. Attribution is immutable; the organization must be no more than 30 days old. Self-referrals are rejected.
+      parameters:
+        - {name: organizationID, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, consent]
+              properties:
+                code: {type: string, maxLength: 40}
+                consent: {type: boolean, const: true}
+      responses:
+        '200': {description: Attribution saved or identical confirmation replayed}
+        '403': {description: Authentication or current MFA required}
+        '409': {description: Ineligible, duplicate or conflicting attribution}
+  /dsa:
+    get:
+      operationId: readDSA
+      summary: Own referral profile and rewards
+      parameters:
+        - {name: agent, in: query, schema: {type: string, format: uuid}, description: Super Admin filter; ignored for agent self-service}
+        - {name: agents_before, in: query, schema: {type: string, format: uuid}}
+        - {name: referrals_before, in: query, schema: {type: string, format: uuid}}
+        - {name: earnings_before, in: query, schema: {type: string, format: uuid}}
+        - {name: payouts_before, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Rules, self profile, wallet and paginated agents/referrals/earnings/payouts; each list has at most 100 rows and its own next cursor
+          content:
+            application/json:
+              schema: {type: object, required: [rules, self, wallet, agents, referrals, earnings, payouts, next]}
+        '403': {description: Current authority required}
+    post:
+      operationId: changeDSA
+      summary: Own referral profile and rewards
+      description: Requires CSRF, recent MFA and idempotency. Agent actions are enrol and bank. Super Admin actions are rules, agent, referral, prepare, paid and cancel. Prepare reserves matured rewards; paid records a completed external bank transfer and never initiates a transfer. Agent, referral, rules and payout changes require the current version. Existing referral terms are frozen.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DSAAction'
+      responses:
+        '200': {description: Saved result, or prepared payout ID}
+        '403': {description: Current authority or recent MFA required}
+        '409': {description: Invalid state, version, reward eligibility or evidence}
+  /ops/dsa:
+    get:
+      operationId: readDSAAdmin
+      summary: Super Admin referral and payout operations
+      parameters:
+        - {name: agent, in: query, schema: {type: string, format: uuid}, description: Super Admin filter; ignored for agent self-service}
+        - {name: agents_before, in: query, schema: {type: string, format: uuid}}
+        - {name: referrals_before, in: query, schema: {type: string, format: uuid}}
+        - {name: earnings_before, in: query, schema: {type: string, format: uuid}}
+        - {name: payouts_before, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Rules, self profile, wallet and paginated agents/referrals/earnings/payouts; each list has at most 100 rows and its own next cursor
+          content:
+            application/json:
+              schema: {type: object, required: [rules, self, wallet, agents, referrals, earnings, payouts, next]}
+        '403': {description: Current authority required}
+    post:
+      operationId: changeDSAAdmin
+      summary: Super Admin referral and payout operations
+      description: Requires CSRF, recent MFA and idempotency. Agent actions are enrol and bank. Super Admin actions are rules, agent, referral, prepare, paid and cancel. Prepare reserves matured rewards; paid records a completed external bank transfer and never initiates a transfer. Agent, referral, rules and payout changes require the current version. Existing referral terms are frozen.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DSAAction'
+      responses:
+        '200': {description: Saved result, or prepared payout ID}
+        '403': {description: Current authority or recent MFA required}
+        '409': {description: Invalid state, version, reward eligibility or evidence}
   /organizations/{organizationID}/fee-authorizations:
     parameters:
       - name: organizationID
@@ -3563,6 +3661,221 @@ paths:
         '403': { description: Authorized reviewer and fresh MFA required }
         '409': { description: Review version or governance does not permit completion }
 
+  /organizations/{organizationID}/consumer-sales:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Read consumer list
+      parameters:
+        - {name: before, in: query, schema: {type: string, format: uuid}, description: Last purchase ID from the previous page.}
+      responses:
+        '200':
+          description: Authorized consumer purchase information.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchaseList'}
+        '403': {description: Current authority required.}
+    post:
+      summary: Create consumer purchase
+      description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsumerOffer'}
+      responses:
+        '201':
+          description: Persisted result.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchase'}
+        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '422': {description: Invalid or unavailable offer terms.}
+  /organizations/{organizationID}/consumer-sales/{saleID}:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: saleID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Read consumer detail
+      responses:
+        '200':
+          description: Authorized consumer purchase information.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchase'}
+        '403': {description: Current authority required.}
+    post:
+      summary: Action consumer purchase
+      description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsumerAction'}
+      responses:
+        '200':
+          description: Persisted result.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchase'}
+        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '422': {description: Invalid or unavailable offer terms.}
+  /buyer/purchases:
+    get:
+      summary: Read consumer list
+      parameters:
+        - {name: before, in: query, schema: {type: string, format: uuid}, description: Last purchase ID from the previous page.}
+      responses:
+        '200':
+          description: Authorized consumer purchase information.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchaseList'}
+        '403': {description: Current authority required.}
+  /buyer/purchases/{saleID}:
+    parameters:
+      - name: saleID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Read consumer detail
+      responses:
+        '200':
+          description: Authorized consumer purchase information.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchase'}
+        '403': {description: Current authority required.}
+    post:
+      summary: Action consumer purchase
+      description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsumerAction'}
+      responses:
+        '200':
+          description: Persisted result.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchase'}
+        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '422': {description: Invalid or unavailable offer terms.}
+  /ops/consumer-sales:
+    get:
+      summary: Read consumer list
+      parameters:
+        - {name: before, in: query, schema: {type: string, format: uuid}, description: Last purchase ID from the previous page.}
+      responses:
+        '200':
+          description: Authorized consumer purchase information.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchaseList'}
+        '403': {description: Current authority required.}
+  /ops/consumer-sales/{saleID}:
+    parameters:
+      - name: saleID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Read consumer detail
+      responses:
+        '200':
+          description: Authorized consumer purchase information.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchase'}
+        '403': {description: Current authority required.}
+    post:
+      summary: Action consumer purchase
+      description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsumerAction'}
+      responses:
+        '200':
+          description: Persisted result.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerPurchase'}
+        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '422': {description: Invalid or unavailable offer terms.}
+  /ops/organizations/{organizationID}/consumer-settings:
+    parameters:
+      - name: organizationID
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Read consumer settings
+      responses:
+        '200':
+          description: Authorized consumer purchase information.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerSettings'}
+        '403': {description: Current authority required.}
+    post:
+      summary: Settings consumer purchase
+      description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsumerSettings'}
+      responses:
+        '200':
+          description: Persisted result.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumerSettings'}
+        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '422': {description: Invalid or unavailable offer terms.}
+  /organizations/{organizationID}/consumer-bank:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+    post:
+      summary: Match the retailer's existing registered account for consumer receipts
+      description: Requires financial permission, recent MFA, CSRF and idempotency. Matches the complete account to its original provider registration without a new provider request. Administrative restrictions remain in force.
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_number]
+              properties:
+                account_number: {type: string, pattern: '^[0-9]{10}$'}
+      responses:
+        '200': {description: Registered account matched and saved.}
+        '409': {description: The account could not be matched.}
 components:
   securitySchemes:
     sessionCookie:
@@ -3653,6 +3966,152 @@ components:
         type: string
         minLength: 64
   schemas:
+    DSARules:
+      type: object
+      required: [version, enabled, onboarding_kobo, activation_kobo, threshold_kobo, share_bps, share_months, initial_limit]
+      properties:
+        version: {type: integer, minimum: 1}
+        enabled: {type: boolean}
+        onboarding_kobo: {type: integer, minimum: 0, maximum: 1000000, default: 100000}
+        activation_kobo: {type: integer, minimum: 0, maximum: 10000000, default: 200000}
+        threshold_kobo: {type: integer, minimum: 10000, maximum: 100000000, default: 500000}
+        share_bps: {type: integer, minimum: 0, maximum: 5000, default: 1000}
+        share_months: {type: integer, minimum: 1, maximum: 12, default: 6}
+        initial_limit: {type: integer, minimum: 1, maximum: 1000, default: 20}
+    DSAAction:
+      type: object
+      required: [action]
+      properties:
+        action: {type: string, enum: [enrol, bank, rules, agent, referral, prepare, paid, cancel]}
+        id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        name: {type: string, minLength: 3, maxLength: 120}
+        phone: {type: string, pattern: '^\+234[789][01][0-9]{8}$'}
+        bank_name: {type: string, minLength: 3, maxLength: 120}
+        account_name: {type: string, minLength: 3, maxLength: 120}
+        account_number: {type: string, pattern: '^[0-9]{10}$'}
+        consent: {type: boolean}
+        status: {type: string, enum: [active, suspended]}
+        onboarding_limit: {type: integer, minimum: 0, maximum: 100000}
+        blocked: {type: boolean}
+        reason: {type: string, minLength: 20, maxLength: 2000}
+        bank_reference: {type: string, minLength: 3, maxLength: 200}
+        rules: {$ref: '#/components/schemas/DSARules'}
+    ConsumerTerms:
+      type: object
+      required: [item, quantity, total_kobo, first_date, count, cadence, fulfillment, delivery_days, stock_reference, stock_reserved, returns_policy]
+      properties:
+        item: {type: string, minLength: 3, maxLength: 500}
+        quantity: {type: integer, minimum: 1, maximum: 10000}
+        total_kobo: {type: integer, format: int64, minimum: 100, maximum: 2500000000}
+        deposit_kobo: {type: integer, format: int64, minimum: 0}
+        deposit_date: {type: string, description: Required before first_date when a deposit is specified.}
+        first_date: {type: string, format: date}
+        count: {type: integer, minimum: 1, maximum: 60}
+        cadence: {type: string, enum: [weekly, fortnightly, monthly]}
+        fulfillment: {type: string, enum: [immediate, on_percentage, on_full_payment]}
+        threshold_percent: {type: integer, minimum: 0, maximum: 100}
+        delivery_days: {type: integer, minimum: 1, maximum: 90}
+        stock_reference: {type: string, minLength: 3, maxLength: 200}
+        stock_reserved: {type: boolean}
+        returns_policy: {type: string, minLength: 20, maxLength: 2000}
+        bank_name: {type: string, readOnly: true}
+        account_name: {type: string, readOnly: true}
+        account_number: {type: string, readOnly: true}
+        seller_name: {type: string, readOnly: true}
+        seller_address: {type: string, readOnly: true}
+        terms_version: {type: string, readOnly: true}
+        schedule:
+          type: array
+          readOnly: true
+          items:
+            type: object
+            properties:
+              date: {type: string, format: date}
+              amount_kobo: {type: integer, format: int64}
+              paid_kobo: {type: integer, format: int64}
+    ConsumerOffer:
+      type: object
+      required: [target_type, target, terms]
+      properties:
+        target_type: {type: string, enum: [email, phone]}
+        target: {type: string, description: Exact verified email or normalized +234 WhatsApp number.}
+        terms: {$ref: '#/components/schemas/ConsumerTerms'}
+    ConsumerAction:
+      type: object
+      required: [action, version]
+      properties:
+        action: {type: string, enum: [accept, decline, claim, payment, reject_claim, reverse_payment, release, received, cancel, request_return, escalate, approve_return, reject_return, reduce_price, refund]}
+        version: {type: integer, format: int64}
+        agreement_hash: {type: string}
+        full_name: {type: string, maxLength: 200}
+        delivery_address: {type: string, minLength: 10, maxLength: 1000}
+        consent: {type: boolean, description: Explicit agreement acceptance and adult self-declaration.}
+        amount_kobo: {type: integer, format: int64, minimum: 1}
+        reference: {type: string, maxLength: 200}
+        related_id: {type: string, description: Original receipt or unresolved claim ID where required.}
+        note: {type: string, maxLength: 2000}
+        occurred_at: {type: string, format: date-time, description: Actual money movement time for claims and receipts.}
+    ConsumerPurchase:
+      type: object
+      required: [id, organization_id, terms, agreement_hash, state, version, events]
+      properties:
+        id: {type: string, format: uuid}
+        organization_id: {type: string, format: uuid}
+        buyer_user_id: {type: string}
+        target_type: {type: string}
+        target: {type: string}
+        terms: {$ref: '#/components/schemas/ConsumerTerms'}
+        agreement_hash: {type: string}
+        state: {type: string, enum: [offered, active, cancelled, completed]}
+        customer_name: {type: string}
+        delivery_address: {type: string}
+        version: {type: integer, format: int64}
+        accepted_at: {type: [string, 'null'], format: date-time}
+        released_at: {type: [string, 'null'], format: date-time}
+        received_at: {type: [string, 'null'], format: date-time}
+        delivery_due_at: {type: [string, 'null'], format: date-time}
+        case_state: {type: string, enum: ['', requested, rejected, escalated, approved]}
+        paid_kobo: {type: integer, format: int64}
+        refunded_kobo: {type: integer, format: int64}
+        reduction_kobo: {type: integer, format: int64}
+        outstanding_kobo: {type: integer, format: int64}
+        refund_due_kobo: {type: integer, format: int64}
+        release_eligible: {type: boolean}
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string, format: uuid}
+              action: {type: string}
+              amount_kobo: {type: integer, format: int64}
+              reference: {type: string}
+              related_id: {type: string}
+              note: {type: string}
+              occurred_at: {type: string, format: date-time}
+              recorded_at: {type: string, format: date-time}
+        schedule_progress:
+          type: array
+          items:
+            type: object
+            properties:
+              date: {type: string, format: date}
+              amount_kobo: {type: integer, format: int64}
+              paid_kobo: {type: integer, format: int64}
+    ConsumerPurchaseList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ConsumerPurchase'}}
+        next_cursor: {type: string, description: Empty when there are no further pages.}
+    ConsumerSettings:
+      type: object
+      required: [enabled, review_evidence]
+      description: Exceptional restriction control. Enabled means no administrative restriction; it does not bypass eligibility checks or activate an unverified retailer.
+      properties:
+        enabled: {type: boolean}
+        review_evidence: {type: string, minLength: 20, maxLength: 2000}
+
     FeeAuthorizationCommand:
       type: object
       required: [action]

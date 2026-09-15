@@ -97,14 +97,11 @@ type Provider interface {
 	Send(context.Context, Message) (string, error)
 }
 
-// SendOTP delivers an authentication code through the requested channel. OTP
-// delivery deliberately bypasses user notification preferences and quiet hours:
-// it is an authentication response, not a marketing or routine notification.
 func (s *Store) SendRecoveryInstructions(ctx context.Context, recipient, channel, link string) error {
 	recipient = strings.TrimSpace(recipient)
 	channel = strings.ToLower(strings.TrimSpace(channel))
 	if channel == "phone" {
-		channel = ChannelSMS
+		channel = ChannelWhatsApp
 	}
 	if recipient == "" || !validChannel(channel) {
 		return errors.New("valid recovery destination and channel are required")
@@ -123,11 +120,13 @@ func (s *Store) SendRecoveryInstructions(ctx context.Context, recipient, channel
 	return err
 }
 
+// SendOTP sends email codes by email and phone codes by WhatsApp. It bypasses
+// routine preferences and quiet hours, and never falls back to another channel.
 func (s *Store) SendOTP(ctx context.Context, recipient, channel, code string) error {
 	recipient = strings.TrimSpace(recipient)
 	channel = strings.ToLower(strings.TrimSpace(channel))
 	if channel == "phone" {
-		channel = ChannelSMS
+		channel = ChannelWhatsApp
 	}
 	code = strings.TrimSpace(code)
 	if recipient == "" || code == "" {
@@ -415,7 +414,7 @@ func (s *Store) channelsFor(event Event, prefs Preferences) []string {
 	if event.Priority == PriorityCritical {
 		return uniqueChannels([]string{ChannelWhatsApp, preferred, ChannelEmail, ChannelSMS})
 	}
-	if prefs.OptedOut || (event.Type == "PaymentDueSoon" && !prefs.PaymentRemindersEnabled) || (event.Type == "ProductUpdate" && !prefs.ProductUpdatesEnabled) {
+	if prefs.OptedOut || ((event.Type == "PaymentDueSoon" || event.Type == "ConsumerPaymentDue") && !prefs.PaymentRemindersEnabled) || (event.Type == "ProductUpdate" && !prefs.ProductUpdatesEnabled) {
 		return []string{}
 	}
 	return uniqueChannels([]string{preferred, fallback})
@@ -555,6 +554,10 @@ func render(template string, event Event) string {
 }
 func defaultTemplate(eventType string) string {
 	switch eventType {
+	case "ConsumerPaymentDue":
+		return "{{reference}}: {{amount}} is due. {{next_action}}"
+	case "ConsumerPurchaseUpdated":
+		return "{{reference}}: {{next_action}}. Open Kredit for the payment, delivery and refund record."
 	case "MandateRevoked":
 		return "Your bank debit permission is now off. Kredit can no longer take money from your account. Open Kredit to arrange how you will pay."
 	case "CollectionRetryScheduled":
