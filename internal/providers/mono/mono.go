@@ -91,7 +91,7 @@ func (c *Client) WithAccountName(name string) *Client {
 	return &copy
 }
 func (c *Client) Capabilities() collections.Capabilities {
-	return collections.Capabilities{MinimumAmountKobo: 20000, MaximumAmountKobo: 2500000000, AuthorizationSession: true, Recurring: true, Variable: true, MultiAccount: true, PartialRecovery: c.partial}
+	return collections.Capabilities{ProviderSplit: !c.partial, MinimumAmountKobo: 20000, MaximumAmountKobo: 2500000000, AuthorizationSession: true, Recurring: true, Variable: true, MultiAccount: true, PartialRecovery: c.partial}
 }
 
 type envelope[T any] struct {

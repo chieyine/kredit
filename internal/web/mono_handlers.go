@@ -57,6 +57,12 @@ func (s *Server) monoWebhook(w http.ResponseWriter, r *http.Request) {
 // HandleProviderNotice treats callbacks as a reconciliation signal. It never
 // posts the webhook's amount directly; the server-to-server lookup is authoritative.
 func (r *Runtime) HandleProviderNotice(ctx context.Context, args jobs.ProviderWebhookArgs) error {
+	if r.NativeBankAccounts[args.Provider] != nil {
+		return r.handleNativeBankNotice(ctx, args)
+	}
+	if r.PaystackAccounts[args.Provider] != nil {
+		return r.handlePaystackNotice(ctx, args)
+	}
 	if r.monoAccountClients()[args.Provider] == nil || r.Database == nil || !args.SignatureValid {
 		return errors.New("unsupported provider notice")
 	}

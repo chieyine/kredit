@@ -298,7 +298,16 @@ func (s *Server) updateSupplierSettlement(w http.ResponseWriter, r *http.Request
 		writeProblem(w, 422, "invalid_bank_account", err.Error())
 		return
 	}
-	result, err := settlement.Register(r.Context(), s.runtime.Database.Raw(), s.config.SettingsEncryptionKey, s.runtime.Settlement, settlement.Input{OrganizationID: orgID, BankCode: in.BankCode, AccountNumber: in.AccountNumber})
+	organization, exists := s.runtime.Organizations.Get(orgID)
+	if !exists {
+		writeProblem(w, 404, "business_not_found", "Your business could not be loaded.")
+		return
+	}
+	businessName := organization.LegalName
+	if businessName == "" {
+		businessName = organization.TradingName
+	}
+	result, err := settlement.Register(r.Context(), s.runtime.Database.Raw(), s.config.SettingsEncryptionKey, s.runtime.Settlement, settlement.Input{OrganizationID: orgID, BankCode: in.BankCode, AccountNumber: in.AccountNumber, BusinessName: businessName, Email: user.Email, Phone: user.Phone})
 	in.AccountNumber = ""
 	if err != nil {
 		writeProblem(w, 409, "bank_registration_unconfirmed", "The bank registration is unconfirmed. Contact support before submitting a different account.")

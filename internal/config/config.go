@@ -39,169 +39,180 @@ type Config struct {
 	MonoWebhookSecret           string
 	MonoRedirectURL             string
 
-	Environment                    string
-	Version                        string
-	PublicBaseURL                  string
-	AppBaseURL                     string
-	APIInternalURL                 string
-	APIListenAddr                  string
-	DatabaseURL                    string
-	DatabaseDirectURL              string
-	RiverDatabaseURL               string
-	ObjectStorageEndpoint          string
-	ObjectStorageBucket            string
-	ObjectStorageRegion            string
-	ObjectStorageAccessKey         string
-	ObjectStorageSecretKey         string
-	DocumentScannerEnabled         bool
-	DocumentScannerEndpoint        string
-	DocumentScannerToken           string
-	FrontendProxySigningKey        string `json:"-"`
-	SessionSigningKey              string
-	FieldEncryptionKeyID           string
-	FieldEncryptionKey             string
-	OTPHMACKey                     string
-	TokenHashKey                   string
-	SettingsEncryptionKey          string
-	GeminiAPIKey                   string
-	OTelEndpoint                   string
-	Timezone                       string
-	Currency                       string
-	MoneyUnit                      string
-	RealCollections                bool
-	CollectionProvider             string
-	CollectionProviderEndpoint     string
-	CollectionProviderToken        string
-	CollectionWebhookSecret        string
-	ProviderApprovedAt             string
-	ProviderApprovalReference      string
-	ProviderApprovedBy             string
-	MultiAccountApprovalReference  string
-	DirectSettlementReference      string
-	BillingTaxApprovalReference    string
-	IdentityApprovalReference      string
-	RetentionApprovalReference     string
-	PilotApprovalReference         string
-	SecurityReviewReference        string
-	DPIAReference                  string
-	LegalApprovalReference         string
-	PenTestReference               string
-	BackupRestoreReference         string
-	ProviderCertificationReference string
-	SupportTrainingReference       string
-	LaunchApprovalReference        string
-	PilotMaxSupplierOrganizations  int64
-	PilotMaxBuyerBusinesses        int64
-	PilotMaxPrincipalKobo          int64
-	PilotMaxActiveExposureKobo     int64
-	PilotMaxDrawdownsPerLineDay    int64
-	PilotMaxCollectionRetries      int64
-	PilotEnhancedReviewKobo        int64
-	PilotAllowedProviderAccounts   string
-	PilotAllowedIndustries         string
-	RealIdentity                   bool
-	WhatsApp                       bool
-	OffPlatformPaymentClaims       bool
-	MultiAccountCollections        bool
-	DirectSupplierSettlement       bool
-	LiveSupplierBilling            bool
-	ApprovedRetentionPolicy        bool
-	ProductionPilot                bool
-	NotificationEmailFrom          string
-	NotificationEmailWebhookSecret string `json:"-"`
-	NotificationEmailAdapter       string
-	NotificationEmailEndpoint      string
-	NotificationEmailToken         string
-	NotificationSMSFrom            string
-	NotificationSMSAdapter         string
-	NotificationSMSEndpoint        string
-	NotificationSMSToken           string
-	NotificationWhatsAppAdapter    string
-	NotificationWhatsAppEndpoint   string
-	NotificationWhatsAppToken      string
-	IdentityAdapter                string
-	IdentityProvider               string
-	IdentityProviderEndpoint       string
-	IdentityProviderToken          string
-	IdentityWebhookSecret          string
+	Environment                        string
+	Version                            string
+	PublicBaseURL                      string
+	AppBaseURL                         string
+	APIInternalURL                     string
+	APIListenAddr                      string
+	DatabaseURL                        string
+	DatabaseDirectURL                  string
+	RiverDatabaseURL                   string
+	ObjectStorageEndpoint              string
+	ObjectStorageBucket                string
+	ObjectStorageRegion                string
+	ObjectStorageAccessKey             string
+	ObjectStorageSecretKey             string
+	DocumentScannerEnabled             bool
+	DocumentScannerEndpoint            string
+	DocumentScannerToken               string
+	FrontendProxySigningKey            string `json:"-"`
+	TrustedProxies                     []string
+	SessionSigningKey                  string
+	FieldEncryptionKeyID               string
+	FieldEncryptionKey                 string
+	OTPHMACKey                         string
+	TokenHashKey                       string
+	SettingsEncryptionKey              string
+	GeminiAPIKey                       string `json:"-"`
+	WhatsAppAssistantTransferReference string
+	WhatsAppAssistant                  bool
+	OTelEndpoint                       string
+	Timezone                           string
+	Currency                           string
+	MoneyUnit                          string
+	RealCollections                    bool
+	CollectionAPIKey                   string
+	CollectionContractCode             string
+	CollectionAdapter                  string
+	CollectionProvider                 string
+	CollectionProviderEndpoint         string
+	CollectionProviderToken            string
+	CollectionWebhookSecret            string
+	ProviderApprovedAt                 string
+	ProviderApprovalReference          string
+	ProviderApprovedBy                 string
+	MultiAccountApprovalReference      string
+	DirectSettlementReference          string
+	BillingTaxApprovalReference        string
+	IdentityApprovalReference          string
+	RetentionApprovalReference         string
+	PilotApprovalReference             string
+	SecurityReviewReference            string
+	DPIAReference                      string
+	LegalApprovalReference             string
+	PenTestReference                   string
+	BackupRestoreReference             string
+	ProviderCertificationReference     string
+	SupportTrainingReference           string
+	LaunchApprovalReference            string
+	PilotMaxSupplierOrganizations      int64
+	PilotMaxBuyerBusinesses            int64
+	PilotMaxPrincipalKobo              int64
+	PilotMaxActiveExposureKobo         int64
+	PilotMaxDrawdownsPerLineDay        int64
+	PilotMaxCollectionRetries          int64
+	PilotEnhancedReviewKobo            int64
+	PilotAllowedProviderAccounts       string
+	PilotAllowedIndustries             string
+	RealIdentity                       bool
+	WhatsApp                           bool
+	OffPlatformPaymentClaims           bool
+	MultiAccountCollections            bool
+	DirectSupplierSettlement           bool
+	LiveSupplierBilling                bool
+	ApprovedRetentionPolicy            bool
+	ProductionPilot                    bool
+	NotificationEmailFrom              string
+	NotificationEmailWebhookSecret     string `json:"-"`
+	NotificationEmailAdapter           string
+	NotificationEmailEndpoint          string
+	NotificationEmailToken             string
+	NotificationSMSFrom                string
+	NotificationSMSAdapter             string
+	NotificationSMSEndpoint            string
+	NotificationSMSToken               string
+	NotificationWhatsAppAdapter        string
+	NotificationWhatsAppEndpoint       string
+	NotificationWhatsAppToken          string
+	IdentityAdapter                    string
+	IdentityProvider                   string
+	IdentityProviderEndpoint           string
+	IdentityProviderToken              string
+	IdentityWebhookSecret              string
 }
 
 func Load() (Config, error) {
 	c := Config{
-		MetricsScrapeToken:             envOr("METRICS_SCRAPE_TOKEN", ""),
-		MonoAccountName:                envOr("MONO_ACCOUNT_NAME", "mono-sweep"),
-		MonoSecretKey:                  envOr("MONO_SECRET_KEY", ""),
-		MonoWebhookSecret:              envOr("MONO_WEBHOOK_SECRET", ""),
-		MonoRedirectURL:                envOr("MONO_REDIRECT_URL", ""),
-		Environment:                    strings.ToLower(strings.TrimSpace(envOr("APP_ENV", "development"))),
-		Version:                        envOr("APP_VERSION", "0.1.0-dev"),
-		PublicBaseURL:                  envOr("PUBLIC_BASE_URL", "http://localhost:5173"),
-		AppBaseURL:                     envOr("APP_BASE_URL", "http://localhost:5173"),
-		APIInternalURL:                 envOr("API_INTERNAL_URL", "http://localhost:8080"),
-		APIListenAddr:                  envOr("API_ADDR", ":8080"),
-		DatabaseURL:                    envOr("DATABASE_URL", "postgres://kredit_app_login:kredit-app-development-only@localhost:5432/kredit?sslmode=disable"),
-		DatabaseDirectURL:              envOr("DATABASE_DIRECT_URL", ""),
-		RiverDatabaseURL:               envOr("RIVER_DATABASE_URL", "postgres://kredit_worker_login:kredit-worker-development-only@localhost:5432/kredit?sslmode=disable"),
-		ObjectStorageEndpoint:          envOr("OBJECT_STORAGE_ENDPOINT", "http://localhost:9000"),
-		ObjectStorageBucket:            envOr("OBJECT_STORAGE_BUCKET", "kredit-local"),
-		ObjectStorageRegion:            envOr("OBJECT_STORAGE_REGION", "us-east-1"),
-		ObjectStorageAccessKey:         envOr("OBJECT_STORAGE_ACCESS_KEY", "minioadmin"),
-		ObjectStorageSecretKey:         envOr("OBJECT_STORAGE_SECRET_KEY", "minioadmin"),
-		DocumentScannerEndpoint:        envOr("DOCUMENT_SCANNER_ENDPOINT", ""),
-		DocumentScannerToken:           envOr("DOCUMENT_SCANNER_TOKEN", ""),
-		FrontendProxySigningKey:        os.Getenv("FRONTEND_PROXY_SIGNING_KEY"),
-		SessionSigningKey:              envOr("SESSION_SIGNING_KEY", "development-only-change-me"),
-		FieldEncryptionKeyID:           envOr("FIELD_ENCRYPTION_KEY_ID", "development-only"),
-		FieldEncryptionKey:             envOr("FIELD_ENCRYPTION_KEY", "development-only-change-me"),
-		OTPHMACKey:                     envOr("OTP_HMAC_KEY", "development-only-change-me"),
-		TokenHashKey:                   envOr("TOKEN_HASH_KEY", "development-only-change-me"),
-		SettingsEncryptionKey:          envOr("SETTINGS_ENCRYPTION_KEY", ""),
-		GeminiAPIKey:                   envOr("GEMINI_API_KEY", ""),
-		OTelEndpoint:                   envOr("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
-		Timezone:                       envOr("BUSINESS_TIMEZONE", defaultTimezone),
-		Currency:                       "NGN",
-		MoneyUnit:                      "kobo",
-		RetainedCollectionProviders:    envOr("COLLECTION_RETAINED_PROVIDERS", ""),
-		CollectionProvider:             envOr("COLLECTION_PROVIDER", "mock-collection"),
-		CollectionProviderEndpoint:     envOr("COLLECTION_PROVIDER_ENDPOINT", ""),
-		CollectionProviderToken:        envOr("COLLECTION_PROVIDER_TOKEN", ""),
-		CollectionWebhookSecret:        envOr("COLLECTION_WEBHOOK_SECRET", ""),
-		ProviderApprovedAt:             envOr("PROVIDER_APPROVED_AT", ""),
-		ProviderApprovalReference:      envOr("PROVIDER_APPROVAL_REFERENCE", ""),
-		ProviderApprovedBy:             envOr("PROVIDER_APPROVED_BY", ""),
-		MultiAccountApprovalReference:  envOr("MULTI_ACCOUNT_APPROVAL_REFERENCE", ""),
-		DirectSettlementReference:      envOr("DIRECT_SETTLEMENT_APPROVAL_REFERENCE", ""),
-		BillingTaxApprovalReference:    envOr("BILLING_TAX_APPROVAL_REFERENCE", ""),
-		IdentityApprovalReference:      envOr("IDENTITY_APPROVAL_REFERENCE", ""),
-		RetentionApprovalReference:     envOr("RETENTION_APPROVAL_REFERENCE", ""),
-		PilotApprovalReference:         envOr("PILOT_APPROVAL_REFERENCE", ""),
-		SecurityReviewReference:        envOr("SECURITY_REVIEW_REFERENCE", ""),
-		DPIAReference:                  envOr("DPIA_REFERENCE", ""),
-		LegalApprovalReference:         envOr("LEGAL_APPROVAL_REFERENCE", ""),
-		PenTestReference:               envOr("PEN_TEST_REFERENCE", ""),
-		BackupRestoreReference:         envOr("BACKUP_RESTORE_REFERENCE", ""),
-		ProviderCertificationReference: envOr("PROVIDER_CERTIFICATION_REFERENCE", ""),
-		SupportTrainingReference:       envOr("SUPPORT_TRAINING_REFERENCE", ""),
-		LaunchApprovalReference:        envOr("LAUNCH_APPROVAL_REFERENCE", ""),
-		PilotAllowedProviderAccounts:   envOr("PILOT_ALLOWED_PROVIDER_ACCOUNTS", ""),
-		PilotAllowedIndustries:         envOr("PILOT_ALLOWED_INDUSTRIES", ""),
-		NotificationEmailFrom:          os.Getenv("NOTIFICATION_EMAIL_FROM"),
-		NotificationEmailWebhookSecret: os.Getenv("SENDLY_WEBHOOK_SECRET"),
-		NotificationEmailAdapter:       envOr("NOTIFICATION_EMAIL_ADAPTER", ""),
-		NotificationEmailEndpoint:      envOr("NOTIFICATION_EMAIL_ENDPOINT", ""),
-		NotificationEmailToken:         envOr("NOTIFICATION_EMAIL_TOKEN", ""),
-		NotificationSMSFrom:            envOr("NOTIFICATION_SMS_FROM", ""),
-		NotificationSMSAdapter:         envOr("NOTIFICATION_SMS_ADAPTER", ""),
-		NotificationSMSEndpoint:        envOr("NOTIFICATION_SMS_ENDPOINT", ""),
-		NotificationSMSToken:           envOr("NOTIFICATION_SMS_TOKEN", ""),
-		NotificationWhatsAppAdapter:    envOr("NOTIFICATION_WHATSAPP_ADAPTER", ""),
-		NotificationWhatsAppEndpoint:   envOr("NOTIFICATION_WHATSAPP_ENDPOINT", ""),
-		NotificationWhatsAppToken:      envOr("NOTIFICATION_WHATSAPP_TOKEN", ""),
-		IdentityAdapter:                envOr("IDENTITY_ADAPTER", "connector"),
-		IdentityProvider:               envOr("IDENTITY_PROVIDER", "mock-identity"),
-		IdentityProviderEndpoint:       envOr("IDENTITY_PROVIDER_ENDPOINT", ""),
-		IdentityProviderToken:          envOr("IDENTITY_PROVIDER_TOKEN", ""),
-		IdentityWebhookSecret:          envOr("IDENTITY_WEBHOOK_SECRET", ""),
+		MetricsScrapeToken:                 envOr("METRICS_SCRAPE_TOKEN", ""),
+		MonoAccountName:                    envOr("MONO_ACCOUNT_NAME", "mono-sweep"),
+		MonoSecretKey:                      envOr("MONO_SECRET_KEY", ""),
+		MonoWebhookSecret:                  envOr("MONO_WEBHOOK_SECRET", ""),
+		MonoRedirectURL:                    envOr("MONO_REDIRECT_URL", ""),
+		Environment:                        strings.ToLower(strings.TrimSpace(envOr("APP_ENV", "development"))),
+		Version:                            envOr("APP_VERSION", "0.1.0-dev"),
+		PublicBaseURL:                      envOr("PUBLIC_BASE_URL", "http://localhost:5173"),
+		AppBaseURL:                         envOr("APP_BASE_URL", "http://localhost:5173"),
+		APIInternalURL:                     envOr("API_INTERNAL_URL", "http://localhost:8080"),
+		APIListenAddr:                      envOr("API_ADDR", ":8080"),
+		DatabaseURL:                        envOr("DATABASE_URL", "postgres://kredit_app_login:kredit-app-development-only@localhost:5432/kredit?sslmode=disable"),
+		DatabaseDirectURL:                  envOr("DATABASE_DIRECT_URL", ""),
+		RiverDatabaseURL:                   envOr("RIVER_DATABASE_URL", "postgres://kredit_worker_login:kredit-worker-development-only@localhost:5432/kredit?sslmode=disable"),
+		ObjectStorageEndpoint:              envOr("OBJECT_STORAGE_ENDPOINT", "http://localhost:9000"),
+		ObjectStorageBucket:                envOr("OBJECT_STORAGE_BUCKET", "kredit-local"),
+		ObjectStorageRegion:                envOr("OBJECT_STORAGE_REGION", "us-east-1"),
+		ObjectStorageAccessKey:             envOr("OBJECT_STORAGE_ACCESS_KEY", "minioadmin"),
+		ObjectStorageSecretKey:             envOr("OBJECT_STORAGE_SECRET_KEY", "minioadmin"),
+		DocumentScannerEndpoint:            envOr("DOCUMENT_SCANNER_ENDPOINT", ""),
+		DocumentScannerToken:               envOr("DOCUMENT_SCANNER_TOKEN", ""),
+		FrontendProxySigningKey:            os.Getenv("FRONTEND_PROXY_SIGNING_KEY"),
+		TrustedProxies:                     splitList(envOr("API_TRUSTED_PROXIES", "")),
+		SessionSigningKey:                  envOr("SESSION_SIGNING_KEY", "development-only-change-me"),
+		FieldEncryptionKeyID:               envOr("FIELD_ENCRYPTION_KEY_ID", "development-only"),
+		FieldEncryptionKey:                 envOr("FIELD_ENCRYPTION_KEY", "development-only-change-me"),
+		OTPHMACKey:                         envOr("OTP_HMAC_KEY", "development-only-change-me"),
+		TokenHashKey:                       envOr("TOKEN_HASH_KEY", "development-only-change-me"),
+		SettingsEncryptionKey:              envOr("SETTINGS_ENCRYPTION_KEY", ""),
+		GeminiAPIKey:                       envOr("GEMINI_API_KEY", ""),
+		WhatsAppAssistantTransferReference: envOr("WHATSAPP_ASSISTANT_TRANSFER_REFERENCE", ""),
+		OTelEndpoint:                       envOr("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
+		Timezone:                           envOr("BUSINESS_TIMEZONE", defaultTimezone),
+		Currency:                           "NGN",
+		MoneyUnit:                          "kobo",
+		RetainedCollectionProviders:        envOr("COLLECTION_RETAINED_PROVIDERS", ""),
+		CollectionAPIKey:                   envOr("COLLECTION_API_KEY", ""),
+		CollectionContractCode:             envOr("COLLECTION_CONTRACT_CODE", ""),
+		CollectionAdapter:                  envOr("COLLECTION_ADAPTER", "connector"),
+		CollectionProvider:                 envOr("COLLECTION_PROVIDER", "mock-collection"),
+		CollectionProviderEndpoint:         envOr("COLLECTION_PROVIDER_ENDPOINT", ""),
+		CollectionProviderToken:            envOr("COLLECTION_PROVIDER_TOKEN", ""),
+		CollectionWebhookSecret:            envOr("COLLECTION_WEBHOOK_SECRET", ""),
+		ProviderApprovedAt:                 envOr("PROVIDER_APPROVED_AT", ""),
+		ProviderApprovalReference:          envOr("PROVIDER_APPROVAL_REFERENCE", ""),
+		ProviderApprovedBy:                 envOr("PROVIDER_APPROVED_BY", ""),
+		MultiAccountApprovalReference:      envOr("MULTI_ACCOUNT_APPROVAL_REFERENCE", ""),
+		DirectSettlementReference:          envOr("DIRECT_SETTLEMENT_APPROVAL_REFERENCE", ""),
+		BillingTaxApprovalReference:        envOr("BILLING_TAX_APPROVAL_REFERENCE", ""),
+		IdentityApprovalReference:          envOr("IDENTITY_APPROVAL_REFERENCE", ""),
+		RetentionApprovalReference:         envOr("RETENTION_APPROVAL_REFERENCE", ""),
+		PilotApprovalReference:             envOr("PILOT_APPROVAL_REFERENCE", ""),
+		SecurityReviewReference:            envOr("SECURITY_REVIEW_REFERENCE", ""),
+		DPIAReference:                      envOr("DPIA_REFERENCE", ""),
+		LegalApprovalReference:             envOr("LEGAL_APPROVAL_REFERENCE", ""),
+		PenTestReference:                   envOr("PEN_TEST_REFERENCE", ""),
+		BackupRestoreReference:             envOr("BACKUP_RESTORE_REFERENCE", ""),
+		ProviderCertificationReference:     envOr("PROVIDER_CERTIFICATION_REFERENCE", ""),
+		SupportTrainingReference:           envOr("SUPPORT_TRAINING_REFERENCE", ""),
+		LaunchApprovalReference:            envOr("LAUNCH_APPROVAL_REFERENCE", ""),
+		PilotAllowedProviderAccounts:       envOr("PILOT_ALLOWED_PROVIDER_ACCOUNTS", ""),
+		PilotAllowedIndustries:             envOr("PILOT_ALLOWED_INDUSTRIES", ""),
+		NotificationEmailFrom:              os.Getenv("NOTIFICATION_EMAIL_FROM"),
+		NotificationEmailWebhookSecret:     os.Getenv("SENDLY_WEBHOOK_SECRET"),
+		NotificationEmailAdapter:           envOr("NOTIFICATION_EMAIL_ADAPTER", ""),
+		NotificationEmailEndpoint:          envOr("NOTIFICATION_EMAIL_ENDPOINT", ""),
+		NotificationEmailToken:             envOr("NOTIFICATION_EMAIL_TOKEN", ""),
+		NotificationSMSFrom:                envOr("NOTIFICATION_SMS_FROM", ""),
+		NotificationSMSAdapter:             envOr("NOTIFICATION_SMS_ADAPTER", ""),
+		NotificationSMSEndpoint:            envOr("NOTIFICATION_SMS_ENDPOINT", ""),
+		NotificationSMSToken:               envOr("NOTIFICATION_SMS_TOKEN", ""),
+		NotificationWhatsAppAdapter:        envOr("NOTIFICATION_WHATSAPP_ADAPTER", ""),
+		NotificationWhatsAppEndpoint:       envOr("NOTIFICATION_WHATSAPP_ENDPOINT", ""),
+		NotificationWhatsAppToken:          envOr("NOTIFICATION_WHATSAPP_TOKEN", ""),
+		IdentityAdapter:                    envOr("IDENTITY_ADAPTER", "connector"),
+		IdentityProvider:                   envOr("IDENTITY_PROVIDER", "mock-identity"),
+		IdentityProviderEndpoint:           envOr("IDENTITY_PROVIDER_ENDPOINT", ""),
+		IdentityProviderToken:              envOr("IDENTITY_PROVIDER_TOKEN", ""),
+		IdentityWebhookSecret:              envOr("IDENTITY_WEBHOOK_SECRET", ""),
 	}
 
 	var err error
@@ -216,6 +227,15 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	c.AdminSurfaces = splitList(envOr("ADMIN_SURFACES", ""))
+	// A malformed entry here would silently stop a real ingress being trusted,
+	// collapsing every client onto one rate-limit key. Fail at load instead.
+	for _, entry := range c.TrustedProxies {
+		if _, _, err := net.ParseCIDR(entry); err != nil {
+			if net.ParseIP(entry) == nil {
+				return Config{}, fmt.Errorf("API_TRUSTED_PROXIES entry %q must be an IP address or CIDR block", entry)
+			}
+		}
+	}
 	if c.RealCollections, err = boolEnv("FEATURE_REAL_COLLECTIONS", false); err != nil {
 		return Config{}, err
 	}
@@ -223,6 +243,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if c.WhatsApp, err = boolEnv("FEATURE_WHATSAPP", false); err != nil {
+		return Config{}, err
+	}
+	// The assistant sends customer names, amounts, goods descriptions and raw
+	// voice notes to a third-party model provider outside Nigeria. It stays off
+	// unless a deployment turns it on deliberately.
+	if c.WhatsAppAssistant, err = boolEnv("FEATURE_WHATSAPP_ASSISTANT", false); err != nil {
 		return Config{}, err
 	}
 	if c.OffPlatformPaymentClaims, err = boolEnv("OFF_PLATFORM_PAYMENT_CLAIMS_ENABLED", c.Environment == "development"); err != nil {
@@ -265,7 +291,11 @@ func Load() (Config, error) {
 
 func (c Config) Validate() error {
 	if c.SettlementEnabled {
-		if c.SettlementProvider == c.MonoAccount() {
+		if c.SettlementProvider == c.CollectionProvider && (c.CollectionAdapter == "paystack" || c.CollectionAdapter == "flutterwave" || c.CollectionAdapter == "monnify") {
+			if c.CollectionProviderToken == "" {
+				return errors.New("configure the native collector before enabling seller bank registration")
+			}
+		} else if c.SettlementProvider == c.MonoAccount() {
 			if c.MonoSecretKey == "" {
 				return errors.New("configure Mono before enabling bank registration")
 			}
@@ -336,6 +366,39 @@ func (c Config) Validate() error {
 	}
 	if c.AutomaticRetryEnabled && !c.AutomaticCollectionEnabled {
 		return errors.New("automatic retries require automatic collection")
+	}
+	if c.CollectionAdapter != "" && c.CollectionAdapter != "connector" && c.CollectionAdapter != "paystack" && c.CollectionAdapter != "flutterwave" && c.CollectionAdapter != "monnify" {
+		return errors.New("COLLECTION_ADAPTER must be connector, paystack, flutterwave or monnify")
+	}
+	if c.CollectionAdapter == "paystack" && (c.RealCollections || (c.SettlementEnabled && c.SettlementProvider == c.CollectionProvider)) {
+		prefix := "sk_test_"
+		if c.Environment == "production" {
+			prefix = "sk_live_"
+		}
+		if !strings.HasPrefix(c.CollectionProviderToken, prefix) || strings.ContainsAny(c.CollectionProviderToken, "\r\n") {
+			return errors.New("Paystack key must match the deployment environment")
+		}
+		if c.CollectionProviderEndpoint != "" && c.CollectionProviderEndpoint != "https://api.paystack.co" {
+			return errors.New("Paystack uses https://api.paystack.co")
+		}
+	}
+	if (c.RealCollections || (c.SettlementEnabled && c.SettlementProvider == c.CollectionProvider)) && (c.CollectionAdapter == "flutterwave" || c.CollectionAdapter == "monnify") {
+		if len(c.SettingsEncryptionKey) < 32 {
+			return errors.New("native bank authorization requires SETTINGS_ENCRYPTION_KEY")
+		}
+		if strings.TrimSpace(c.CollectionProviderToken) == "" {
+			return errors.New("collection provider secret key is required")
+		}
+		if c.CollectionAdapter == "flutterwave" {
+			if !strings.HasPrefix(c.CollectionProviderToken, "FLWSECK") || strings.Contains(c.CollectionProviderToken, "TEST") == (c.Environment == "production") || len(c.CollectionWebhookSecret) < 32 {
+				return errors.New("Flutterwave requires a matching secret key and webhook secret")
+			}
+		} else if c.CollectionAPIKey == "" || c.CollectionContractCode == "" {
+			return errors.New("Monnify requires its API key and contract code")
+		}
+		if c.CollectionProviderEndpoint != "" {
+			return errors.New("leave the native collection endpoint blank; Kredit selects the official API for the environment")
+		}
 	}
 	if strings.TrimSpace(c.CollectionProvider) == "" {
 		return errors.New("COLLECTION_PROVIDER is required")
@@ -512,6 +575,20 @@ func (c Config) Validate() error {
 			}
 		}
 		// --- Capabilities: required only where the capability is switched on. ---
+		if c.WhatsAppAssistant {
+			if !c.WhatsApp {
+				return errors.New("FEATURE_WHATSAPP_ASSISTANT requires FEATURE_WHATSAPP; the assistant only replies on an enabled WhatsApp channel")
+			}
+			if err := validateSecret("GEMINI_API_KEY", c.GeminiAPIKey); err != nil {
+				return err
+			}
+			// This is a cross-border transfer to a sub-processor. Refusing to
+			// start without the recorded assessment keeps the data inventory and
+			// the running system from drifting apart.
+			if strings.TrimSpace(c.WhatsAppAssistantTransferReference) == "" {
+				return errors.New("FEATURE_WHATSAPP_ASSISTANT requires WHATSAPP_ASSISTANT_TRANSFER_REFERENCE naming the approved cross-border transfer assessment for the model provider")
+			}
+		}
 		if c.WhatsApp {
 			if strings.TrimSpace(c.NotificationWhatsAppEndpoint) == "" || strings.TrimSpace(c.NotificationWhatsAppToken) == "" {
 				return errors.New("FEATURE_WHATSAPP requires NOTIFICATION_WHATSAPP_ENDPOINT and NOTIFICATION_WHATSAPP_TOKEN")
@@ -564,7 +641,7 @@ func (c Config) Validate() error {
 			if strings.Contains(strings.ToLower(c.CollectionProvider), "mock") {
 				return errors.New("FEATURE_REAL_COLLECTIONS requires a certified COLLECTION_PROVIDER")
 			}
-			if !c.MonoSweepEnabled {
+			if !c.MonoSweepEnabled && (c.CollectionAdapter == "" || c.CollectionAdapter == "connector") {
 				if strings.TrimSpace(c.CollectionProviderEndpoint) == "" || strings.TrimSpace(c.CollectionProviderToken) == "" || strings.TrimSpace(c.CollectionWebhookSecret) == "" {
 					return errors.New("FEATURE_REAL_COLLECTIONS requires the collection connector endpoint, token, and webhook secret")
 				}

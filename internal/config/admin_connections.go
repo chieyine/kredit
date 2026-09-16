@@ -101,6 +101,7 @@ func PublicConnectionValues(c Config, key string) map[string]any {
 				entries = []RetainedCollectionConnection{}
 			}
 			for i := range entries {
+				entries[i].APIKey = ""
 				entries[i].Token = ""
 				entries[i].WebhookSecret = ""
 			}
@@ -161,10 +162,13 @@ func PrepareConnectionUpdate(ctx context.Context, base Config, settings platform
 				if entries[i].Name != prior.Name {
 					continue
 				}
-				if (entries[i].Endpoint != prior.Endpoint || entries[i].Adapter != prior.Adapter) && (entries[i].Token == "" || (entries[i].Adapter != "mono" && entries[i].WebhookSecret == "")) {
+				if (entries[i].Endpoint != prior.Endpoint || entries[i].Adapter != prior.Adapter) && (entries[i].Token == "" || ((entries[i].Adapter == "" || entries[i].Adapter == "connector" || entries[i].Adapter == "flutterwave") && entries[i].WebhookSecret == "")) {
 					return nil, errors.New("provide new credentials when changing a saved account address")
 				}
 				if entries[i].Endpoint == prior.Endpoint && entries[i].Adapter == prior.Adapter && !clearCredentials {
+					if entries[i].APIKey == "" {
+						entries[i].APIKey = prior.APIKey
+					}
 					if entries[i].Token == "" {
 						entries[i].Token = prior.Token
 					}
@@ -209,6 +213,18 @@ func PrepareConnectionUpdate(ctx context.Context, base Config, settings platform
 			oldEndpoint = source.FieldByName(endpointField).String()
 		}
 		endpointChanged = endpoint != oldEndpoint
+		if key == "integrations.runtime.collections" {
+			var adapter, oldAdapter string
+			_ = json.Unmarshal(values["CollectionAdapter"], &adapter)
+			if previous["CollectionAdapter"] != nil {
+				_ = json.Unmarshal(previous["CollectionAdapter"], &oldAdapter)
+			} else {
+				oldAdapter = base.CollectionAdapter
+			}
+			if adapter != oldAdapter {
+				endpointChanged = true
+			}
+		}
 		if key == "integrations.runtime.storage" && endpointChanged {
 			var accessKey string
 			_ = json.Unmarshal(values["ObjectStorageAccessKey"], &accessKey)

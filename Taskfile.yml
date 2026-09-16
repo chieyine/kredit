@@ -116,6 +116,16 @@ tasks:
     cmds:
       - bash scripts/data-inventory-check.sh
 
+  data:subprocessors:check:
+    desc: Verify every outbound host in Go source is a declared sub-processor
+    cmds:
+      - bash scripts/sub-processor-check.sh
+
+  db:rls:check:
+    desc: Verify no tenant policy is OR'd away by a permissive blanket role policy
+    cmds:
+      - bash scripts/rls-policy-shape-check.sh
+
   openapi:generate:
     cmds:
       - bash scripts/generate.sh

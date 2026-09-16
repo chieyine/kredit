@@ -83,15 +83,28 @@ func (p *PostgresProvider) ResolveAuthorizationAttempt(ctx context.Context, acto
 	if p.remote == nil {
 		return errors.New("connect the mandate provider before recovery")
 	}
-	mandate, err := p.remote.GetMandate(ctx, strings.TrimSpace(providerID))
+	var mandate Mandate
+	if recoverer, ok := p.remote.(interface {
+		RecoverAuthorization(context.Context, AuthorizationInput, string) (Mandate, error)
+	}); ok {
+		// Hosted providers may not echo our client reference or local spending
+		// cap. Their adapter must verify the buyer independently; the audited
+		// operator decision binds this permission to the saved request.
+		mandate, err = recoverer.RecoverAuthorization(ctx, input, strings.TrimSpace(providerID))
+	} else {
+		mandate, err = p.remote.GetMandate(ctx, strings.TrimSpace(providerID))
+		if err == nil && (mandate.Reference == "" || mandate.Reference != input.Reference || mandate.AmountCeiling != input.AmountCeiling || !mandate.Variable || mandate.EndsAt.Before(input.RequiredUntil)) {
+			return errors.New("provider mandate does not match the original reference, amount or validity")
+		}
+	}
 	if err != nil {
 		return err
 	}
-	if mandate.Reference == "" || mandate.Reference != input.Reference || mandate.ProviderID != strings.TrimSpace(providerID) || mandate.AmountCeiling != input.AmountCeiling || !mandate.Variable || mandate.EndsAt.Before(input.RequiredUntil) {
-		return errors.New("provider mandate does not match the original reference, amount or validity")
+	if mandate.ProviderID != strings.TrimSpace(providerID) || mandate.AmountCeiling <= 0 || mandate.AmountCeiling > input.AmountCeiling {
+		return errors.New("recovered permission does not match the saved request")
 	}
 	if mandate.Status != Active {
-		return errors.New("this mandate is not active; recover its original authorization link in the Mono dashboard before attaching it")
+		return errors.New("this mandate is not active; recover its original authorization link in the provider dashboard before attaching it")
 	}
 	_, err = p.saveAuthorization(ctx, input, mandate, id, actor, reason)
 	return err

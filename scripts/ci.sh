@@ -15,6 +15,7 @@ bash scripts/api-lint.sh
 bash scripts/phase6-governance-test.sh
 python3 scripts/phase6-context-audit.py
 bash scripts/readme-conformance.sh
+bash scripts/sub-processor-check.sh
 bash scripts/implementation-plan-conformance-test.sh
 bash scripts/load-env-test.sh
 pnpm run audit
@@ -36,4 +37,5 @@ pnpm --dir web test
 if [[ -n "${DATABASE_URL:-}" ]]; then
 	bash scripts/test-integration.sh
 	bash scripts/data-inventory-check.sh
+	bash scripts/rls-policy-shape-check.sh
 fi

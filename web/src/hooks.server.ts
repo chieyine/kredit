@@ -79,7 +79,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 				const { value, done } = await reader.read();
 				if (done) break;
 				size += value.byteLength;
-				if (size > (event.url.pathname.endsWith('/documents') ? 3 : 2) * 1024 * 1024) {
+				// Document routes carry a base64 payload, which inflates a 2 MB file
+				// to roughly 2.7 MB of JSON. Matching only the plural '/documents'
+				// left the identity route (.../{caseID}/document) on the 2 MB
+				// allowance, so a file the UI and the API both accept was rejected
+				// here with a bare 413.
+				if (size > (/\/documents?$/.test(event.url.pathname) ? 4 : 2) * 1024 * 1024) {
 					await reader.cancel();
 					return new Response(JSON.stringify({ title: 'Request too large', status: 413 }), {
 						status: 413, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' }

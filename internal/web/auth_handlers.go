@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"kredit/internal/audit"
@@ -41,7 +42,19 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	challenge, code, err := s.runtime.Auth.RequestOTP(input.Identifier, input.Channel, input.Purpose)
+	// This route is unauthenticated, so it may only mint the purposes that
+	// belong to it. Every other purpose is issued by a handler that has already
+	// established its own context, and consumption now checks the purpose, so an
+	// unconstrained value here would let a sign-in code be spent elsewhere.
+	purpose := strings.ToLower(strings.TrimSpace(input.Purpose))
+	if purpose == "" {
+		purpose = auth.PurposeLogin
+	}
+	if !slices.Contains(auth.PublicOTPPurposes(), purpose) {
+		writeProblem(w, http.StatusBadRequest, "invalid_request", "That verification purpose is not available here.")
+		return
+	}
+	challenge, code, err := s.runtime.Auth.RequestOTP(input.Identifier, input.Channel, purpose)
 	if err != nil {
 		writeProblem(w, http.StatusTooManyRequests, "otp_unavailable", err.Error())
 		return

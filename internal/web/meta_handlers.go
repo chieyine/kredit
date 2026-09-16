@@ -133,10 +133,21 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 					var audioBytes []byte
 					var audioMime string
 
+					// Decide before downloading anything. A voice note costs a media
+					// download plus a model call, so an assistant that is switched
+					// off or over its per-sender budget must not pay either.
+					assistant := s.runtime.WhatsAppAI != nil && s.runtime.WhatsAppAI.Enabled() && s.runtime.WhatsAppAI.Allow(message.From)
+
 					if message.Type == "text" {
 						rawText = message.Text.Body
 					} else if message.Type == "audio" || message.Type == "voice" {
 						isAudio = true
+						if !assistant {
+							// Without the assistant there is nothing that can read a
+							// voice note, so say so rather than downloading it.
+							_ = s.runtime.Notifications.SendWhatsAppReply(r.Context(), message.ID, message.From, "We cannot read voice notes right now. Send the goods, the amount and the payment day as a message, or record the sale in Kredit: "+strings.TrimRight(s.config.AppBaseURL, "/")+"/app/credit/new")
+							continue
+						}
 						mediaID := message.Audio.ID
 						audioMime = message.Audio.MimeType
 						if mediaID == "" {
@@ -163,8 +174,10 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 					var reply string
 					appURL := strings.TrimRight(s.config.AppBaseURL, "/")
 
-					// Use Gemini AI parser if enabled
-					if s.runtime.WhatsAppAI != nil && s.runtime.WhatsAppAI.Enabled() {
+					// The assistant is optional. When it is switched off, over its
+					// per-sender budget, or unable to read the message, the
+					// deterministic command parser below still answers.
+					if assistant {
 						var aiResult whatsapp.AIResult
 						var aiErr error
 						if isAudio {
@@ -173,46 +186,11 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 							aiResult, aiErr = s.runtime.WhatsAppAI.ParseText(r.Context(), rawText)
 						}
 
-						if aiErr != nil {
-							reply = "Could not parse your message. To record a sale, send: 'create credit Buyer, amount, due date' or send a voice note. Dashboard: " + appURL + "/app"
-						} else {
-							switch aiResult.Intent {
-							case whatsapp.IntentCreateCredit:
-								amountStr := fmt.Sprintf("₦%s", formatKoboAmount(aiResult.AmountKobo))
-								itemsLine := ""
-								if aiResult.Items != "" {
-									itemsLine = fmt.Sprintf("• *Items:* %s\n", aiResult.Items)
-								}
-								dueLine := ""
-								if aiResult.DueDate != "" {
-									dueLine = fmt.Sprintf("• *Due Date:* %s\n", aiResult.DueDate)
-								}
-								reply = fmt.Sprintf("📋 *Credit Sale Draft:*\n• *Buyer:* %s\n• *Amount:* %s\n%s%s\nReply *YES* to confirm and send payment link, or reply with edits.", aiResult.BuyerName, amountStr, itemsLine, dueLine)
-
-							case whatsapp.IntentConfirm:
-								reply = "✅ *Sale Confirmed!*\nInvoice recorded. A notification and payment link have been dispatched to the buyer.\n\nOpen Kredit: " + appURL + "/app"
-
-							case whatsapp.IntentRecordPayment:
-								reply = fmt.Sprintf("💰 *Payment Recorded:*\n%s\n\nView updated ledger: %s/app", aiResult.Summary, appURL)
-
-							case whatsapp.IntentQueryBalance:
-								reply = fmt.Sprintf("📊 *Your Kredit Account:*\nView your current debtors, receivables, and invoices anytime at: %s/app", appURL)
-
-							case whatsapp.IntentHelp:
-								reply = "👋 *Welcome to Kredit on WhatsApp!*\nYou can send text or voice notes anytime:\n• *\"I gave Emeka 50 cartons for 150k to pay on Friday\"*\n• *\"Who owes me?\"*\n• *\"Emeka paid 50,000\"*\n\nDashboard: " + appURL + "/app"
-
-							default:
-								if aiResult.Summary != "" {
-									reply = aiResult.Summary + "\n\nOpen Kredit: " + appURL + "/app"
-								} else {
-									reply = "👋 Send a voice note or message with your sale details (e.g. 'I gave Alhassan goods for 200k to pay next week').\nDashboard: " + appURL + "/app"
-								}
-							}
-						}
+						reply = assistantReply(aiResult, aiErr, appURL)
 					} else {
 						command, parseErr := whatsapp.ParseCommand(rawText)
 						if parseErr != nil {
-							reply = "To create a sale, send: create credit Buyer name, amount, due date. Dashboard: " + appURL + "/app"
+							reply = "To start a sale, send: create credit Customer name, amount, payment day. Nothing is recorded until you confirm it in Kredit: " + appURL + "/app"
 						} else if command.RequiresConfirmation {
 							reply = whatsapp.ConfirmationSummary(command) + " Review and confirm in Kredit: " + appURL + "/app"
 						} else {
@@ -252,4 +230,43 @@ func formatKoboAmount(kobo int64) string {
 		return fmt.Sprintf("%s.%02d", string(out), rem)
 	}
 	return string(out)
+}
+
+// assistantReply turns a read message into what the seller must still do. It is
+// separated from the webhook so the property that matters can be tested
+// directly: no reply may ever state that a sale or a payment has been recorded.
+//
+// WhatsApp carries no authenticated session, so a chat message cannot create an
+// agreement, a mandate or a payment. README section 29.2 requires confirmation
+// on an authenticated surface and section 29.6 forbids completing a financial
+// action through unauthenticated chat. An earlier version of this code replied
+// "Sale Confirmed! Invoice recorded" when nothing had been written, which is the
+// one thing a trade-credit product must never say.
+func assistantReply(result whatsapp.AIResult, readErr error, appURL string) string {
+	if readErr != nil {
+		return "Sorry, we could not read that message. Open Kredit to record the sale yourself: " + appURL + "/app/credit/new"
+	}
+	switch result.Intent {
+	case whatsapp.IntentCreateCredit:
+		itemsLine := ""
+		if result.Items != "" {
+			itemsLine = fmt.Sprintf("• *Goods:* %s\n", result.Items)
+		}
+		dueLine := ""
+		if result.DueDate != "" {
+			dueLine = fmt.Sprintf("• *Payment day:* %s\n", result.DueDate)
+		}
+		return fmt.Sprintf("📋 *This is what we understood. Nothing is saved yet.*\n• *Customer:* %s\n• *Amount:* ₦%s\n%s%s\nOpen Kredit to check these details and send the sale to your customer: %s/app/credit/new",
+			result.BuyerName, formatKoboAmount(result.AmountKobo), itemsLine, dueLine, appURL)
+	case whatsapp.IntentConfirm:
+		return "A sale cannot be confirmed over WhatsApp. Open Kredit to check the goods, amount and payment day, then send it to your customer: " + appURL + "/app/credit/new"
+	case whatsapp.IntentRecordPayment:
+		return "Nothing is saved yet. Check and record payments in Kredit against your bank account: " + appURL + "/app/payments"
+	case whatsapp.IntentQueryBalance:
+		return "Open Kredit to see what each customer still owes you: " + appURL + "/app/overview"
+	case whatsapp.IntentHelp:
+		return "👋 *Kredit on WhatsApp.*\nSend a message or voice note and we will read the details back to you. Recording a sale, confirming it and recording a payment all happen in Kredit, where your account is protected.\n\nOpen Kredit: " + appURL + "/app"
+	default:
+		return "Send the goods, the amount and the payment day and we will read them back to you. Sales are recorded in Kredit: " + appURL + "/app/credit/new"
+	}
 }

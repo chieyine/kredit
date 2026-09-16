@@ -8,10 +8,11 @@ export function disputeEffectCopy(effect: string, amount?: KoboValue): string {
   return `Only the amount in question${amount == null ? '' : ` (${formatKobo(amount)})`} will be held once this report is saved. Undisputed amounts may still be collected. ${submittedDebitCaveat}`;
 }
 export function hostedAuthorizationURL(value: string, provider: string): string | null {
-  if (provider !== 'mono-sweep') return null;
+  if (/^\/buyer\/bank-authorization\/[a-f0-9]{32}$/.test(value)) return value;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && url.hostname === 'authorise.mono.co' && !url.port && !url.username && !url.password && url.pathname !== '/' ? url.href : null;
+    const allowed = url.hostname === 'authorise.mono.co' || url.hostname === 'link.paystack.com' || url.hostname === 'checkout.paystack.com';
+    return url.protocol === 'https:' && allowed && !url.port && !url.username && !url.password && url.pathname !== '/' ? url.href : null;
   } catch { return null; }
 }
 export function acceptanceMessage(state: string): string {

@@ -42,6 +42,7 @@ type AuthorizationInput struct {
 }
 
 type Mandate struct {
+	CancellationRequested  bool      `json:"cancellation_requested,omitempty"`
 	ProviderAdapter        string    `json:"provider_adapter,omitempty"`
 	Reference              string    `json:"reference,omitempty"`
 	ID                     string    `json:"id"`
@@ -116,6 +117,13 @@ func (p *PostgresProvider) CreateAuthorizationSession(ctx context.Context, input
 	}
 	if p == nil || p.pool == nil {
 		return Mandate{}, errors.New("mandate database is not configured")
+	}
+	if validator, ok := p.remote.(interface {
+		ValidateAuthorization(context.Context, AuthorizationInput) error
+	}); ok {
+		if err := validator.ValidateAuthorization(ctx, input); err != nil {
+			return Mandate{}, err
+		}
 	}
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
@@ -288,6 +296,9 @@ func (p *PostgresProvider) GetMandate(ctx context.Context, providerID string) (M
 		oldState := mandate.Status
 		if mandate.Status != Cancelled && mandate.Status != Expired {
 			mandate.Status = remoteMandate.Status
+			if mandate.CancellationRequested && mandate.Status != Cancelled && mandate.Status != Expired {
+				mandate.Status = Paused
+			}
 		}
 		if remoteMandate.AmountCeiling > 0 && remoteMandate.AmountCeiling < mandate.AmountCeiling {
 			mandate.AmountCeiling = remoteMandate.AmountCeiling
@@ -349,6 +360,7 @@ func (p *PostgresProvider) loadMandateDetails(ctx context.Context, mandate *Mand
 	if err := json.Unmarshal(metadata, &stored); err != nil {
 		return fmt.Errorf("decode mandate details: %w", err)
 	}
+	mandate.CancellationRequested = stored.CancellationRequested
 	mandate.ProviderAdapter = stored.ProviderAdapter
 	mandate.AuthorizationURL, mandate.Variable = stored.AuthorizationURL, stored.Variable
 	mandate.MultiAccount, mandate.PartialRecovery = stored.MultiAccount, stored.PartialRecovery
@@ -381,6 +393,11 @@ func (p *PostgresProvider) CancelMandate(ctx context.Context, providerID, reason
 	}
 	if mandate.Status == Cancelled {
 		return mandate, nil
+	}
+	// Stop local debit permission before asking the bank. A delayed or failed
+	// cancellation response must never authorize another debit in the meantime.
+	if _, err = p.BlockMandate(ctx, providerID, Paused, "buyer-cancel-request:"+providerID); err != nil {
+		return Mandate{}, err
 	}
 	if p.remote != nil {
 		if _, err = p.remote.CancelMandate(ctx, providerID, reason); err != nil {
@@ -542,6 +559,9 @@ func (p *PostgresProvider) BlockMandate(ctx context.Context, providerID string, 
 		m = stored
 	}
 	m.Status = status
+	if strings.HasPrefix(eventID, "buyer-cancel-request:") {
+		m.CancellationRequested = true
+	}
 	if old == "cancelled" || old == "expired" {
 		m.Status = Status(strings.ToUpper(old))
 	}

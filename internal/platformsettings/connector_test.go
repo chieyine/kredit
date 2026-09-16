@@ -19,7 +19,7 @@ func TestConnectorValidation(t *testing.T) {
 		{"disabled", "", "", false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			payload, _ := json.Marshal(NotificationConnector{Enabled: tc.enabled, Endpoint: tc.endpoint, Token: tc.token})
+			payload, _ := json.Marshal(NotificationConnector{Adapter: "connector", Enabled: tc.enabled, Endpoint: tc.endpoint, Token: tc.token})
 			raw, _ := json.Marshal(string(payload))
 			meta, err := ValidateKeyAndValue("integrations.notifications.email", raw)
 			if (err == nil) != tc.valid {

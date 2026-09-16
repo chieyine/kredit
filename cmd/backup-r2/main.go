@@ -55,8 +55,22 @@ func main() {
 
 	fmt.Printf("[%s] Starting PostgreSQL database backup...\n", timestamp)
 
-	// Execute pg_dump via docker
-	cmd := exec.Command("docker", "exec", "kredit-prod-postgres-1", "pg_dump", "-U", "kredit", "-d", "kredit", "--format=custom")
+	// The Compose project name and service index decide this container name, so
+	// it is configuration rather than a constant. A renamed stack must fail
+	// loudly at the exec below instead of silently producing no backup.
+	container := os.Getenv("BACKUP_POSTGRES_CONTAINER")
+	if container == "" {
+		container = "kredit-prod-postgres-1"
+	}
+	databaseUser := os.Getenv("BACKUP_POSTGRES_USER")
+	if databaseUser == "" {
+		databaseUser = "kredit"
+	}
+	databaseName := os.Getenv("BACKUP_POSTGRES_DB")
+	if databaseName == "" {
+		databaseName = "kredit"
+	}
+	cmd := exec.Command("docker", "exec", container, "pg_dump", "-U", databaseUser, "-d", databaseName, "--format=custom")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening stdout pipe: %v\n", err)
@@ -113,16 +127,18 @@ func main() {
 	if strings.Contains(endpoint, "<") || strings.HasPrefix(accessKey, "your-") || endpoint == "https://r2.cloudflarestorage.com" {
 		fmt.Printf("[%s] Cloudflare R2 not fully configured yet (needs Account ID and real token). Local backup is saved.\n", timestamp)
 	} else {
+		uploaded := false
 		fmt.Printf("[%s] Uploading to Cloudflare R2 bucket '%s'...\n", timestamp, bucket)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}
-		httpClient := &http.Client{Transport: tr}
+		// This upload carries a complete dump of the production database.
+		// Certificate verification is mandatory: an intercepted connection would
+		// hand over every user, mandate and ledger entry. R2 presents a valid
+		// public certificate, so the platform trust store is sufficient.
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		httpClient := &http.Client{Transport: transport}
 
 		cfg, err := awsconfig.LoadDefaultConfig(ctx,
 			awsconfig.WithHTTPClient(httpClient),
@@ -156,18 +172,28 @@ func main() {
 					},
 				})
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "R2 upload warning: %v\n", err)
+					fmt.Fprintf(os.Stderr, "R2 upload failed: %v\n", err)
 				} else {
 					fmt.Printf("[%s] Successfully uploaded to R2: %s\n", timestamp, r2Key)
 					checksumKey := r2Key + ".sha256"
-					_, _ = s3Client.PutObject(ctx, &s3.PutObjectInput{
+					if _, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
 						Bucket:      aws.String(bucket),
 						Key:         aws.String(checksumKey),
 						Body:        bytes.NewReader([]byte(fmt.Sprintf("%s  %s\n", checksum, filepath.Base(dumpFile)))),
 						ContentType: aws.String("text/plain"),
-					})
+					}); err != nil {
+						fmt.Fprintf(os.Stderr, "R2 checksum upload failed: %v\n", err)
+					} else {
+						uploaded = true
+					}
 				}
 			}
+		}
+		// A local-only copy is not an offsite backup. Exiting zero here would let
+		// a scheduler record a successful run while replication is broken.
+		if !uploaded {
+			fmt.Fprintf(os.Stderr, "[%s] Offsite replication did not complete; the local dump is retained.\n", timestamp)
+			os.Exit(1)
 		}
 	}
 

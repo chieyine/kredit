@@ -299,7 +299,7 @@ func TestReplacingContactRemovesOldLoginAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	challenge, code, err := s.RequestOTP("new@example.test", "email", "contact")
+	challenge, code, err := s.RequestOTP("new@example.test", "email", PurposeContactVerify)
 	if err != nil {
 		t.Fatal(err)
 	}

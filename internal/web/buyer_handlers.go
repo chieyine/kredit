@@ -8,6 +8,7 @@ import (
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
+	"kredit/internal/auth"
 	"kredit/internal/buyers"
 	"kredit/internal/legalpublication"
 )
@@ -135,7 +136,7 @@ func (s *Server) acceptBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 422, "notices_required", "Read and accept the current notices before continuing. Refresh this page if they have changed.")
 		return
 	}
-	user, session, rawSessionToken, err := s.runtime.Auth.VerifyOTPForTarget(input.ChallengeID, input.Code, input.DeviceLabel, targetType, target)
+	user, session, rawSessionToken, err := s.runtime.Auth.VerifyOTPForTarget(input.ChallengeID, input.Code, input.DeviceLabel, targetType, target, auth.PurposeBuyerInvitation)
 	if err != nil {
 		writeProblem(w, http.StatusUnauthorized, "otp_invalid", err.Error())
 		return

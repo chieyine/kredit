@@ -54,11 +54,58 @@ Use `NOTIFICATION_EMAIL_ENDPOINT=https://api.sendlyai.com/v1/messages`, the live
 
 Point Sendly's email receipt webhook at `https://api.kredit.ng/api/v1/webhooks/notifications/email` (confirm the route in `internal/web/server.go` before enabling it). The receiver authenticates the signed envelope. The worker retrieves message status from Sendly and records delivered status only for the saved message and recipient. An API acceptance is not delivery evidence. SMS and WhatsApp require their own contracted adapters; Sendly email does not establish either integration. [Sendly documentation](https://developer.sendlyai.com/).
 
+## Ingress: which proxy terminates client connections
+
+The Compose stack publishes the API on `127.0.0.1:8080` and keeps the `caddy`
+service behind the `standalone` profile, so `docker compose up` does **not**
+start Caddy. That is deliberate: on a host running 1Panel, its bundled reverse
+proxy terminates TLS and forwards to the loopback listener. Decide which of the
+two you are running and configure it, because the repository can only describe
+one of them.
+
+**Running Caddy from this stack.** Add `--profile standalone` to every Compose
+command. `Caddyfile.prod` already pins the Cloudflare ranges with
+`trusted_proxies_strict`, strips `CF-Connecting-IP`, `True-Client-IP` and
+`Forwarded`, and sets `X-Real-IP` from the verified client address.
+
+**Running 1Panel's proxy, or any other ingress.** The protections above are then
+its responsibility, and they are not in this repository. The proxy must strip
+every client-supplied forwarding header before setting its own, exactly as the
+Caddyfile does.
+
+Either way, set `API_TRUSTED_PROXIES` in `.env.runtime` to the address or subnet
+of that proxy. `X-Real-IP` is the rate-limit identity for sign-in, one-time-code
+requests and account recovery, so the API believes it only from a peer named
+there, or from the frontend proxy's signed header. A request arriving on
+`127.0.0.1:8080` from anything else is rate-limited by its own source address.
+Leaving `API_TRUSTED_PROXIES` empty is correct when every request reaches the API
+through the Vercel frontend, which signs the client address with
+`FRONTEND_PROXY_SIGNING_KEY`.
+
+The API listener is bound to loopback, not `0.0.0.0`, so it is not reachable
+from outside the host. Do not publish it on a public interface to shorten a
+debugging session.
+
 ## Provider and launch gates
 
 Use the production Mono account and its approved Sweep permissions. Set the redirect and webhook URLs to the implemented `kredit.ng`/`api.kredit.ng` routes. Follow [the Mono runbook](../runbooks/mono-sweep.md). Never use a development mock as production identity or collection evidence.
 
 Keep live collection, direct supplier settlement and other separately gated capabilities disabled until the actual provider implementation, account permission and approval references are present. Set production-pilot and retention approval gates only after the real approvals exist. Placeholder references such as `internal-pilot-launch` are not approvals. A template deliberately cannot start an approved production service by itself.
+
+## The WhatsApp assistant
+
+`FEATURE_WHATSAPP_ASSISTANT` is off by default and should stay off until the
+cross-border transfer assessment for the model provider is recorded. When
+enabled, the assistant forwards inbound message text and voice-note audio to
+Google's Gemini API — a sub-processor outside Nigeria — so production startup
+refuses to proceed without both `GEMINI_API_KEY` and
+`WHATSAPP_ASSISTANT_TRANSFER_REFERENCE`. The processor, the data sent and the
+controls are recorded in `docs/compliance/sub-processors.md`.
+
+The assistant reads a message back to a seller as structured fields. It holds no
+write capability: it cannot create a sale, confirm one or record a payment, and
+its replies say so. Anything that appears to record a financial action from chat
+is a defect, not a feature.
 
 ## Frontend settings
 
@@ -92,6 +139,6 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=100 migrate role-init api worker
 ```
 
-The migration and role containers must exit successfully; API and worker must become healthy. Check the public health route through both `api.kredit.ng` and the frontend `/api` proxy. There is no host `127.0.0.1:8080` listener in this stack. Verify domain redirects and a narrowly scoped sign-in/provider flow only when the final verification phase is authorized. Health alone does not establish launch readiness.
+The migration and role containers must exit successfully; API and worker must become healthy. Check the public health route through both `api.kredit.ng` and the frontend `/api` proxy. Verify domain redirects and a narrowly scoped sign-in/provider flow only when the final verification phase is authorized. Health alone does not establish launch readiness.
 
 Keep the previous image digests and release record. Database recovery uses a verified backup and forward repairs; do not automatically run financial migrations backwards. Follow [the go-live runbook](../release/go-live-runbook.md) for approval evidence and cutover ownership.

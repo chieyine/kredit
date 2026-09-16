@@ -56,9 +56,19 @@ func Evaluate(cfg config.Config) Report {
 		if (cfg.RealCollections || cfg.MonoSweepEnabled) && !strings.Contains(strings.ToLower(cfg.CollectionProvider), "mock") {
 			collectionGate = "enabled"
 		}
+		// Phone codes are delivered over WhatsApp only, and a failed send is
+		// never switched to another channel. Without that channel every
+		// phone-identified person is locked out of both sign-in and account
+		// recovery, so it belongs in readiness rather than being discovered by
+		// the first customer who tries to sign in.
+		signInGate := ""
+		if cfg.WhatsApp && strings.TrimSpace(cfg.NotificationWhatsAppEndpoint) != "" && strings.TrimSpace(cfg.NotificationWhatsAppToken) != "" {
+			signInGate = "enabled"
+		}
 		checks = append(checks,
 			struct{ name, value, detail string }{"real_identity_provider", identityGate, "certified identity provider enabled"},
 			struct{ name, value, detail string }{"real_collection_provider", collectionGate, "certified collection provider enabled"},
+			struct{ name, value, detail string }{"phone_sign_in_channel", signInGate, "WhatsApp configured: phone sign-in and account recovery codes have no other delivery channel"},
 		)
 	}
 	gates := make([]Gate, 0, len(checks)+1)

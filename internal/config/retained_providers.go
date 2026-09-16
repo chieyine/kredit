@@ -8,6 +8,8 @@ import (
 )
 
 type RetainedCollectionConnection struct {
+	APIKey        string `json:"api_key,omitempty"`
+	ContractCode  string `json:"contract_code,omitempty"`
 	Adapter       string `json:"adapter,omitempty"`
 	Partial       bool   `json:"partial,omitempty"`
 	Name          string `json:"name"`
@@ -28,8 +30,25 @@ func (c Config) RetainedCollections() ([]RetainedCollectionConnection, error) {
 	}
 	seen := map[string]bool{}
 	for _, connection := range connections {
-		if (connection.Adapter != "" && connection.Adapter != "connector" && connection.Adapter != "mono") || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$`).MatchString(connection.Name) || (connection.Name == "mono-sweep" && connection.Adapter != "mono") || strings.Contains(strings.ToLower(connection.Name), "mock") || seen[connection.Name] {
+		if (connection.Adapter != "" && connection.Adapter != "connector" && connection.Adapter != "mono" && connection.Adapter != "paystack" && connection.Adapter != "flutterwave" && connection.Adapter != "monnify") || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$`).MatchString(connection.Name) || (connection.Name == "mono-sweep" && connection.Adapter != "mono" && connection.Adapter != "paystack" && connection.Adapter != "flutterwave" && connection.Adapter != "monnify") || strings.Contains(strings.ToLower(connection.Name), "mock") || seen[connection.Name] {
 			return nil, errors.New("saved collection account names must be unique and use the correct adapter")
+		}
+		if connection.Adapter == "paystack" {
+			prefix := "sk_test_"
+			if c.Environment == "production" {
+				prefix = "sk_live_"
+			}
+			if !strings.HasPrefix(connection.Token, prefix) || (connection.Endpoint != "" && connection.Endpoint != "https://api.paystack.co") {
+				return nil, errors.New("saved Paystack accounts require the correct secret key and API address")
+			}
+		}
+		if connection.Adapter == "flutterwave" {
+			if !strings.HasPrefix(connection.Token, "FLWSECK") || strings.Contains(connection.Token, "TEST") == (c.Environment == "production") || connection.Endpoint != "" {
+				return nil, errors.New("saved Flutterwave accounts require matching keys and no endpoint override")
+			}
+		}
+		if connection.Adapter == "monnify" && (connection.APIKey == "" || connection.ContractCode == "" || connection.Endpoint != "") {
+			return nil, errors.New("saved Monnify accounts require API key, contract code and no endpoint override")
 		}
 		if connection.Adapter == "mono" {
 			if c.Environment == "production" && !strings.HasPrefix(connection.Token, "live_sk_") {
@@ -44,13 +63,15 @@ func (c Config) RetainedCollections() ([]RetainedCollectionConnection, error) {
 		}
 		// Save the current connector before switching. The redundant route must be
 		// identical, so the same identity can never point at two accounts at once.
-		if connection.Adapter != "mono" && connection.Name == c.CollectionProvider && (connection.Endpoint != c.CollectionProviderEndpoint || connection.Token != c.CollectionProviderToken || connection.WebhookSecret != c.CollectionWebhookSecret) {
+		if connection.Adapter != "mono" && connection.Name == c.CollectionProvider && (connection.Endpoint != c.CollectionProviderEndpoint || connection.Token != c.CollectionProviderToken || connection.WebhookSecret != c.CollectionWebhookSecret || connection.APIKey != c.CollectionAPIKey || connection.ContractCode != c.CollectionContractCode || (connection.Adapter != "" && connection.Adapter != c.CollectionAdapter)) {
 			return nil, errors.New("the saved active account must match its current connection exactly")
 		}
-		if err := validateProductionURL("retained collection endpoint", connection.Endpoint); err != nil {
-			return nil, err
+		if connection.Adapter == "" || connection.Adapter == "connector" || connection.Adapter == "mono" {
+			if err := validateProductionURL("retained collection endpoint", connection.Endpoint); err != nil {
+				return nil, err
+			}
 		}
-		if len(connection.Token) < 32 || len(connection.WebhookSecret) < 32 || strings.ContainsAny(connection.Token+connection.WebhookSecret, "\r\n") {
+		if len(connection.Token) < 32 || (connection.Adapter != "paystack" && connection.Adapter != "monnify" && len(connection.WebhookSecret) < 32) || strings.ContainsAny(connection.Token+connection.WebhookSecret+connection.APIKey, "\r\n") {
 			return nil, errors.New("retained collection credentials require at least 32 characters and no line breaks")
 		}
 		seen[connection.Name] = true

@@ -163,15 +163,32 @@ func (s *Store) RequestOTP(identifier, channel, purpose string) (OTPChallenge, s
 	return challenge, code, nil
 }
 
+// A challenge records why it was issued. Binding that purpose at consumption is
+// what stops a code minted for one flow being redeemed in another: the sign-in
+// route is public and takes a purpose from the caller, so without this check a
+// code requested as "login" could be spent on contact verification or the
+// reverse.
+const (
+	PurposeLogin           = "login"
+	PurposeRecovery        = "recovery"
+	PurposeBuyerInvitation = "buyer_invitation"
+	PurposeContactVerify   = "supplier_contact_verification"
+)
+
+// PublicOTPPurposes are the only purposes the unauthenticated sign-in route may
+// mint. Every other purpose is issued by a handler that has already established
+// its own context.
+func PublicOTPPurposes() []string { return []string{PurposeLogin, PurposeRecovery} }
+
 func (s *Store) VerifyOTP(challengeID, code, deviceLabel string) (User, Session, string, error) {
-	return s.verifyOTP(challengeID, code, deviceLabel, "", "")
+	return s.verifyOTP(challengeID, code, deviceLabel, "", "", PurposeLogin)
 }
 
-func (s *Store) VerifyOTPForTarget(challengeID, code, deviceLabel, channel, identifier string) (User, Session, string, error) {
+func (s *Store) VerifyOTPForTarget(challengeID, code, deviceLabel, channel, identifier, purpose string) (User, Session, string, error) {
 	if channel == "" || identifier == "" {
 		return User{}, Session{}, "", errors.New("otp target is required")
 	}
-	return s.verifyOTP(challengeID, code, deviceLabel, channel, identifier)
+	return s.verifyOTP(challengeID, code, deviceLabel, channel, identifier, purpose)
 }
 
 func (s *Store) VerifyAndAttachIdentifier(userID, challengeID, code, channel, identifier string) error {
@@ -184,6 +201,9 @@ func (s *Store) VerifyAndAttachIdentifier(userID, challengeID, code, channel, id
 	challenge := s.challenges[challengeID]
 	if user == nil || challenge == nil || !challenge.ConsumedAt.IsZero() || !now.Before(challenge.ExpiresAt) || challenge.AttemptCount >= 5 || challenge.TargetType != channel || challenge.TargetHash != s.hashTarget(channel, identifier) {
 		return errors.New("otp challenge is invalid or expired")
+	}
+	if challenge.Purpose != PurposeContactVerify {
+		return errors.New("otp challenge was issued for a different purpose")
 	}
 	challenge.AttemptCount++
 	if !hmac.Equal(challenge.CodeHash, s.hashCode(strings.TrimSpace(code))) {
@@ -208,7 +228,7 @@ func (s *Store) VerifyAndAttachIdentifier(userID, challengeID, code, channel, id
 	return nil
 }
 
-func (s *Store) verifyOTP(challengeID, code, deviceLabel, expectedChannel, expectedIdentifier string) (User, Session, string, error) {
+func (s *Store) verifyOTP(challengeID, code, deviceLabel, expectedChannel, expectedIdentifier, expectedPurpose string) (User, Session, string, error) {
 	now := s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -218,6 +238,9 @@ func (s *Store) verifyOTP(challengeID, code, deviceLabel, expectedChannel, expec
 	}
 	if expectedChannel != "" && challenge.TargetHash != s.hashTarget(expectedChannel, expectedIdentifier) {
 		return User{}, Session{}, "", errors.New("otp challenge target mismatch")
+	}
+	if expectedPurpose != "" && challenge.Purpose != expectedPurpose {
+		return User{}, Session{}, "", errors.New("otp challenge was issued for a different purpose")
 	}
 	if challenge.AttemptCount >= 5 {
 		return User{}, Session{}, "", errors.New("otp challenge is locked")

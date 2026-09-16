@@ -3704,6 +3704,13 @@ Show TCR-7H4M-92QK
 
 Natural-language input must resolve to structured fields. Before a financial action, show a confirmation summary.
 
+The assistant reads a message back; it never writes. WhatsApp carries no
+authenticated session, so a chat message cannot create an agreement, a mandate or
+a payment, and no reply may state that a sale or payment has been recorded.
+`internal/web/meta_assistant_test.go` enforces this over every intent. The
+assistant is off unless `FEATURE_WHATSAPP_ASSISTANT` is set; see
+`docs/compliance/sub-processors.md` for the model provider and its controls.
+
 ### 29.3 Buyer messages
 
 Invitation:
@@ -3728,14 +3735,25 @@ Collection notice:
 
 ### 29.4 WhatsApp safety
 
+Kredit *delivers* one-time sign-in and account-recovery codes over WhatsApp, and
+that is currently the only channel for a phone identifier: a failed send is never
+switched to SMS or email, because delivery evidence is pinned to the channel that
+was actually used. WhatsApp is therefore a hard dependency for every
+phone-identified person, which the `phone_sign_in_channel` readiness gate reports
+before a customer discovers it at sign-in. Delivering a code is different from
+asking for one: Kredit never asks anybody to send a code back through chat.
+
 - never request BVN in chat;
-- never request OTP, PIN, or online-banking password;
+- never ask anyone to send an OTP, PIN, or online-banking password to Kredit,
+  through chat or any other channel;
 - mask account data;
 - avoid sensitive detail in message previews;
 - use secure expiring links;
 - use approved message templates;
 - honour opt-out rules where applicable;
-- fall back to email/SMS for critical events;
+- fall back to email/SMS for critical *notifications*; authentication codes do
+  not fall back, by design, so that delivery evidence stays pinned to one
+  channel;
 - keep group-chat use out of v1.
 
 ### 29.5 Webhook handling

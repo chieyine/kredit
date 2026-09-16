@@ -8,10 +8,10 @@ func TestOTPVerificationCanBeBoundToInvitationTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := store.VerifyOTPForTarget(challenge.ID, code, "device", "email", "other@example.test"); err == nil {
+	if _, _, _, err := store.VerifyOTPForTarget(challenge.ID, code, "device", "email", "other@example.test", "buyer_invitation"); err == nil {
 		t.Fatal("mismatched OTP target should be rejected")
 	}
-	if _, _, _, err := store.VerifyOTPForTarget(challenge.ID, code, "device", "email", "buyer@example.test"); err != nil {
+	if _, _, _, err := store.VerifyOTPForTarget(challenge.ID, code, "device", "email", "buyer@example.test", "buyer_invitation"); err != nil {
 		t.Fatal(err)
 	}
 }

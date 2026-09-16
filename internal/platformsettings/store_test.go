@@ -71,7 +71,7 @@ func TestRegistryValidationRules(t *testing.T) {
 	// The registry is the whole list. A key that is not here cannot be written,
 	// and after migration 091 it is not stored either — which is the point: an
 	// owner should never be shown a switch that moves nothing.
-	if len(KnownSettings) != 13+len(WebsitePages) {
+	if len(KnownSettings) != 8+len(WebsitePages)+len(RuntimeConnections) {
 		t.Fatalf("the registry should hold only settings with a consumer, got %d: %v", len(KnownSettings), keys())
 	}
 	for _, key := range []string{"features.trade_lines", "features.drawdowns", "features.disputes", "features.system_acceptance"} {

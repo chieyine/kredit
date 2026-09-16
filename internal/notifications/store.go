@@ -101,6 +101,12 @@ func (s *Store) SendRecoveryInstructions(ctx context.Context, recipient, channel
 	recipient = strings.TrimSpace(recipient)
 	channel = strings.ToLower(strings.TrimSpace(channel))
 	if channel == "phone" {
+		// Phone codes go over WhatsApp and are never switched to another channel
+		// on failure, because delivery evidence is pinned to the channel that
+		// was actually used. The consequence is that WhatsApp is a hard
+		// dependency for every phone-identified person: see the
+		// phone_sign_in_channel readiness gate, which reports this before a
+		// customer discovers it at sign-in.
 		channel = ChannelWhatsApp
 	}
 	if recipient == "" || !validChannel(channel) {
@@ -139,6 +145,9 @@ func (s *Store) SendOTP(ctx context.Context, recipient, channel, code string) er
 	provider := s.providers[channel]
 	s.mu.Unlock()
 	if provider == nil {
+		if channel == ChannelWhatsApp {
+			return errors.New("WhatsApp is the only delivery channel for phone sign-in codes and it is not configured; enable FEATURE_WHATSAPP with its endpoint and token, or sign in with an email address")
+		}
 		return fmt.Errorf("%s OTP provider is unavailable", channel)
 	}
 	_, err := provider.Send(ctx, Message{

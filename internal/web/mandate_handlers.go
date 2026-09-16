@@ -37,12 +37,12 @@ func (s *Server) cancelBuyerMandate(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "mandate_not_found", "We could not find that bank debit permission.")
 		return
 	}
-	cancelled, err := s.runtime.Mandates.CancelMandate(r.Context(), current.ProviderID, input.Reason)
+	cancelled, err := s.runtime.Mandates.CancelMandate(mandates.WithProvider(r.Context(), current.Provider), current.ProviderID, input.Reason)
 	if err != nil {
 		writeProblem(w, 409, "mandate_cancellation_failed", err.Error())
 		return
 	}
-	if err := s.applyMandateToBuyerResources(user.ID, current, cancelled, views); err != nil {
+	if err := s.applyMandateToBuyerResources(r.Context(), user.ID, current, cancelled, views); err != nil {
 		writeProblem(w, 503, "mandate_sync_pending", "The bank debit permission changed while we were working. Please try this again.")
 		return
 	}
@@ -70,12 +70,12 @@ func (s *Server) restoreBuyerMandate(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "mandate_not_found", "We could not find that bank debit permission.")
 		return
 	}
-	restored, err := s.runtime.Mandates.RestoreAuthorization(r.Context(), current.ProviderID)
+	restored, err := s.runtime.Mandates.RestoreAuthorization(mandates.WithProvider(r.Context(), current.Provider), current.ProviderID)
 	if err != nil {
 		writeProblem(w, 409, "mandate_restore_failed", err.Error())
 		return
 	}
-	if err := s.applyMandateToBuyerResources(user.ID, current, restored, views); err != nil {
+	if err := s.applyMandateToBuyerResources(r.Context(), user.ID, current, restored, views); err != nil {
 		writeProblem(w, 503, "mandate_sync_pending", "The bank debit permission changed while we were working. Please try this again.")
 		return
 	}
@@ -117,13 +117,18 @@ func (s *Server) findBuyerMandate(ctx context.Context, userID, id string) (manda
 	return current, matching, current.ID != "", nil
 }
 
-func (s *Server) applyMandateToBuyerResources(userID string, previous, next mandates.Mandate, views []credit.View) error {
+// The request context carries the caller's deadline and cancellation, and the
+// tenant identity the trade-line store applies to its RLS session settings.
+// Manufacturing a background context here detached both: a cancelled request
+// left this loop still writing mandate state.
+func (s *Server) applyMandateToBuyerResources(ctx context.Context, userID string, previous, next mandates.Mandate, views []credit.View) error {
 	for _, view := range views {
 		if _, err := s.runtime.Credit.SetMandate(view.Request.ID, userID, next); err != nil {
 			return err
 		}
 	}
-	lines, err := s.runtime.readTradeLinesForBuyer(db.WithTenantContext(context.Background(), userID, ""), userID)
+	scoped := db.WithTenantContext(ctx, userID, "")
+	lines, err := s.runtime.readTradeLinesForBuyer(scoped, userID)
 	if err != nil {
 		return err
 	}
@@ -131,9 +136,36 @@ func (s *Server) applyMandateToBuyerResources(userID string, previous, next mand
 		if line.MandateID != previous.ID && line.MandateID != previous.ProviderID {
 			continue
 		}
-		if _, err := s.runtime.ScopedTradeLines(db.WithTenantContext(context.Background(), userID, "")).SetMandateState(line.ID, next.ID, next.Status == mandates.Active); err != nil {
+		if _, err := s.runtime.ScopedTradeLines(scoped).SetMandateState(line.ID, next.ID, next.Status == mandates.Active); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// Refresh is explicitly requested by the owner; a plain list remains read-only.
+func (s *Server) refreshBuyerMandate(w http.ResponseWriter, r *http.Request) {
+	_, user, ok := s.requireAuth(w, r)
+	if !ok || !s.requireCSRF(w, r) {
+		return
+	}
+	id, _ := pathID(r, "mandateID")
+	current, views, found, err := s.findBuyerMandate(r.Context(), user.ID, id)
+	if financialReadError(w, err) {
+		return
+	}
+	if !found {
+		writeProblem(w, 404, "mandate_not_found", "We could not find that bank permission.")
+		return
+	}
+	updated, err := s.runtime.Mandates.GetMandate(mandates.WithProvider(r.Context(), current.Provider), current.ProviderID)
+	if err != nil {
+		writeProblem(w, 409, "mandate_unconfirmed", "Your bank has not confirmed this permission yet. Please check again shortly.")
+		return
+	}
+	if err = s.applyMandateToBuyerResources(r.Context(), user.ID, current, updated, views); err != nil {
+		writeProblem(w, 503, "mandate_sync_pending", "Your bank permission is being updated. Please check again.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"mandate": updated})
 }

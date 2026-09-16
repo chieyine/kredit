@@ -1,0 +1,32 @@
+# Tables where a tenant-scoped policy is currently OR'd with a permissive
+# blanket runtime-role policy, so the tenant predicate does not constrain the
+# roles the application connects as.
+#
+# PostgreSQL combines permissive policies with OR. Migration 081 fixed the core
+# money tables by dropping the blanket policy first; these are the tables that
+# conversion has not reached yet. scripts/rls-policy-shape-check.sh fails if this
+# list grows, or if an entry is fixed but left here, so it can only shrink.
+#
+# A policy that filters through a subquery on another RLS-protected table -
+# app.payment_allocations via app.obligations, app.drawdowns via
+# app.trade_lines - is NOT in this list. Those inherit the referenced table's
+# policies and are already tenant-scoped.
+#
+# Each line is removed in the same change that converts the table. See
+# docs/operations/rls-phase2-completion.md for the per-table procedure and why
+# this cannot be one migration: the blanket policies are currently load-bearing
+# for worker discovery and for admin cross-tenant reads.
+app.account_recovery_codes
+app.account_recovery_events
+app.account_recovery_evidence
+app.account_recovery_requests
+app.correction_decisions
+app.correction_requests
+app.disputes
+app.notification_preferences
+app.notifications
+app.privacy_exports
+app.privacy_request_events
+app.privacy_requests
+app.processing_restrictions
+app.repayment_schedules

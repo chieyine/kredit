@@ -35,7 +35,7 @@ func NewWebhookProvider(name, endpoint, token, secret string) (*WebhookProvider,
 }
 func (p *WebhookProvider) Name() string { return p.name }
 func (p *WebhookProvider) Capabilities() Capabilities {
-	return Capabilities{AuthorizationSession: true, OneTime: true, Recurring: true, Variable: true, Settlement: true, Reversal: true}
+	return Capabilities{ProviderSplit: true, AuthorizationSession: true, OneTime: true, Recurring: true, Variable: true, Settlement: true, Reversal: true}
 }
 func (p *WebhookProvider) Submit(ctx context.Context, input Request) (Response, error) {
 	var result Response

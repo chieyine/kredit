@@ -492,3 +492,31 @@ A workstream is not complete until all applicable items exist:
 The scoreboard may move to “Complete” only when the linked acceptance evidence
 meets section 11. Partial backend, API, or interface delivery must be recorded
 as “In progress,” never “Complete.”
+
+## TENANT-ISOLATION-PHASE2
+
+Wave 2. Finish converting the fourteen tables where a tenant-scoped policy is
+still OR'd away by a permissive blanket runtime-role policy. PostgreSQL combines
+permissive policies with `OR`, so on those tables the tenant predicate does not
+constrain the roles the application connects as, and isolation rests on the Go
+handlers alone. Migration 081 completed this for the core money tables.
+
+The per-table procedure, the reason it cannot be a single migration, and the
+suggested order are in `docs/operations/rls-phase2-completion.md`. The current
+set is recorded in `docs/compliance/rls-permissive-baseline.txt` and enforced by
+`scripts/rls-policy-shape-check.sh`, which fails if the list grows or if a
+converted table is left in it. Complete when the baseline is empty and
+`tests/integration/tenant_isolation_test.go` covers each converted table.
+
+## WHATSAPP-ASSISTANT
+
+Wave 6. The WhatsApp assistant reads an inbound message or voice note back to a
+seller as structured fields. It holds no write capability: it cannot create a
+sale, confirm one or record a payment, and its replies say so.
+
+It is the only feature that sends free-text customer data to a general-purpose
+model provider outside Nigeria, so it is off unless `FEATURE_WHATSAPP_ASSISTANT`
+is set, production startup requires both a valid key and a recorded transfer
+assessment, and the processor is declared in `docs/compliance/sub-processors.md`.
+Complete when the transfer assessment is recorded and the intent handling has
+browser coverage as well as the handler test.

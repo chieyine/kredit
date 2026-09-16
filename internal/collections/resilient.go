@@ -71,6 +71,18 @@ func (p *ResilientProvider) Capabilities() Capabilities {
 	return Capabilities{}
 }
 
+// Unwrap exposes the wrapped provider so routing can find its approval record.
+// Forwarding Enabled instead would be wrong: this wrapper would have to answer
+// for a provider that carries no approval at all, and "unapproved" and "no
+// approval record exists" are the two cases production most needs to tell
+// apart.
+func (p *ResilientProvider) Unwrap() Provider {
+	if p == nil {
+		return nil
+	}
+	return p.inner
+}
+
 func (p *ResilientProvider) Submit(ctx context.Context, request Request) (Response, error) {
 	generation, err := p.allow()
 	if err != nil {

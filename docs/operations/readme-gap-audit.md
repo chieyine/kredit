@@ -55,3 +55,28 @@ release gates below still apply and prevent a production-complete claim.
 
 Until the applicable external gates are closed, the release must remain
 fail-closed and must not be represented as production V1 complete.
+
+## TENANT-ISOLATION-PHASE2
+
+Gap: fourteen tables carry a tenant-scoped policy and a permissive blanket
+runtime-role policy at the same time. Because PostgreSQL ORs permissive
+policies, the tenant predicate is inert for `kredit_app` and `kredit_worker`.
+The Phase 2 integration test asserts against `app.obligations`, one of the
+tables migration 081 already fixed, which is why the gap stayed green.
+
+Closing it requires giving each table's worker and admin callers a narrow
+`SECURITY DEFINER` route before the blanket policy is dropped, because those
+callers currently depend on it. Tracked in
+`docs/compliance/rls-permissive-baseline.txt`; procedure in
+`docs/operations/rls-phase2-completion.md`.
+
+## WHATSAPP-ASSISTANT
+
+Gap: the assistant shipped without a data-inventory entry, without
+documentation, and with replies that told sellers a sale or payment had been
+recorded when nothing had been. The field-level inventory could not catch it
+because a new outbound transfer adds no database column.
+
+Closed for the replies, the feature flag, the key handling, the per-sender
+budget and the sub-processor register. Remaining: record the cross-border
+transfer assessment referenced by `WHATSAPP_ASSISTANT_TRANSFER_REFERENCE`.

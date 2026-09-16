@@ -37,8 +37,14 @@ func NewPostgresEngine(pool *pgxpool.Pool, base *Engine) *PostgresEngine {
 }
 func (e *PostgresEngine) RequirePriorNotice(delay time.Duration) { e.noticeMinimum = delay }
 func (e *PostgresEngine) ProviderStatus() ProviderStatus         { return e.base.ProviderStatus() }
-func (e *PostgresEngine) SetFeatureEnabled(value bool)           { e.base.SetFeatureEnabled(value) }
-func (e *PostgresEngine) SetMaxRetries(value int)                { e.base.SetMaxRetries(value) }
+func (e *PostgresEngine) SelectProvider(request SelectionRequest) (Selection, error) {
+	return e.base.SelectProvider(request)
+}
+func (e *PostgresEngine) ResolveMandateProvider(name string, request SelectionRequest) (Selection, error) {
+	return e.base.ResolveMandateProvider(name, request)
+}
+func (e *PostgresEngine) SetFeatureEnabled(value bool) { e.base.SetFeatureEnabled(value) }
+func (e *PostgresEngine) SetMaxRetries(value int)      { e.base.SetMaxRetries(value) }
 func (e *PostgresEngine) Eligibility(id string, now time.Time) (Eligibility, error) {
 	return e.EligibilityContext(context.Background(), id, now)
 }
@@ -52,13 +58,24 @@ func (e *PostgresEngine) EligibilityContext(ctx context.Context, id string, now 
 
 // reserveProvider captures a debit intent without doing network I/O. The
 // reservation and reference must commit before Submit can reach a bank.
+//
+// Every provider the debit could reach is wrapped, not only the configured
+// active one. A mandate pins its debit to the provider that holds it, so on a
+// deployment with more than one provider an unwrapped provider would let a
+// pinned debit reach a bank before its reservation had committed.
 type reserveProvider struct {
 	Provider
-	request *Request
+	capture *capturedRequest
 }
 
+// capturedRequest is shared by every wrapper, so the caller reads back the one
+// request that was made without having to know which provider made it.
+type capturedRequest struct{ request *Request }
+
 func (p *reserveProvider) Submit(_ context.Context, request Request) (Response, error) {
-	p.request = &request
+	if p.capture != nil {
+		p.capture.request = &request
+	}
 	return Response{State: ProviderPending}, nil
 }
 func (p *reserveProvider) Capabilities() Capabilities {
@@ -66,6 +83,16 @@ func (p *reserveProvider) Capabilities() Capabilities {
 		return provider.Capabilities()
 	}
 	return Capabilities{}
+}
+
+// Unwrap keeps the wrapped provider's approval record and health visible to
+// routing while a submission is being prepared.
+func (p *reserveProvider) Unwrap() Provider { return p.Provider }
+func (p *reserveProvider) Health() HealthStatus {
+	if provider, ok := p.Provider.(HealthProvider); ok {
+		return provider.Health()
+	}
+	return HealthStatus{State: CircuitClosed, Healthy: true}
 }
 func (p *reserveProvider) Sign(event Webhook) string {
 	if signer, ok := p.Provider.(WebhookSigner); ok {
@@ -80,11 +107,10 @@ func (e *PostgresEngine) submitPrepared(ctx context.Context, id string, prepare 
 	var result Attempt
 	var request *Request
 	err := e.mutate(ctx, id, func(local *Engine) error {
-		proxy := &reserveProvider{Provider: local.provider}
-		local.provider = proxy
+		capture := local.reserveEveryProvider()
 		var err error
 		result, err = prepare(local)
-		request = proxy.request
+		request = capture.request
 		return err
 	})
 	if err != nil || request == nil {
@@ -226,7 +252,11 @@ func (e *PostgresEngine) fresh() *Engine {
 	for name, provider := range e.base.retainedProviders {
 		retained[name] = provider
 	}
-	return &Engine{retainedProviders: retained, provider: e.base.provider, payments: e.base.payments, snapshot: e.base.snapshot, contextSnapshot: e.base.contextSnapshot, due: e.base.due, reservations: map[string]*CollectionReservation{}, attempts: map[string]*Attempt{}, byKey: map[string]string{}, byExternal: map[string]string{}, events: map[string]bool{}, now: e.base.now, featureEnabled: e.base.featureEnabled, reservationTTL: e.base.reservationTTL, maxRetries: e.base.maxRetries}
+	active := map[string]*registration{}
+	for name, entry := range e.base.activeProviders {
+		active[name] = entry
+	}
+	return &Engine{retainedProviders: retained, activeProviders: active, activeSequence: e.base.activeSequence, requireApproval: e.base.requireApproval, provider: e.base.provider, payments: e.base.payments, snapshot: e.base.snapshot, contextSnapshot: e.base.contextSnapshot, due: e.base.due, reservations: map[string]*CollectionReservation{}, attempts: map[string]*Attempt{}, byKey: map[string]string{}, byExternal: map[string]string{}, events: map[string]bool{}, now: e.base.now, featureEnabled: e.base.featureEnabled, reservationTTL: e.base.reservationTTL, maxRetries: e.base.maxRetries}
 }
 func installCollection(local *Engine, state persistedCollection) {
 	for _, value := range state.Reservations {
@@ -322,8 +352,12 @@ func (e *PostgresEngine) mutate(ctx context.Context, id string, operation func(*
 				route.NetAmountKobo = amount - route.FeeAmountKobo
 			}
 			route.Method = "reviewed_transfer"
-			if e.base.provider.Name() == route.Provider {
-				if cp, ok := e.base.provider.(CapabilityProvider); ok && !cp.Capabilities().PartialRecovery && route.NetAmountKobo > 0 {
+			// Resolve the route's provider by name. Comparing against one
+			// configured provider would silently fall back to a reviewed
+			// transfer once a second provider exists, and would panic on a
+			// deployment that has no active provider at all.
+			if routed := e.base.activeRegistration(route.Provider); routed != nil {
+				if cp, ok := routed.provider.(CapabilityProvider); ok && cp.Capabilities().ProviderSplit && !cp.Capabilities().PartialRecovery && route.NetAmountKobo > 0 {
 					route.Method = "provider_split"
 				}
 			}

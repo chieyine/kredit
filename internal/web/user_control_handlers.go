@@ -7,6 +7,7 @@ import (
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
+	"kredit/internal/auth"
 	"kredit/internal/notifications"
 	"kredit/internal/usercontrol"
 
@@ -138,7 +139,7 @@ func (s *Server) addAccountRecoveryEvidence(w http.ResponseWriter, r *http.Reque
 			writeProblem(w, 400, "recovery_verification_incomplete", "independent contact verification is required")
 			return
 		}
-		user, _, token, err := s.runtime.Auth.VerifyOTPForTarget(in.ChallengeID, in.Code, "recovery", in.Channel, in.Identifier)
+		user, _, token, err := s.runtime.Auth.VerifyOTPForTarget(in.ChallengeID, in.Code, "recovery", in.Channel, in.Identifier, auth.PurposeRecovery)
 		if err != nil {
 			writeProblem(w, 400, "recovery_verification_incomplete", "independent contact verification is required")
 			return

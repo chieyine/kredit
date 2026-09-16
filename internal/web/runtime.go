@@ -36,7 +36,11 @@ import (
 	"kredit/internal/payments"
 	"kredit/internal/platformops"
 	"kredit/internal/platformsettings"
+	"kredit/internal/providers/bankdebit"
+	"kredit/internal/providers/flutterwave"
+	"kredit/internal/providers/monnify"
 	"kredit/internal/providers/mono"
+	"kredit/internal/providers/paystack"
 	"kredit/internal/readiness"
 	"kredit/internal/relationships"
 	"kredit/internal/reports"
@@ -58,6 +62,9 @@ type Runtime struct {
 	policyInitializationError error
 	Mono                      *mono.Client
 	MonoAccounts              map[string]*mono.Client
+	PaystackAccounts          map[string]*paystack.Client
+	NativeBankAccounts        map[string]bankdebit.NativeClient
+	BankEnrollments           *bankdebit.Store
 	FeeBilling                *billing.FeeService
 	WebhookJobs               *jobs.Client
 	Database                  *db.Pool
@@ -253,17 +260,87 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			monoAccounts[account.Name] = client.WithAccountName(account.Name).ReconciliationOnly()
 		}
 	}
-	if cfg.SettlementEnabled {
-		if cfg.SettlementProvider == cfg.MonoAccount() {
-			if monoClient != nil {
-				settlementProvider = monoClient
-			} else {
-				providerFailures = append(providerFailures, "seller bank registration is unavailable")
+	paystackAccounts := map[string]*paystack.Client{}
+	if database != nil && cfg.CollectionAdapter == "paystack" && cfg.CollectionProviderToken != "" {
+		client, err := paystack.New(cfg.CollectionProvider, cfg.CollectionProviderToken, strings.TrimRight(cfg.AppBaseURL, "/")+"/buyer/mandates", cfg.Environment == "production", paystackEmailLookup(database))
+		if err != nil {
+			providerFailures = append(providerFailures, err.Error())
+		} else {
+			paystackAccounts[client.Name()] = client
+		}
+	}
+	if database != nil {
+		retained, err := cfg.RetainedCollections()
+		if err == nil {
+			for _, account := range retained {
+				if account.Adapter != "paystack" || paystackAccounts[account.Name] != nil {
+					continue
+				}
+				client, createErr := paystack.New(account.Name, account.Token, strings.TrimRight(cfg.AppBaseURL, "/")+"/buyer/mandates", cfg.Environment == "production", paystackEmailLookup(database))
+				if createErr != nil {
+					providerFailures = append(providerFailures, "saved Paystack account unavailable")
+				} else {
+					paystackAccounts[account.Name] = client
+				}
 			}
+		}
+	}
+	nativeAccounts := map[string]bankdebit.NativeClient{}
+	var bankEnrollments *bankdebit.Store
+	if database != nil {
+		store := bankdebit.NewStore(database.Raw(), cfg.SettingsEncryptionKey)
+		bankEnrollments = store
+		var native bankdebit.NativeClient
+		var err error
+		switch cfg.CollectionAdapter {
+		case "flutterwave":
+			native, err = flutterwave.New(cfg.CollectionProvider, cfg.CollectionProviderToken, cfg.CollectionWebhookSecret, cfg.Environment == "production", store)
+		case "monnify":
+			native, err = monnify.New(cfg.CollectionProvider, cfg.CollectionAPIKey, cfg.CollectionProviderToken, cfg.CollectionContractCode, strings.TrimRight(cfg.AppBaseURL, "/")+"/buyer/mandates", cfg.Environment == "production", store)
+		}
+		if err != nil {
+			providerFailures = append(providerFailures, err.Error())
+		} else if native != nil {
+			nativeAccounts[cfg.CollectionProvider] = native
+		}
+	}
+	if database != nil {
+		retained, err := cfg.RetainedCollections()
+		if err == nil {
+			for _, account := range retained {
+				if nativeAccounts[account.Name] != nil {
+					continue
+				}
+				var client bankdebit.NativeClient
+				var createErr error
+				store := bankdebit.NewStore(database.Raw(), cfg.SettingsEncryptionKey)
+				switch account.Adapter {
+				case "flutterwave":
+					client, createErr = flutterwave.New(account.Name, account.Token, account.WebhookSecret, cfg.Environment == "production", store)
+				case "monnify":
+					client, createErr = monnify.New(account.Name, account.APIKey, account.Token, account.ContractCode, strings.TrimRight(cfg.AppBaseURL, "/")+"/buyer/mandates", cfg.Environment == "production", store)
+				default:
+					continue
+				}
+				if createErr != nil {
+					providerFailures = append(providerFailures, "saved native collector unavailable")
+				} else {
+					nativeAccounts[account.Name] = client
+				}
+			}
+		}
+	}
+	if cfg.SettlementEnabled {
+		if client := paystackAccounts[cfg.SettlementProvider]; client != nil {
+			settlementProvider = client
+		} else if client, ok := nativeAccounts[cfg.SettlementProvider].(settlement.Provider); ok {
+			settlementProvider = client
+		} else if cfg.SettlementProvider == cfg.MonoAccount() && monoClient != nil {
+			settlementProvider = monoClient
 		} else {
 			connector, err := settlement.NewConnector(cfg.SettlementProvider, cfg.SettlementEndpoint, cfg.SettlementToken)
 			if err != nil {
-				providerFailures = append(providerFailures, "seller bank connector is unavailable")
+				providerFailures = append(providerFailures, "seller bank registration is unavailable")
 			} else {
 				settlementProvider = connector
 			}
@@ -271,13 +348,38 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	}
 	mandateProvider := mandates.NewMockProvider()
 	var mandateRuntime mandates.Provider = mandateProvider
+	if cfg.CollectionAdapter == "paystack" || cfg.CollectionAdapter == "flutterwave" || cfg.CollectionAdapter == "monnify" {
+		mandateRuntime = mandates.NewUnavailableProvider(cfg.CollectionProvider)
+	}
 	if database != nil {
 		mandateRuntime = mandates.NewPostgresProvider(database.Raw(), cfg.CollectionProvider)
-		if cfg.Environment != "development" && cfg.RealCollections && cfg.CollectionProvider != cfg.MonoAccount() {
-			remote, err := mandates.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken)
+		// A missing native connection must not fall through to the development
+		// provider, which creates an ACTIVE permission without a bank response.
+		if cfg.Environment != "development" || cfg.RealCollections {
+			mandateRuntime = mandates.NewPostgresProviderWithRemote(database.Raw(), mandates.NewUnavailableProvider(cfg.CollectionProvider))
+		}
+		if cfg.CollectionProvider != cfg.MonoAccount() && (cfg.RealCollections || nativeAccounts[cfg.CollectionProvider] != nil || paystackAccounts[cfg.CollectionProvider] != nil || (cfg.CollectionProviderToken != "" && cfg.CollectionProviderEndpoint != "")) {
+			var remote mandates.Provider
+			var err error
+			if cfg.CollectionAdapter == "flutterwave" || cfg.CollectionAdapter == "monnify" {
+				remote = nativeAccounts[cfg.CollectionProvider]
+				if remote == nil {
+					err = errors.New("native bank collector unavailable")
+				}
+			} else if cfg.CollectionAdapter == "paystack" {
+				remote = paystackAccounts[cfg.CollectionProvider]
+				if paystackAccounts[cfg.CollectionProvider] == nil {
+					err = errors.New("Paystack account unavailable")
+				}
+			} else {
+				remote, err = mandates.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken)
+			}
 			if err != nil {
 				providerFailures = append(providerFailures, fmt.Sprintf("mandate connector unavailable: %v", err))
 			} else {
+				if !cfg.RealCollections {
+					remote = mandates.NewPausedProvider(remote)
+				}
 				mandateRuntime = mandates.NewPostgresProviderWithRemote(database.Raw(), remote)
 			}
 		}
@@ -310,7 +412,17 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			}
 			var remote mandates.Provider
 			var err error
-			if account.Adapter == "mono" {
+			if account.Adapter == "flutterwave" || account.Adapter == "monnify" {
+				remote = nativeAccounts[account.Name]
+				if remote == nil {
+					err = errors.New("saved native collector unavailable")
+				}
+			} else if account.Adapter == "paystack" {
+				remote = paystackAccounts[account.Name]
+				if paystackAccounts[account.Name] == nil {
+					err = errors.New("saved Paystack account unavailable")
+				}
+			} else if account.Adapter == "mono" {
 				client := monoAccounts[account.Name]
 				if client == nil {
 					err = errors.New("saved Mono mandate account unavailable")
@@ -712,8 +824,23 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	}
 	var baseCollectionProvider collections.Provider = collections.NewMockProvider(runtimeDomainKey(cfg.TokenHashKey, sessionKey, "mock-collections"))
 	collectionEnabled := cfg.Environment == "development" && !cfg.RealCollections
-	if cfg.Environment != "development" && cfg.RealCollections && cfg.CollectionProvider != cfg.MonoAccount() {
-		if connector, err := collections.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken, cfg.CollectionWebhookSecret); err == nil {
+	if cfg.RealCollections && cfg.CollectionProvider != cfg.MonoAccount() {
+		var connector collections.Provider
+		var err error
+		if cfg.CollectionAdapter == "flutterwave" || cfg.CollectionAdapter == "monnify" {
+			connector = nativeAccounts[cfg.CollectionProvider]
+			if connector == nil {
+				err = errors.New("native bank collector unavailable")
+			}
+		} else if cfg.CollectionAdapter == "paystack" {
+			connector = paystackAccounts[cfg.CollectionProvider]
+			if paystackAccounts[cfg.CollectionProvider] == nil {
+				err = errors.New("Paystack account unavailable")
+			}
+		} else {
+			connector, err = collections.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken, cfg.CollectionWebhookSecret)
+		}
+		if err == nil {
 			approvedAt, timeErr := time.Parse(time.RFC3339, cfg.ProviderApprovedAt)
 			if timeErr == nil {
 				approval := collections.ApprovalRecord{ProviderName: cfg.CollectionProvider, WrittenReference: cfg.ProviderApprovalReference, ApprovedBy: cfg.ProviderApprovedBy, ApprovedAt: approvedAt, AllowedCapabilities: []collections.Capability{collections.CapabilityOneTime, collections.CapabilitySettlement, collections.CapabilityReversal}, PilotLimitKobo: cfg.PilotMaxPrincipalKobo}
@@ -782,17 +909,43 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			providerFailures = append(providerFailures, "original Mono reconciliation could not be installed")
 		}
 	}
+	pausedNativeRegistered := false
+	if collectionProvider.Name() != cfg.CollectionProvider {
+		var paused collections.Provider
+		if p := nativeAccounts[cfg.CollectionProvider]; p != nil {
+			paused = p
+		} else if p := paystackAccounts[cfg.CollectionProvider]; p != nil {
+			paused = p
+		}
+		if paused != nil {
+			if err := collectionEngine.RegisterRetainedProvider(paused); err != nil {
+				providerFailures = append(providerFailures, "paused collector reconciliation unavailable")
+			} else {
+				pausedNativeRegistered = true
+			}
+		}
+	}
 	retainedConnections, retainedErr := cfg.RetainedCollections()
 	if retainedErr != nil {
 		providerFailures = append(providerFailures, "retained collection configuration is invalid")
 	}
 	for _, connection := range retainedConnections {
-		if connection.Name == collectionProvider.Name() || (monoClient != nil && connection.Name == monoClient.Name()) {
+		if connection.Name == collectionProvider.Name() || (pausedNativeRegistered && connection.Name == cfg.CollectionProvider) || (monoClient != nil && connection.Name == monoClient.Name()) {
 			continue
 		}
 		var retained collections.Provider
 		var err error
-		if connection.Adapter == "mono" {
+		if connection.Adapter == "flutterwave" || connection.Adapter == "monnify" {
+			retained = nativeAccounts[connection.Name]
+			if retained == nil {
+				err = errors.New("saved native collector unavailable")
+			}
+		} else if connection.Adapter == "paystack" {
+			retained = paystackAccounts[connection.Name]
+			if paystackAccounts[connection.Name] == nil {
+				err = errors.New("saved Paystack account unavailable")
+			}
+		} else if connection.Adapter == "mono" {
 			client := monoAccounts[connection.Name]
 			if client == nil {
 				err = errors.New("saved Mono collection account unavailable")
@@ -860,7 +1013,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		for name, client := range monoAccounts {
 			feeProviders[name] = client
 		}
-		if cfg.RealCollections && cfg.CollectionProvider != cfg.MonoAccount() {
+		if cfg.RealCollections && cfg.CollectionProvider != cfg.MonoAccount() && (cfg.CollectionAdapter == "" || cfg.CollectionAdapter == "connector") {
 			connector, e := billing.NewConnector(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken, false)
 			if e != nil {
 				providerFailures = append(providerFailures, "fee billing connector: "+e.Error())
@@ -869,7 +1022,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			}
 		}
 		for _, saved := range retainedConnections {
-			if saved.Adapter == "mono" || feeProviders[saved.Name] != nil {
+			if (saved.Adapter != "" && saved.Adapter != "connector") || feeProviders[saved.Name] != nil {
 				continue
 			}
 			connector, e := billing.NewConnector(saved.Name, saved.Endpoint, saved.Token, true)
@@ -882,7 +1035,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		active := ""
 		if cfg.MonoSweepEnabled {
 			active = cfg.MonoAccount()
-		} else if cfg.RealCollections && cfg.CollectionProvider != cfg.MonoAccount() {
+		} else if cfg.RealCollections && feeProviders[cfg.CollectionProvider] != nil {
 			active = cfg.CollectionProvider
 		}
 		feeBilling = billing.NewFeeService(database.Raw(), active, feeProviders, func(value string) string {
@@ -892,8 +1045,9 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		})
 	}
 	return &Runtime{
-		FeeBilling: feeBilling,
-		Mono:       monoClient, MonoAccounts: monoAccounts, WebhookJobs: webhookJobs, Settlement: settlementProvider,
+		FeeBilling:       feeBilling,
+		PaystackAccounts: paystackAccounts, NativeBankAccounts: nativeAccounts, BankEnrollments: bankEnrollments,
+		Mono: monoClient, MonoAccounts: monoAccounts, WebhookJobs: webhookJobs, Settlement: settlementProvider,
 		Database: database,
 		Persistence: PersistenceStatus{
 			DatabaseConfigured:      database != nil,
@@ -936,7 +1090,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		Tracer:               tracer,
 		Notifications:        notificationStore,
 		WhatsApp:             whatsAppHandler,
-		WhatsAppAI:           whatsapp.NewAIParser(cfg.GeminiAPIKey),
+		WhatsAppAI:           whatsAppAssistant(cfg),
 		Outbox:               outboxStore,
 		PlatformOps:          platformOpsStore,
 		PlatformSettings:     platformSettingsStore,
@@ -969,4 +1123,15 @@ func runtimeDomainKey(primary, fallback, domain string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	_, _ = mac.Write([]byte(domain))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// whatsAppAssistant is nil unless the capability is deliberately switched on.
+// The assistant forwards message text and voice notes to a model provider
+// outside Nigeria, so an unset feature flag must mean no transfer at all rather
+// than a transfer that happens to lack a key.
+func whatsAppAssistant(cfg config.Config) *whatsapp.AIParser {
+	if !cfg.WhatsAppAssistant {
+		return nil
+	}
+	return whatsapp.NewAIParser(cfg.GeminiAPIKey)
 }

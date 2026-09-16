@@ -22,7 +22,7 @@ require_file web/src/routes/sitemap.xml/+server.ts
 
 # sqlc:generate is intentionally absent; Go persistence is hand-written per
 # docs/adr/0005-hand-written-http-and-sql.md.
-for command in dev build test test:unit test:integration test:e2e test:race test:fuzz lint audit security generate api:lint readme:check plan:check db:migrate db:rollback db:reset db:seed db:check data:inventory:generate data:inventory:check openapi:generate web:check web:test ci; do require_text Taskfile.yml "  ${command}:"; done
+for command in dev build test test:unit test:integration test:e2e test:race test:fuzz lint audit security generate api:lint readme:check plan:check db:migrate db:rollback db:reset db:seed db:check data:inventory:generate data:inventory:check data:subprocessors:check db:rls:check openapi:generate web:check web:test ci; do require_text Taskfile.yml "  ${command}:"; done
 require_file docs/adr/0005-hand-written-http-and-sql.md
 
 for command in api worker migrate seed reconcile provider-simulator; do require_file "cmd/${command}/main.go"; done
@@ -95,6 +95,15 @@ require_text api/openapi.yaml '/me/privacy-requests:'
 require_file internal/usercontrol/store.go
 require_file docs/compliance/data-inventory.tsv
 require_file scripts/data-inventory-check.sh
+# The field-level inventory proves what is stored. The register below proves
+# where data is sent, which no schema diff can establish.
+require_file docs/compliance/sub-processors.md
+require_file scripts/sub-processor-check.sh
+require_file docs/compliance/rls-permissive-baseline.txt
+require_file scripts/rls-policy-shape-check.sh
+require_file docs/operations/rls-phase2-completion.md
+require_text docs/compliance/sub-processors.md 'generativelanguage.googleapis.com'
+require_text internal/config/config.go 'FEATURE_WHATSAPP_ASSISTANT'
 require_text internal/tradelines/store.go 'VerifyAgreementHash'
 require_text internal/tradelines/postgres.go 'SetTransactionalActivationHandler'
 require_text internal/credit/postgres.go 'ActivateTradeLineDrawdownTx'

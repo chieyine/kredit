@@ -391,7 +391,9 @@
                             {/if}
                             {#each editingSetting.connection_fields || [] as field (field.key)}
                                 <label for={`connection-${field.key}`}>{field.label}</label>
-                                {#if field.kind === 'boolean'}
+                                {#if field.key === 'CollectionAdapter'}
+                                    <select id={`connection-${field.key}`} bind:value={runtimeDraft[field.key]} disabled={busy}><option value="flutterwave">Flutterwave direct debit</option><option value="paystack">Paystack direct debit</option><option value="monnify">Monnify direct debit</option><option value="connector">Approved custom connector</option></select>
+                                {:else if field.kind === 'boolean'}
                                     <select id={`connection-${field.key}`} bind:value={runtimeDraft[field.key]} disabled={busy}><option value={true}>Enabled</option><option value={false}>Disabled</option></select>
                                 {:else if field.kind === 'number'}
                                     <input id={`connection-${field.key}`} type="number" min="0" max="9007199254740991" step="1" bind:value={runtimeDraft[field.key]} disabled={busy} required />

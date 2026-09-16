@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,12 @@ const (
 	CapabilitySettlement    Capability = "settlement_reconciliation"
 	CapabilityReversal      Capability = "reversal"
 	CapabilityMultiAccount  Capability = "multi_account_collection"
+	// PartialRecovery and AutomaticRetries were capability flags before they
+	// were named capabilities. They are named here so Capabilities.Supports is
+	// total: a routing rule that asks for a capability no constant covers must
+	// refuse, not silently pass.
+	CapabilityPartialRecovery  Capability = "partial_recovery"
+	CapabilityAutomaticRetries Capability = "automatic_retries"
 )
 
 type Capabilities struct {
@@ -32,11 +39,61 @@ type Capabilities struct {
 	OneTime              bool         `json:"one_time_collection"`
 	Recurring            bool         `json:"recurring_collection"`
 	Variable             bool         `json:"variable_amount_collection"`
+	ProviderSplit        bool         `json:"provider_split"`
 	Settlement           bool         `json:"settlement_reconciliation"`
 	Reversal             bool         `json:"reversal"`
 	MultiAccount         bool         `json:"multi_account_collection"`
 	PartialRecovery      bool         `json:"partial_recovery"`
 	AutomaticRetries     bool         `json:"automatic_retries"`
+	// SupportedCurrencies is empty when a provider has not declared one, which
+	// is read as "unspecified" and never as "none". Only a provider that
+	// declares its currencies can be refused for currency.
+	SupportedCurrencies []string `json:"supported_currencies,omitempty"`
+}
+
+// Supports answers a capability question with one boolean so routing rules do
+// not each repeat the mapping. An unrecognised capability is not supported:
+// routing fails closed on a capability this build does not know about.
+func (c Capabilities) Supports(capability Capability) bool {
+	switch capability {
+	case CapabilityAuthorization:
+		return c.AuthorizationSession
+	case CapabilityOneTime:
+		return c.OneTime
+	case CapabilityRecurring:
+		return c.Recurring
+	case CapabilityVariable:
+		return c.Variable
+	case CapabilitySettlement:
+		return c.Settlement
+	case CapabilityReversal:
+		return c.Reversal
+	case CapabilityMultiAccount:
+		return c.MultiAccount
+	case CapabilityPartialRecovery:
+		return c.PartialRecovery
+	case CapabilityAutomaticRetries:
+		return c.AutomaticRetries
+	default:
+		return false
+	}
+}
+
+// SupportsCurrency is true when the provider has not declared its currencies,
+// or has declared this one. An empty request currency is always supported:
+// the obligation carries the currency, and routing is not the place that
+// decides an obligation has none.
+func (c Capabilities) SupportsCurrency(currency string) bool {
+	wanted := strings.ToUpper(strings.TrimSpace(currency))
+	if wanted == "" || len(c.SupportedCurrencies) == 0 {
+		return true
+	}
+	for _, supported := range c.SupportedCurrencies {
+		if strings.EqualFold(strings.TrimSpace(supported), wanted) {
+			return true
+		}
+	}
+	return false
 }
 
 // ReferenceLookupProvider reconciles ambiguous submissions without requiring a

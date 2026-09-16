@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -92,6 +93,7 @@ type Engine struct {
 	settlementRoute   settlementRouteLoader
 	mu                sync.Mutex
 	provider          Provider
+	activeProviders   map[string]*registration
 	retainedProviders map[string]Provider
 	payments          payments.Service
 	snapshot          SnapshotFunc
@@ -104,12 +106,16 @@ type Engine struct {
 	events            map[string]bool
 	now               func() time.Time
 	featureEnabled    bool
+	requireApproval   bool
 	reservationTTL    time.Duration
 	maxRetries        int
+	activeSequence    int
 }
 
 type Service interface {
 	ProviderStatus() ProviderStatus
+	SelectProvider(SelectionRequest) (Selection, error)
+	ResolveMandateProvider(string, SelectionRequest) (Selection, error)
 	SetFeatureEnabled(bool)
 	SetMaxRetries(int)
 	Eligibility(string, time.Time) (Eligibility, error)
@@ -134,6 +140,10 @@ type ProviderStatus struct {
 	FeatureEnabled bool         `json:"feature_enabled"`
 	Capabilities   Capabilities `json:"capabilities"`
 	Health         HealthStatus `json:"health"`
+	// Providers lists every registered provider in selection order, each with
+	// the reasons it would be passed over. Name, Capabilities and Health above
+	// describe the configured active provider and are unchanged.
+	Providers []Candidate `json:"providers,omitempty"`
 }
 
 func (e *Engine) ProviderStatus() ProviderStatus {
@@ -150,6 +160,17 @@ func (e *Engine) ProviderStatus() ProviderStatus {
 		} else {
 			status.Health = HealthStatus{State: CircuitClosed, Healthy: true}
 		}
+	}
+	for _, entry := range e.activeRegistrationsLocked() {
+		status.Providers = append(status.Providers, evaluateCandidate(entry.provider, entry.role, entry.rank, e.requireApproval, SelectionRequest{}))
+	}
+	retained := make([]string, 0, len(e.retainedProviders))
+	for name := range e.retainedProviders {
+		retained = append(retained, name)
+	}
+	slices.Sort(retained)
+	for _, name := range retained {
+		status.Providers = append(status.Providers, evaluateCandidate(e.retainedProviders[name], RoleReconcileOnly, 0, e.requireApproval, SelectionRequest{}))
 	}
 	return status
 }
@@ -198,7 +219,7 @@ func (e *Engine) EligibilityContext(ctx context.Context, obligationID string, no
 }
 
 func (e *Engine) eligibilityForSnapshot(obligationID string, now time.Time, snapshot ObligationSnapshot) (Eligibility, error) {
-	if e.provider == nil || e.due == nil {
+	if !e.hasActiveProvider() || e.due == nil {
 		return Eligibility{}, errors.New("collection dependencies unavailable")
 	}
 	amount, err := e.due(obligationID, now)
@@ -206,12 +227,29 @@ func (e *Engine) eligibilityForSnapshot(obligationID string, now time.Time, snap
 		return Eligibility{}, err
 	}
 	reasons := []string{}
-	if snapshot.MandateProvider != "" && snapshot.MandateProvider != e.provider.Name() {
-		reasons = append(reasons, "mandate_provider_mismatch")
-	}
+	// The provider is read off the mandate, never chosen. A mandate is an
+	// instruction one provider holds against one bank account, so a debit has
+	// nothing to route: either that provider can take it or the collection
+	// does not happen.
+	entry := e.debitRegistration(snapshot)
 	capabilities := Capabilities{}
-	if provider, ok := e.provider.(CapabilityProvider); ok {
-		capabilities = provider.Capabilities()
+	if entry == nil {
+		reasons = append(reasons, "mandate_provider_mismatch")
+		// A provider kept for reconciliation is a different problem from one
+		// that was never configured, and the operator fixes them differently.
+		if e.retainedProviderExists(snapshot.MandateProvider) {
+			reasons = append(reasons, ReasonProviderReconcileOnly)
+		}
+	} else {
+		if provider, ok := entry.provider.(CapabilityProvider); ok {
+			capabilities = provider.Capabilities()
+		}
+		// ApprovedAdapter refuses an unapproved debit at submission. Refusing
+		// it here too means the operator sees the approval gap as a reason,
+		// not as a failed attempt against a customer's account.
+		if approval, recorded := approvalOf(entry.provider); recorded && !approval.Enabled() {
+			reasons = append(reasons, ReasonProviderNotApproved)
+		}
 	}
 	if err := ValidatePolicy(snapshot.CollectionPolicy, capabilities); err != nil {
 		reasons = append(reasons, "collection_policy_not_supported")
@@ -318,6 +356,15 @@ func (e *Engine) Start(ctx context.Context, obligationID, idempotencyKey string,
 	if !eligibility.Eligible {
 		return Attempt{}, fmt.Errorf("collection ineligible: %s", strings.Join(eligibility.Reasons, ","))
 	}
+	// Resolved once, here, and used for the submission, the attempt record and
+	// the webhook signature. It is never re-resolved and there is no second
+	// candidate: once Submit has been called the buyer's money may already
+	// have moved, and offering the same debit to another provider is how a
+	// platform debits a customer twice.
+	submitter := e.debitRegistration(snapshot)
+	if submitter == nil {
+		return Attempt{}, errors.New("the mandate's collection provider must be configured before collection")
+	}
 	e.mu.Lock()
 	if existing := e.byKey[obligationID+"\x00"+idempotencyKey]; existing != "" {
 		out := cloneAttempt(*e.attempts[existing])
@@ -363,18 +410,18 @@ func (e *Engine) Start(ctx context.Context, obligationID, idempotencyKey string,
 			return Attempt{}, err
 		}
 	}
-	attempt := &Attempt{SettlementRoute: route, MandateReference: snapshot.MandateReference, ID: attemptID, ReservationID: reservation.ID, ObligationID: obligationID, Provider: e.provider.Name(), ExternalReference: "kredit-" + attemptID, RequestedAmountKobo: eligibility.AmountKobo, State: AttemptPending, AttemptNumber: number, RequestedAt: e.now()}
+	attempt := &Attempt{SettlementRoute: route, MandateReference: snapshot.MandateReference, ID: attemptID, ReservationID: reservation.ID, ObligationID: obligationID, Provider: submitter.provider.Name(), ExternalReference: "kredit-" + attemptID, RequestedAmountKobo: eligibility.AmountKobo, State: AttemptPending, AttemptNumber: number, RequestedAt: e.now()}
 	e.reservations[reservation.ID] = reservation
 	e.attempts[attempt.ID] = attempt
 	e.byKey[obligationID+"\x00"+idempotencyKey] = attempt.ID
 	e.byExternal[attempt.ExternalReference] = attempt.ID
 	e.mu.Unlock()
-	response, submitErr := e.provider.Submit(ctx, Request{SettlementRoute: attempt.SettlementRoute, MandateReference: attempt.MandateReference, ExternalReference: attempt.ExternalReference, ObligationID: obligationID, BuyerUserID: snapshot.BuyerUserID, AmountKobo: attempt.RequestedAmountKobo, Currency: snapshot.Currency})
+	response, submitErr := submitter.provider.Submit(ctx, Request{SettlementRoute: attempt.SettlementRoute, MandateReference: attempt.MandateReference, ExternalReference: attempt.ExternalReference, ObligationID: obligationID, BuyerUserID: snapshot.BuyerUserID, AmountKobo: attempt.RequestedAmountKobo, Currency: snapshot.Currency})
 	if submitErr != nil {
 		response = Response{State: ProviderTimeout}
 	}
 	event := Webhook{EventID: "provider-event-" + attempt.ID, ExternalReference: attempt.ExternalReference, State: response.State, ProviderCollectionID: response.ProviderCollectionID, SucceededAmountKobo: response.SucceededAmountKobo, FailureCode: response.FailureCode, Retryable: response.Retryable, SettlementState: response.SettlementState, SettlementReference: response.SettlementReference}
-	if signer, ok := e.provider.(WebhookSigner); ok {
+	if signer, ok := submitter.provider.(WebhookSigner); ok {
 		event.Signature = signer.Sign(event)
 	}
 	if _, err = e.ProcessWebhook(ctx, event); err != nil {

@@ -25,7 +25,7 @@ import (
 type Service interface {
 	RequestOTP(identifier, channel, purpose string) (OTPChallenge, string, error)
 	VerifyOTP(challengeID, code, deviceLabel string) (User, Session, string, error)
-	VerifyOTPForTarget(challengeID, code, deviceLabel, channel, identifier string) (User, Session, string, error)
+	VerifyOTPForTarget(challengeID, code, deviceLabel, channel, identifier, purpose string) (User, Session, string, error)
 	VerifyAndAttachIdentifier(userID, challengeID, code, channel, identifier string) error
 	FindOrCreateUser(identifier, channel string) (User, error)
 	UserByID(userID string) (User, error)
@@ -60,8 +60,12 @@ func (s *PostgresStore) VerifyAndAttachIdentifier(userID, challengeID, code, cha
 	var attempts int
 	var expires time.Time
 	var consumed *time.Time
-	if err = tx.QueryRow(ctx, `SELECT target_type,target_hash,code_hmac,attempt_count,expires_at,consumed_at FROM app.otp_challenges WHERE id=$1 FOR UPDATE`, challengeID).Scan(&targetType, &targetHash, &codeHash, &attempts, &expires, &consumed); err != nil {
+	var attachPurpose string
+	if err = tx.QueryRow(ctx, `SELECT target_type,target_hash,code_hmac,attempt_count,expires_at,consumed_at,purpose FROM app.otp_challenges WHERE id=$1 FOR UPDATE`, challengeID).Scan(&targetType, &targetHash, &codeHash, &attempts, &expires, &consumed, &attachPurpose); err != nil {
 		return errors.New("otp challenge is invalid or expired")
+	}
+	if attachPurpose != PurposeContactVerify {
+		return errors.New("otp challenge was issued for a different purpose")
 	}
 	if consumed != nil || !now.Before(expires) || attempts >= 5 || targetType != channel || !equalBytes(targetHash, s.hashTargetBytes(channel, identifier)) {
 		return errors.New("otp challenge is invalid or expired")
@@ -213,17 +217,17 @@ func (s *PostgresStore) RequestOTP(identifier, channel, purpose string) (OTPChal
 }
 
 func (s *PostgresStore) VerifyOTP(challengeID, code, deviceLabel string) (User, Session, string, error) {
-	return s.verifyOTP(challengeID, code, deviceLabel, "", "")
+	return s.verifyOTP(challengeID, code, deviceLabel, "", "", PurposeLogin)
 }
 
-func (s *PostgresStore) VerifyOTPForTarget(challengeID, code, deviceLabel, channel, identifier string) (User, Session, string, error) {
+func (s *PostgresStore) VerifyOTPForTarget(challengeID, code, deviceLabel, channel, identifier, purpose string) (User, Session, string, error) {
 	if channel == "" || identifier == "" {
 		return User{}, Session{}, "", errors.New("otp target is required")
 	}
-	return s.verifyOTP(challengeID, code, deviceLabel, channel, identifier)
+	return s.verifyOTP(challengeID, code, deviceLabel, channel, identifier, purpose)
 }
 
-func (s *PostgresStore) verifyOTP(challengeID, code, deviceLabel, expectedChannel, expectedIdentifier string) (User, Session, string, error) {
+func (s *PostgresStore) verifyOTP(challengeID, code, deviceLabel, expectedChannel, expectedIdentifier, expectedPurpose string) (User, Session, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	now := s.now()
@@ -232,14 +236,14 @@ func (s *PostgresStore) verifyOTP(challengeID, code, deviceLabel, expectedChanne
 		return User{}, Session{}, "", err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var targetType string
+	var targetType, challengePurpose string
 	var targetHash, targetCiphertext, codeHash []byte
 	var attempts int
 	var expiresAt time.Time
 	var consumedAt *time.Time
 	if err := tx.QueryRow(ctx, `
-		SELECT target_type, target_hash, target_ciphertext, code_hmac, attempt_count, expires_at, consumed_at
-		FROM app.otp_challenges WHERE id = $1 FOR UPDATE`, challengeID).Scan(&targetType, &targetHash, &targetCiphertext, &codeHash, &attempts, &expiresAt, &consumedAt); err != nil {
+		SELECT target_type, target_hash, target_ciphertext, code_hmac, attempt_count, expires_at, consumed_at, purpose
+		FROM app.otp_challenges WHERE id = $1 FOR UPDATE`, challengeID).Scan(&targetType, &targetHash, &targetCiphertext, &codeHash, &attempts, &expiresAt, &consumedAt, &challengePurpose); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return User{}, Session{}, "", errors.New("otp challenge is invalid or expired")
 		}
@@ -250,6 +254,9 @@ func (s *PostgresStore) verifyOTP(challengeID, code, deviceLabel, expectedChanne
 	}
 	if expectedChannel != "" && !equalBytes(targetHash, s.hashTargetBytes(expectedChannel, expectedIdentifier)) {
 		return User{}, Session{}, "", errors.New("otp challenge target mismatch")
+	}
+	if expectedPurpose != "" && challengePurpose != expectedPurpose {
+		return User{}, Session{}, "", errors.New("otp challenge was issued for a different purpose")
 	}
 	if attempts >= 5 {
 		return User{}, Session{}, "", errors.New("otp challenge is locked")

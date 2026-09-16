@@ -75,7 +75,11 @@ if command -v rg >/dev/null 2>&1; then
 		exit 1
 	fi
 else
-	if grep -rlE --exclude-dir={.tmp,node_modules,.git} --exclude={README.md,IMPLEMENTATION_PLAN.md,'*.lock'} '(BEGIN (RSA|OPENSSH) PRIVATE KEY|AKIA[0-9A-Z]{16}|password[[:space:]]*=[[:space:]]*"[^"$]+")' .; then
+	# ripgrep honours .gitignore, so the branch above already skips local-only
+	# material such as the deployment keys under ssh/. grep does not, which made
+	# this gate pass or fail depending on which tool happened to be installed.
+	# The exclusions below mirror the ignored paths so both branches agree.
+	if grep -rlE --exclude-dir={.tmp,node_modules,.git,ssh,.ssh,certs,db-certs,.data,.svelte-kit,build,_to_delete} --exclude={README.md,IMPLEMENTATION_PLAN.md,'*.lock','*.pem','*.key'} '(BEGIN (RSA|OPENSSH) PRIVATE KEY|AKIA[0-9A-Z]{16}|password[[:space:]]*=[[:space:]]*"[^"$]+")' .; then
 		printf '%s\n' 'Potential secret material found.' >&2
 		exit 1
 	fi

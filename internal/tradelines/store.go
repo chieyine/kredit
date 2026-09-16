@@ -429,7 +429,12 @@ func (s *Store) ConfirmDrawdown(drawdownID, buyerUserID, agreementHash string) (
 	if line == nil || line.BuyerUserID != buyerUserID {
 		return Drawdown{}, TradeLine{}, errors.New("buyer mismatch")
 	}
-	if d.State != DrawdownPending && !d.BuyerConfirmedAt.IsZero() && agreementHash == d.AgreementHash && VerifyAgreementHash(*d, *line) {
+	// Replaying a confirmation is safe only for a drawdown that is still on the
+	// confirmed path. A cancelled or expired drawdown also carries a
+	// BuyerConfirmedAt, so without the state check below this returned success
+	// for a purchase that no longer exists.
+	confirmedPath := d.State == DrawdownConfirmed || d.State == DrawdownGoodsReleased || d.State == DrawdownReceiptIssue || d.State == DrawdownActivated
+	if confirmedPath && !d.BuyerConfirmedAt.IsZero() && agreementHash == d.AgreementHash && VerifyAgreementHash(*d, *line) {
 		return cloneDrawdown(*d), cloneLine(*line), nil
 	}
 	if d.State != DrawdownPending {

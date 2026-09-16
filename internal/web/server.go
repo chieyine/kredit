@@ -334,7 +334,7 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		"/credit-requests/", "/payments", "/reverse", "/collection", "/retry", "/reconcile", "/disputes", "/decide", "/write-off", "/fee-waiver", "/drawdowns", "/activate", "/suspend", "/resume", "/exports", "/trade-lines",
 		// These routes mutate financial state or create durable authority and
 		// therefore must be safe to replay after a client timeout.
-		"/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
+		"/bank-authorization/", "/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
 		"/onboarding/", "/notification-preferences", "/recovery-codes", "/account-recovery/", "/privacy-requests", "/support-cases", "/product-feedback",
 		"/ops/seller-settlements/", "/identity/checks/", "/ops/billing-review/", "/ops/message-submissions/", "/ops/verification-requests/", "/ops/mandate-authorizations/",
 		"/dsa", "/consumer-bank", "/consumer-sales", "/consumer-settings", "/purchases", "/fee-operations/", "/fee-authorizations", "/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
@@ -455,8 +455,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/buyer/me/verification/refresh", s.refreshBuyerVerification)
 	s.mux.HandleFunc("GET /api/v1/buyer/credit-requests", s.listBuyerCreditRequests)
 	s.mux.HandleFunc("GET /api/v1/buyer/mandates", s.listBuyerMandates)
+	s.mux.HandleFunc("GET /api/v1/buyer/bank-authorization/{reference}", s.buyerBankEnrollment)
+	s.mux.HandleFunc("POST /api/v1/buyer/bank-authorization/{reference}", s.buyerBankEnrollment)
 	s.mux.HandleFunc("POST /api/v1/buyer/mandates/{mandateID}/cancel", s.cancelBuyerMandate)
 	s.mux.HandleFunc("POST /api/v1/buyer/mandates/{mandateID}/restore", s.restoreBuyerMandate)
+	s.mux.HandleFunc("POST /api/v1/buyer/mandates/{mandateID}/refresh", s.refreshBuyerMandate)
 	s.mux.HandleFunc("GET /api/v1/buyer/trade-lines", s.listBuyerTradeLines)
 	s.mux.HandleFunc("GET /api/v1/buyer/trade-lines/{lineID}/statement", s.buyerTradeLineStatement)
 	s.mux.HandleFunc("GET /api/v1/buyer/trade-lines/{lineID}/drawdowns/{drawdownID}/agreement-document", s.getBuyerDrawdownAgreementDocument)
@@ -521,6 +524,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/collections/{attemptID}/retry", s.retryCollection)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/collections/{attemptID}/reconcile", s.reconcileCollection)
 	s.mux.HandleFunc("POST /api/v1/webhooks/collection/{provider}", s.collectionWebhook)
+	s.mux.HandleFunc("POST /api/v1/webhooks/paystack/{account}", s.paystackWebhook)
+	s.mux.HandleFunc("POST /api/v1/webhooks/bank/{account}", s.nativeBankWebhook)
 	s.mux.HandleFunc("POST /api/v1/buyer/schedule-items/{itemID}/collection-notice/acknowledge", s.acknowledgeCollectionNotice)
 	s.mux.HandleFunc("POST /webhooks/mono", s.monoWebhook)
 	s.mux.HandleFunc("POST /api/v1/webhooks/mono", s.monoWebhook)
@@ -824,23 +829,40 @@ func (s *Server) pruneRateWindows(now time.Time) {
 	}
 }
 
-// clientIP accepts frontend client addresses only with a short-lived signature.
-// Caddy overwrites X-Real-IP for direct API traffic; the API has no public port.
+// clientIP is the key for every authentication rate limit: the per-replica
+// window below, the cross-replica budget on sign-in routes, and the
+// account-recovery throttle. A caller that can choose its own key has no limit
+// at all, so an address is only believed when it is proved.
+//
+// The signed header from the frontend proxy is the proof. An unsigned X-Real-IP
+// is believed only when no signing key is configured at all and the peer is a
+// private address, which is the development and single-host case. This used to
+// be safe because the API had no published port and only Caddy could reach it;
+// that stopped being true when the stack began publishing 127.0.0.1:8080 for an
+// external ingress, so the fallback is now explicitly scoped instead of
+// resting on deployment topology.
 func (s *Server) clientIP(r *http.Request) string {
 	address := r.Header.Get("X-Kredit-Client-IP")
 	stamp := r.Header.Get("X-Kredit-Client-Timestamp")
 	signature, err := hex.DecodeString(r.Header.Get("X-Kredit-Client-Signature"))
 	seconds, stampErr := strconv.ParseInt(stamp, 10, 64)
 	age := time.Now().Unix() - seconds
-	if s.config.FrontendProxySigningKey != "" && err == nil && stampErr == nil && age >= -30 && age <= 60 && net.ParseIP(address) != nil {
-		mac := hmac.New(sha256.New, []byte(s.config.FrontendProxySigningKey))
+	signingKey := strings.TrimSpace(s.config.FrontendProxySigningKey)
+	if signingKey != "" && err == nil && stampErr == nil && age >= -30 && age <= 60 && net.ParseIP(address) != nil {
+		mac := hmac.New(sha256.New, []byte(signingKey))
 		_, _ = fmt.Fprintf(mac, "%s\n%s\n%s\n%s", stamp, r.Method, r.URL.RequestURI(), address)
 		if hmac.Equal(signature, mac.Sum(nil)) {
 			return net.ParseIP(address).String()
 		}
 	}
 	remote := remoteHost(r)
-	if isPrivateOrLoopback(remote) {
+	// An unsigned X-Real-IP is believed only from a peer the operator has named,
+	// or — when nothing is configured at all — from a private peer, which is the
+	// development case. Once a signing key exists, every legitimate forwarded
+	// address arrives signed, so honouring a bare header would leave the bypass
+	// open to anything that can reach the API on the private network.
+	trusted := len(s.config.TrustedProxies) > 0
+	if (trusted && trustedProxyPeer(s.config.TrustedProxies, remote)) || (!trusted && signingKey == "" && isPrivateOrLoopback(remote)) {
 		if parsed := net.ParseIP(strings.TrimSpace(r.Header.Get("X-Real-IP"))); parsed != nil {
 			return parsed.String()
 		}
@@ -859,6 +881,28 @@ func remoteHost(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return ""
+}
+
+// trustedProxyPeer reports whether an address was named in API_TRUSTED_PROXIES.
+// Entries are exact addresses or CIDR blocks; config validation rejects anything
+// else at load, so an unparseable entry can never widen this silently.
+func trustedProxyPeer(allowed []string, host string) bool {
+	parsed := net.ParseIP(host)
+	if parsed == nil {
+		return false
+	}
+	for _, entry := range allowed {
+		if _, network, err := net.ParseCIDR(entry); err == nil {
+			if network.Contains(parsed) {
+				return true
+			}
+			continue
+		}
+		if candidate := net.ParseIP(entry); candidate != nil && candidate.Equal(parsed) {
+			return true
+		}
+	}
+	return false
 }
 
 func isPrivateOrLoopback(host string) bool {

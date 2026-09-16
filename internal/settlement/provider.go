@@ -13,6 +13,9 @@ var digits = regexp.MustCompile(`^[0-9]{10}$`)
 var bankCode = regexp.MustCompile(`^[0-9]{3,6}$`)
 
 type Input struct {
+	BusinessName   string `json:"business_name,omitempty"`
+	Email          string `json:"email,omitempty"`
+	Phone          string `json:"phone,omitempty"`
 	Reference      string `json:"reference"`
 	OrganizationID string `json:"organization_id"`
 	BankCode       string `json:"bank_code"`

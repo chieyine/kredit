@@ -14,6 +14,7 @@ import (
 // checking only the ledger and job tables; a migrated-but-partial database
 // must never be reported as ready.
 var RequiredPersistenceObjects = []string{
+	"app.bank_debit_enrollments",
 	"app.fee_authorizations", "app.fee_debits", "app.fee_bank_receipts",
 	"app.dsa_program", "app.dsa_agents", "app.dsa_referrals", "app.dsa_earnings", "app.dsa_payouts", "app.consumer_sales", "app.consumer_events", "app.consumer_settings", "app.consumer_restrictions", "app.split_fee_allocations", "app.native_identity_history",
 	"app.buyer_verification_intents", "app.mandate_authorization_intents",
@@ -212,8 +213,8 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	if err := p.inner.QueryRow(ctx, `SELECT COALESCE(MAX(version_id),0) FROM (SELECT DISTINCT ON(version_id) version_id,is_applied FROM public.goose_db_version ORDER BY version_id,id DESC) v WHERE is_applied`).Scan(&version); err != nil {
 		return fmt.Errorf("check required migration version: %w", err)
 	}
-	if version < 153 {
-		return fmt.Errorf("database migrations are incomplete: version %d, require at least 153", version)
+	if version < 154 {
+		return fmt.Errorf("database migrations are incomplete: version %d, require at least 154", version)
 	}
 	return nil
 }

@@ -39,7 +39,7 @@ paths:
       responses:
         '200': {description: Attribution saved or identical confirmation replayed}
         '403': {description: Authentication or current MFA required}
-        '409': {description: Ineligible, duplicate or conflicting attribution}
+        '409': {description: "Ineligible, duplicate or conflicting attribution"}
   /dsa:
     get:
       operationId: readDSA
@@ -70,30 +70,30 @@ paths:
             schema:
               $ref: '#/components/schemas/DSAAction'
       responses:
-        '200': {description: Saved result, or prepared payout ID}
+        '200': {description: "Saved result, or prepared payout ID"}
         '403': {description: Current authority or recent MFA required}
-        '409': {description: Invalid state, version, reward eligibility or evidence}
+        '409': {description: "Invalid state, version, reward eligibility or evidence"}
   /ops/dsa:
     get:
-      operationId: readDSAAdmin
-      summary: Super Admin referral and payout operations
+      operationId: readOpsDSA
+      summary: Super Admin read of referral profile, rules and payouts
       parameters:
-        - {name: agent, in: query, schema: {type: string, format: uuid}, description: Super Admin filter; ignored for agent self-service}
+        - {name: agent, in: query, schema: {type: string, format: uuid}}
         - {name: agents_before, in: query, schema: {type: string, format: uuid}}
         - {name: referrals_before, in: query, schema: {type: string, format: uuid}}
         - {name: earnings_before, in: query, schema: {type: string, format: uuid}}
         - {name: payouts_before, in: query, schema: {type: string, format: uuid}}
       responses:
         '200':
-          description: Rules, self profile, wallet and paginated agents/referrals/earnings/payouts; each list has at most 100 rows and its own next cursor
+          description: Super Admin view of rules, self profile, wallet and paginated records
           content:
             application/json:
               schema: {type: object, required: [rules, self, wallet, agents, referrals, earnings, payouts, next]}
         '403': {description: Current authority required}
     post:
-      operationId: changeDSAAdmin
-      summary: Super Admin referral and payout operations
-      description: Requires CSRF, recent MFA and idempotency. Agent actions are enrol and bank. Super Admin actions are rules, agent, referral, prepare, paid and cancel. Prepare reserves matured rewards; paid records a completed external bank transfer and never initiates a transfer. Agent, referral, rules and payout changes require the current version. Existing referral terms are frozen.
+      operationId: changeOpsDSA
+      summary: Super Admin referral actions
+      description: Requires CSRF, recent MFA and idempotency. Actions are rules, agent, referral, prepare, paid and cancel.
       parameters:
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
@@ -103,9 +103,9 @@ paths:
             schema:
               $ref: '#/components/schemas/DSAAction'
       responses:
-        '200': {description: Saved result, or prepared payout ID}
+        '200': {description: "Saved result, or prepared payout ID"}
         '403': {description: Current authority or recent MFA required}
-        '409': {description: Invalid state, version, reward eligibility or evidence}
+        '409': {description: "Invalid state, version, reward eligibility or evidence"}
   /organizations/{organizationID}/fee-authorizations:
     parameters:
       - name: organizationID
@@ -421,16 +421,16 @@ paths:
                 received_at: {type: string, format: date-time}
                 evidence: {type: string, minLength: 20, maxLength: 2000}
       responses:
-        '200': {description: Current invoice after atomic bank record, ledger and audit commit}
+        '200': {description: "Current invoice after atomic bank record, ledger and audit commit"}
         '403': {description: Owner authority or recent MFA required}
-        '409': {description: Invalid or duplicate bank evidence, or amount exceeds balance}
+        '409': {description: "Invalid or duplicate bank evidence, or amount exceeds balance"}
   /ops/setup:
     get:
       operationId: ownerLaunchSetup
       summary: Super-admin setup tasks and API and worker configuration status
       description: Requires platform owner access and recent MFA. Applied configuration is not proof of provider approval or successful live operation.
       responses:
-        '200': {description: Tasks, saved versions, process heartbeats and configuration gates}
+        '200': {description: "Tasks, saved versions, process heartbeats and configuration gates"}
         '403': {description: Super-admin access or recent MFA required}
         '503': {description: Saved configuration or service status unavailable}
   /ops/message-submissions:
@@ -438,7 +438,7 @@ paths:
       operationId: listUncertainMessageSubmissions
       summary: List native message sends held after uncertain results
       responses:
-        '200': {description: Up to 100 held submissions, without message contents or recipients}
+        '200': {description: "Up to 100 held submissions, without message contents or recipients"}
         '403': {description: Provider operations permission required}
   /ops/message-submissions/{submissionID}/resolve:
     parameters:
@@ -916,7 +916,7 @@ paths:
               schema: { $ref: '#/components/schemas/WebsiteEditorRecord' }
         '400': { description: Invalid action or edit version }
         '401': { description: Sign-in required }
-        '403': { description: Owner role, fresh MFA and CSRF required }
+        '403': { description: "Owner role, fresh MFA and CSRF required" }
         '404': { description: Unsupported page }
         '409': { description: Saved copy changed or publishing unsaved content }
         '422': { description: Invalid copy or missing saved publication }
@@ -3668,6 +3668,7 @@ paths:
         required: true
         schema: {type: string, format: uuid}
     get:
+      operationId: listOrganizationConsumerSales
       summary: Read consumer list
       parameters:
         - {name: before, in: query, schema: {type: string, format: uuid}, description: Last purchase ID from the previous page.}
@@ -3679,6 +3680,7 @@ paths:
               schema: {$ref: '#/components/schemas/ConsumerPurchaseList'}
         '403': {description: Current authority required.}
     post:
+      operationId: createOrganizationConsumerSale
       summary: Create consumer purchase
       description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
       parameters:
@@ -3694,7 +3696,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ConsumerPurchase'}
-        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '409': {description: "Stale version, invalid transition, or unconfirmed result."}
         '422': {description: Invalid or unavailable offer terms.}
   /organizations/{organizationID}/consumer-sales/{saleID}:
     parameters:
@@ -3707,6 +3709,7 @@ paths:
         required: true
         schema: {type: string, format: uuid}
     get:
+      operationId: getOrganizationConsumerSale
       summary: Read consumer detail
       responses:
         '200':
@@ -3716,6 +3719,7 @@ paths:
               schema: {$ref: '#/components/schemas/ConsumerPurchase'}
         '403': {description: Current authority required.}
     post:
+      operationId: actionOrganizationConsumerSale
       summary: Action consumer purchase
       description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
       parameters:
@@ -3731,10 +3735,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ConsumerPurchase'}
-        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '409': {description: "Stale version, invalid transition, or unconfirmed result."}
         '422': {description: Invalid or unavailable offer terms.}
   /buyer/purchases:
     get:
+      operationId: listBuyerPurchases
       summary: Read consumer list
       parameters:
         - {name: before, in: query, schema: {type: string, format: uuid}, description: Last purchase ID from the previous page.}
@@ -3752,6 +3757,7 @@ paths:
         required: true
         schema: {type: string, format: uuid}
     get:
+      operationId: getBuyerPurchase
       summary: Read consumer detail
       responses:
         '200':
@@ -3761,6 +3767,7 @@ paths:
               schema: {$ref: '#/components/schemas/ConsumerPurchase'}
         '403': {description: Current authority required.}
     post:
+      operationId: actionBuyerPurchase
       summary: Action consumer purchase
       description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
       parameters:
@@ -3776,10 +3783,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ConsumerPurchase'}
-        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '409': {description: "Stale version, invalid transition, or unconfirmed result."}
         '422': {description: Invalid or unavailable offer terms.}
   /ops/consumer-sales:
     get:
+      operationId: listOpsConsumerSales
       summary: Read consumer list
       parameters:
         - {name: before, in: query, schema: {type: string, format: uuid}, description: Last purchase ID from the previous page.}
@@ -3797,6 +3805,7 @@ paths:
         required: true
         schema: {type: string, format: uuid}
     get:
+      operationId: getOpsConsumerSale
       summary: Read consumer detail
       responses:
         '200':
@@ -3806,6 +3815,7 @@ paths:
               schema: {$ref: '#/components/schemas/ConsumerPurchase'}
         '403': {description: Current authority required.}
     post:
+      operationId: actionOpsConsumerSale
       summary: Action consumer purchase
       description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
       parameters:
@@ -3821,7 +3831,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ConsumerPurchase'}
-        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '409': {description: "Stale version, invalid transition, or unconfirmed result."}
         '422': {description: Invalid or unavailable offer terms.}
   /ops/organizations/{organizationID}/consumer-settings:
     parameters:
@@ -3830,6 +3840,7 @@ paths:
         required: true
         schema: {type: string, format: uuid}
     get:
+      operationId: getOpsConsumerSettings
       summary: Read consumer settings
       responses:
         '200':
@@ -3839,6 +3850,7 @@ paths:
               schema: {$ref: '#/components/schemas/ConsumerSettings'}
         '403': {description: Current authority required.}
     post:
+      operationId: updateOpsConsumerSettings
       summary: Settings consumer purchase
       description: Requires CSRF protection and an idempotency key. Retailer and super-admin mutations also require recent MFA. Payments and refunds record completed money movements; they do not initiate bank transfers.
       parameters:
@@ -3854,12 +3866,13 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ConsumerSettings'}
-        '409': {description: Stale version, invalid transition, or unconfirmed result.}
+        '409': {description: "Stale version, invalid transition, or unconfirmed result."}
         '422': {description: Invalid or unavailable offer terms.}
   /organizations/{organizationID}/consumer-bank:
     parameters:
       - {$ref: '#/components/parameters/OrganizationID'}
     post:
+      operationId: matchConsumerBankAccount
       summary: Match the retailer's existing registered account for consumer receipts
       description: Requires financial permission, recent MFA, CSRF and idempotency. Matches the complete account to its original provider registration without a new provider request. Administrative restrictions remain in force.
       parameters:
@@ -4144,7 +4157,7 @@ components:
       properties:
         action: {type: string, enum: [phone_start, phone_verify, business_lookup, renew, approve, reject, retry]}
         expected_version: {type: integer, minimum: 1}
-        value: {type: string, writeOnly: true, description: Transient phone, OTP or registration number for the selected action}
+        value: {type: string, writeOnly: true, description: "Transient phone, OTP or registration number for the selected action"}
         consent_version: {type: string}
         evidence: {type: string, minLength: 20, maxLength: 2000}
     NativeIdentityDocument:

@@ -24,7 +24,7 @@ var RuntimeConnections = map[string]RuntimeConnection{
 	"integrations.runtime.retained_collections": {Title: "Saved collection accounts", Fields: []ConnectionField{{"RetainedCollectionProviders", "Accounts used by existing collections", "retained"}}},
 	"integrations.runtime.settlement": {Title: "Seller bank accounts", Fields: []ConnectionField{
 		{"SettlementEnabled", "Enable seller bank registration", "boolean"},
-		{"SettlementProvider", "Provider name (mono-sweep for Mono)", "text"},
+		{"SettlementProvider", "Collection account name, or separate connector name", "text"},
 		{"SettlementEndpoint", "Other provider connector HTTPS address", "url"},
 		{"SettlementToken", "Other provider connector access token", "password"},
 	}},
@@ -58,12 +58,15 @@ var RuntimeConnections = map[string]RuntimeConnection{
 		{"DocumentScannerEndpoint", "Scanner HTTPS address", "url"},
 		{"DocumentScannerToken", "Scanner access token", "password"},
 	}},
-	"integrations.runtime.collections": {Title: "Other bank collection connector", Fields: []ConnectionField{
-		{"RealCollections", "Enable this collection connector", "boolean"},
+	"integrations.runtime.collections": {Title: "Bank collections", Fields: []ConnectionField{
+		{"RealCollections", "Enable collections", "boolean"},
+		{"CollectionAdapter", "Connection type: flutterwave, paystack, monnify or connector", "text"},
 		{"CollectionProvider", "Provider name", "text"},
-		{"CollectionProviderEndpoint", "Provider HTTPS address", "url"},
+		{"CollectionProviderEndpoint", "Connector HTTPS address (leave blank for native providers)", "url"},
 		{"CollectionProviderToken", "Provider secret key or connector token", "password"},
-		{"CollectionWebhookSecret", "Webhook signing secret", "password"},
+		{"CollectionWebhookSecret", "Webhook secret (Flutterwave or connector)", "password"},
+		{"CollectionAPIKey", "Monnify API key", "password"},
+		{"CollectionContractCode", "Monnify contract code", "text"},
 		{"ProviderApprovalReference", "Written provider approval reference", "text"},
 		{"ProviderApprovedBy", "Approved by", "text"},
 		{"ProviderApprovedAt", "Approval time (for example 2026-09-08T10:00:00+01:00)", "text"},

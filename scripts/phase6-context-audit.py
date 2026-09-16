@@ -19,12 +19,26 @@ issues: list[str] = []
 # HTTP handlers must never manufacture a background context; browser/request
 # cancellation must be allowed to flow from r.Context(). runtime.go is excluded
 # because its Background contexts are process-startup/runtime-construction work.
+# A rollback is the one place a background context is correct: it must still run
+# after the client has disconnected, or a cancelled request leaves its
+# transaction open. Everything else in an HTTP path must carry the caller's
+# deadline, cancellation and tenant identity, so it is reported line by line
+# rather than file by file - a file-level check hid a real defect in
+# mandate_handlers.go behind two legitimate rollbacks in the same package.
+ROLLBACK = re.compile(r"Rollback\(context\.(Background|TODO)\(\)\)")
+
 for path in sorted(WEB.glob("*.go")):
     if path.name.endswith("_test.go") or path.name == "runtime.go":
         continue
-    text = path.read_text(encoding="utf-8")
-    if "context.Background()" in text or "context.TODO()" in text:
-        issues.append(f"{path.relative_to(ROOT)}: HTTP code manufactures a background context")
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if "context.Background()" not in line and "context.TODO()" not in line:
+            continue
+        if ROLLBACK.search(line):
+            continue
+        issues.append(
+            f"{path.relative_to(ROOT)}:{number}: HTTP code manufactures a background context; "
+            "pass r.Context(), or context.WithoutCancel(r.Context()) when the work must outlive the request"
+        )
 
 # Protect the context-aware payment boundary. Compatibility fallbacks are kept for
 # development/test adapters, but the helper must prefer the request-aware methods.

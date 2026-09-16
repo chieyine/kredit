@@ -58,7 +58,12 @@ func (s *Server) ownerSetup(w http.ResponseWriter, r *http.Request) {
 		add(channel, map[string]string{"email": "Email delivery", "sms": "SMS delivery", "whatsapp": "WhatsApp delivery"}[channel], configured, "Enter the provider connection and sender details. Confirm delivery with the provider before launch.", link("integrations.notifications."+channel))
 	}
 	add("identity", "Identity and business verification", s.config.RealIdentity && s.config.IdentityProviderEndpoint != "", "Choose an approved identity connection and enter its credentials.", link("integrations.runtime.identity"))
-	add("collections", "Bank authorization and collection", s.runtime.Mono != nil || (s.config.RealCollections && s.config.CollectionProviderEndpoint != ""), "Configure Mono or another collection provider. Bank permission and provider approval are separate requirements.", link("integrations.runtime.mono"))
+	collectionLink := link("integrations.runtime.collections")
+	if s.config.CollectionProvider == s.config.MonoAccount() {
+		collectionLink = link("integrations.runtime.mono")
+	}
+	nativeReady := s.runtime.PaystackAccounts[s.config.CollectionProvider] != nil || s.runtime.NativeBankAccounts[s.config.CollectionProvider] != nil
+	add("collections", "Bank authorization and collection", (s.config.MonoSweepEnabled && s.runtime.Mono != nil) || (s.config.RealCollections && (nativeReady || s.config.CollectionProviderEndpoint != "")), "Choose Flutterwave, Paystack, Monnify or an approved connector. Record account approval before enabling live collections.", collectionLink)
 	add("settlement", "Seller bank accounts", s.runtime.Settlement != nil, "Choose the bank registration provider. Review business ownership before activating a destination.", link("integrations.runtime.settlement"))
 	add("storage", "Private file storage", s.config.ObjectStorageEndpoint != "" && s.config.ObjectStorageAccessKey != "", "Connect the private storage bucket used for invoices and evidence.", link("integrations.runtime.storage"))
 	add("scanner", "Document safety checks", s.config.DocumentScannerEndpoint != "", "Connect the document scanner. Files stay unavailable until their scan passes.", link("integrations.runtime.scanner"))
