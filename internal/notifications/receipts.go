@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kredit/internal/db"
 	"strings"
 	"time"
 
@@ -33,6 +34,11 @@ func (s *Store) RecordDeliveryReceipt(ctx context.Context, channel string, recei
 	if receipt.EventID == "" || len(receipt.EventID) > 200 || receipt.NotificationEventID == "" || len(receipt.NotificationEventID) > 512 || receipt.MessageID == "" || len(receipt.MessageID) > 512 || receipt.DeliveredAt.IsZero() || receipt.DeliveredAt.After(time.Now().Add(time.Minute)) {
 		return ErrInvalidDeliveryReceipt
 	}
+	var recipient string
+	if err := s.pool.QueryRow(ctx, `SELECT app.notification_receipt_subject($1,$2,$3)::text`, channel, receipt.NotificationEventID, receipt.MessageID).Scan(&recipient); err != nil {
+		return ErrDeliveryReceiptPending
+	}
+	ctx = db.WithTenantContext(ctx, recipient, "")
 	payload, _ := json.Marshal(receipt)
 	digest := sha256.Sum256(payload)
 	hash := hex.EncodeToString(digest[:])
@@ -94,18 +100,18 @@ func (s *Store) ReconcileDelivery(ctx context.Context, channel string, limit int
 	if !ok {
 		return nil
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id::text,event_reference,provider_message_id,destination_ciphertext FROM app.notifications WHERE channel=$2 AND state='sent' AND (provider_checked_at IS NULL OR provider_checked_at<now()-interval '1 minute') ORDER BY provider_checked_at NULLS FIRST,created_at LIMIT $1`, limit, channel)
+	rows, err := s.pool.Query(ctx, `SELECT id::text,event_reference,provider_message_id,destination_ciphertext,recipient_id::text FROM app.notification_receipt_work($2,$1)`, limit, channel)
 	if err != nil {
 		return err
 	}
 	type pending struct {
-		id, event, message string
-		destination        []byte
+		id, event, message, recipient string
+		destination                   []byte
 	}
 	var pendingMessages []pending
 	for rows.Next() {
 		var item pending
-		if err = rows.Scan(&item.id, &item.event, &item.message, &item.destination); err != nil {
+		if err = rows.Scan(&item.id, &item.event, &item.message, &item.destination, &item.recipient); err != nil {
 			rows.Close()
 			return err
 		}
@@ -118,6 +124,7 @@ func (s *Store) ReconcileDelivery(ctx context.Context, channel string, limit int
 	}
 	var failures []error
 	for _, item := range pendingMessages {
+		ctx := db.WithTenantContext(ctx, item.recipient, "")
 		// Advance the cursor even when one provider record is unavailable.
 		if _, err = s.pool.Exec(ctx, `UPDATE app.notifications SET provider_checked_at=now() WHERE id=$1::uuid AND state='sent'`, item.id); err != nil {
 			return err

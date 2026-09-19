@@ -83,6 +83,8 @@ for (const path of ['billing', 'settlement', 'credit-policy']) {
     let ready = false;
     await page.route('**/api/v1/organizations', route => ready ? route.fulfill({ json: { organizations: [{id:'org-a'}] } }) : route.abort('failed'));
     await page.route('**/api/v1/organizations/org-a/onboarding', route => route.fulfill({json:{profile:{version:1},permissions:{billing:true,settlement:true,credit_policy:true}}}));
+    await page.route('**/api/v1/organizations/org-a/onboarding/settlement/banks', route => route.fulfill({json:{banks:[{code:'001',name:'Synthetic bank'}]}}));
+    await page.route('**/api/v1/organizations/org-a/seller-settlements', route => route.fulfill({json:{settlements:[]}}));
     await page.goto(`/app/settings/${path}`);
     await expect(page.getByRole('alert')).toBeVisible();
     await expect(page.getByText(/only the owner/)).toHaveCount(0);

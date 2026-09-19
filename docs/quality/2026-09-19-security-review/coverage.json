@@ -1,0 +1,61 @@
+{
+  "completeness": "partial",
+  "deferred": [],
+  "documentType": "codex-security.coverage",
+  "excludePaths": [],
+  "explicitExclusions": [
+    {
+      "pattern": "internal/web/*",
+      "reason": "Remaining internal/web handlers outside the focused review; no whole-repository penetration-test claim."
+    },
+    {
+      "pattern": "production configuration",
+      "reason": "Live provider transactions, credentials, VPS configuration and intrusive production testing."
+    }
+  ],
+  "includePaths": [
+    "internal/web"
+  ],
+  "inventoryStrategy": "scoped_path",
+  "mode": "scoped_path",
+  "openQuestions": [
+    {
+      "question": "Does the actual deployed revision match this workspace?"
+    },
+    {
+      "question": "Does ingress impose a separate origin/content-type policy?"
+    }
+  ],
+  "scanId": "319a9df5-9024-4172-9719-a41f5a1b6961",
+  "schemaVersion": "1.0",
+  "surfaces": [
+    {
+      "disposition": "reported",
+      "id": "authentication",
+      "label": "OTP sign-in, cookie issuance and CSRF",
+      "notes": "Fully reviewed auth_handlers.go and http_helpers.go; traced API proxy in web/src/hooks.server.ts.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "uploads",
+      "label": "Organization documents and invoice downloads",
+      "notes": "Fully reviewed internal/web/document_handlers.go; guards, bounded uploads and scan-gated downloads present.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "notifications",
+      "label": "Notification receipt authentication",
+      "notes": "Fully reviewed internal/web/notification_receipt_handlers.go; receipt signals do not independently establish delivery.",
+      "receiptRefs": []
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "shared_guards",
+      "label": "Shared rate limiting, proxy IP and platform permission guards",
+      "notes": "Selected control functions reviewed in server.go:755-959 and platform_operations_handlers.go:27-70; these files were not reviewed in full.",
+      "receiptRefs": []
+    }
+  ]
+}

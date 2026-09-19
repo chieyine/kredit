@@ -878,7 +878,13 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 				state.CollectionEnabled = false
 			}
 		}
-		blocked, disputeErr := disputeStore.BlockedAmount(obligationID)
+		scopedDisputeStore := disputeStore
+		if scoped, ok := disputeStore.(interface {
+			ForContext(context.Context) disputes.Service
+		}); ok {
+			scopedDisputeStore = scoped.ForContext(db.WithTenantContext(ctx, state.BuyerUserID, state.SupplierOrganizationID))
+		}
+		blocked, disputeErr := scopedDisputeStore.BlockedAmount(obligationID)
 		if disputeErr != nil {
 			return collections.ObligationSnapshot{}, disputeErr
 		}
@@ -900,8 +906,8 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		}
 		return collections.ObligationSnapshot{ID: state.ID, BuyerUserID: state.BuyerUserID, Currency: state.Currency, Active: state.Active, CollectionPolicy: state.CollectionPolicy, OutstandingKobo: state.OutstandingKobo, MandateActive: state.MandateActive, MandateReference: state.MandateReference, MandateProvider: state.MandateProvider, MandateRemainingKobo: state.MandateRemainingKobo, CollectionEnabled: state.CollectionEnabled, ComplianceHold: state.ComplianceHold, BuyerPaymentHold: state.BuyerPaymentHold, BuyerPaymentHoldKobo: claimHold, ProviderSupported: state.ProviderSupported, DisputedBlockedKobo: blocked, Version: state.Version}, nil
 	}
-	collectionDue := func(obligationID string, now time.Time) (ledger.Money, error) {
-		return scheduleStore.CollectionTarget(obligationID, now)
+	collectionDue := func(ctx context.Context, obligationID string, now time.Time) (ledger.Money, error) {
+		return scheduleStore.ForContext(ctx).CollectionTarget(obligationID, now)
 	}
 	collectionEngine := collections.NewContextEngine(collectionProvider, paymentStore, collectionSnapshot, collectionDue)
 	if monoClient != nil && collectionProvider.Name() != monoClient.Name() {

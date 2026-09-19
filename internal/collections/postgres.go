@@ -256,7 +256,7 @@ func (e *PostgresEngine) fresh() *Engine {
 	for name, entry := range e.base.activeProviders {
 		active[name] = entry
 	}
-	return &Engine{retainedProviders: retained, activeProviders: active, activeSequence: e.base.activeSequence, requireApproval: e.base.requireApproval, provider: e.base.provider, payments: e.base.payments, snapshot: e.base.snapshot, contextSnapshot: e.base.contextSnapshot, due: e.base.due, reservations: map[string]*CollectionReservation{}, attempts: map[string]*Attempt{}, byKey: map[string]string{}, byExternal: map[string]string{}, events: map[string]bool{}, now: e.base.now, featureEnabled: e.base.featureEnabled, reservationTTL: e.base.reservationTTL, maxRetries: e.base.maxRetries}
+	return &Engine{retainedProviders: retained, activeProviders: active, activeSequence: e.base.activeSequence, requireApproval: e.base.requireApproval, provider: e.base.provider, payments: e.base.payments, snapshot: e.base.snapshot, contextSnapshot: e.base.contextSnapshot, due: e.base.due, contextDue: e.base.contextDue, reservations: map[string]*CollectionReservation{}, attempts: map[string]*Attempt{}, byKey: map[string]string{}, byExternal: map[string]string{}, events: map[string]bool{}, now: e.base.now, featureEnabled: e.base.featureEnabled, reservationTTL: e.base.reservationTTL, maxRetries: e.base.maxRetries}
 }
 func installCollection(local *Engine, state persistedCollection) {
 	for _, value := range state.Reservations {

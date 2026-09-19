@@ -188,6 +188,15 @@ resource "kubernetes_deployment_v1" "web" {
             value = var.public_base_url }
           env { name = "APP_ENV"
             value = var.environment }
+          env {
+            name = "FRONTEND_PROXY_SIGNING_KEY"
+            value_from {
+              secret_key_ref {
+                name = var.runtime_secret_name
+                key  = "FRONTEND_PROXY_SIGNING_KEY"
+              }
+            }
+          }
           env { name = "API_INTERNAL_URL"
             value = "http://api:8080" }
           env { name = "LEGAL_DOCUMENTS_ACTIVE"

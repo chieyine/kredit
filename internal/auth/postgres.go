@@ -97,6 +97,8 @@ func (s *PostgresStore) VerifyAndAttachIdentifier(userID, challengeID, code, cha
 	return tx.Commit(ctx)
 }
 
+var ErrSessionUnavailable = errors.New("session storage is unavailable")
+
 var _ Service = (*Store)(nil)
 
 // PostgresStore persists authentication state. OTP targets and TOTP secrets
@@ -356,7 +358,10 @@ func (s *PostgresStore) SessionFromToken(token string) (Session, User, error) {
 		SELECT session_id::text, user_id::text, authentication_level, COALESCE(device_label,''), session_created_at, session_expires_at, session_last_seen_at, session_revoked_at,
 		       COALESCE(email,''), COALESCE(phone,''), COALESCE(display_name,''), user_status, user_created_at, COALESCE(last_authenticated_at, 'epoch')
 		FROM app.session_by_token_hash($1)`, s.hashTokenBytes(token)).Scan(&session.ID, &session.UserID, &session.AuthenticationLevel, &session.DeviceLabel, &session.CreatedAt, &session.ExpiresAt, &session.LastSeenAt, &revokedAt, &email, &phone, &displayName, &status, &user.CreatedAt, &user.LastAuthenticatedAt); err != nil {
-		return Session{}, User{}, errors.New("session is invalid or expired")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Session{}, User{}, errors.New("session is invalid or expired")
+		}
+		return Session{}, User{}, fmt.Errorf("%w: %v", ErrSessionUnavailable, err)
 	}
 	now := s.now()
 	if revokedAt != nil || !now.Before(session.ExpiresAt) || status != "active" {
@@ -398,7 +403,7 @@ func (s *PostgresStore) RevokeSession(token string) error {
 	defer cancel()
 	session, user, err := s.SessionFromToken(token)
 	if err != nil {
-		return errors.New("session not found")
+		return err
 	}
 	tx, err := s.beginUserTx(ctx, user.ID)
 	if err != nil {

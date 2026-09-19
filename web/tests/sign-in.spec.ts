@@ -49,7 +49,7 @@ test('a six-digit code is accepted by the field that asks for six digits', async
 	});
 
 	await page.goto('/app');
-	await page.getByRole('radio', { name: /Phone/ }).check();
+	await page.getByRole('radio', { name: /WhatsApp/ }).check();
 	await page.getByLabel('Phone number').fill('08012345678');
 	await page.getByRole('button', { name: 'Send me a code' }).click();
 
@@ -70,7 +70,7 @@ test('a six-digit code is accepted by the field that asks for six digits', async
 test('a code the field should refuse is refused, and the button stays closed', async ({ page }) => {
 	await stubChallenge(page);
 	await page.goto('/app');
-	await page.getByRole('radio', { name: /Phone/ }).check();
+	await page.getByRole('radio', { name: /WhatsApp/ }).check();
 	await page.getByLabel('Phone number').fill('08012345678');
 	await page.getByRole('button', { name: 'Send me a code' }).click();
 
@@ -91,7 +91,7 @@ test('a wrong code is explained in words a person can act on', async ({ page }) 
 	});
 
 	await page.goto('/app');
-	await page.getByRole('radio', { name: /Phone/ }).check();
+	await page.getByRole('radio', { name: /WhatsApp/ }).check();
 	await page.getByLabel('Phone number').fill('08012345678');
 	await page.getByRole('button', { name: 'Send me a code' }).click();
 	await page.getByLabel('Six-digit code').fill('000000');
@@ -118,7 +118,7 @@ test('an expired code closes the field and offers a new one', async ({ page }) =
 		});
 	});
 	await page.goto('/app');
-	await page.getByRole('radio', { name: /Phone/ }).check();
+	await page.getByRole('radio', { name: /WhatsApp/ }).check();
 	await page.getByLabel('Phone number').fill('08012345678');
 	await page.getByRole('button', { name: 'Send me a code' }).click();
 	await expect(page.getByLabel('Six-digit code')).toBeVisible();

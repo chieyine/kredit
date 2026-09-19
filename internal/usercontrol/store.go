@@ -10,6 +10,7 @@ import (
 	"errors"
 	"kredit/internal/access"
 	"kredit/internal/auth"
+	"kredit/internal/db"
 	"maps"
 	"strings"
 	"sync"
@@ -94,7 +95,7 @@ func NewStore(secret string) *Store {
 
 func NewPostgresStore(pool *pgxpool.Pool, secret string) *Store {
 	s := NewStore(secret)
-	s.pool = pool
+	s.pool = &db.ScopedDatabase{Pool: pool}
 	return s
 }
 
@@ -115,6 +116,7 @@ func (s *Store) BindUser(userID, email, phone string) {
 }
 
 func (s *Store) GenerateRecoveryCodes(ctx context.Context, userID string) ([]string, error) {
+	ctx = db.WithTenantContext(ctx, userID, "")
 	if userID == "" {
 		return nil, errors.New("user is required")
 	}
@@ -176,6 +178,7 @@ func (s *Store) RequestRecovery(ctx context.Context, identifier, channel, finger
 		} else if err != nil {
 			return "", err
 		}
+		ctx = db.WithTenantContext(ctx, userID, "")
 		tx, err := s.pool.Begin(ctx)
 		if err != nil {
 			return "", err
@@ -281,6 +284,10 @@ func (s *Store) AddRecoveryEvidence(ctx context.Context, requestID, factor, proo
 }
 
 func (s *Store) addRecoveryEvidencePG(ctx context.Context, requestID, factor, proof string) (RecoveryRequest, error) {
+	ctx, scopeErr := s.recoveryContext(ctx, requestID)
+	if scopeErr != nil {
+		return RecoveryRequest{}, scopeErr
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return RecoveryRequest{}, err
@@ -339,6 +346,10 @@ func (s *Store) ReviewRecovery(ctx context.Context, requestID, reviewerID, decis
 		return RecoveryRequest{}, "", err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = access.LockPlatformAuthority(ctx, tx, reviewerID, access.PermissionRecoverAccounts); err != nil {
+		return RecoveryRequest{}, "", err
+	}
+
 	r, err := loadRecovery(ctx, tx, requestID, true)
 	if err != nil || r.State != RecoveryPendingReview || r.Version != expectedVersion || r.TargetUserID == reviewerID || !s.now().Before(r.ExpiresAt) {
 		return RecoveryRequest{}, "", errors.New("recovery conflict")
@@ -410,6 +421,10 @@ func (s *Store) reviewRecoveryMemory(ctx context.Context, id, reviewer, decision
 
 func (s *Store) CompleteRecovery(ctx context.Context, requestID, token string) (string, error) {
 	if s.pool != nil {
+		ctx, scopeErr := s.recoveryContext(ctx, requestID)
+		if scopeErr != nil {
+			return "", scopeErr
+		}
 		tx, err := s.pool.Begin(ctx)
 		if err != nil {
 			return "", err
@@ -460,6 +475,7 @@ func (s *Store) CompleteRecovery(ctx context.Context, requestID, token string) (
 }
 
 func (s *Store) CancelRecovery(ctx context.Context, requestID, userID string) error {
+	ctx = db.WithTenantContext(ctx, userID, "")
 	if s.pool != nil {
 		tag, err := s.pool.Exec(ctx, `UPDATE app.account_recovery_requests SET state='CANCELLED',cancelled_at=now(),version=version+1,updated_at=now() WHERE id=$1::uuid AND target_user_id=$2::uuid AND state IN ('PENDING_VERIFICATION','PENDING_REVIEW','COOLING_OFF')`, requestID, userID)
 		if err != nil || tag.RowsAffected() != 1 {
@@ -516,6 +532,10 @@ func (s *Store) ListRecoveries(ctx context.Context, state string) ([]RecoveryReq
 
 func (s *Store) Recovery(ctx context.Context, id string) (RecoveryRequest, error) {
 	if s.pool != nil {
+		ctx, scopeErr := s.recoveryContext(ctx, id)
+		if scopeErr != nil {
+			return RecoveryRequest{}, scopeErr
+		}
 		return loadRecovery(ctx, s.pool, id, false)
 	}
 	s.mu.Lock()
@@ -528,6 +548,7 @@ func (s *Store) Recovery(ctx context.Context, id string) (RecoveryRequest, error
 }
 
 func (s *Store) SensitiveActionsBlocked(ctx context.Context, userID string) bool {
+	ctx = db.WithTenantContext(ctx, userID, "")
 	if s.pool != nil {
 		var blocked bool
 		if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.account_recovery_requests WHERE target_user_id=$1::uuid AND state='COOLING_OFF' AND cooling_off_until>now())`, userID).Scan(&blocked); err != nil {
@@ -593,7 +614,7 @@ func (s *Store) CreatePrivacyRequest(ctx context.Context, userID, orgID, kind, d
 }
 
 func (s *Store) ListPrivacyForUser(ctx context.Context, userID string) ([]PrivacyRequest, error) {
-	return s.listPrivacy(ctx, `requester_user_id=$1::uuid`, userID)
+	return s.listPrivacy(db.WithTenantContext(ctx, userID, ""), `requester_user_id=$1::uuid`, userID)
 }
 func (s *Store) ListPrivacyReview(ctx context.Context) ([]PrivacyRequest, error) {
 	return s.listPrivacy(ctx, `state IN ('IN_REVIEW','CLARIFICATION_REQUIRED','APPROVED','PARTIALLY_APPROVED','IN_PROGRESS')`, "")
@@ -843,6 +864,7 @@ func (s *Store) CompletePrivacyWithReason(ctx context.Context, id, reviewer, sec
 }
 
 func (s *Store) PrivacyExport(ctx context.Context, requestID, userID string) (json.RawMessage, error) {
+	ctx = db.WithTenantContext(ctx, userID, "")
 	if s.pool == nil {
 		return nil, errors.New("privacy export is unavailable in the development memory store")
 	}
@@ -939,6 +961,7 @@ func restrictsOptionalProcessing(requestType string) bool {
 // AllowsOptionalProcessing is checked at scheduling and immediately before
 // routine delivery. Essential account and financial evidence is retained.
 func (s *Store) AllowsOptionalProcessing(ctx context.Context, userID string) (bool, error) {
+	ctx = db.WithTenantContext(ctx, userID, "")
 	if strings.TrimSpace(userID) == "" {
 		return false, errors.New("processing subject is required")
 	}
@@ -953,4 +976,15 @@ func (s *Store) AllowsOptionalProcessing(ctx context.Context, userID string) (bo
 		return false, err
 	}
 	return !restricted, nil
+}
+
+// Recovery links are high-entropy private capabilities, delivered only to the
+// saved account contact. This projection returns identity only; evidence and
+// completion-token checks remain inside the subject-scoped transactions.
+func (s *Store) recoveryContext(ctx context.Context, id string) (context.Context, error) {
+	var userID string
+	if err := s.pool.QueryRow(ctx, `SELECT app.recovery_subject($1::uuid)::text`, id).Scan(&userID); err != nil {
+		return ctx, errors.New("recovery request is invalid")
+	}
+	return db.WithTenantContext(ctx, userID, ""), nil
 }

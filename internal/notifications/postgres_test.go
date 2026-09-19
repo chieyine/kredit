@@ -3,6 +3,7 @@ package notifications
 import (
 	"context"
 	"fmt"
+	"kredit/internal/db"
 	"os"
 	"testing"
 	"time"
@@ -32,8 +33,17 @@ func TestPostgresNotificationIsDurableAndDeduplicatedBeforeProviderSend(t *testi
 		_, _ = pool.Exec(ctx, `DELETE FROM app.notification_preferences WHERE recipient_id=$1::uuid`, userID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id=$1::uuid`, userID)
 	}()
+	runtimeURL := os.Getenv("KREDIT_TEST_APP_DATABASE_URL")
+	if runtimeURL == "" {
+		runtimeURL = url
+	}
+	runtimePool, err := db.OpenAsRole(ctx, runtimeURL, "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtimePool.Close()
 	provider := NewMockProvider(ChannelEmail)
-	store := NewPostgresStore(pool, "notification-secret")
+	store := NewPostgresStore(runtimePool.Raw(), "notification-secret")
 	store.RegisterProvider(provider)
 	store.SetPreferences(userID, Preferences{PreferredChannel: ChannelEmail, FallbackChannel: ChannelEmail, QuietStart: 0, QuietEnd: 0, Timezone: "Africa/Lagos"})
 	event := Event{ID: eventID, Type: "PaymentRecorded", RecipientID: userID, Email: email, Priority: PriorityRoutine, AmountKobo: 2500, Currency: "NGN", Reference: "payment-1"}
@@ -44,7 +54,7 @@ func TestPostgresNotificationIsDurableAndDeduplicatedBeforeProviderSend(t *testi
 	if len(deliveries) != 1 || deliveries[0].State != StateSent {
 		t.Fatalf("unexpected delivery: %+v", deliveries)
 	}
-	restarted := NewPostgresStore(pool, "notification-secret")
+	restarted := NewPostgresStore(runtimePool.Raw(), "notification-secret")
 	restarted.RegisterProvider(provider)
 	duplicate, err := restarted.Emit(ctx, event)
 	if err != nil || len(duplicate) != 1 || duplicate[0].ID != deliveries[0].ID {
@@ -96,7 +106,25 @@ func TestScheduledNotificationIsRecoveredAndDeliveredOnce(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM app.notification_preferences WHERE recipient_id=$1::uuid`, userID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id=$1::uuid`, userID)
 	}()
-	store := NewPostgresStore(pool, "scheduled-secret")
+	runtimeURL := os.Getenv("KREDIT_TEST_APP_DATABASE_URL")
+	if runtimeURL == "" {
+		runtimeURL = url
+	}
+	runtimePool, err := db.OpenAsRole(ctx, runtimeURL, "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtimePool.Close()
+	workerURL := os.Getenv("KREDIT_TEST_WORKER_DATABASE_URL")
+	if workerURL == "" {
+		workerURL = url
+	}
+	workerPool, err := db.OpenAsRole(ctx, workerURL, "kredit_worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer workerPool.Close()
+	store := NewPostgresStore(runtimePool.Raw(), "scheduled-secret")
 	store.now = func() time.Time { return time.Date(2026, 8, 17, 23, 0, 0, 0, time.FixedZone("Africa/Lagos", 3600)) }
 	store.SetPreferences(userID, Preferences{PreferredChannel: ChannelEmail, FallbackChannel: ChannelEmail, QuietStart: 22, QuietEnd: 7, Timezone: "Africa/Lagos"})
 	deliveries, err := store.Emit(ctx, Event{ID: eventID, Type: "PaymentDueSoon", RecipientID: userID, Email: email, Priority: PriorityRoutine})
@@ -107,7 +135,7 @@ func TestScheduledNotificationIsRecoveredAndDeliveredOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider := NewMockProvider(ChannelEmail)
-	restarted := NewPostgresStore(pool, "scheduled-secret")
+	restarted := NewPostgresStore(workerPool.Raw(), "scheduled-secret")
 	// Recovery runs in daytime; the machine clock may currently be in quiet hours.
 	restarted.now = func() time.Time {
 		now := time.Now().In(time.FixedZone("Africa/Lagos", 3600))

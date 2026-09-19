@@ -56,7 +56,7 @@ func TestPostgresInvitationHashAndSecondSupplierReuse(t *testing.T) {
 		if _, err = s.Preview(invitation.RawToken); err != nil {
 			t.Fatal(err)
 		}
-		portal, err := s.Accept(ctx, invitation.RawToken, buyer, AcceptInput{FullName: "Buyer Name"})
+		portal, err := s.Accept(ctx, invitation.RawToken, buyer, AcceptInput{FullName: "Buyer Name", ConsentsAccepted: true, TermsVersion: "terms-v1", PrivacyVersion: "privacy-v1", IdentityNoticeVersion: IdentityNoticeVersion})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,7 +65,7 @@ func TestPostgresInvitationHashAndSecondSupplierReuse(t *testing.T) {
 		} else if portal.Person.ID != first.Person.ID || portal.Business.ID != first.Business.ID || portal.Representative.ID != first.Representative.ID {
 			t.Fatal("duplicate identity on second invitation")
 		}
-		replay, err := s.Accept(ctx, invitation.RawToken, buyer, AcceptInput{FullName: "Buyer Name"})
+		replay, err := s.Accept(ctx, invitation.RawToken, buyer, AcceptInput{FullName: "Buyer Name", ConsentsAccepted: true, TermsVersion: "terms-v1", PrivacyVersion: "privacy-v1", IdentityNoticeVersion: IdentityNoticeVersion})
 		if err != nil || replay.Business.ID != portal.Business.ID {
 			t.Fatalf("same-buyer acceptance recovery failed: %v", err)
 		}
@@ -77,7 +77,7 @@ func TestPostgresInvitationHashAndSecondSupplierReuse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.Accept(ctx, next.RawToken, buyer, AcceptInput{FullName: "Buyer Name"}); err == nil {
+			if _, err = s.Accept(ctx, next.RawToken, buyer, AcceptInput{FullName: "Buyer Name", ConsentsAccepted: true, TermsVersion: "terms-v1", PrivacyVersion: "privacy-v1", IdentityNoticeVersion: IdentityNoticeVersion}); err == nil {
 				t.Fatal("new business exceeded the persisted limit")
 			}
 		}

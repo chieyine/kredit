@@ -66,7 +66,7 @@ test('an expired session cannot flash the next page during an account navigation
 test('the secure payment link is public but never shows the seller account', async ({ page }) => {
 	await page.route('**/api/v1/public/payment-intents/example', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payment_intent: { reference: 'sale-example', supplier_name: 'Adebayo Supplies', description: 'Twenty bags of rice', amount_kobo: 25000000, payment_status: 'ready', provider_action: 'Continue to your approved payment provider.' } }) }));
 	await page.goto('/pay/example');
-	await expect(page.getByRole('heading', { name: 'Check the amount before you pay.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Check what is left to pay.' })).toBeVisible();
 	await expect(page.getByText('₦250,000.00')).toBeVisible();
 	await expect(page.getByRole('navigation', { name: 'Seller account', exact: true })).toHaveCount(0);
 });
@@ -93,7 +93,7 @@ test('the signed-in payments page prioritizes money and items needing an answer'
 	await headerMenu.click();
 	const moreMenu = page.getByRole('dialog', { name: 'Seller account menu' });
 	await expect(moreMenu).toBeVisible();
-	await expect(moreMenu.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(13);
+	await expect(moreMenu.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(16);
 	await expect(moreMenu.getByText('Sales and money', { exact: true })).toBeVisible();
 	await expect(moreMenu.getByText('Account and help', { exact: true })).toBeVisible();
 	await expect(moreMenu.getByRole('link', { name: /Settings/ })).toBeVisible();

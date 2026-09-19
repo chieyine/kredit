@@ -15,7 +15,7 @@ export async function loadOnboardingSettings(selectedOrganization = new URLSearc
   const selected = selectedOrganization ? available.find((organization) => text(organization.id) === selectedOrganization) : available[0];
   if (!selected) throw new Error('You do not have access to the selected business.');
   const orgID = text(selected.id);
-  const organizationName = text(selected.name) || text(selected.legal_name) || 'Your business';
+  const organizationName = text(selected.name ?? '') || text(selected.legal_name ?? '') || 'Your business';
   if (!orgID) throw new Error('We could not confirm your business. Try again.');
   const result = await adminGet(`/api/v1/organizations/${encodeURIComponent(orgID)}/onboarding`);
   return { orgID, organizationName, profile: settingsProfile(result.profile), permissions: record(result.permissions) };

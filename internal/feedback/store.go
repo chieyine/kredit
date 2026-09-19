@@ -92,6 +92,18 @@ func (s *Store) Submit(ctx context.Context, input Input) (Entry, error) {
 			return Entry{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
+		if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, input.UserID, input.OrganizationID); err != nil {
+			return Entry{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		}
+		if input.Area == "seller" {
+			var allowed bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.memberships WHERE organization_id=$1::uuid AND user_id=$2::uuid AND status='active')`, input.OrganizationID, input.UserID).Scan(&allowed); err != nil {
+				return Entry{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+			}
+			if !allowed {
+				return Entry{}, errors.New("active membership is required for seller feedback")
+			}
+		}
 		_, err = tx.Exec(ctx, `SELECT app.record_product_event($1,$2::uuid,NULLIF($3,'')::uuid,'product_improvement',$4,$5,jsonb_build_object('area',$6::text,'screen',$7::text,'answer',$8::text))`, EventName, input.UserID, input.OrganizationID, entry.CreatedAt, deduplication, input.Area, input.Screen, input.Answer)
 		if err != nil {
 			return Entry{}, fmt.Errorf("%w: %v", ErrUnavailable, err)

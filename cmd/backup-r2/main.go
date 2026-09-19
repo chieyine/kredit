@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,6 +30,10 @@ func main() {
 	flag.StringVar(&localDir, "local-dir", "/home/kredit/backups", "Local backup storage directory")
 	flag.IntVar(&keepDays, "keep-days", 14, "Days to retain local backups")
 	flag.Parse()
+	if keepDays <= 0 {
+		fmt.Fprintln(os.Stderr, "Error: keep-days must be positive")
+		os.Exit(1)
+	}
 
 	endpoint := os.Getenv("OBJECT_STORAGE_ENDPOINT")
 	bucket := os.Getenv("OBJECT_STORAGE_BUCKET")
@@ -42,6 +47,13 @@ func main() {
 	if endpoint == "" || bucket == "" || accessKey == "" || secretKey == "" {
 		fmt.Fprintf(os.Stderr, "Error: OBJECT_STORAGE_ENDPOINT, OBJECT_STORAGE_BUCKET, OBJECT_STORAGE_ACCESS_KEY, and OBJECT_STORAGE_SECRET_KEY are required\n")
 		os.Exit(1)
+	}
+
+	for _, value := range []string{endpoint, bucket, accessKey, secretKey} {
+		if strings.Contains(value, "<") || strings.HasPrefix(value, "your-") || value == "https://r2.cloudflarestorage.com" {
+			fmt.Fprintln(os.Stderr, "Error: replace placeholder offsite backup configuration before running")
+			os.Exit(1)
+		}
 	}
 
 	if err := os.MkdirAll(localDir, 0700); err != nil {
@@ -83,7 +95,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	outFile, err := os.OpenFile(dumpFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	outFile, err := os.OpenFile(dumpFile, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating dump file: %v\n", err)
 		os.Exit(1)
@@ -121,12 +133,13 @@ func main() {
 		timestamp, dumpFile, copied, sizeBytes, checksum)
 
 	// Write sha256 file
-	_ = os.WriteFile(dumpFile+".sha256", []byte(fmt.Sprintf("%s  %s\n", checksum, filepath.Base(dumpFile))), 0600)
+	if err := os.WriteFile(dumpFile+".sha256", []byte(fmt.Sprintf("%s  %s\n", checksum, filepath.Base(dumpFile))), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing backup checksum: %v\n", err)
+		os.Exit(1)
+	}
 
-	// Upload to Cloudflare R2 if configured
-	if strings.Contains(endpoint, "<") || strings.HasPrefix(accessKey, "your-") || endpoint == "https://r2.cloudflarestorage.com" {
-		fmt.Printf("[%s] Cloudflare R2 not fully configured yet (needs Account ID and real token). Local backup is saved.\n", timestamp)
-	} else {
+	// Offsite replication must complete before local retention runs.
+	{
 		uploaded := false
 		fmt.Printf("[%s] Uploading to Cloudflare R2 bucket '%s'...\n", timestamp, bucket)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -199,11 +212,35 @@ func main() {
 
 	// Prune local backups older than keepDays
 	cutoff := now.AddDate(0, 0, -keepDays)
-	entries, _ := os.ReadDir(localDir)
+	entries, err := os.ReadDir(localDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing local backups: %v\n", err)
+		os.Exit(1)
+	}
+	backupName := regexp.MustCompile(`^kredit-[0-9]{8}T[0-9]{6}Z\.dump\.gz$`)
 	for _, entry := range entries {
+		if !backupName.MatchString(entry.Name()) || !entry.Type().IsRegular() {
+			continue
+		}
 		info, err := entry.Info()
-		if err == nil && !info.IsDir() && info.ModTime().Before(cutoff) {
-			_ = os.Remove(filepath.Join(localDir, entry.Name()))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error inspecting local backup: %v\n", err)
+			os.Exit(1)
+		}
+		if !info.ModTime().Before(cutoff) {
+			continue
+		}
+		// Only remove a recognized archive with its matching checksum companion.
+		archive := filepath.Join(localDir, entry.Name())
+		sidecar, err := os.Lstat(archive + ".sha256")
+		if err != nil || !sidecar.Mode().IsRegular() {
+			continue
+		}
+		for _, name := range []string{archive, archive + ".sha256"} {
+			if err := os.Remove(name); err != nil {
+				fmt.Fprintf(os.Stderr, "Error pruning local backup: %v\n", err)
+				os.Exit(1)
+			}
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"kredit/internal/db"
 	"kredit/internal/jobs"
 	"kredit/internal/outbox"
 
@@ -47,7 +48,8 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM app.organizations WHERE id=$1::uuid`, organizationID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id=$1::uuid`, userID)
 	}()
-	store := NewPostgresStoreWithOutbox(pool, outbox.NewStore(pool))
+	ctx = db.WithTenantContext(ctx, userID, organizationID)
+	store := NewPostgresStoreWithOutbox(pool, outbox.NewStore(pool)).ForContext(ctx)
 	line, err := store.CreateLine(CreateLineInput{SupplierOrganizationID: organizationID, BuyerUserID: userID, BuyerBusinessID: businessID, ApprovedLimitKobo: 100000, Cadence: "monthly", StartAt: time.Now().UTC(), EndAt: time.Now().UTC().AddDate(1, 0, 0), MandateID: mandateID, MandateActive: true, MandateVerified: true})
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +72,7 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 	if err != nil || issued.ReceiptDisputeID == "" || issued.ObligationID != "" {
 		t.Fatalf("receipt dispute was not opened safely: drawdown=%+v err=%v", issued, err)
 	}
-	restarted := NewPostgresStore(pool)
+	restarted := NewPostgresStore(pool).ForContext(ctx)
 	loaded, ok := restarted.Get(line.ID)
 	if !ok || loaded.ReservedPendingKobo != 25000 {
 		t.Fatalf("restart-safe line load failed: %+v", loaded)
@@ -96,7 +98,7 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 	if err := jobs.ExpireDrawdownReservations(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
-	postExpiry := NewPostgresStore(pool)
+	postExpiry := NewPostgresStore(pool).ForContext(ctx)
 	expiredStatement, err := postExpiry.Statement(line.ID)
 	if err != nil {
 		t.Fatal(err)

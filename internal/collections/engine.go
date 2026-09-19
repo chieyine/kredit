@@ -99,6 +99,7 @@ type Engine struct {
 	snapshot          SnapshotFunc
 	contextSnapshot   func(context.Context, string) (ObligationSnapshot, error)
 	due               DueFunc
+	contextDue        func(context.Context, string, time.Time) (ledger.Money, error)
 	reservations      map[string]*CollectionReservation
 	attempts          map[string]*Attempt
 	byKey             map[string]string
@@ -188,8 +189,9 @@ func (e *Engine) SetMaxRetries(max int) {
 }
 
 // NewContextEngine carries authenticated tenant identity through production reads.
-func NewContextEngine(provider Provider, paymentStore payments.Service, snapshot func(context.Context, string) (ObligationSnapshot, error), due DueFunc) *Engine {
-	e := NewEngine(provider, paymentStore, nil, due)
+func NewContextEngine(provider Provider, paymentStore payments.Service, snapshot func(context.Context, string) (ObligationSnapshot, error), due func(context.Context, string, time.Time) (ledger.Money, error)) *Engine {
+	e := NewEngine(provider, paymentStore, nil, nil)
+	e.contextDue = due
 	e.contextSnapshot = snapshot
 	return e
 }
@@ -215,14 +217,20 @@ func (e *Engine) EligibilityContext(ctx context.Context, obligationID string, no
 	if err != nil {
 		return Eligibility{}, err
 	}
-	return e.eligibilityForSnapshot(obligationID, now, snapshot)
+	return e.eligibilityForSnapshot(ctx, obligationID, now, snapshot)
 }
 
-func (e *Engine) eligibilityForSnapshot(obligationID string, now time.Time, snapshot ObligationSnapshot) (Eligibility, error) {
-	if !e.hasActiveProvider() || e.due == nil {
+func (e *Engine) eligibilityForSnapshot(ctx context.Context, obligationID string, now time.Time, snapshot ObligationSnapshot) (Eligibility, error) {
+	if !e.hasActiveProvider() || (e.due == nil && e.contextDue == nil) {
 		return Eligibility{}, errors.New("collection dependencies unavailable")
 	}
-	amount, err := e.due(obligationID, now)
+	var amount ledger.Money
+	var err error
+	if e.contextDue != nil {
+		amount, err = e.contextDue(ctx, obligationID, now)
+	} else {
+		amount, err = e.due(obligationID, now)
+	}
 	if err != nil {
 		return Eligibility{}, err
 	}
@@ -349,7 +357,7 @@ func (e *Engine) Start(ctx context.Context, obligationID, idempotencyKey string,
 	if err != nil {
 		return Attempt{}, err
 	}
-	eligibility, err := e.eligibilityForSnapshot(obligationID, now, snapshot)
+	eligibility, err := e.eligibilityForSnapshot(ctx, obligationID, now, snapshot)
 	if err != nil {
 		return Attempt{}, err
 	}

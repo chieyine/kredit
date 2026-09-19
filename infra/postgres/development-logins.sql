@@ -46,9 +46,17 @@ GRANT kredit_worker TO kredit WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
 
 SELECT 'ALTER ROLE kredit NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS'
 WHERE :'demote_owner' = 'true'
+  -- PostgreSQL's initdb bootstrap role (OID 10) must remain SUPERUSER.
+  -- It is an administration credential, never an application login. The
+  -- distinct app/worker wrappers above are always non-superuser/non-bypass.
+  AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='kredit' AND oid=10)
   AND EXISTS (
     SELECT 1 FROM pg_roles
     WHERE rolname = 'kredit'
       AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls)
 )
 \gexec
+
+SELECT 'Bootstrap administrator retained; use kredit_app_login and kredit_worker_login for runtime connections.' AS development_role_notice
+WHERE :'demote_owner' = 'true'
+  AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname='kredit' AND oid=10);

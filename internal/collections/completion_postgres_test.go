@@ -174,7 +174,7 @@ func TestCompletionReconciliationCannotCloseUnresolvedDifference(t *testing.T) {
 	if _, err := f.pool.Exec(ctx, `UPDATE app.obligations SET outstanding_kobo=outstanding_kobo-1 WHERE id=$1::uuid`, f.id); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshFinancialReviews(ctx); err != nil {
+	if err := refreshReviewsAsWorker(t, f.pool); err != nil {
 		t.Fatal(err)
 	}
 	var id string
@@ -203,7 +203,7 @@ func TestCompletionReconciliationCannotCloseUnresolvedDifference(t *testing.T) {
 	if _, err := f.pool.Exec(ctx, `UPDATE app.obligations SET outstanding_kobo=outstanding_kobo-1 WHERE id=$1::uuid`, f.id); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshFinancialReviews(ctx); err != nil {
+	if err := refreshReviewsAsWorker(t, f.pool); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.pool.Exec(ctx, `UPDATE app.platform_role_assignments SET revoked_at=now() WHERE user_id=$1::uuid AND revoked_at IS NULL`, f.user); err != nil {
@@ -241,8 +241,11 @@ func TestCompletionReadsUnderRuntimeRole(t *testing.T) {
 	if _, err = observability.DurableFinancialMetrics(ctx, pool); err != nil {
 		t.Fatal("runtime metrics", err)
 	}
-	if err = platformops.NewStore(pool).RefreshFinancialReviews(ctx); err != nil {
-		t.Fatal("runtime reconciliation", err)
+	if err = platformops.NewStore(pool).RefreshFinancialReviews(ctx); err == nil {
+		t.Fatal("unscoped application refreshed global financial reviews")
+	}
+	if err = refreshReviewsAsWorker(t, f.pool); err != nil {
+		t.Fatal("worker reconciliation", err)
 	}
 }
 
@@ -321,4 +324,18 @@ func TestFinancialReadsRespectCancelledRequest(t *testing.T) {
 	if time.Since(started) > time.Second {
 		t.Fatal("cancelled reads waited for the database timeout")
 	}
+}
+
+// Refresh is a background-worker operation; interactive decisions still use
+// the current operator authority tested above.
+func refreshReviewsAsWorker(t *testing.T, admin *pgxpool.Pool) error {
+	t.Helper()
+	cfg := admin.Config().Copy()
+	cfg.ConnConfig.RuntimeParams["role"] = "kredit_worker"
+	worker, err := pgxpool.NewWithConfig(t.Context(), cfg)
+	if err != nil {
+		return err
+	}
+	defer worker.Close()
+	return platformops.NewStore(worker).RefreshFinancialReviews(t.Context())
 }

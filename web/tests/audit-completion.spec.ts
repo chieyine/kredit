@@ -7,6 +7,7 @@ async function signedIn(page: Page, context: BrowserContext, baseURL?: string) {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/me') return route.fulfill({ json: { user: { id: 'u1' }, session: { id: 'session-1' } } });
     if (path === '/api/v1/organizations') return route.fulfill({ json: { organizations: [{ id: 'org-a', legal_name: 'Example supplier A' }, { id: 'org-b', legal_name: 'Example supplier B' }] } });
+    if (path.endsWith('/onboarding')) return route.fulfill({ json: { profile: { version: 1 } } });
     if (path.endsWith('/customers')) return route.fulfill({ json: { customers: [{ buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', legal_name: 'Example buyer', trading_name: 'Example buyer', state: 'verified' }] } });
     if (path.endsWith('/reports/receivables')) return route.fulfill({ json: { summary: { obligation_count: 0, outstanding_kobo: 0, overdue_kobo: 0 } } });
     if (path.endsWith('/credit-requests')) return route.fulfill({ json: { requests: [] } });
@@ -141,6 +142,7 @@ test('sale-detail payment retry preserves its key, amount and paid-at timestamp 
   const enter = async () => {
     await page.getByLabel('How much did you receive? (₦)').fill('100.49');
     await page.getByLabel('Transfer or POS number').fill('SYNTHETIC-TRANSFER');
+    await page.getByLabel('When did the money reach you? (Nigerian time)').fill('2026-09-01T12:00');
     await page.getByRole('button', { name: 'Save this payment', exact: true }).click();
   };
   await page.goto('/app/credit/retry-sale?organization=org-a'); await enter();

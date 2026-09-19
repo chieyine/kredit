@@ -442,6 +442,9 @@ func (s *Store) Track(name, subjectID, purpose string, metadata map[string]strin
 }
 
 func (s *Store) TrackContext(ctx context.Context, name, subjectID, purpose string, metadata map[string]string) (AnalyticsEvent, error) {
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(purpose) == "" {
 		return AnalyticsEvent{}, errors.New("analytics name and purpose are required")
 	}

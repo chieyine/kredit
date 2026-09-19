@@ -8,7 +8,8 @@ import (
 )
 
 func (s *Server) financialReviews(w http.ResponseWriter, r *http.Request) {
-	if _, _, _, ok := s.requirePlatformAccess(w, r, access.PermissionProviderOperations); !ok {
+	_, user, role, ok := s.requirePlatformAccess(w, r, access.PermissionProviderOperations)
+	if !ok {
 		return
 	}
 	if s.runtime.PlatformOps == nil {
@@ -20,7 +21,7 @@ func (s *Server) financialReviews(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 503, "reconciliation_unavailable", "Reconciliation cases could not be loaded")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"cases": data})
+	writeJSON(w, 200, map[string]any{"cases": data, "actor_id": user.ID, "can_takeover": access.CanPlatform(role, access.PermissionPlatformOwner)})
 }
 func (s *Server) decideFinancialReview(w http.ResponseWriter, r *http.Request) {
 	session, user, _, ok := s.requirePlatformAccess(w, r, access.PermissionProviderOperations)

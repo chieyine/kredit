@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"kredit/internal/db"
 	"strconv"
 	"time"
 )
@@ -38,18 +39,18 @@ func (s *Store) RecordMetaStatus(ctx context.Context, phoneID, id, recipient, st
 	if !ok {
 		return errors.New("original WhatsApp connection is unavailable")
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id::text,event_reference,destination_ciphertext FROM app.notifications WHERE channel='whatsapp' AND provider_message_id=$1 AND state IN ('sent','delivered','read','failed') LIMIT 10`, id)
+	rows, err := s.pool.Query(ctx, `SELECT id::text,event_reference,destination_ciphertext,recipient_id::text FROM app.notification_meta_candidates($1)`, id)
 	if err != nil {
 		return err
 	}
 	type candidate struct {
-		id, event   string
-		destination []byte
+		id, event, recipient string
+		destination          []byte
 	}
 	items := []candidate{}
 	for rows.Next() {
 		var item candidate
-		if err = rows.Scan(&item.id, &item.event, &item.destination); err != nil {
+		if err = rows.Scan(&item.id, &item.event, &item.destination, &item.recipient); err != nil {
 			rows.Close()
 			return err
 		}
@@ -88,6 +89,7 @@ func (s *Store) RecordMetaStatus(ctx context.Context, phoneID, id, recipient, st
 		return ErrDeliveryReceiptConflict
 	}
 	item := matches[0]
+	ctx = db.WithTenantContext(ctx, item.recipient, "")
 	if status == "sent" || status == "deleted" {
 		return nil
 	}

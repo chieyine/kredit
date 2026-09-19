@@ -329,14 +329,14 @@ func TestCollectionWorkerRoleCanPostAndReconcilePayment(t *testing.T) {
 func TestCollectionStateLoadsAfterRestartAndObservesExternalManualPayment(t *testing.T) {
 	f := financialFixture(t)
 	cold := credit.NewPostgresStore(f.pool, credit.NewStore(nil, ledger.NewStore()))
-	first, err := cold.CollectionState(f.id)
+	first, err := cold.CollectionStateContext(f.ctx, f.id)
 	if err != nil || first.OutstandingKobo != 50000000 {
 		t.Fatalf("cold worker failed: %+v %v", first, err)
 	}
 	if _, _, err = f.payments.Record(payments.RecordInput{ObligationID: f.id, AmountKobo: 30000000, SourceType: payments.SourceSupplierTransfer, RecordedBy: f.user, IdempotencyKey: "external-manual:" + f.id}); err != nil {
 		t.Fatal(err)
 	}
-	next, err := cold.CollectionState(f.id)
+	next, err := cold.CollectionStateContext(f.ctx, f.id)
 	if err != nil || next.OutstandingKobo != 20000000 {
 		t.Fatalf("worker used stale balance: %+v %v", next, err)
 	}

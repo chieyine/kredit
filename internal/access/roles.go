@@ -51,6 +51,7 @@ const (
 	PermissionInviteMembers      Permission = "members:invite"
 	PermissionManageMembers      Permission = "members:manage"
 	PermissionInviteBuyers       Permission = "buyers:invite"
+	PermissionReadConsumerSales  Permission = "consumer:read"
 	PermissionCreateCredit       Permission = "credit:create"
 	PermissionReleaseGoods       Permission = "goods:release"
 	PermissionReadAudit          Permission = "audit:read"
@@ -150,6 +151,8 @@ func Can(role Role, permission Permission) bool {
 		return role == RoleAdministrator || role == RoleSales
 	case PermissionReadAudit:
 		return role == RoleAdministrator || role == RoleFinance || role == RoleViewer
+	case PermissionReadConsumerSales:
+		return role == RoleAdministrator || role == RoleSales || role == RoleFinance || role == RoleCollections || role == RoleViewer
 	case PermissionReadFinancial:
 		return role == RoleFinance || role == RoleCollections || role == RoleViewer
 	case PermissionManageFinancial, PermissionManageDisputes:

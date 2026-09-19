@@ -478,7 +478,7 @@ func (s *Server) decideOperationsDispute(w http.ResponseWriter, r *http.Request)
 	if !decodeJSONRequest(w, r, &input) {
 		return
 	}
-	item, decision, err := s.runtime.Disputes.Decide(disputes.DecideInput{DisputeID: r.PathValue("disputeID"), ReviewerID: user.ID, Outcome: strings.TrimSpace(input.Outcome), ValidPrincipalKobo: ledger.Money(input.ValidPrincipalKobo), AdjustmentKobo: ledger.Money(input.AdjustmentKobo), RemainingDisputedKobo: ledger.Money(input.RemainingDisputedKobo), Reason: strings.TrimSpace(input.Reason)})
+	item, decision, err := s.runtime.ScopedDisputes(r.Context()).Decide(disputes.DecideInput{DisputeID: r.PathValue("disputeID"), ReviewerID: user.ID, Outcome: strings.TrimSpace(input.Outcome), ValidPrincipalKobo: ledger.Money(input.ValidPrincipalKobo), AdjustmentKobo: ledger.Money(input.AdjustmentKobo), RemainingDisputedKobo: ledger.Money(input.RemainingDisputedKobo), Reason: strings.TrimSpace(input.Reason)})
 	if err != nil {
 		writeProblem(w, http.StatusConflict, "dispute_decision_failed", err.Error())
 		return
@@ -645,7 +645,7 @@ func (s *Server) operationsDispute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("disputeID")
-	item, evidence, decisions, err := s.runtime.Disputes.Get(id)
+	item, evidence, decisions, err := s.runtime.ScopedDisputes(r.Context()).Get(id)
 	if err != nil {
 		writeProblem(w, http.StatusNotFound, "dispute_not_found", "dispute was not found")
 		return

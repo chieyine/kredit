@@ -2103,7 +2103,7 @@ paths:
       operationId: financialReviews
       summary: Open financial differences with ownership and immutable review history
       responses:
-        '200': { description: "Open reconciliation cases, with monetary values as decimal kobo strings" }
+        '200': { description: "Open reconciliation cases with first/last observed times, monetary values as decimal kobo strings, actor_id and can_takeover" }
         '403': { description: "Provider operations permission and MFA required" }
         '503': { description: "Financial records unavailable" }
   /ops/financial-reconciliation/{caseID}/decision:
@@ -2123,10 +2123,10 @@ paths:
               type: object
               required: [action, reason]
               properties:
-                action: { type: string, enum: [claim, resolve] }
+                action: { type: string, enum: [claim, resolve, release, takeover] }
                 reason: { type: string, minLength: 8, maxLength: 2000 }
       responses:
-        '200': { description: "Review claimed or resolved with immutable evidence" }
+        '200': { description: "Review claimed, released, taken over by the platform owner, or resolved with immutable evidence" }
         '403': { description: "Provider operations permission, MFA and CSRF required" }
         '409': { description: "Ownership conflict or financial records still disagree" }
   /webhooks/messaging/whatsapp:
@@ -2304,14 +2304,14 @@ paths:
   /ops/search:
     get:
       operationId: operationsSearch
-      summary: Find an exact public or internal reference
+      summary: Find an exact public, internal or unconfirmed-request support reference
       parameters:
         - name: q
           in: query
           required: true
           schema: { type: string, minLength: 4, maxLength: 128 }
       responses:
-        '200': { description: "Permission-scoped reference matches" }
+        '200': { description: "Permission-scoped reference matches; request_receipt exposes only receipt ID, reference and HTTP receipt state, never a payment confirmation or saved body" }
         '400': { description: "Search reference is invalid" }
         '403': { description: "Support search role required" }
   /ops/users:

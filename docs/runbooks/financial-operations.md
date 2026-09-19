@@ -35,7 +35,7 @@ reference and request ID, and append an audit event for every operator action.
 
 ## Mandate mismatch or cancellation
 
-- Treat provider state as authoritative for the mandate.
+- Preserve a saved local cancellation block even when the provider is unavailable or still reports active. Reconcile bank-side state by the original reference; an already submitted debit may still complete.
 - Block new credit/drawdowns when inactive or cancelled while owing.
 - Reconcile out-of-order events by provider event ID and append a normalised
   mandate event.
@@ -77,3 +77,5 @@ reference and request ID, and append an audit event for every operator action.
   pseudonymising data.
 - Record the decision, deadline, reviewer, and communication in the support
   case.
+
+For exact request-reference lookup, review handover and delivery-issue resolution, follow [Recovery operations](recovery-operations.md).

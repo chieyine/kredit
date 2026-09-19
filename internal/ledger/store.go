@@ -178,10 +178,19 @@ func sameTransactionIntent(existing, requested Transaction) bool {
 	if existing.EventType != requested.EventType || existing.ReferenceType != requested.ReferenceType || existing.ReferenceID != requested.ReferenceID || len(existing.Postings) != len(requested.Postings) {
 		return false
 	}
-	for index := range existing.Postings {
-		if existing.Postings[index] != requested.Postings[index] {
+	// Posting order is not part of the intent: PostgreSQL reloads postings by
+	// their persisted UUIDs, not their original insertion order. Count exact
+	// postings so reordered retries match without losing duplicate entries or
+	// treating different debit/credit distributions as the same journal.
+	counts := make(map[Posting]int, len(existing.Postings))
+	for _, posting := range existing.Postings {
+		counts[posting]++
+	}
+	for _, posting := range requested.Postings {
+		if counts[posting] == 0 {
 			return false
 		}
+		counts[posting]--
 	}
 	return true
 }

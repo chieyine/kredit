@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"kredit/internal/db"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -87,7 +89,14 @@ func TestPostgresProductEventDeduplicationAndScorecardReconciliation(t *testing.
 		t.Fatalf("duplicate product event count=%d err=%v", count, err)
 	}
 	store := NewPostgresStore(pool, Source{})
-	card, err := store.PilotScorecard(ctx, time.Now().UTC().Add(-300*24*time.Hour), time.Now().UTC().Add(24*time.Hour), organizationID)
+	actor := uuid.NewString()
+	if _, err := pool.Exec(ctx, `INSERT INTO app.users(id,normalized_email) VALUES($1::uuid,$2)`, actor, actor+"@scorecard.test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO app.platform_role_assignments(user_id,role,granted_by,reason) VALUES($1::uuid,'platform_admin',$1::uuid,'Scorecard verification fixture')`, actor); err != nil {
+		t.Fatal(err)
+	}
+	card, err := store.PilotScorecard(db.WithTenantContext(ctx, actor, organizationID), time.Now().UTC().Add(-300*24*time.Hour), time.Now().UTC().Add(24*time.Hour), organizationID)
 	if err != nil {
 		t.Fatal(err)
 	}

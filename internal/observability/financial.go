@@ -16,6 +16,8 @@ var financialMetricNames = []string{
 	"collection_payment_discrepancies", "settlement_discrepancies",
 	"collection_unknown_states", "notification_dead_letters", "outbox_delivery_failures",
 	"provider_webhook_oldest_unprocessed_seconds", "collection_oldest_unresolved_seconds",
+	"financial_reviews_open", "financial_reviews_unassigned", "financial_review_oldest_open_seconds",
+	"drawdown_receipt_issues_open", "drawdown_receipt_issue_oldest_open_seconds",
 	"river_pending_jobs", "river_discarded_jobs", "active_obligations", "negative_outstanding_balances",
 }
 
@@ -26,7 +28,7 @@ func DurableFinancialMetrics(ctx context.Context, pool *pgxpool.Pool) (string, e
 	if pool == nil {
 		return "", errors.New("financial monitoring database is unavailable")
 	}
-	rows, err := pool.Query(ctx, `SELECT metric,value FROM app.phase5_financial_metrics()`)
+	rows, err := pool.Query(ctx, `SELECT metric,value FROM app.phase5_financial_metrics() UNION ALL SELECT metric,value FROM app.recovery_queue_metrics()`)
 	if err != nil {
 		return "", err
 	}

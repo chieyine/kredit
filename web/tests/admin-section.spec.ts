@@ -120,7 +120,7 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 
 	const more = page.getByRole('dialog', { name: 'Admin account menu' });
 	await expect(more).toBeVisible();
-	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(21);
+	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(32);
 	await expect(more.getByRole('link', { name: 'Platform settings' })).toBeVisible();
 	await expect(more.getByRole('link', { name: 'Website content' })).toBeVisible();
 	await expect(more.getByRole('link', { name: 'Business settings' })).toBeVisible();
@@ -150,7 +150,9 @@ test('an administrator can find a person and give access without copying an ID',
 	await page.getByRole('button', { name: /Ada Okafor/ }).click();
 	await page.getByLabel('Role').selectOption('dispute_reviewer');
 	await page.getByLabel('Why are you giving access?').fill('Ada will review customer disputes.');
-	await page.getByRole('button', { name: 'Give this access' }).click();
+	await page.getByRole('button', { name: 'Review this access' }).click();
+ expect(submitted).toBeUndefined();
+ await page.getByRole('button', { name: 'Grant the reviewed access' }).click();
 
 	await expect(page.getByText('Admin access was granted and recorded.')).toBeVisible();
 	expect(submitted).toMatchObject({ role: 'dispute_reviewer', reason: 'Ada will review customer disputes.' });

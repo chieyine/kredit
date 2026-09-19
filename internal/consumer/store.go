@@ -233,7 +233,7 @@ func (s *Store) Get(ctx context.Context, actor, org, id string, admin bool) (Sal
 		if org != v.OrganizationID {
 			return Sale{}, ErrUnavailable
 		}
-		if e = sellerPermission(ctx, tx, actor, org, access.PermissionReadFinancial); e != nil {
+		if e = sellerPermission(ctx, tx, actor, org, access.PermissionReadConsumerSales); e != nil {
 			return Sale{}, e
 		}
 		v.Role = "seller"
@@ -263,7 +263,7 @@ func (s *Store) List(ctx context.Context, actor, org string, admin bool, before 
 		query = saleSelect + ` WHERE ($1='' OR id<NULLIF($1,'')::uuid) ORDER BY id DESC LIMIT 100`
 		args = []any{before}
 	} else if org != "" {
-		if e = sellerPermission(ctx, tx, actor, org, access.PermissionReadFinancial); e != nil {
+		if e = sellerPermission(ctx, tx, actor, org, access.PermissionReadConsumerSales); e != nil {
 			return nil, e
 		}
 		query = saleSelect + ` WHERE organization_id=$1::uuid AND ($2='' OR id<NULLIF($2,'')::uuid) ORDER BY id DESC LIMIT 100`

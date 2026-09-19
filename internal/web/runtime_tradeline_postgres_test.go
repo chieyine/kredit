@@ -72,21 +72,22 @@ func TestPostgresTradeLineActivationCommitsAsOneFinancialTransaction(t *testing.
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id=$1::uuid`, userID)
 	}()
 	cfg := config.Config{Environment: "development", Currency: "NGN", MoneyUnit: "kobo", CollectionProvider: "mock", TokenHashKey: "atomic-drawdown-test", Timezone: "Africa/Lagos"}
+	ctx = db.WithTenantContext(ctx, userID, organizationID)
 	runtime := NewRuntimeWithDB(cfg, database)
-	line, err := runtime.TradeLines.CreateLine(tradelines.CreateLineInput{SupplierOrganizationID: organizationID, BuyerUserID: userID, BuyerBusinessID: businessID, ApprovedLimitKobo: 500000, Cadence: "monthly", StartAt: time.Now().Add(-time.Hour), EndAt: time.Now().AddDate(1, 0, 0), MandateID: mandateID, MandateActive: true, MandateVerified: true})
+	line, err := runtime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).CreateLine(tradelines.CreateLineInput{SupplierOrganizationID: organizationID, BuyerUserID: userID, BuyerBusinessID: businessID, ApprovedLimitKobo: 500000, Cadence: "monthly", StartAt: time.Now().Add(-time.Hour), EndAt: time.Now().AddDate(1, 0, 0), MandateID: mandateID, MandateActive: true, MandateVerified: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	lineID = line.ID
-	drawdown, _, _, err := runtime.TradeLines.ReserveDrawdown(tradelines.CreateDrawdownInput{LineID: line.ID, PrincipalKobo: 125000, GoodsDescription: "atomic inventory", DueDate: "2026-09-30", CollectionAt: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), IdempotencyKey: "atomic-" + line.ID})
+	drawdown, _, _, err := runtime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).ReserveDrawdown(tradelines.CreateDrawdownInput{LineID: line.ID, PrincipalKobo: 125000, GoodsDescription: "atomic inventory", DueDate: "2026-09-30", CollectionAt: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), IdempotencyKey: "atomic-" + line.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	drawdownID = drawdown.ID
-	if _, _, err := runtime.TradeLines.ConfirmDrawdown(drawdown.ID, userID, drawdown.AgreementHash); err != nil {
+	if _, _, err := runtime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).ConfirmDrawdown(drawdown.ID, userID, drawdown.AgreementHash); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := runtime.TradeLines.ReleaseDrawdown(tradelines.ReleaseInput{DrawdownID: drawdown.ID, SupplierOrganizationID: organizationID, ActorID: userID, DeliveryMethod: "courier", EvidenceReference: "ATOMIC-TRACK"}); err != nil {
+	if _, _, err := runtime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).ReleaseDrawdown(tradelines.ReleaseInput{DrawdownID: drawdown.ID, SupplierOrganizationID: organizationID, ActorID: userID, DeliveryMethod: "courier", EvidenceReference: "ATOMIC-TRACK"}); err != nil {
 		t.Fatal(err)
 	}
 	tradeStore := runtime.TradeLines.(*tradelines.PostgresStore)
@@ -103,7 +104,7 @@ func TestPostgresTradeLineActivationCommitsAsOneFinancialTransaction(t *testing.
 		}
 		return "", nil, forcedRollback
 	})
-	if _, _, err := runtime.TradeLines.RecordDrawdownReceipt(tradelines.ReceiptInput{DrawdownID: drawdown.ID, BuyerUserID: userID, State: "no_issue"}); !errors.Is(err, forcedRollback) {
+	if _, _, err := runtime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).RecordDrawdownReceipt(tradelines.ReceiptInput{DrawdownID: drawdown.ID, BuyerUserID: userID, State: "no_issue"}); !errors.Is(err, forcedRollback) {
 		t.Fatalf("expected forced atomic rollback after financial writes, got %v", err)
 	}
 	var creditCount, ledgerCount, scheduleCount int
@@ -125,7 +126,7 @@ func TestPostgresTradeLineActivationCommitsAsOneFinancialTransaction(t *testing.
 	}
 
 	committingRuntime := NewRuntimeWithDB(cfg, database)
-	activated, _, err := committingRuntime.TradeLines.RecordDrawdownReceipt(tradelines.ReceiptInput{DrawdownID: drawdown.ID, BuyerUserID: userID, State: "no_issue"})
+	activated, _, err := committingRuntime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).RecordDrawdownReceipt(tradelines.ReceiptInput{DrawdownID: drawdown.ID, BuyerUserID: userID, State: "no_issue"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,14 +147,14 @@ func TestPostgresTradeLineActivationCommitsAsOneFinancialTransaction(t *testing.
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM app.outbox_events WHERE idempotency_key IN($1,$2)`, "trade-line-drawdown:"+drawdown.ID+":TradeLineDrawdownActivated", "ledger:trade-line-drawdown:"+drawdown.ID+":activation").Scan(&activationEventCount); err != nil || activationEventCount != 2 {
 		t.Fatalf("atomic activation outbox events=%d err=%v", activationEventCount, err)
 	}
-	current, found := committingRuntime.TradeLines.Get(lineID)
+	current, found := committingRuntime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).Get(lineID)
 	if !found {
 		t.Fatal("trade line not found")
 	}
-	if _, err = committingRuntime.TradeLines.ReduceLimit(lineID, 400000, current.Version); err != nil {
+	if _, err = committingRuntime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).ReduceLimit(lineID, 400000, current.Version); err != nil {
 		t.Fatal(err)
 	}
-	current, found = committingRuntime.TradeLines.Get(lineID)
+	current, found = committingRuntime.TradeLines.(*tradelines.PostgresStore).ForContext(ctx).Get(lineID)
 	if !found || current.ApprovedLimitKobo != 400000 {
 		t.Fatalf("reduced limit did not persist: %+v found=%v", current, found)
 	}

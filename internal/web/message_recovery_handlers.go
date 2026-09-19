@@ -92,6 +92,23 @@ func (s *Server) resolveMessageSubmission(w http.ResponseWriter, r *http.Request
 		writeProblem(w, 409, "recovery_conflict", "This send is still active or has already been resolved. Refresh its status.")
 		return
 	}
+	// Re-check the operator while locking the role lifecycle, then resolve only
+	// the recipient of this exact pending submission before touching its message.
+	if err = access.LockPlatformAuthority(r.Context(), tx, user.ID, access.PermissionProviderOperations); err != nil {
+		writeProblem(w, 403, "recovery_forbidden", "Current operator authority is required.")
+		return
+	}
+	if id != "" {
+		var recipient string
+		if err = tx.QueryRow(r.Context(), `SELECT app.notification_recovery_subject($1::uuid)::text`, id).Scan(&recipient); err != nil {
+			writeProblem(w, 409, "recovery_conflict", "The original message could not be confirmed.")
+			return
+		}
+		if _, err = tx.Exec(r.Context(), `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id','',true)`, recipient); err != nil {
+			writeProblem(w, 503, "recovery_unavailable", "Recovery could not begin.")
+			return
+		}
+	}
 	next := "REJECTED"
 	reference := ""
 	if in.Action == "record_reference" {

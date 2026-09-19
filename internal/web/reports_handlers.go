@@ -146,7 +146,7 @@ func (s *Server) buyerHistory(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 503, "report_unavailable", "We could not open your money history. Please try again.")
 		return
 	}
-	reviewed, err := s.runtime.Corrections.ReadForBuyer(r.Context(), user.ID)
+	reviewed, err := s.runtime.ScopedCorrections(r.Context()).ReadForBuyer(r.Context(), user.ID)
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "We could not open your correction history. Please try again.")
 		return
@@ -240,7 +240,7 @@ func (s *Server) openCorrection(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "subject_not_found", "We could not find that record for this customer.")
 		return
 	}
-	c, err := s.runtime.Corrections.Open(orgID, in.SubjectType, in.SubjectID, in.SourceEventID, user.ID, in.Reason, in.Evidence)
+	c, err := s.runtime.ScopedCorrections(r.Context()).Open(orgID, in.SubjectType, in.SubjectID, in.SourceEventID, user.ID, in.Reason, in.Evidence)
 	if err != nil {
 		writeProblem(w, 422, "correction_invalid", err.Error())
 		return
@@ -258,7 +258,7 @@ func (s *Server) listCorrections(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadAudit); !ok {
 		return
 	}
-	requests, err := s.runtime.Corrections.ListForOrganization(r.Context(), orgID)
+	requests, err := s.runtime.ScopedCorrections(r.Context()).ListForOrganization(r.Context(), orgID)
 	if err != nil {
 		writeProblem(w, 503, "correction_history_unavailable", "We could not load the correction requests. Please try again.")
 		return
@@ -289,13 +289,13 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	correction, _, err := s.runtime.Corrections.Get(id)
+	correction, _, err := s.runtime.ScopedCorrections(r.Context()).Get(id)
 	if err != nil || correction.OrganizationID != orgID {
 		writeProblem(w, 404, "correction_not_found", "We could not find that correction.")
 		return
 	}
 	if in.Outcome == corrections.StateReview {
-		updated, err := s.runtime.Corrections.StartReview(id, user.ID)
+		updated, err := s.runtime.ScopedCorrections(r.Context()).StartReview(id, user.ID)
 		if err != nil {
 			writeProblem(w, 409, "correction_review_failed", err.Error())
 			return
@@ -307,7 +307,7 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 	if financialReadError(w, readErr2) {
 		return
 	}
-	updated, decision, err := s.runtime.Corrections.Decide(id, user.ID, in.Outcome, in.Reason)
+	updated, decision, err := s.runtime.ScopedCorrections(r.Context()).Decide(id, user.ID, in.Outcome, in.Reason)
 	if err != nil {
 		writeProblem(w, 422, "correction_decision_invalid", err.Error())
 		return

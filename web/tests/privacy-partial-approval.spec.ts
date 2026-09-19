@@ -17,5 +17,5 @@ test('privacy approval acknowledges retained records without reporting an uncert
  await dialog.getByRole('button',{name:'Record decision'}).click();
  await expect(dialog).not.toBeVisible();
  await expect(page.getByRole('status')).toContainText('Partially approved');
- await expect(page.getByRole('button',{name:'Finish this request'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Record completed work'})).toBeVisible();
 });

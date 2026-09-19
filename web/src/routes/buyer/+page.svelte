@@ -21,7 +21,7 @@
  let paymentDays=$state<any[]>([]), datesUnavailable=$state(true);
 	// A sale whose obligation did not load contributes nothing we can vouch for,
 	// so the total is reported as unconfirmed rather than quietly understated.
-	const outstanding = $derived(balancesUnavailable ? null : sumKobo(requests.map((item) => item.obligation ? item.obligation.outstanding_kobo : (item.request?.state === 'DRAFT' || item.request?.state === 'SENT' || item.request?.state === 'BUYER_REVIEWING' ? 0 : null))));
+	const outstanding = $derived(balancesUnavailable ? null : sumKobo(requests.map((item) => item.obligation ? item.obligation.outstanding_kobo : (['DRAFT','SENT','BUYER_REVIEWING','BUYER_ACCEPTED','VERIFICATION_PENDING','READY_TO_RELEASE','GOODS_RELEASED','RECEIPT_CONFIRMATION_PENDING','CANCELLED','DECLINED'].includes(item.request?.state) ? 0 : null))));
 	const pending = $derived(requests.filter((item)=>['SENT','BUYER_REVIEWING','PENDING_BUYER_CONFIRMATION'].includes(String(item.request?.state??item.state??'').toUpperCase())));
 	const openBalances = $derived(requests.filter((item)=>Number(item.obligation?.outstanding_kobo??0)>0));
 

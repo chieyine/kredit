@@ -384,20 +384,17 @@ func (p *PostgresProvider) ResolveTradeLineMandate(ctx context.Context, mandateI
 }
 
 func (p *PostgresProvider) CancelMandate(ctx context.Context, providerID, reason string) (Mandate, error) {
-	mandate, err := p.GetMandate(ctx, providerID)
-	if err != nil {
-		return Mandate{}, err
-	}
 	if strings.TrimSpace(reason) == "" {
 		return Mandate{}, errors.New("mandate cancellation reason is required")
 	}
+	// This loads only local evidence and commits the block before remote I/O.
+	// GetMandate performs a remote lookup and must not precede this boundary.
+	mandate, err := p.BlockMandate(ctx, providerID, Paused, "buyer-cancel-request:"+providerID)
+	if err != nil {
+		return Mandate{}, err
+	}
 	if mandate.Status == Cancelled {
 		return mandate, nil
-	}
-	// Stop local debit permission before asking the bank. A delayed or failed
-	// cancellation response must never authorize another debit in the meantime.
-	if _, err = p.BlockMandate(ctx, providerID, Paused, "buyer-cancel-request:"+providerID); err != nil {
-		return Mandate{}, err
 	}
 	if p.remote != nil {
 		if _, err = p.remote.CancelMandate(ctx, providerID, reason); err != nil {
@@ -405,7 +402,6 @@ func (p *PostgresProvider) CancelMandate(ctx context.Context, providerID, reason
 		}
 	}
 	return p.BlockMandate(ctx, providerID, Cancelled, "buyer-cancel:"+providerID)
-
 }
 
 func (p *PostgresProvider) RestoreAuthorization(ctx context.Context, providerID string) (Mandate, error) {

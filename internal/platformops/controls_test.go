@@ -127,7 +127,7 @@ func TestControlledSuspendRestoreHoldAndIdempotency(t *testing.T) {
 	if _, err = pool.Exec(ctx, `UPDATE app.operations_commands SET reason='tampered record' WHERE id=$1::uuid`, applied.ID); err == nil {
 		t.Fatal("immutable command was mutable")
 	}
-	diagnostics, err := store.Diagnostics(ctx, 60, "correlation-sensitive-1234")
+	diagnostics, err := store.Diagnostics(db.WithTenantContext(ctx, actor, ""), 60, "correlation-sensitive-1234")
 	if err != nil {
 		t.Fatal(err)
 	}

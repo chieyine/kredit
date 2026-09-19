@@ -46,6 +46,7 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 	await page.route('**/api/v1/organizations', async (route) => route.fulfill({
 		status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies', trading_name: 'Adebayo' }] })
 	}));
+	await page.route('**/api/v1/organizations/org-1/onboarding', route => route.fulfill({json:{profile:{version:1}}}));
 	await page.route('**/api/v1/organizations/org-1/customers', async (route) => route.fulfill({
 		status: 200, contentType: 'application/json', body: JSON.stringify({ customers: [{ buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', legal_name: 'Kano Retail Limited', trading_name: 'Kano Retail', state: 'VERIFIED' }] })
 	}));
@@ -166,6 +167,7 @@ test('buyer payment claim explains and applies a bounded hold', async ({ page })
 	await page.getByText('Already paid by bank transfer?', {exact:true}).click();
 	await page.getByLabel('Amount transferred (₦)').fill('125,000');
 	await page.getByLabel('Transfer reference').fill('BANK-2026-001');
+	await page.getByLabel('When did you transfer it? (Nigerian time)').fill('2026-09-01T12:00');
 	await page.getByRole('button', { name: 'Report my transfer', exact:true }).click();
 	await expect(page.getByText('Transfer reported. The seller must confirm receipt before your balance changes.')).toBeVisible();
 	await expect.poll(() => submitted).toMatchObject({ amount_kobo: 12500000, transfer_reference: 'BANK-2026-001' });
@@ -195,7 +197,7 @@ test('mobile customer navigation keeps important pages below and every other pag
 	await expect(page.getByRole('heading', { name: 'Sales and payments' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Messages and choices' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Account and help' })).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(8);
+	await expect(page.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(9);
 	await page.getByRole('link', { name: 'Get help' }).click();
 	await expect(page).toHaveURL(/\/legal\/complaints$/);
 	await expect(page.getByRole('dialog', { name: 'Customer account menu' })).toHaveCount(0);
@@ -222,7 +224,7 @@ test('supplier reserves exact drawdown terms and releases only after buyer confi
 	// owner would, rather than relying on the page assuming it is available.
 	await page.route('**/api/v1/platform/capabilities', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ features: { drawdowns: true, trade_lines: true } }) }));
 	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/statement', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ line, drawdowns: [confirmed] }) }));
-	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/drawdowns', async (route) => { reserved = route.request().postDataJSON(); await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ drawdown: { id: 'new-drawdown' } }) }); });
+	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/drawdowns', async (route) => { reserved = route.request().postDataJSON(); await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ trade_line: line, drawdown: { ...confirmed, ...reserved, id: 'new-drawdown', state: 'PENDING_BUYER_CONFIRMATION' } }) }); });
 	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/drawdowns/drawdown-confirmed/release', async (route) => { released = route.request().postDataJSON(); confirmed.state = 'GOODS_RELEASED'; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ drawdown: confirmed, trade_line: line }) }); });
 	await page.goto('/app/trade-lines/line-1');
 	await page.getByLabel('Money to pay (₦)').fill('100,000');
@@ -276,7 +278,7 @@ test('buyer receipt issue opens a case without activating an obligation', async 
 test('pilot-ready owner reviews mobile readiness and invites a sales user', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	let invited: Record<string, unknown> | undefined;
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-ready', legal_name: 'Fresh Foods Ltd' }] }) }));
+	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-ready', business_type: 'limited_company', legal_name: 'Fresh Foods Ltd' }] }) }));
 	await page.route('**/api/v1/organizations/org-ready/onboarding', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ profile: { organization_id: 'org-ready', version: 12, kyb_state: 'approved', settlement_state: 'verified', billing_state: 'configured', terms_version: 'supplier-terms-v1', privacy_version: 'privacy-v1' }, readiness: { state: 'pilot_ready', ready: true, requirements: ['business_identity','email_verified','phone_verified','kyb_approved','settlement_verified','billing_configured','credit_policy','current_consents','owner_mfa','finance_mfa'].map((code) => ({ code, label: code.replaceAll('_',' '), complete: true, manage_path: '/app/onboarding' })), missing: [] }, permissions: { business: true, settlement: true, billing: true, credit_policy: true, consents: true }, current_terms_version: 'supplier-terms-v1', current_privacy_version: 'privacy-v1' }) }));
 	await page.route('**/api/v1/organizations/org-ready/members', async (route) => {
 		if (route.request().method() === 'POST') { invited = route.request().postDataJSON(); await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ membership: { user_id: 'sales-user', role: 'sales', status: 'invited' } }) }); return; }
@@ -294,7 +296,7 @@ test('pilot-ready owner reviews mobile readiness and invites a sales user', asyn
 });
 
 test('incomplete supplier sees precise recovery steps before financial activity', async ({ page }) => {
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-incomplete', legal_name: 'Starting Supplier Ltd' }] }) }));
+	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-incomplete', business_type: 'limited_company', legal_name: 'Starting Supplier Ltd' }] }) }));
 	const missing = [
 		{ code: 'phone_verified', label: 'Owner phone verified', complete: false, manage_path: '/app/onboarding' },
 		{ code: 'kyb_approved', label: 'Business verification approved', complete: false, manage_path: '/app/onboarding' },

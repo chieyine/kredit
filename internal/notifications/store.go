@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kredit/internal/db"
 	"kredit/internal/identifier"
 	"kredit/internal/platform/logging"
 	"net/url"
@@ -226,7 +227,7 @@ type Store struct {
 	now                func() time.Time
 	newID              func() string
 	baseURL            string
-	pool               *pgxpool.Pool
+	pool               *db.ScopedDatabase
 	encryption         []byte
 	reminderConsent    func(context.Context, string, string) (bool, error)
 	optionalProcessing func(context.Context, string) (bool, error)
@@ -238,7 +239,7 @@ func NewStore(secret string) *Store {
 func NewPostgresStore(pool *pgxpool.Pool, secret string) *Store {
 	store := NewStore(secret)
 	key := sha256.Sum256([]byte("kredit-notifications:" + secret))
-	store.pool = pool
+	store.pool = &db.ScopedDatabase{Pool: pool}
 	store.encryption = key[:]
 	return store
 }
@@ -273,7 +274,7 @@ func (s *Store) SetPreferences(recipient string, prefs Preferences) {
 	}
 	s.preferences[recipient] = prefs
 	if s.pool != nil {
-		_, _ = s.pool.Exec(context.Background(), `INSERT INTO app.notification_preferences(recipient_id,preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(recipient_id) DO UPDATE SET preferred_channel=EXCLUDED.preferred_channel,fallback_channel=EXCLUDED.fallback_channel,opted_out=EXCLUDED.opted_out,payment_reminders_enabled=EXCLUDED.payment_reminders_enabled,product_updates_enabled=EXCLUDED.product_updates_enabled,quiet_start_hour=EXCLUDED.quiet_start_hour,quiet_end_hour=EXCLUDED.quiet_end_hour,timezone=EXCLUDED.timezone,version=app.notification_preferences.version+1,updated_at=now()`, recipient, prefs.PreferredChannel, prefs.FallbackChannel, prefs.OptedOut, prefs.PaymentRemindersEnabled, prefs.ProductUpdatesEnabled, prefs.QuietStart, prefs.QuietEnd, prefs.Timezone)
+		_, _ = s.pool.Exec(db.WithTenantContext(context.Background(), recipient, ""), `INSERT INTO app.notification_preferences(recipient_id,preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(recipient_id) DO UPDATE SET preferred_channel=EXCLUDED.preferred_channel,fallback_channel=EXCLUDED.fallback_channel,opted_out=EXCLUDED.opted_out,payment_reminders_enabled=EXCLUDED.payment_reminders_enabled,product_updates_enabled=EXCLUDED.product_updates_enabled,quiet_start_hour=EXCLUDED.quiet_start_hour,quiet_end_hour=EXCLUDED.quiet_end_hour,timezone=EXCLUDED.timezone,version=app.notification_preferences.version+1,updated_at=now()`, recipient, prefs.PreferredChannel, prefs.FallbackChannel, prefs.OptedOut, prefs.PaymentRemindersEnabled, prefs.ProductUpdatesEnabled, prefs.QuietStart, prefs.QuietEnd, prefs.Timezone)
 	}
 }
 
@@ -282,6 +283,7 @@ func DefaultPreferences() Preferences {
 }
 
 func (s *Store) GetPreferences(ctx context.Context, recipient string) (Preferences, error) {
+	ctx = db.WithTenantContext(ctx, recipient, "")
 	prefs := DefaultPreferences()
 	if s.pool != nil {
 		err := s.pool.QueryRow(ctx, `SELECT preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone,version FROM app.notification_preferences WHERE recipient_id=$1::uuid`, recipient).Scan(&prefs.PreferredChannel, &prefs.FallbackChannel, &prefs.OptedOut, &prefs.PaymentRemindersEnabled, &prefs.ProductUpdatesEnabled, &prefs.QuietStart, &prefs.QuietEnd, &prefs.Timezone, &prefs.Version)
@@ -302,6 +304,7 @@ func (s *Store) GetPreferences(ctx context.Context, recipient string) (Preferenc
 }
 
 func (s *Store) UpdatePreferences(ctx context.Context, recipient string, prefs Preferences, expectedVersion int64) (Preferences, error) {
+	ctx = db.WithTenantContext(ctx, recipient, "")
 	if recipient == "" || !validChannel(prefs.PreferredChannel) || !validChannel(prefs.FallbackChannel) || prefs.PreferredChannel == prefs.FallbackChannel || prefs.QuietStart < 0 || prefs.QuietStart > 23 || prefs.QuietEnd < 0 || prefs.QuietEnd > 23 || prefs.Timezone != "Africa/Lagos" {
 		return Preferences{}, errors.New("notification preference is invalid")
 	}
@@ -380,6 +383,7 @@ func (s *Store) reminderAllowed(ctx context.Context, event Event) (bool, error) 
 }
 
 func (s *Store) Emit(ctx context.Context, event Event) ([]Delivery, error) {
+	ctx = db.WithTenantContext(ctx, event.RecipientID, event.OrganizationID)
 	event.Priority = defaultPriority(event.Priority)
 	if event.ID == "" || event.Type == "" || event.RecipientID == "" {
 		return nil, errors.New("event, type, and recipient are required")
@@ -530,7 +534,7 @@ func (s *Store) VerifySecureLink(path string, expires time.Time, signature strin
 }
 func (s *Store) ListDeliveries(recipient string) []Delivery {
 	if s.pool != nil {
-		rows, err := s.pool.Query(context.Background(), `SELECT id::text,event_reference,recipient_id::text,channel,template,template_version,state,COALESCE(provider_message_id,''),body,scheduled_at,sent_at,failed_at,COALESCE(failure_reason,''),COALESCE(secure_link,'') FROM app.notifications WHERE recipient_id=$1::uuid ORDER BY COALESCE(sent_at,scheduled_at) DESC NULLS LAST`, recipient)
+		rows, err := s.pool.Query(db.WithTenantContext(context.Background(), recipient, ""), `SELECT id::text,event_reference,recipient_id::text,channel,template,template_version,state,COALESCE(provider_message_id,''),body,scheduled_at,sent_at,failed_at,COALESCE(failure_reason,''),COALESCE(secure_link,'') FROM app.notifications WHERE recipient_id=$1::uuid ORDER BY COALESCE(sent_at,scheduled_at) DESC NULLS LAST`, recipient)
 		if err != nil {
 			return []Delivery{}
 		}
@@ -810,16 +814,7 @@ func (s *Store) DueDeliveryIDs(ctx context.Context, limit int) ([]string, error)
 	if limit <= 0 || limit > 500 {
 		return nil, errors.New("notification delivery limit must be between 1 and 500")
 	}
-	rows, err := s.pool.Query(ctx, `
-		SELECT id::text
-		FROM app.notifications
-		WHERE delivery_attempts < 8 AND (
-			(state = 'scheduled' AND scheduled_at <= now()) OR
-			(state = 'failed' AND COALESCE(next_attempt_at, now()) <= now()) OR
-			(state = 'sending' AND lease_expires_at <= now())
-		)
-		ORDER BY COALESCE(next_attempt_at, scheduled_at, lease_expires_at, updated_at)
-		LIMIT $1`, limit)
+	rows, err := s.pool.Query(ctx, `SELECT id::text FROM app.notification_due_work($1)`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -842,6 +837,11 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 	if s.pool == nil || strings.TrimSpace(id) == "" {
 		return errors.New("notification database and id are required")
 	}
+	var recipient string
+	if err := s.pool.QueryRow(ctx, `SELECT app.notification_work_subject($1::uuid)::text`, id).Scan(&recipient); err != nil {
+		return err
+	}
+	ctx = db.WithTenantContext(ctx, recipient, "")
 	var message Message
 	var ciphertext []byte
 	var organizationID, priority string

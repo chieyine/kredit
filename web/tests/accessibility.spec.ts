@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-const organization = { id: 'org-a11y', legal_name: 'Accessible Supplies Limited', trading_name: 'Accessible Supplies' };
+const organization = { id: 'org-a11y', business_type: 'limited_company', legal_name: 'Accessible Supplies Limited', trading_name: 'Accessible Supplies' };
 const line = { id: 'line-a11y', supplier_organization_id: organization.id, buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', approved_limit_kobo: 100_000_000, current_exposure_kobo: 0, reserved_pending_kobo: 25_000_000, available_limit_kobo: 75_000_000, state: 'ACTIVE', version: 2 };
 const drawdown = { id: 'drawdown-a11y', trade_line_id: 'line-a11y', principal_kobo: 25_000_000, goods_description: 'Twenty bags of rice', invoice_reference: 'INV-A11Y', due_date: '2026-10-30', collection_at: '2026-10-31T09:00:00Z', grace_hours: 24, agreement_hash: 'accessible-agreement-hash', state: 'GOODS_RELEASED', delivery_method: 'Courier', release_evidence_reference: 'TRACK-A11Y' };
 const creditRequest = { id: 'request-a11y', state: 'BUYER_REVIEWING', supplier_legal_name: 'Accessible Supplies Limited', buyer_legal_name: 'Inclusive Retail Limited', buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', principal_kobo: 50_000_000, goods_description: 'Verified inventory', due_date: '2026-10-30', collection_at: '2026-10-31T09:00:00Z', grace_hours: 24, schedule_type: 'one_time', fee_terms:{policy_revision:1,base_bps:50,collection_bps:50} };
@@ -63,6 +63,8 @@ for (const journey of [
 		await page.goto(journey[1]);
 		if (journey[1] !== '/app') await expect(page.locator('.account-gate')).toHaveCount(0);
 		await expect(page.locator('h1')).toBeVisible();
+		if (journey[0] === 'supplier onboarding') await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
+		if (journey[0] === 'credit creation') await expect(page.getByRole('combobox', { name: 'Customer', exact: true })).toBeVisible();
 		if (journey[0] === 'goods receipt and drawdown' || journey[0] === 'goods release') await expect(page.getByText('Twenty bags of rice')).toBeVisible();
 		await expectNoSeriousViolations(page, journey[0]);
 	});

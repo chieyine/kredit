@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { actualPaymentTime } from '$lib/financial-input';
  import SaleProgress from "$lib/components/SaleProgress.svelte";
  import SaleCosts from "$lib/components/SaleCosts.svelte";
   import { getContext, untrack } from 'svelte';
@@ -19,7 +20,7 @@
   let resource = $state<Resource<SaleView>>({ state: 'loading', scope: '' });
   let paymentResource = $state<Resource<PaymentRow[]>>({ state: 'loading', scope: '' });
   let busy = $state(''), message = $state(''), actionError = $state(''), uncertain = $state('');
-  let receiptIssue = $state(''), claimAmount = $state(''), claimReference = $state(''), paymentURL = $state('');
+  let receiptIssue = $state(''), claimAmount = $state(''), claimReference = $state(''), claimPaidAt = $state(''), paymentURL = $state('');
   let disputeAmount = $state(''), disputeReason = $state(''), disputeExplanation = $state(''), disputeEffect = $state('CONTESTED_ONLY');
   const intents = new Map<string, MutationIntent>();
   const reads = new LatestRequest();
@@ -83,7 +84,9 @@
   async function claimPayment() {
     const amount = parseNaira(claimAmount);
     if (amount <= 0 || !claimReference.trim()) { actionError = 'Enter the amount and transfer reference. Contact support if you cannot find the reference.'; return; }
-    await perform('payment-claims', { amount_kobo: amount, paid_at: intent('payment-claims').createdAt, transfer_reference: claimReference.trim() }, value => {const claim=record(record(value).payment_claim);if(!text(claim.id))throw new Error('Missing transfer reference');kobo(claim.amount_kobo);text(claim.state);return claim;}, () => { message = 'Transfer reported. The seller must confirm receipt before your balance changes.'; claimAmount = ''; claimReference = ''; });
+    let paidAt: string;
+    try { paidAt = actualPaymentTime(claimPaidAt); } catch { actionError = 'Enter the actual transfer date and time in Nigerian time, not a future date.'; return; }
+    await perform('payment-claims', { amount_kobo: amount, paid_at: paidAt, transfer_reference: claimReference.trim() }, value => {const claim=record(record(value).payment_claim);if(!text(claim.id))throw new Error('Missing transfer reference');kobo(claim.amount_kobo);text(claim.state);return claim;}, () => { message = 'Transfer reported. The seller must confirm receipt before your balance changes.'; claimAmount = ''; claimReference = ''; claimPaidAt = ''; });
   }
   async function createPaymentLink() {
     await perform('payment-link', undefined, value => {
@@ -97,7 +100,7 @@
     if (amount <= 0 || !disputeReason.trim()) { actionError = 'Enter the amount in question and the reason for your report.'; return; }
     await perform('disputes', { disputed_amount_kobo: amount, reason: disputeReason.trim(), explanation: disputeExplanation.trim(), collection_effect: 'CONTESTED_ONLY' }, value=>{const result=record(value);const dispute=record(result.dispute);if(!text(dispute.id))throw new Error('Missing problem reference');text(dispute.state);return result;}, () => { message = `Problem reported. ${disputeEffectCopy(disputeEffect, amount)}`; });
   }
-  $effect(()=>{const scope=requestID;untrack(()=>{message='';actionError='';uncertain='';paymentURL='';receiptIssue='';claimAmount='';claimReference='';disputeAmount='';disputeReason='';disputeExplanation='';void load(scope);});return()=>reads.cancel();});
+  $effect(()=>{const scope=requestID;untrack(()=>{message='';actionError='';uncertain='';paymentURL='';receiptIssue='';claimAmount='';claimReference='';claimPaidAt='';disputeAmount='';disputeReason='';disputeExplanation='';void load(scope);});return()=>reads.cancel();});
 </script>
 <svelte:head><title>Review your sale — Kredit</title></svelte:head>
 <main class="shell buyer-sale">
@@ -141,7 +144,7 @@
         <a href={`/api/v1/buyer/credit-requests/${encodeURIComponent(requestID)}/agreement-document`} target="_blank" rel="noreferrer">Print or save the agreement</a>
       </section>
       {#if mayPay}<section class="payment-options"><h2>Your balance and payments</h2><p>View the remaining balance, or report a transfer you have already made.</p><button class="primary" disabled={blocked('payment-link')} onclick={createPaymentLink}>Get balance link</button>{#if paymentURL}<a href={paymentURL}>Open balance link</a>{/if}
-        <details><summary>Already paid by bank transfer?</summary><p>A transfer report is not a payment confirmation. Your balance changes only after the money is verified.</p><label>Amount transferred (₦)<input bind:value={claimAmount} inputmode="decimal" disabled={!!busy} /></label><label>Transfer reference<input bind:value={claimReference} maxlength="256" disabled={!!busy} /></label><p class="field-help">Find this on your bank receipt. Contact support if the reference is unavailable, or a different person sent the payment and you need help matching it.</p><button class="secondary" disabled={blocked('payment-claims')} onclick={claimPayment}>Report my transfer</button></details>
+        <details><summary>Already paid by bank transfer?</summary><p>A transfer report is not a payment confirmation. Your balance changes only after the money is verified.</p><label>Amount transferred (₦)<input bind:value={claimAmount} inputmode="decimal" disabled={!!busy} /></label><label>When did you transfer it? (Nigerian time)<input type="datetime-local" bind:value={claimPaidAt} disabled={!!busy} required /></label><label>Transfer reference<input bind:value={claimReference} maxlength="256" disabled={!!busy} /></label><p class="field-help">Find this on your bank receipt. Contact support if the reference is unavailable, or a different person sent the payment and you need help matching it.</p><button class="secondary" disabled={blocked('payment-claims')} onclick={claimPayment}>Report my transfer</button></details>
       </section>{/if}
       <details class="dispute-panel"><summary>Report a problem with this sale</summary><p>Your report and its outcome stay with the sale.</p><form onsubmit={openDispute}><label>Amount in question (₦)<input bind:value={disputeAmount} inputmode="decimal" required disabled={!!busy} /></label><label>What went wrong?<input bind:value={disputeReason} maxlength="200" placeholder="For example: 5 cartons were missing" required disabled={!!busy} /></label><label>Details<textarea bind:value={disputeExplanation} maxlength="5000" rows="4" disabled={!!busy}></textarea></label><label>What should happen to new bank debits?<select bind:value={disputeEffect} disabled={!!busy}><option value="CONTESTED_ONLY">Hold the amount in question</option></select></label><p class="inline-notice">{disputeEffectCopy(disputeEffect, parseNaira(disputeAmount) > 0 ? parseNaira(disputeAmount) : undefined)}</p><button class="primary" disabled={blocked('disputes')}>Report problem</button></form></details>
     {/if}

@@ -90,7 +90,7 @@ func (s *Server) listOrganizationOverdue(w http.ResponseWriter, r *http.Request)
 		if view.Obligation == nil || view.Obligation.OutstandingKobo <= 0 {
 			continue
 		}
-		_, scheduleItems, err := s.runtime.Schedules.GetForObligation(view.Obligation.ID)
+		_, scheduleItems, err := s.runtime.Schedules.ForContext(r.Context()).GetForObligation(view.Obligation.ID)
 		if financialReadError(w, err) {
 			return
 		}
@@ -213,7 +213,7 @@ func (s *Server) listBuyerDisputes(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	financialRows9, readErr9 := s.runtime.readDisputesForBuyer(user.ID)
+	financialRows9, readErr9 := s.runtime.readDisputesForBuyer(r.Context(), user.ID)
 	if financialReadError(w, readErr9) {
 		return
 	}

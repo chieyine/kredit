@@ -135,7 +135,7 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 		// Deemed acceptance is the only path where silence creates a collectable
 		// obligation. A rising share means buyers are not answering, which is a
 		// wrongful-debit risk signal long before it becomes a dispute.
-		{&result.Guardrails, "deemed_acceptance_share", "Activations from buyer silence", "percent", "Confirmed receipts recorded by deemed acceptance, divided by all confirmed receipts in the window.", "app.receipt_confirmations + app.credit_requests"},
+		{&result.Guardrails, "deemed_acceptance_share", "Activations from buyer silence", "percent", "Obligations activated through recorded system acceptance, divided by all obligations activated in the window.", "app.system_acceptances + app.obligations"},
 		// Kredit earns at most one hundred basis points on activated principal.
 		// Every workflow counted here consumes human time against that margin, so
 		// the ratio is the cost-to-serve signal. Minutes per touch is not

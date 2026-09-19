@@ -515,12 +515,13 @@ func (s *Store) RecordDrawdownReceipt(input ReceiptInput) (Drawdown, TradeLine, 
 	if input.State == "issue_reported" && d.State == DrawdownReceiptIssue && d.ReceiptState == input.State && d.ReceiptActorID == input.BuyerUserID && d.ReceiptIssueReason == strings.TrimSpace(input.IssueReason) {
 		return cloneDrawdown(*d), cloneLine(*line), nil
 	}
-	if d.State != DrawdownGoodsReleased {
+	if d.State != DrawdownGoodsReleased && !(d.State == DrawdownReceiptIssue && input.State == "no_issue") {
 		return Drawdown{}, TradeLine{}, fmt.Errorf("drawdown receipt cannot be recorded from %s", d.State)
 	}
 	if input.State == "no_issue" {
-		if err := s.eligibleLocked(line); err != nil {
-			return Drawdown{}, TradeLine{}, err
+		// Expiry prevents new purchases, not completion of goods already released.
+		if line.State != LineActive || !line.MandateActive {
+			return Drawdown{}, TradeLine{}, errors.New("an active line and mandate are required to complete this purchase")
 		}
 	}
 	if input.State != "no_issue" && input.State != "issue_reported" {
@@ -535,7 +536,9 @@ func (s *Store) RecordDrawdownReceipt(input ReceiptInput) (Drawdown, TradeLine, 
 	d = &prepared
 	d.ReceiptState = input.State
 	d.ReceiptActorID = input.BuyerUserID
-	d.ReceiptIssueReason = strings.TrimSpace(input.IssueReason)
+	if input.State == "issue_reported" {
+		d.ReceiptIssueReason = strings.TrimSpace(input.IssueReason)
+	}
 	d.ReceiptAt = s.now()
 	if input.State == "issue_reported" {
 		if d.ReceiptDisputeID == "" {
@@ -610,11 +613,15 @@ func (s *Store) CancelDrawdown(authorizedLineID, drawdownID, actorID string) (Dr
 	if d.State == DrawdownCancelled {
 		return cloneDrawdown(*d), cloneLine(*line), nil
 	}
-	if d.State != DrawdownPending && d.State != DrawdownConfirmed {
+	resolvingIssue := d.State == DrawdownReceiptIssue
+	if resolvingIssue && actorID == line.BuyerUserID {
+		return Drawdown{}, TradeLine{}, errors.New("the seller must accept the return before cancelling released goods")
+	}
+	if d.State != DrawdownPending && d.State != DrawdownConfirmed && !resolvingIssue {
 		return Drawdown{}, TradeLine{}, fmt.Errorf("drawdown cannot be cancelled from %s", d.State)
 	}
 	r := s.reservations[d.ReservationID]
-	if r == nil || (r.State != ReservationPending && r.State != ReservationConfirmed) {
+	if r == nil || (r.State != ReservationPending && r.State != ReservationConfirmed && !(resolvingIssue && r.State == ReservationReleasedToSupplier)) {
 		return Drawdown{}, TradeLine{}, errors.New("releasable reservation required")
 	}
 	d.State = DrawdownCancelled

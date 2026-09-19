@@ -5,6 +5,9 @@ export type Resource<T> =
   | { state: 'ready'; scope: string; data: T; checkedAt: string }
   | { state: 'error'; scope: string; message: string; status: number };
 
+/** Explicitly authored client guidance; never construct this from server diagnostics. */
+export class UserFacingError extends Error {}
+
 export class RequestError extends Error {
   status: number;
   code: string;
@@ -28,6 +31,7 @@ export function rows<T>(key: string, decode: Decoder<T>): Decoder<T[]> {
   };
 }
 export function publicError(error: unknown, subject = 'these details'): string {
+  if (error instanceof UserFacingError) return error.message;
   if (error instanceof RequestError && error.status === 401) return 'Your session has ended. Sign in again to continue.';
   if (error instanceof RequestError && error.status === 403) return 'Your account does not have permission to open these details.';
   if (error instanceof RequestError && error.status === 429) return 'Too many requests. Wait a moment, then try again.';

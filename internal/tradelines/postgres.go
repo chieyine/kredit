@@ -442,8 +442,31 @@ func persistAggregateTx(ctx context.Context, tx pgx.Tx, local *Store, lineID str
 			return fmt.Errorf("persist drawdown: %w", err)
 		}
 		if d.ReceiptDisputeID != "" {
-			if _, err := tx.Exec(ctx, `INSERT INTO app.drawdown_receipt_disputes(id,drawdown_id,supplier_organization_id,buyer_user_id,state,reason,created_at,updated_at) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,'OPEN',$5,$6,$6) ON CONFLICT(drawdown_id) DO UPDATE SET reason=EXCLUDED.reason,updated_at=EXCLUDED.updated_at`, d.ReceiptDisputeID, d.ID, line.SupplierOrganizationID, line.BuyerUserID, d.ReceiptIssueReason, d.ReceiptAt); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO app.drawdown_receipt_disputes(id,drawdown_id,supplier_organization_id,buyer_user_id,state,reason,created_at,updated_at) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,'OPEN',$5,$6,$6) ON CONFLICT(drawdown_id) DO NOTHING`, d.ReceiptDisputeID, d.ID, line.SupplierOrganizationID, line.BuyerUserID, d.ReceiptIssueReason, d.ReceiptAt); err != nil {
 				return fmt.Errorf("persist drawdown receipt dispute: %w", err)
+			}
+			disputeState := "OPEN"
+			if d.State == DrawdownActivated {
+				disputeState = "RESOLVED"
+			}
+			if d.State == DrawdownCancelled {
+				disputeState = "CANCELLED"
+			}
+			if disputeState != "OPEN" {
+				changed, err := tx.Exec(ctx, `UPDATE app.drawdown_receipt_disputes SET state=$2,updated_at=now() WHERE id=$1::uuid AND state='OPEN'`, d.ReceiptDisputeID, disputeState)
+				if err != nil {
+					return err
+				}
+				if changed.RowsAffected() > 0 {
+					// The aggregate was already loaded under the caller's RLS context.
+					// Buyer requests do not carry a supplier organization context.
+					if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, line.SupplierOrganizationID); err != nil {
+						return err
+					}
+					if _, err = tx.Exec(ctx, `INSERT INTO app.audit_events(actor_user_id,organization_id,action,resource_type,resource_id,outcome,severity,metadata) VALUES(app.current_user_id(),$1::uuid,'trade_line.receipt_issue_resolved','drawdown',$2,'success','notice',jsonb_build_object('dispute_id',$3::text,'resolution',$4::text))`, line.SupplierOrganizationID, d.ID, d.ReceiptDisputeID, disputeState); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}

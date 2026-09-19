@@ -7,6 +7,7 @@ import { feeDisclosure, feeForKobo, baseFeeForKobo } from '../src/lib/fee-terms'
 import { dateLabel, receivables, saleView, workRow } from '../src/lib/records';
 import { attentionItems } from '../src/lib/attention';
 import { DEMO_SALE, DEMO_BALANCE_KOBO, DEMO_PAID_PERCENT } from '../src/lib/demo-sale';
+import { loadOnboardingSettings } from '../src/lib/api/onboarding-settings';
 
 class MemoryStorage implements Storage {
   data = new Map<string, string>();
@@ -26,6 +27,13 @@ test.afterEach(() => {
   else Reflect.deleteProperty(globalThis, 'navigator');
 });
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
+
+test('business settings accept a legal name without an optional display name', async () => {
+  globalThis.fetch = async (url) => String(url).endsWith('/organizations')
+    ? json({ organizations: [{ id: 'org-a', legal_name: 'Verified seller' }] })
+    : json({ profile: { version: 1 }, permissions: { billing: true } });
+  expect(await loadOnboardingSettings('org-a')).toMatchObject({ orgID: 'org-a', organizationName: 'Verified seller' });
+});
 
 test('failed, malformed and missing financial responses stay unavailable, not empty', async () => {
   for (const response of [json({ detail: 'unavailable' }, 503), json({}), json({ payments: null }), new Response('<html>Error</html>')]) {

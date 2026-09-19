@@ -70,8 +70,8 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 	if s == nil || s.pool == nil {
 		return errors.New("financial review database unavailable")
 	}
-	if action != "claim" && action != "resolve" {
-		return errors.New("action must be claim or resolve")
+	if action != "claim" && action != "resolve" && action != "release" && action != "takeover" {
+		return errors.New("action must be claim, resolve, release, or takeover")
 	}
 	if len(strings.TrimSpace(reason)) < 8 || len(reason) > 2000 {
 		return errors.New("reason must contain 8 to 2000 characters")
@@ -87,6 +87,11 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 	if err = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionProviderOperations); err != nil {
 		return err
 	}
+	if action == "takeover" {
+		if err = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionPlatformOwner); err != nil {
+			return err
+		}
+	}
 	var owner, kind, target, state string
 	if err = tx.QueryRow(ctx, `SELECT COALESCE(owner_id::text,''),kind,target_id,state FROM app.financial_review_cases WHERE id=$1::uuid FOR UPDATE`, id).Scan(&owner, &kind, &target, &state); err != nil {
 		return err
@@ -94,10 +99,15 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 	if state != "OPEN" {
 		return errors.New("case is already resolved")
 	}
-	if owner != "" && owner != actor {
+	if owner != "" && owner != actor && action != "takeover" {
 		return errors.New("case is assigned to another reviewer")
 	}
-	if action == "resolve" {
+	if action == "release" {
+		if owner != actor {
+			return errors.New("only the assigned reviewer may release this case")
+		}
+		_, err = tx.Exec(ctx, `UPDATE app.financial_review_cases SET owner_id=NULL WHERE id=$1::uuid`, id)
+	} else if action == "resolve" {
 		if owner != actor {
 			return errors.New("claim this case before resolving it")
 		}
@@ -115,8 +125,16 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO app.financial_review_events(case_id,actor_id,action,reason) VALUES($1::uuid,$2::uuid,$3,$4)`, id, actor, strings.ToUpper(action), strings.TrimSpace(reason)); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO app.financial_review_events(case_id,actor_id,action,reason) VALUES($1::uuid,$2::uuid,$3,$4)`, id, actor, strings.ToUpper(action), reviewDecisionReason(action, owner, reason)); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// Preserve the previous assignment without adding mutable ownership history.
+func reviewDecisionReason(action, previousOwner, reason string) string {
+	if action == "release" || action == "takeover" {
+		return "Previous owner: " + previousOwner + ". " + strings.TrimSpace(reason)
+	}
+	return strings.TrimSpace(reason)
 }

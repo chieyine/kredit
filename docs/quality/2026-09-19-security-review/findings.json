@@ -1,0 +1,110 @@
+{
+  "documentType": "codex-security.findings",
+  "findings": [
+    {
+      "attackPath": {
+        "assumptions": [
+          "Victim visits attacker-controlled content before the OTP expires.",
+          "No separately configured ingress origin policy blocks the request."
+        ],
+        "dataflow": {
+          "summary": "Attacker-owned OTP plus form POST reaches verifyOTP, passes JSON decoding, creates attacker-account session and returns Set-Cookie in the victim browser."
+        },
+        "reachability": {
+          "summary": "Public /api/v1/auth/otp/verify route; no existing session or idempotency header is required. API proxy forwards the request before framework resolve."
+        }
+      },
+      "codeEvidence": [
+        {
+          "code": "user, session, token, err := s.runtime.Auth.VerifyOTP(input.ChallengeID, input.Code, input.DeviceLabel)",
+          "explanation": "The handler verifies supplied OTP credentials but never validates browser request origin before issuing session cookies at line 92.",
+          "id": "otp-cookie",
+          "label": "Unprotected login cookie issuance",
+          "path": "internal/web/auth_handlers.go",
+          "startLine": 85
+        },
+        {
+          "code": "func decodeJSONLimit(w http.ResponseWriter, r *http.Request, destination any, limit int64) error {",
+          "explanation": "A text/plain HTML form can encode valid JSON using device_label to absorb the form separator; unknown-field rejection does not prevent that construction.",
+          "id": "json-form",
+          "label": "JSON parsing has no media-type gate",
+          "path": "internal/web/http_helpers.go",
+          "startLine": 19
+        }
+      ],
+      "confidence": {
+        "level": "high",
+        "rationale": "The public handler consumes OTP and sets cookies without checking Origin, and the proxy forwards form bodies directly."
+      },
+      "findingId": "csf_963e7e2c23e774183344cb68",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:6297e1bddaadbb74a0c7bfb9d2775d2beb79914e1fe7cf64e2934149ffd64f30"
+      },
+      "identity": {
+        "anchor": "cross-site-otp-verification-can-install-an-attacker-owned-browser-session"
+      },
+      "locations": [
+        {
+          "endLine": 92,
+          "path": "internal/web/auth_handlers.go",
+          "role": "root_control",
+          "startLine": 79
+        },
+        {
+          "endLine": 30,
+          "path": "internal/web/http_helpers.go",
+          "role": "supporting",
+          "startLine": 19
+        },
+        {
+          "endLine": 112,
+          "path": "web/src/hooks.server.ts",
+          "role": "supporting",
+          "startLine": 99
+        }
+      ],
+      "occurrenceId": "occ_2a7f61f7a91a753949e15102",
+      "provenance": {
+        "candidateId": "login-origin",
+        "source": "local_plugin"
+      },
+      "remediation": "Reject cross-origin browser requests before consuming OTP or issuing a session. Preserve legitimate same-origin sign-in and verify rejected requests leave the OTP usable.",
+      "remediationTests": [
+        "Cross-site and same-site form submissions with valid synthetic OTPs must return 403 with no cookies.",
+        "The same unconsumed challenge must subsequently succeed from the configured origin."
+      ],
+      "rootCause": {
+        "summary": "The origin control is applied by requireCSRF on authenticated mutations, but omitted from unauthenticated OTP verification that establishes authentication."
+      },
+      "ruleId": "csrf.login-session-installation",
+      "severity": {
+        "level": "medium",
+        "rationale": "A remotely inducible browser action can confuse account ownership, but requires a live attacker-owned OTP and victim interaction."
+      },
+      "summary": "OTP verification accepts a valid attacker-owned challenge from a cross-origin form and sets first-party session cookies. The victim may unknowingly enter data into the attacker's account. This does not expose the victim's pre-existing account or bypass OTP possession.",
+      "taxonomy": {
+        "category": "cross-site-request-forgery",
+        "cwe": [
+          "CWE-352"
+        ]
+      },
+      "title": "Cross-site OTP verification can install an attacker-owned browser session",
+      "validation": {
+        "counterEvidence": [
+          "A valid OTP is still required; an attacker can only supply their own challenge.",
+          "HttpOnly, Secure and SameSite=Lax protect existing cookies but do not prevent setting a new session during a top-level navigation."
+        ],
+        "limitations": [
+          "No production attack performed; deployed ingress may have additional protections.",
+          "Source-backed finding; local regression reproduction will run during remediation."
+        ],
+        "method": "Parent source review",
+        "status": "source_validated",
+        "summary": "Traced anonymous OTP verification through decoder, OTP service call and Set-Cookie; checked middleware and SvelteKit proxy for an equivalent origin guard and found none."
+      }
+    }
+  ],
+  "scanId": "319a9df5-9024-4172-9719-a41f5a1b6961",
+  "schemaVersion": "1.0"
+}

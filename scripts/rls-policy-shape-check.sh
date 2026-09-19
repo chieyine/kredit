@@ -45,7 +45,7 @@ HAVING count(*) FILTER (
        ) > 0
 ORDER BY 1" > "$actual"
 
-grep -vE '^\s*(#|$)' "$baseline" | sort > "$expected"
+{ grep -vE '^\s*(#|$)' "$baseline" || true; } | sort > "$expected"
 sort -o "$actual" "$actual"
 
 if ! diff -u "$expected" "$actual" > /dev/null; then

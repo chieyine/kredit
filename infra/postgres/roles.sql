@@ -95,6 +95,10 @@ BEGIN
     IF to_regprocedure('app.delete_expired_idempotency_record(text,text)') IS NOT NULL THEN
         GRANT EXECUTE ON FUNCTION app.delete_expired_idempotency_record(TEXT, TEXT) TO kredit_app;
     END IF;
+    IF to_regprocedure('app.recovery_queue_metrics()') IS NOT NULL THEN
+        REVOKE ALL ON FUNCTION app.recovery_queue_metrics() FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION app.recovery_queue_metrics() TO kredit_app, kredit_worker;
+    END IF;
     IF to_regprocedure('app.phase5_financial_metrics()') IS NOT NULL THEN
         REVOKE ALL ON FUNCTION app.phase5_financial_metrics() FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION app.phase5_financial_metrics() TO kredit_app, kredit_worker;
@@ -286,3 +290,10 @@ GRANT EXECUTE ON FUNCTION app.dsa_code(text),app.dsa_claim(uuid,text) TO kredit_
 GRANT EXECUTE ON FUNCTION app.dsa_facts(uuid,timestamptz,timestamptz) TO kredit_app,kredit_worker;
 
 GRANT EXECUTE ON FUNCTION app.dsa_agent_active(uuid) TO kredit_app;
+
+-- Tenant-scoped recovery and notification repositories (migrations 159/163).
+GRANT EXECUTE ON FUNCTION app.recovery_subject(uuid) TO kredit_app;
+GRANT EXECUTE ON FUNCTION app.notification_due_work(integer),app.notification_work_subject(uuid),app.notification_receipt_work(text,integer) TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.notification_receipt_subject(text,text,text),app.notification_meta_candidates(text) TO kredit_app,kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.isolation_operations_counts(),app.dispute_reference_lookup(text),app.notification_recovery_subject(uuid) TO kredit_app;

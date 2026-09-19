@@ -21,7 +21,7 @@ groups:
       # These are current-state gauges, not counters. Never apply rate/increase
       # to them. Deployment labels must separate independent environments.
       - alert: KreditFinancialTelemetryMissing
-        expr: absent(kredit_ledger_discrepancies) or absent(kredit_balance_discrepancies) or absent(kredit_schedule_discrepancies) or absent(kredit_collection_payment_discrepancies) or absent(kredit_settlement_discrepancies) or absent(kredit_provider_webhook_oldest_unprocessed_seconds) or absent(kredit_collection_unknown_states) or absent(kredit_notification_dead_letters) or absent(kredit_outbox_delivery_failures) or absent(kredit_collection_oldest_unresolved_seconds) or absent(kredit_river_pending_jobs) or absent(kredit_river_discarded_jobs) or absent(kredit_active_obligations) or absent(kredit_negative_outstanding_balances)
+        expr: absent(kredit_ledger_discrepancies) or absent(kredit_balance_discrepancies) or absent(kredit_schedule_discrepancies) or absent(kredit_collection_payment_discrepancies) or absent(kredit_settlement_discrepancies) or absent(kredit_provider_webhook_oldest_unprocessed_seconds) or absent(kredit_collection_unknown_states) or absent(kredit_notification_dead_letters) or absent(kredit_outbox_delivery_failures) or absent(kredit_collection_oldest_unresolved_seconds) or absent(kredit_river_pending_jobs) or absent(kredit_river_discarded_jobs) or absent(kredit_active_obligations) or absent(kredit_negative_outstanding_balances) or absent(kredit_financial_reviews_open) or absent(kredit_financial_reviews_unassigned) or absent(kredit_financial_review_oldest_open_seconds) or absent(kredit_drawdown_receipt_issues_open) or absent(kredit_drawdown_receipt_issue_oldest_open_seconds)
         for: 5m
         labels: {severity: critical}
         annotations: {summary: "Required financial monitoring signals are missing"}
@@ -70,3 +70,24 @@ groups:
         expr: kredit_river_discarded_jobs > 0
         labels: {severity: critical}
         annotations: {summary: "A discarded background job requires an assigned operator"}
+      - alert: KreditFinancialReviewUnassigned
+        expr: kredit_financial_reviews_unassigned > 0
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: "Financial differences need an accountable reviewer"
+          description: "Open /admin/reconciliation and claim the case. Use docs/runbooks/recovery-operations.md; do not retry collections or change balances to clear this alert."
+      - alert: KreditFinancialReviewAging
+        expr: kredit_financial_review_oldest_open_seconds > 3600
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "An open financial review is older than one hour"
+          description: "Escalate to financial operations with the case reference and investigation history. Closing requires the underlying records to agree."
+      - alert: KreditDeliveryIssueAging
+        expr: kredit_drawdown_receipt_issue_oldest_open_seconds > 86400
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "A reported delivery problem is older than one day"
+          description: "Contact the responsible seller and buyer through the support process. Only buyer confirmation or seller acceptance of a return resolves the purchase; see docs/runbooks/recovery-operations.md."

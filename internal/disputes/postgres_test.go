@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"kredit/internal/db"
 	"kredit/internal/schedules"
 	"os"
 	"testing"
@@ -66,7 +67,19 @@ func TestPostgresDisputeDecisionIsAtomicAndRestartSafe(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM app.organizations WHERE id=$1::uuid`, organizationID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id=$1::uuid OR id=$2::uuid`, openerID, reviewerID)
 	}()
-	store := NewPostgresStore(pool, nil)
+	runtimeURL := os.Getenv("KREDIT_TEST_APP_DATABASE_URL")
+	if runtimeURL == "" {
+		runtimeURL = databaseURL
+	}
+	runtimePool, err := db.OpenAsRole(ctx, runtimeURL, "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtimePool.Close()
+	if _, err := pool.Exec(ctx, `INSERT INTO app.platform_role_assignments(user_id,role,granted_by,reason) VALUES($1::uuid,'dispute_reviewer',$1::uuid,'Synthetic dispute review')`, reviewerID); err != nil {
+		t.Fatal(err)
+	}
+	store := NewPostgresStore(runtimePool.Raw(), nil).ForContext(db.WithTenantContext(ctx, openerID, organizationID))
 	opened, err := store.Open(OpenInput{ObligationID: obligationID, OpenedBy: openerID, DisputedAmountKobo: 2500, Reason: "Quantity mismatch"})
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +88,8 @@ func TestPostgresDisputeDecisionIsAtomicAndRestartSafe(t *testing.T) {
 	if _, err := store.AddEvidence(disputeID, openerID, "", "Delivery was short"); err != nil {
 		t.Fatal(err)
 	}
-	updated, decision, err := store.Decide(DecideInput{DisputeID: disputeID, ReviewerID: reviewerID, Outcome: "buyer_supported", AdjustmentKobo: 2500, RemainingDisputedKobo: 0, Reason: "Evidence confirmed"})
+	reviewStore := NewPostgresStore(runtimePool.Raw(), nil).ForContext(db.WithTenantContext(ctx, reviewerID, ""))
+	updated, decision, err := reviewStore.Decide(DecideInput{DisputeID: disputeID, ReviewerID: reviewerID, Outcome: "buyer_supported", AdjustmentKobo: 2500, RemainingDisputedKobo: 0, Reason: "Evidence confirmed"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +110,7 @@ func TestPostgresDisputeDecisionIsAtomicAndRestartSafe(t *testing.T) {
 	if normalized != 7500 || snapshot != 7500 {
 		t.Fatalf("adjustment not atomic: normalized=%d snapshot=%d", normalized, snapshot)
 	}
-	loaded, evidence, decisions, err := NewPostgresStore(pool, nil).Get(disputeID)
+	loaded, evidence, decisions, err := NewPostgresStore(runtimePool.Raw(), nil).ForContext(db.WithTenantContext(ctx, openerID, organizationID)).Get(disputeID)
 	if err != nil || loaded.State != StateResolved || len(evidence) != 1 || len(decisions) != 1 {
 		t.Fatalf("restart load failed: %v %+v %d %d", err, loaded, len(evidence), len(decisions))
 	}

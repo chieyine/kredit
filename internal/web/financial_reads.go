@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"kredit/internal/collections"
+	"kredit/internal/corrections"
 	"kredit/internal/credit"
 	"kredit/internal/disputes"
 	"kredit/internal/paymentclaims"
@@ -50,29 +51,29 @@ func (r *Runtime) getPayment(ctx context.Context, id string) (payments.Payment, 
 	}
 	return r.Payments.Get(id)
 }
-func (r *Runtime) readDisputesForOrganization(id string) ([]disputes.Dispute, error) {
-	if source, ok := r.Disputes.(interface {
+func (r *Runtime) readDisputesForOrganization(ctx context.Context, id string) ([]disputes.Dispute, error) {
+	if source, ok := r.ScopedDisputes(ctx).(interface {
 		ReadForOrganization(id string) ([]disputes.Dispute, error)
 	}); ok {
 		return source.ReadForOrganization(id)
 	}
-	return r.Disputes.ListForOrganization(id), nil
+	return r.ScopedDisputes(ctx).ListForOrganization(id), nil
 }
-func (r *Runtime) readDisputesForBuyer(id string) ([]disputes.Dispute, error) {
-	if source, ok := r.Disputes.(interface {
+func (r *Runtime) readDisputesForBuyer(ctx context.Context, id string) ([]disputes.Dispute, error) {
+	if source, ok := r.ScopedDisputes(ctx).(interface {
 		ReadForBuyer(id string) ([]disputes.Dispute, error)
 	}); ok {
 		return source.ReadForBuyer(id)
 	}
-	return r.Disputes.ListForBuyer(id), nil
+	return r.ScopedDisputes(ctx).ListForBuyer(id), nil
 }
-func (r *Runtime) readDisputesForObligation(id string) ([]disputes.Dispute, error) {
-	if source, ok := r.Disputes.(interface {
+func (r *Runtime) readDisputesForObligation(ctx context.Context, id string) ([]disputes.Dispute, error) {
+	if source, ok := r.ScopedDisputes(ctx).(interface {
 		ReadForObligation(id string) ([]disputes.Dispute, error)
 	}); ok {
 		return source.ReadForObligation(id)
 	}
-	return r.Disputes.ListForObligation(id), nil
+	return r.ScopedDisputes(ctx).ListForObligation(id), nil
 }
 func (r *Runtime) readTradeLinesForSupplier(ctx context.Context, id string) ([]tradelines.TradeLine, error) {
 	if source, ok := r.ScopedTradeLines(ctx).(interface {
@@ -158,4 +159,22 @@ func (r *Runtime) ScopedTradeLines(ctx context.Context) tradelines.Service {
 		return scoped.ForContext(ctx)
 	}
 	return r.TradeLines
+}
+
+func (r *Runtime) ScopedCorrections(ctx context.Context) corrections.Service {
+	if scoped, ok := r.Corrections.(interface {
+		ForContext(context.Context) corrections.Service
+	}); ok {
+		return scoped.ForContext(ctx)
+	}
+	return r.Corrections
+}
+
+func (r *Runtime) ScopedDisputes(ctx context.Context) disputes.Service {
+	if scoped, ok := r.Disputes.(interface {
+		ForContext(context.Context) disputes.Service
+	}); ok {
+		return scoped.ForContext(ctx)
+	}
+	return r.Disputes
 }

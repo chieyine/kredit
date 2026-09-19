@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"kredit/internal/audit"
 	"kredit/internal/feedback"
@@ -18,6 +19,8 @@ func (s *Server) submitProductFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.UserID = user.ID
+	input.Area = strings.TrimSpace(input.Area)
+	input.OrganizationID = strings.TrimSpace(input.OrganizationID)
 	if input.Area == "seller" {
 		membership, found := s.runtime.Organizations.Membership(input.OrganizationID, user.ID)
 		if !found || membership.Status != "active" {

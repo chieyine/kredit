@@ -77,6 +77,11 @@ func (s *Server) requestOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
+	// Login establishes browser authority even without an existing session.
+	// Check origin before consuming the one-time code or replacing cookies.
+	if !s.requireSameOrigin(w, r) {
+		return
+	}
 	var input otpVerifyRequest
 	if err := decodeJSON(w, r, &input); err != nil {
 		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -106,7 +111,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.runtime.Auth.RevokeSession(sessionTokenFromRequest(r)); err != nil {
-		writeProblem(w, http.StatusUnauthorized, "session_invalid", err.Error())
+		writeProblem(w, http.StatusServiceUnavailable, "logout_unavailable", "Sign-out was not confirmed. Please try again before leaving this device.")
 		return
 	}
 	clearSessionCookies(w, s.config.Environment != "development")
@@ -204,6 +209,10 @@ func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) (auth.Sessi
 	}
 	session, user, err := s.runtime.Auth.SessionFromToken(token)
 	if err != nil {
+		if errors.Is(err, auth.ErrSessionUnavailable) {
+			writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "We could not check your session. Please try again.")
+			return auth.Session{}, auth.User{}, false
+		}
 		s.recordSecurityEvent(r, "auth.session_invalid", "session", "denied", "warning")
 		writeProblem(w, http.StatusUnauthorized, "session_invalid", "You have been signed out. Please sign in again.")
 		return auth.Session{}, auth.User{}, false
@@ -222,9 +231,7 @@ func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) (auth.Sessi
 // and a same-origin check on Sec-Fetch-Site/Origin. Either control alone is
 // weaker than the pair.
 func (s *Server) requireCSRF(w http.ResponseWriter, r *http.Request) bool {
-	if !s.sameOriginRequest(r) {
-		s.recordSecurityEvent(r, "auth.csrf_cross_origin", "csrf", "denied", "warning")
-		writeProblem(w, http.StatusForbidden, "csrf_failed", "That request did not come from Kredit, so we stopped it.")
+	if !s.requireSameOrigin(w, r) {
 		return false
 	}
 	cookie, err := r.Cookie(csrfCookieName)
@@ -232,6 +239,15 @@ func (s *Server) requireCSRF(w http.ResponseWriter, r *http.Request) bool {
 	if err != nil || cookie.Value == "" || submitted == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(submitted)) != 1 {
 		s.recordSecurityEvent(r, "auth.csrf_failed", "csrf", "denied", "warning")
 		writeProblem(w, http.StatusForbidden, "csrf_failed", "Your page is out of date. Refresh it and try again.")
+		return false
+	}
+	return true
+}
+
+func (s *Server) requireSameOrigin(w http.ResponseWriter, r *http.Request) bool {
+	if !s.sameOriginRequest(r) {
+		s.recordSecurityEvent(r, "auth.csrf_cross_origin", "csrf", "denied", "warning")
+		writeProblem(w, http.StatusForbidden, "csrf_failed", "That request did not come from Kredit, so we stopped it.")
 		return false
 	}
 	return true

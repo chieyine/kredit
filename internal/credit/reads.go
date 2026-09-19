@@ -58,6 +58,9 @@ func (s *PostgresStore) readViews(ctx context.Context, field, id string) ([]View
 		if field == "buyer_user_id" && v.Request.State == Draft {
 			continue
 		}
+		if field == "supplier_organization_id" && v.Mandate != nil {
+			v.Mandate.AuthorizationURL = ""
+		}
 		views = append(views, v)
 	}
 	err = rows.Err()

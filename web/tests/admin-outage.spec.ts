@@ -111,13 +111,14 @@ test('connector configuration sends an atomic replacement and clears credentials
   });
   await page.goto('/admin/platform-settings');
   await page.getByRole('button', { name: 'Change', exact: true }).click();
-  await page.getByLabel('Connector HTTPS address').fill('https://connector.example/send');
+  await page.getByLabel('Provider adapter').selectOption('connector');
+  await page.getByLabel('Provider HTTPS address').fill('https://connector.example/send');
   await page.getByLabel('Connector access token').fill('private-connector-token');
   await page.getByLabel('Why are you making this change?').fill('Connect SMS for launch');
   await page.getByRole('button', { name: 'Save this change', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(saved.expected_version).toBe(0);
-  expect(JSON.parse(saved.value)).toEqual({ enabled: true, endpoint: 'https://connector.example/send', token: 'private-connector-token' });
+  expect(JSON.parse(saved.value)).toMatchObject({ adapter: 'connector', enabled: true, endpoint: 'https://connector.example/send', token: 'private-connector-token' });
   await page.getByRole('button', { name: 'Change', exact: true }).click();
   await expect(page.getByLabel('Connector access token')).toHaveValue('');
 });

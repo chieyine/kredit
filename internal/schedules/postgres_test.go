@@ -3,6 +3,7 @@ package schedules
 import (
 	"context"
 	"fmt"
+	"kredit/internal/db"
 	"os"
 	"testing"
 	"time"
@@ -51,7 +52,16 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id = $1::uuid`, userID)
 	}()
 
-	store := NewPostgresStore(pool)
+	runtimeURL := os.Getenv("KREDIT_TEST_APP_DATABASE_URL")
+	if runtimeURL == "" {
+		runtimeURL = url
+	}
+	runtimePool, err := db.OpenAsRole(ctx, runtimeURL, "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtimePool.Close()
+	store := NewPostgresStore(runtimePool.Raw()).ForContext(db.WithTenantContext(ctx, userID, organizationID))
 	schedule, items, err := store.Create(CreateInput{ObligationID: obligationID, PrincipalKobo: 3000, ScheduleType: TypeEqual, Count: 2, StartDate: time.Now().UTC().AddDate(0, 0, 1), DueHour: 10, Cadence: CadenceMonthly, Timezone: "UTC", GraceHours: 24})
 	if err != nil || len(items) != 2 {
 		t.Fatalf("create schedule: %v %+v", err, items)

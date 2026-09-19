@@ -15,6 +15,7 @@ async function signedIn(page: Page, context: BrowserContext, baseURL?: string) {
   if (path === '/api/v1/organizations') return send(route, { organizations: orgs });
   if (path === '/api/v1/pricing') return send(route, { policy_revision: 1, base_bps: 50, collection_bps: 50, min_fee_kobo: 0 });
   if (path.endsWith('/credit-requests')) return send(route, { requests: [sale('draft-1', 'DRAFT')] });
+  if (path.endsWith('/onboarding')) return send(route, { profile: { version: 1 } });
   if (path.endsWith('/customers')) return send(route, { customers: [{ buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', legal_name: 'Amina Stores', trading_name: 'Amina Stores', state: 'verified' }] });
   if (path.endsWith('/payments')) return send(route, { payments: [] });
   if (path.endsWith('/payment-claims')) return send(route, { payment_claims: [] });
@@ -69,10 +70,10 @@ test('pending hosted permission stays pending after return parameters', async ({
  const current = sale('sale-1', 'BUYER_ACCEPTED'); current.mandate = { id: 'mandate-1', provider_id: 'provider-1', provider: 'mono-sweep', status: 'PENDING', authorization_url: 'https://authorise.mono.co/synthetic-example' };
  await page.route('**/api/v1/buyer/credit-requests/sale-1', route => send(route, current));
  await page.goto('/buyer/credit-requests/sale-1?success=true&status=approved');
- await expect(page.getByRole('link', { name: /Continue securely with Mono/ })).toHaveAttribute('href', 'https://authorise.mono.co/synthetic-example');
+ await expect(page.getByRole('link', { name: /Continue to bank authorization/ })).toHaveAttribute('href', 'https://authorise.mono.co/synthetic-example');
  await expect(page.getByText('Permission active', { exact: true })).toHaveCount(0);
  await page.getByRole('button', { name: 'Check permission status' }).click();
- await expect(page.getByRole('link', { name: /Continue securely with Mono/ })).toBeVisible();
+ await expect(page.getByRole('link', { name: /Continue to bank authorization/ })).toBeVisible();
 });
 
 test('untrusted hosted permission links are never rendered', async ({ page, context, baseURL }) => {
@@ -88,7 +89,7 @@ test('failed OTP request leaves the form recoverable', async ({ page }) => {
  await page.route('**/api/v1/me', route => send(route, { code: 'authentication_required' }, 401));
  await page.route('**/api/v1/auth/otp/challenges', route => route.abort('failed'));
  await page.goto('/app');
- await page.getByRole('textbox', { name: 'Phone number' }).fill('08031234567');
+ await page.getByRole('radio', { name: 'WhatsApp', exact: true }).check(); await page.getByRole('textbox', { name: 'Phone number' }).fill('08031234567');
  await page.getByRole('button', { name: 'Send me a code' }).click();
  await expect(page.getByRole('alert')).toContainText('We could not confirm that a code was sent');
  await expect(page.getByRole('button', { name: 'Send me a code' })).toBeEnabled();
@@ -97,7 +98,7 @@ test('failed OTP request leaves the form recoverable', async ({ page }) => {
 test('OTP has an expiry and resend countdown without exposing the full target', async ({ page }) => {
  await page.route('**/api/v1/me', route => send(route, { code: 'authentication_required' }, 401));
  await page.route('**/api/v1/auth/otp/challenges', route => send(route, { challenge_id: 'challenge-1', expires_at: new Date(Date.now() + 300000).toISOString(), channel: 'sms' }, 202));
- await page.goto('/app'); await page.getByRole('textbox', { name: 'Phone number' }).fill('08031234567'); await page.getByRole('button', { name: 'Send me a code' }).click();
+ await page.goto('/app'); await page.getByRole('radio', { name: 'WhatsApp', exact: true }).check(); await page.getByRole('textbox', { name: 'Phone number' }).fill('08031234567'); await page.getByRole('button', { name: 'Send me a code' }).click();
  await expect(page.getByRole('textbox', { name: 'Six-digit code' })).toBeVisible();
  await expect(page.getByRole('button', { name: /Resend in/ })).toBeDisabled();
  await expect(page.getByText(/This code expires in/)).toBeVisible();
@@ -196,6 +197,7 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
  const saved: Record<string, unknown>[] = [];
  await page.route('**/api/v1/organizations/org-a/credit-requests', route => { if(route.request().method()==='POST'){saved.push(route.request().postDataJSON());return send(route,{request:{id:'created-sale'}},201);}return send(route,{requests:[]}); });
  await page.goto('/app/credit/new?advanced=1&organization=org-a');
+ await expect(page.locator('.review')).not.toContainText('-₦0.01');
  await page.getByRole('combobox',{name:'Customer',exact:true}).selectOption('buyer-1:business-2');
  await page.getByRole('textbox',{name:'Sale amount (₦)'}).fill('127,500.49');
  await page.getByRole('textbox',{name:'What goods are they taking?'}).fill('40 cartons of cooking oil');

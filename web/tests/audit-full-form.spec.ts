@@ -6,6 +6,7 @@ async function prepare(page:Page,context:BrowserContext,baseURL?:string){
   const path=new URL(route.request().url()).pathname;
   if(path==='/api/v1/me')return send(route,{user:{id:'user-1'},session:{authentication_level:'aal2'},organizations:[{id:'org-a',legal_name:'Kora Wholesale'}]});
   if(path==='/api/v1/organizations')return send(route,{organizations:[{id:'org-a',legal_name:'Kora Wholesale',trading_name:''}]});
+  if(path.endsWith('/onboarding'))return send(route,{profile:{version:1}});
   if(path.endsWith('/customers'))return send(route,{customers:[{buyer_user_id:'buyer-1',buyer_business_id:'business-1',legal_name:'Amina Stores',trading_name:'Amina Stores',state:'verified'}]});
   if(path.endsWith('/credit-terms/preview')){const input=route.request().postDataJSON();return send(route,{due_date:input.due_date,grace_hours:input.grace_hours,collection_at:'2026-09-19T22:59:00Z',timezone:'Africa/Lagos',cutoff:'23:59',timing_mode:input.collection_local?'lagos_explicit':'lagos_end_of_day'});}
   return send(route,{},404);
@@ -27,7 +28,7 @@ test('invoice upload retries preserve one operation before sale creation',async(
  await page.route('**/api/v1/organizations/org-a/documents',route=>{
   keys.push(route.request().headers()['idempotency-key']);
   if(keys.length===1)return route.abort('failed');
-  return send(route,{document:{sha256:hash}},201);
+  return send(route,{document:{id:'synthetic-document',sha256:hash}},201);
  });
  await page.route('**/api/v1/organizations/org-a/credit-requests',route=>{creations.push(route.request().postDataJSON());return send(route,{request:{id:'created'}},201);});
  await page.locator('input[type=file]').setInputFiles('static/icon-192.png');

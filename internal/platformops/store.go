@@ -14,9 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Store struct{ pool *pgxpool.Pool }
+type Store struct{ pool *db.ScopedDatabase }
 
-func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: &db.ScopedDatabase{Pool: pool}} }
 
 type Overview struct {
 	QueuedJobs       int64 `json:"queued_jobs"`
@@ -164,7 +164,7 @@ func (s *Store) Overview(ctx context.Context) (Overview, error) {
 		(SELECT count(*) FROM app.outbox_events WHERE state='failed'),
 		(SELECT count(*) FROM app.provider_webhook_inbox WHERE state='failed'),
 		(SELECT count(*) FROM app.support_cases WHERE state IN ('OPEN','IN_PROGRESS')),
-		(SELECT count(*) FROM app.disputes WHERE state IN ('OPEN','UNDER_REVIEW','PARTIALLY_RESOLVED'))`).
+		(SELECT open_disputes FROM app.isolation_operations_counts())`).
 		Scan(&v.QueuedJobs, &v.FailedJobs, &v.DeadLetterJobs, &v.PendingOutbox, &v.FailedOutbox, &v.ProviderFailures, &v.OpenCases, &v.OpenDisputes)
 	return v, err
 }
@@ -218,6 +218,9 @@ func (s *Store) Search(ctx context.Context, query string) ([]SearchResult, error
 	if len(query) < 4 || len(query) > 128 {
 		return nil, errors.New("search reference must be between 4 and 128 characters")
 	}
+	if recoveryReferencePattern.MatchString(query) {
+		return s.requestRecovery(ctx, query)
+	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	tx, err := s.pool.Begin(ctx)
@@ -237,7 +240,7 @@ func (s *Store) Search(ctx context.Context, query string) ([]SearchResult, error
 			UNION ALL SELECT 'payment',p.id::text,o.supplier_organization_id::text,p.state,COALESCE(p.provider_reference,p.id::text) FROM app.payments p JOIN app.obligations o ON o.id=p.obligation_id
 			UNION ALL SELECT 'collection',ca.id::text,o.supplier_organization_id::text,ca.state,ca.external_reference FROM app.collection_attempts ca JOIN app.obligations o ON o.id=ca.obligation_id
 			UNION ALL SELECT 'support_case',sc.id::text,COALESCE(sc.organization_id::text,''),sc.state,sc.id::text FROM app.support_cases sc
-			UNION ALL SELECT 'dispute',d.id::text,d.supplier_organization_id::text,d.state,d.id::text FROM app.disputes d
+			UNION ALL SELECT 'dispute',d.id::text,d.organization_id::text,d.state,d.id::text FROM app.dispute_reference_lookup($1) d
 		) records WHERE lower(reference)=lower($1) OR lower(id::text)=lower($1) LIMIT 25`, query)
 	if err != nil {
 		return nil, err

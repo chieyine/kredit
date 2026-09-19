@@ -1,0 +1,91 @@
+{
+  "documentType": "codex-security.scan-manifest",
+  "scan": {
+    "artifacts": [
+      {
+        "mediaType": "application/json",
+        "path": "findings.json",
+        "sha256": "112d19a14d23107444121820205ac40e1612e3c1858b9defb429adc1728f8c3c"
+      },
+      {
+        "mediaType": "application/json",
+        "path": "coverage.json",
+        "sha256": "9a1fd523a31f40a8aef667027090a3ead3eebad8ede7b05e305ee9d40dfacc3a"
+      }
+    ],
+    "completedAt": "2026-09-19T15:46:56.256449Z",
+    "coverageRef": "coverage.json",
+    "findingsRef": "findings.json",
+    "id": "319a9df5-9024-4172-9719-a41f5a1b6961",
+    "preservedSources": {
+      "checkpoints/0fd3aba69cb2055a4962d9f272211630eafc2c10d5cd7aa69e6afec51ee4666f.json": "d129bf84bd6349cf7ebc00aa936ba1c70da250e19375b5f85667570a7d03c0ad",
+      "checkpoints/39b03b11f454570fb52cb8d6f70f8d0e8092b02596dff7e42ccd9e62f378c919.json": "19fe019413fb0aa53c1017c970fe948ac3e0cf202df7991054a4d2afe24fb7cb",
+      "checkpoints/7177a394ca1627f8adff168fb419e2b16cccf8cb243ffaa9d57ce61ae91e2c9e.json": "d8819ccf0776f3f3d9e7690cf3af141f8d4a4c4364516027c3d02f0a76255975",
+      "checkpoints/d274facd132a4a0e9f810f60dfe8e5338d7b07cca5071de12b33e747c8fb6fd8.json": "d274facd132a4a0e9f810f60dfe8e5338d7b07cca5071de12b33e747c8fb6fd8"
+    },
+    "producer": {
+      "name": "codex-security-plugin",
+      "version": "0.1.24"
+    },
+    "scope": {
+      "artifactsReviewed": [
+        "internal/web/auth_handlers.go",
+        "internal/web/http_helpers.go",
+        "internal/web/document_handlers.go",
+        "internal/web/notification_receipt_handlers.go",
+        "web/src/hooks.server.ts"
+      ],
+      "excludePaths": [],
+      "includePaths": [
+        "internal/web"
+      ],
+      "limitations": [
+        "Partial review of internal/web under the user's request for proportionate checks; selected supporting control functions also inspected.",
+        "No independent agent or live exploitation. Production VPS and deployed revision remain unverified."
+      ],
+      "runtimeStatus": "No production attacks performed",
+      "summary": "Focused review of common browser/API attack paths",
+      "validationMode": "source review"
+    },
+    "sealedAt": "2026-09-19T15:46:56.256449Z",
+    "startedAt": "2026-09-19T15:31:20.860348Z",
+    "status": "completed",
+    "target": {
+      "displayName": "Kredit.com",
+      "kind": "git_worktree",
+      "revision": "ea7a5a88460857035362604f7dc86cef84bd9501",
+      "snapshotDigest": "codex-security-snapshot/v1:sha256:bce23e910b5cbe710ec101cc68d0cd650d0f87e32d117a3cb1ba0ef892c4f3de",
+      "targetId": "target_sha256_cf07476788ff019c5c010229ffa2d115b1ab5b30c1c8a6b64747beb42023c5e2"
+    },
+    "threatModel": {
+      "assets": [
+        "Authenticated browser sessions",
+        "Customer documents and personal financial records",
+        "Tenant-separated financial actions"
+      ],
+      "assumptions": [
+        "Focused, proportionate review requested; coverage is partial within internal/web.",
+        "No agents used, so independent baseline unavailable.",
+        "VPS firewall, production database roles, secrets, deployment revision and provider configuration not inspected."
+      ],
+      "attackerCapabilities": [
+        "An anonymous remote party can submit HTTP requests and host a webpage.",
+        "An attacker can legitimately obtain an unused OTP for their own account; cannot read another user's OTP or session."
+      ],
+      "securityObjectives": [
+        "Cross-origin navigation must not install an attacker-controlled session.",
+        "Tenant records require authenticated, authorized identity.",
+        "Provider callbacks must not directly fabricate financial outcomes."
+      ],
+      "summary": "Kredit serves browser financial workflows through a SvelteKit API proxy into Go handlers. User-reported deployment uses Vercel, Cloudflare and a VPS; live configuration and deployed revision are unverified.",
+      "trustBoundaries": [
+        "Browser-controlled JSON and Origin enter OTP verification before cookie issuance (internal/web/auth_handlers.go:80-99; internal/web/http_helpers.go:19-30).",
+        "Authenticated writes normally require origin validation and double-submit CSRF (internal/web/auth_handlers.go:228-242).",
+        "Uploads require organization access, CSRF, size limits and clean scan before download (internal/web/document_handlers.go:25-121).",
+        "Provider receipt handlers authenticate evidence before accepting signals (internal/web/notification_receipt_handlers.go:15-134).",
+        "SvelteKit forwards /api requests directly, including body and Origin, without invoking resolve for API routes (web/src/hooks.server.ts:27-114)."
+      ]
+    }
+  },
+  "schemaVersion": "1.0"
+}

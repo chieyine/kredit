@@ -22,7 +22,7 @@ func (s *Server) disputeDocumentAccess(w http.ResponseWriter, r *http.Request, w
 		writeProblem(w, 400, "invalid_path", "The dispute reference is invalid.")
 		return disputes.Dispute{}, "", false
 	}
-	item, _, _, err := s.runtime.Disputes.Get(id)
+	item, _, _, err := s.runtime.ScopedDisputes(r.Context()).Get(id)
 	if err != nil {
 		writeProblem(w, 404, "dispute_not_found", "The dispute could not be found.")
 		return item, "", false
@@ -101,7 +101,7 @@ func (s *Server) disputeDocument(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_path", "The document reference is invalid.")
 		return
 	}
-	_, evidence, _, err := s.runtime.Disputes.Get(item.ID)
+	_, evidence, _, err := s.runtime.ScopedDisputes(r.Context()).Get(item.ID)
 	if err != nil {
 		writeProblem(w, 503, "document_unavailable", "The document could not be opened.")
 		return

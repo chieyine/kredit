@@ -4,6 +4,9 @@ import (
 	"os"
 	"testing"
 
+	"kredit/internal/db"
+
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,7 +24,14 @@ func TestUserDirectoryIncludesCurrentControlVersion(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), `SELECT id::text,version FROM app.users ORDER BY version DESC,id LIMIT 1`).Scan(&id, &version); err != nil {
 		t.Fatal(err)
 	}
-	users, err := NewStore(pool).Users(t.Context(), id, 100)
+	actor := uuid.NewString()
+	if _, err := pool.Exec(t.Context(), `INSERT INTO app.users(id,normalized_email) VALUES($1::uuid,$2)`, actor, actor+"@directory.test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), `INSERT INTO app.platform_role_assignments(user_id,role,granted_by,reason) VALUES($1::uuid,'platform_admin',$1::uuid,'Directory verification fixture')`, actor); err != nil {
+		t.Fatal(err)
+	}
+	users, err := NewStore(pool).Users(db.WithTenantContext(t.Context(), actor, ""), id, 100)
 	if err != nil {
 		t.Fatal(err)
 	}

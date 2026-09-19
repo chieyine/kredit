@@ -113,6 +113,11 @@ tests:
       - {series: kredit_river_discarded_jobs, values: '0+0x12'}
       - {series: kredit_active_obligations, values: '40+0x12'}
       - {series: kredit_negative_outstanding_balances, values: '0+0x12'}
+      - {series: kredit_financial_reviews_open, values: '0+0x12'}
+      - {series: kredit_financial_reviews_unassigned, values: '0+0x12'}
+      - {series: kredit_financial_review_oldest_open_seconds, values: '0+0x12'}
+      - {series: kredit_drawdown_receipt_issues_open, values: '0+0x12'}
+      - {series: kredit_drawdown_receipt_issue_oldest_open_seconds, values: '0+0x12'}
     alert_rule_test:
       - {eval_time: 11m, alertname: KreditFinancialTelemetryMissing, exp_alerts: []}
       - {eval_time: 11m, alertname: KreditLedgerReconciliationFailure, exp_alerts: []}

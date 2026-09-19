@@ -634,6 +634,9 @@ func (s *Store) sendWithLegalVersions(requestID, actorID string, versions legalp
 	if r.State != Draft {
 		return View{}, fmt.Errorf("credit request cannot be sent from %s", r.State)
 	}
+	if err := ValidateRepaymentSchedule(*r); err != nil {
+		return View{}, err
+	}
 	canonical := agreementCanonical{FeeTerms: r.FeeTerms.Clone(), SupplierLegalName: r.SupplierLegalName, SupplierTradingName: r.SupplierTradingName, BuyerLegalName: r.BuyerLegalName, BuyerTradingName: r.BuyerTradingName, BuyerBusinessID: r.BuyerBusinessID, GoodsDescription: r.GoodsDescription, InvoiceReference: r.InvoiceReference, InvoiceDocumentHash: r.InvoiceDocumentHash, InvoiceDocumentID: r.InvoiceDocumentID, PrincipalKobo: r.PrincipalKobo, Currency: r.Currency, DueDate: r.DueDate, CollectionPolicy: r.CollectionPolicy, GraceHours: r.GraceHours, CollectionAt: r.CollectionAt, ScheduleType: r.ScheduleType, ScheduleCount: r.ScheduleCount, ScheduleCadence: r.ScheduleCadence, MonthEndPolicy: r.MonthEndPolicy, CustomScheduleItems: append([]ScheduleTerm(nil), r.CustomScheduleItems...), MandateDisclosure: "Automated repayment requires separate bank mandate authorization; each collection is limited to the outstanding accepted amount.", BaseFeeDisclosure: r.FeeTerms.Disclosure(), TermsVersion: versions.Terms, PrivacyVersion: versions.Privacy}
 	data, _ := json.Marshal(canonical)
 	hash := sha256.Sum256(data)
@@ -1106,10 +1109,7 @@ func validateCreateInput(in CreateInput) error {
 	if in.CollectionPolicy == "IMMEDIATE" && in.GraceHours > 0 {
 		return errors.New("immediate policy cannot include a grace period")
 	}
-	if err := validateScheduleTerms(in.PrincipalKobo, in.ScheduleType, in.ScheduleCount, in.ScheduleCadence, in.MonthEndPolicy, in.CustomScheduleItems); err != nil {
-		return err
-	}
-	return nil
+	return ValidateRepaymentSchedule(CreditRequest{PrincipalKobo: in.PrincipalKobo, DueDate: in.DueDate, CollectionAt: in.CollectionAt, GraceHours: in.GraceHours, ScheduleType: in.ScheduleType, ScheduleCount: in.ScheduleCount, ScheduleCadence: in.ScheduleCadence, MonthEndPolicy: in.MonthEndPolicy, CustomScheduleItems: in.CustomScheduleItems})
 }
 
 func validateScheduleTerms(principal ledger.Money, scheduleType string, count int, cadence, monthEndPolicy string, custom []ScheduleTerm) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"kredit/internal/db"
 	"os"
 	"testing"
 	"time"
@@ -39,7 +40,17 @@ func TestPostgresCorrectionIsRestartSafeAndEnforcesSeparateReviewer(t *testing.T
 		_, _ = pool.Exec(ctx, `DELETE FROM app.organizations WHERE id=$1::uuid`, organizationID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id=$1::uuid OR id=$2::uuid`, requesterID, reviewerID)
 	}()
-	store := NewPostgresStore(pool)
+	runtimeURL := os.Getenv("KREDIT_TEST_APP_DATABASE_URL")
+	if runtimeURL == "" {
+		runtimeURL = databaseURL
+	}
+	runtimePool, err := db.OpenAsRole(ctx, runtimeURL, "kredit_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtimePool.Close()
+	ctx = db.WithTenantContext(ctx, requesterID, organizationID)
+	store := NewPostgresStore(runtimePool.Raw()).ForContext(ctx)
 	opened, err := store.Open(organizationID, "obligation", identifier.New(), "source-1", requesterID, "Incorrect payment date", []string{"document-reference"})
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +67,7 @@ func TestPostgresCorrectionIsRestartSafeAndEnforcesSeparateReviewer(t *testing.T
 	if err != nil || len(rows) != 1 || rows[0].ID != opened.ID {
 		t.Fatalf("correction history: %+v, %v", rows, err)
 	}
-	restarted := NewPostgresStore(pool)
+	restarted := NewPostgresStore(runtimePool.Raw()).ForContext(db.WithTenantContext(ctx, reviewerID, organizationID))
 	loaded, _, err := restarted.Get(opened.ID)
 	if err != nil || loaded.Reason != opened.Reason || len(loaded.Evidence) != 1 {
 		t.Fatalf("restart-safe load failed: %v %+v", err, loaded)

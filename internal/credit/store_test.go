@@ -347,7 +347,7 @@ func TestCancellationAndDeclinePreserveTerminalHistory(t *testing.T) {
 
 func TestAcceptanceIsIndependentOfBankAuthorization(t *testing.T) {
 	s := NewStore(mandates.NewMockProvider(), ledger.NewStore())
-	r, err := s.Create(CreateInput{SupplierOrganizationID: "supplier", SupplierLegalName: "Supplier", BuyerUserID: "buyer", BuyerBusinessID: "business", BuyerLegalName: "Buyer", PrincipalKobo: 50000000, GoodsDescription: "Trade goods", DueDate: "2026-09-30", CollectionAt: time.Now().Add(time.Hour), CreatedBy: "supplier"})
+	r, err := s.Create(CreateInput{SupplierOrganizationID: "supplier", SupplierLegalName: "Supplier", BuyerUserID: "buyer", BuyerBusinessID: "business", BuyerLegalName: "Buyer", PrincipalKobo: 50000000, GoodsDescription: "Trade goods", DueDate: "2026-09-30", CollectionAt: time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC), CreatedBy: "supplier"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestAcceptanceIsIndependentOfBankAuthorization(t *testing.T) {
 func TestOfferFeeRatesAreCopiedAndBoundToAgreement(t *testing.T) {
 	store := NewStore(mandates.NewMockProvider(), ledger.NewStore())
 	terms := &ledger.FeeTerms{PolicyRevision: 7, BaseBPS: 25, CollectionBPS: 75}
-	created, err := store.Create(CreateInput{FeeTerms: terms, SupplierOrganizationID: "supplier", SupplierLegalName: "Supplier", BuyerUserID: "buyer", BuyerBusinessID: "business", BuyerLegalName: "Buyer", PrincipalKobo: 100000, GoodsDescription: "goods", DueDate: "2026-09-30", CollectionAt: time.Now().Add(time.Hour), CreatedBy: "creator"})
+	created, err := store.Create(CreateInput{FeeTerms: terms, SupplierOrganizationID: "supplier", SupplierLegalName: "Supplier", BuyerUserID: "buyer", BuyerBusinessID: "business", BuyerLegalName: "Buyer", PrincipalKobo: 100000, GoodsDescription: "goods", DueDate: "2026-09-30", CollectionAt: time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC), CreatedBy: "creator"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,7 +26,7 @@ func (s *Server) listOrganizationDue(w http.ResponseWriter, r *http.Request) {
 		if v.Obligation == nil || v.Obligation.OutstandingKobo <= 0 {
 			continue
 		}
-		_, schedule, err := s.runtime.Schedules.GetForObligation(v.Obligation.ID)
+		_, schedule, err := s.runtime.Schedules.ForContext(r.Context()).GetForObligation(v.Obligation.ID)
 		if financialReadError(w, err) {
 			return
 		}

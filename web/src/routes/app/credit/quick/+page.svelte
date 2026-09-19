@@ -7,6 +7,7 @@
   import { customer, organization, dateLabel, timeLabel, type Customer, type Organization } from '$lib/records';
   import { deleteDraft, readDraft, saveDraft } from '$lib/sale-drafts';
   import { parseNaira, verbalizeNaira } from '$lib/money';
+  import { loadSaleDefaults } from '$lib/sale-defaults';
   import { collectionBoundary } from '$lib/financial-copy';
   import Money from '$lib/components/Money.svelte';
   import ResourceNotice from '$lib/components/ResourceNotice.svelte';
@@ -14,6 +15,8 @@
   let organizations = $state<Resource<Organization[]>>({ state: 'loading', scope: '' });
   let customers = $state<Resource<Customer[]>>({ state: 'loading', scope: '' });
   let organizationID = $state(''), selectedBuyer = $state(''), goods = $state(''), principal = $state(''), dueDate = $state('');
+  let graceHours = $state(24);
+  let defaultsScope = '';
   let step = $state(1), busy = $state(false), error = $state(''), recoveredDraft = $state(false), draftReady = $state(false), keepDraft = $state(false), draftWarning = $state('');
   let timing = $state<{ dueDate: string; collectionAt: string; organizationID: string } | null>(null);
   let heading = $state<HTMLHeadingElement>();
@@ -24,7 +27,7 @@
   const customerKey = (item: Customer) => `${item.buyer_user_id}:${item.buyer_business_id}`;
   const buyer = $derived(customers.state === 'ready' ? customers.data.find(item => customerKey(item) === selectedBuyer) : undefined);
   function restoreForBusiness() {
-    draftReady = false; keepDraft = false; draftWarning = ''; recoveredDraft = false; goods = ''; principal = ''; dueDate = ''; timing = null; error = ''; creation = null;
+    defaultsScope = ''; draftReady = false; keepDraft = false; draftWarning = ''; recoveredDraft = false; goods = ''; principal = ''; dueDate = ''; timing = null; error = ''; creation = null;
     try {
       const saved = readDraft(account.userID, organizationID, sessionStorage);
       if (saved) { keepDraft = true; goods = saved.goods; principal = saved.principal; dueDate = saved.dueDate; recoveredDraft = true; }
@@ -43,8 +46,13 @@
     customers = { state: 'loading', scope }; selectedBuyer = ''; step = 1;
     if (resetDraft) restoreForBusiness();
     if (!scope) return;
+    try {
+    const defaults = await loadSaleDefaults(scope, request.signal);
+    if (!request.current() || organizationID !== scope) return;
+    if (defaultsScope !== scope) { graceHours = defaults.graceHours; defaultsScope = scope; if (!dueDate) dueDate = defaults.dueDate; timing = null; }
     const result = await readResource(scope, `/api/v1/organizations/${encodeURIComponent(scope)}/customers`, rows('customers', customer), request.signal, 'your customers');
     if (request.current() && organizationID === scope) customers = result;
+    } catch (cause) { if (request.current() && organizationID === scope) customers = { state: 'error', scope, status: 0, message: cause instanceof Error ? cause.message : 'Payment settings could not be loaded. Try again.' }; }
   }
   async function focusStep() { await tick(); heading?.focus(); }
   async function next() {
@@ -58,9 +66,9 @@
         const scope = organizationID, date = dueDate;
         const result = await checkedJSON(`/api/v1/organizations/${encodeURIComponent(scope)}/credit-terms/preview`, value => {
           const result = record(value), collectionAt = text(result.collection_at);
-          if (result.due_date !== date || result.grace_hours !== 24 || result.timezone !== 'Africa/Lagos' || result.timing_mode !== 'lagos_end_of_day' || !Number.isFinite(Date.parse(collectionAt))) throw new Error('The payment date could not be checked.');
+          if (result.due_date !== date || result.grace_hours !== graceHours || result.timezone !== 'Africa/Lagos' || result.timing_mode !== 'lagos_end_of_day' || !Number.isFinite(Date.parse(collectionAt))) throw new Error('The payment date could not be checked.');
           return { dueDate: date, collectionAt, organizationID: scope };
-        }, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeader() }, body: JSON.stringify({ due_date: date, grace_hours: 24 }) });
+        }, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeader() }, body: JSON.stringify({ due_date: date, grace_hours: graceHours }) });
         if (organizationID !== scope || dueDate !== date) return;
         timing = result;
       } catch { error = 'We could not verify the payment date. Try again before saving.'; return; }
@@ -74,7 +82,7 @@
     try {
       if (!buyer || !organizationID || amount <= 0 || !goods.trim() || timing?.dueDate !== dueDate || timing.organizationID !== organizationID) throw new Error('Go back and check the customer, amount and payment date.');
       creation ??= new MutationIntent(`${account.userID}:${organizationID}`, `/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests`);
-      const id = await creation.run({ buyer_user_id: buyer.buyer_user_id, buyer_business_id: buyer.buyer_business_id, buyer_legal_name: buyer.legal_name, buyer_trading_name: buyer.trading_name, principal_kobo: amount, goods_description: goods.trim(), invoice_reference: '', invoice_document_hash: '', due_date: dueDate, grace_hours: 24, collection_at: timing.collectionAt, timing_mode: 'lagos_end_of_day', schedule_type: 'one_time', schedule_count: 1, schedule_cadence: 'custom', month_end_policy: 'last_day', custom_schedule_items: [] }, value => {const id=text(record(record(value).request).id);if(!id)throw new Error('Missing sale reference');return id;});
+      const id = await creation.run({ buyer_user_id: buyer.buyer_user_id, buyer_business_id: buyer.buyer_business_id, buyer_legal_name: buyer.legal_name, buyer_trading_name: buyer.trading_name, principal_kobo: amount, goods_description: goods.trim(), invoice_reference: '', invoice_document_hash: '', due_date: dueDate, grace_hours: graceHours, collection_at: timing.collectionAt, timing_mode: 'lagos_end_of_day', schedule_type: 'one_time', schedule_count: 1, schedule_cadence: 'custom', month_end_policy: 'last_day', custom_schedule_items: [] }, value => {const id=text(record(record(value).request).id);if(!id)throw new Error('Missing sale reference');return id;});
       draftReady = false;
       try { deleteDraft(account.userID, organizationID, sessionStorage); } catch { /* Server result is authoritative. */ }
       await goto(`/app/credit/${encodeURIComponent(id)}?organization=${encodeURIComponent(organizationID)}`);
@@ -123,7 +131,7 @@
         <label>Sale amount (₦)<input bind:value={principal} inputmode="decimal" maxlength="40" placeholder="120,000.00" disabled={busy} />{#if amountWords}<small>{amountWords}</small>{/if}</label>
       {:else if step === 3}
         <label>Agreed payment date<input type="date" bind:value={dueDate} disabled={busy} /></label>
-        <div class="inline-notice"><strong>Payment timing</strong><p>The day ends at 11:59 pm Nigerian time. This sale allows 24 extra hours before a bank debit can be considered.</p><p>{collectionBoundary}</p></div>
+        <div class="inline-notice"><strong>Payment timing</strong><p>The day ends at 11:59 pm Nigerian time. This sale allows {graceHours} extra hours before a bank debit can be considered.</p><p>{collectionBoundary}</p></div>
       {:else}
         <dl class="sale-summary"><div><dt>Customer</dt><dd>{buyer?.trading_name || buyer?.legal_name}</dd></div>{#if buyer?.trading_name && buyer.trading_name !== buyer.legal_name}<div><dt>Contracting party</dt><dd>{buyer.legal_name}</dd></div>{/if}<div><dt>Goods</dt><dd>{goods}</dd></div><div><dt>Sale amount</dt><dd class="amount"><Money amountKobo={amount} /></dd></div><div><dt>Pay by</dt><dd>{dateLabel(dueDate)}</dd></div><div><dt>Bank debit may be considered from</dt><dd>{timing ? timeLabel(timing.collectionAt) : 'Not yet verified'}</dd></div></dl>
         <p class="field-help">This saves a draft. Review the complete terms and fees on the next screen before sending it. Your customer must accept the agreement and complete the required bank permission.</p>

@@ -106,6 +106,13 @@ var RequiredPersistenceObjects = []string{
 // PostgreSQL authentication adapter. A complete table set without these
 // functions would still fail at runtime.
 var RequiredPersistenceFunctions = []string{
+	"app.isolation_operations_counts()", "app.dispute_reference_lookup(text)", "app.notification_recovery_subject(uuid)",
+	"app.recovery_subject(uuid)",
+	"app.notification_due_work(integer)",
+	"app.notification_work_subject(uuid)",
+	"app.notification_receipt_work(text,integer)",
+	"app.notification_receipt_subject(text,text,text)",
+	"app.notification_meta_candidates(text)",
 	"app.dsa_code(text)", "app.dsa_claim(uuid,text)", "app.dsa_facts(uuid,timestamp with time zone,timestamp with time zone)", "app.dsa_agent_active(uuid)", "app.dsa_registration(text,text)", "app.guard_dsa_agent()", "app.guard_dsa_referral()",
 	"app.consumer_retailer_ready(uuid)", "app.consumer_reminder_work()", "app.consumer_contact_matches(text,text)", "app.consumer_seller_role(uuid,text[])", "app.consumer_acceptance_guard()", "app.consumer_event_permission()",
 	"app.fee_billing_work()", "app.fee_notice_scope(text,text,text)", "app.guard_fee_authorization()", "app.guard_fee_debit()", "app.guard_native_identity()",
@@ -114,6 +121,7 @@ var RequiredPersistenceFunctions = []string{
 	"app.recovery_account(text,text)", "app.collection_mandate_capacity(uuid)", "app.drawdown_expiry_tenants(text,integer)",
 	"app.financial_change_identity(text,boolean)", "app.lock_transfer_recipient(uuid)", "app.financial_review_differences(boolean)",
 	"app.admin_user_directory(text,integer,uuid)", "app.admin_organization_directory(text,integer,uuid)", "app.admin_audit_directory(text,integer,uuid)", "app.admin_team_directory(uuid)", "app.admin_money_summary(uuid)", "app.admin_money_activity(integer,uuid)",
+	"app.recovery_queue_metrics()",
 	"app.pilot_metric(timestamptz,timestamptz,text,text)", "app.pilot_reconciliation(timestamptz,timestamptz,text)",
 	"app.public_payment_receipt(uuid)", "app.current_governance_mode()", "app.enforce_owner_lifecycle()", "app.reject_settings_history_mutation()",
 	"app.touch_session(uuid,timestamptz)", "app.sync_drawdown_exposure()", "app.record_rate_limit_attempt(bytea,interval)", "app.prune_rate_limits(interval)",
@@ -213,8 +221,8 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	if err := p.inner.QueryRow(ctx, `SELECT COALESCE(MAX(version_id),0) FROM (SELECT DISTINCT ON(version_id) version_id,is_applied FROM public.goose_db_version ORDER BY version_id,id DESC) v WHERE is_applied`).Scan(&version); err != nil {
 		return fmt.Errorf("check required migration version: %w", err)
 	}
-	if version < 154 {
-		return fmt.Errorf("database migrations are incomplete: version %d, require at least 154", version)
+	if version < 164 {
+		return fmt.Errorf("database migrations are incomplete: version %d, require at least 164", version)
 	}
 	return nil
 }

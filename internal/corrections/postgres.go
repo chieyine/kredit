@@ -7,17 +7,23 @@ import (
 	"strings"
 	"time"
 
+	"kredit/internal/db"
 	"kredit/internal/identifier"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type PostgresStore struct{ pool *pgxpool.Pool }
+type PostgresStore struct {
+	pool *db.ScopedDatabase
+	ctx  context.Context
+}
 
 var _ Service = (*PostgresStore)(nil)
 
-func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore { return &PostgresStore{pool: pool} }
+func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
+	return &PostgresStore{pool: &db.ScopedDatabase{Pool: pool}, ctx: context.Background()}
+}
 
 func (s *PostgresStore) Open(organizationID, subjectType, subjectID, sourceEventID, requestedBy, reason string, evidence []string) (Request, error) {
 	if organizationID == "" || subjectType == "" || subjectID == "" || requestedBy == "" || strings.TrimSpace(reason) == "" {
@@ -28,7 +34,7 @@ func (s *PostgresStore) Open(organizationID, subjectType, subjectID, sourceEvent
 		return Request{}, err
 	}
 	id := identifier.New()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 	defer cancel()
 	row := s.pool.QueryRow(ctx, `INSERT INTO app.correction_requests(id,organization_id,subject_type,subject_id,source_event_id,requested_by,reason,evidence,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,NULLIF($5,''),$6::uuid,$7,$8::jsonb,'OPEN') RETURNING id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at`, id, organizationID, subjectType, subjectID, strings.TrimSpace(sourceEventID), requestedBy, strings.TrimSpace(reason), encodedEvidence)
 	return scanRequest(row)
@@ -38,7 +44,7 @@ func (s *PostgresStore) StartReview(id, reviewerID string) (Request, error) {
 	if id == "" || reviewerID == "" {
 		return Request{}, errors.New("correction request and reviewer are required")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 	defer cancel()
 	row := s.pool.QueryRow(ctx, `UPDATE app.correction_requests SET state='UNDER_REVIEW',updated_at=now() WHERE id=$1::uuid AND state='OPEN' RETURNING id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at`, id)
 	request, err := scanRequest(row)
@@ -55,7 +61,7 @@ func (s *PostgresStore) Decide(id, reviewerID, outcome, reason string) (Request,
 	if outcome != StateApproved && outcome != StateRejected {
 		return Request{}, Decision{}, errors.New("outcome must be approved or rejected")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -94,7 +100,7 @@ func (s *PostgresStore) Decide(id, reviewerID, outcome, reason string) (Request,
 }
 
 func (s *PostgresStore) Get(id string) (Request, []Decision, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 	defer cancel()
 	request, err := scanRequest(s.pool.QueryRow(ctx, `SELECT id::text,organization_id::text,subject_type,subject_id::text,COALESCE(source_event_id,''),requested_by::text,reason,evidence,state,created_at,updated_at FROM app.correction_requests WHERE id=$1::uuid`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -140,7 +146,7 @@ func scanRequest(row correctionScanner) (Request, error) {
 }
 
 func (s *PostgresStore) decisions(id string) ([]Decision, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)
 	defer cancel()
 	rows, err := s.pool.Query(ctx, `SELECT id::text,request_id::text,reviewer_id::text,outcome,reason,COALESCE(correction_event_id,''),decided_at FROM app.correction_decisions WHERE request_id=$1::uuid ORDER BY decided_at`, id)
 	if err != nil {
@@ -156,4 +162,8 @@ func (s *PostgresStore) decisions(id string) ([]Decision, error) {
 		out = append(out, decision)
 	}
 	return out, rows.Err()
+}
+
+func (s *PostgresStore) ForContext(ctx context.Context) Service {
+	return &PostgresStore{pool: s.pool, ctx: ctx}
 }

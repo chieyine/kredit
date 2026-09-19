@@ -497,27 +497,9 @@ func (s *PostgresStore) recordReceiptTransaction(ctx context.Context, requestID,
 		return View{}, nil, err
 	}
 	if view.Obligation != nil {
-		location, err := time.LoadLocation("Africa/Lagos")
+		input, err := repaymentScheduleInput(view.Request, view.Obligation.ID)
 		if err != nil {
 			return View{}, nil, err
-		}
-		r := view.Request
-		start, err := time.ParseInLocation("2006-01-02", r.DueDate, location)
-		if err != nil {
-			return View{}, nil, err
-		}
-		input := schedules.CreateInput{FirstCollectionAt: r.CollectionAt, ObligationID: view.Obligation.ID, PrincipalKobo: view.Obligation.PrincipalKobo, ScheduleType: r.ScheduleType, Count: r.ScheduleCount, StartDate: start, DueHour: r.CollectionAt.In(location).Hour(), DueMinute: r.CollectionAt.In(location).Minute(), Timezone: "Africa/Lagos", GraceHours: r.GraceHours, Cadence: r.ScheduleCadence, MonthEndPolicy: r.MonthEndPolicy, AllocationPolicy: "due_date_order"}
-		if r.ScheduleType == "" || r.ScheduleType == "one_time" {
-			input.ScheduleType = schedules.TypeEqual
-			input.Count = 1
-			input.Cadence = schedules.CadenceCustom
-		}
-		for _, term := range r.CustomScheduleItems {
-			due, err := time.ParseInLocation("2006-01-02", term.DueDate, location)
-			if err != nil {
-				return View{}, nil, err
-			}
-			input.CustomItems = append(input.CustomItems, schedules.CustomItem{AmountKobo: term.AmountKobo, DueDate: due})
 		}
 		if _, _, err = schedules.NewPostgresStore(s.pool).CreateTx(ctx, tx, input); err != nil {
 			return View{}, nil, err
@@ -886,6 +868,9 @@ func (s *PostgresStore) installView(view View) {
 	if view.Mandate != nil {
 		mandate := *view.Mandate
 		s.mandateMap[mandate.ID] = &mandate
+		if mandate.ProviderID != "" {
+			s.mandateMap[mandate.ProviderID] = &mandate
+		}
 	}
 	if view.Release != nil {
 		release := *view.Release

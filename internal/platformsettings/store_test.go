@@ -176,7 +176,7 @@ func TestPostgresStoreIntegration(t *testing.T) {
 	if existing, readErr := store.Get(ctx, key, false); readErr == nil {
 		version = existing.Version
 	}
-	configJSON, _ := json.Marshal(NotificationConnector{Enabled: true, Endpoint: "https://connector.example/send", Token: "private-integration-test-token"})
+	configJSON, _ := json.Marshal(NotificationConnector{Adapter: "connector", Enabled: true, Endpoint: "https://connector.example/send", Token: "private-integration-test-token"})
 	raw, _ := json.Marshal(string(configJSON))
 	saved, err := store.Update(ctx, "", key, raw, "Configure test connector", version)
 	if err != nil {

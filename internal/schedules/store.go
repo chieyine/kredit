@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"kredit/internal/db"
 	"kredit/internal/ledger"
 
 	"github.com/jackc/pgx/v5"
@@ -92,7 +93,8 @@ type Store struct {
 	byObligation map[string]string
 	now          func() time.Time
 	newID        func() string
-	pool         *pgxpool.Pool
+	pool         *db.ScopedDatabase
+	ctx          context.Context
 }
 
 func NewStore() *Store {
@@ -100,7 +102,7 @@ func NewStore() *Store {
 }
 
 func NewPostgresStore(pool *pgxpool.Pool) *Store {
-	return &Store{schedules: map[string]*Schedule{}, items: map[string][]*Item{}, byObligation: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier, pool: pool}
+	return &Store{schedules: map[string]*Schedule{}, items: map[string][]*Item{}, byObligation: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier, pool: &db.ScopedDatabase{Pool: pool}, ctx: context.Background()}
 }
 
 func (s *Store) Create(input CreateInput) (Schedule, []Item, error) {
@@ -283,7 +285,7 @@ func (s *Store) GetForObligationAt(obligationID string, now time.Time) (Schedule
 
 func (s *Store) DeleteIfEmpty(obligationID string) error {
 	if s.pool != nil {
-		ctx := context.Background()
+		ctx := s.ctx
 		tx, err := s.pool.Begin(ctx)
 		if err != nil {
 			return err
@@ -626,7 +628,7 @@ func newIdentifier() string {
 }
 
 func (s *Store) createPostgres(input CreateInput) (Schedule, []Item, error) {
-	ctx := context.Background()
+	ctx := s.ctx
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Schedule{}, nil, err
@@ -694,7 +696,7 @@ func (s *Store) CreateTx(ctx context.Context, tx pgx.Tx, input CreateInput) (Sch
 }
 
 func (s *Store) getPostgres(obligationID string) (Schedule, []Item, error) {
-	ctx := context.Background()
+	ctx := s.ctx
 	var schedule Schedule
 	err := s.pool.QueryRow(ctx, `SELECT id::text, obligation_id::text, schedule_type, timezone, allocation_policy, cadence, grace_hours, status, created_at FROM app.repayment_schedules WHERE obligation_id = $1::uuid`, obligationID).
 		Scan(&schedule.ID, &schedule.ObligationID, &schedule.ScheduleType, &schedule.Timezone, &schedule.AllocationPolicy, &schedule.Cadence, &schedule.GraceHours, &schedule.Status, &schedule.CreatedAt)
@@ -709,7 +711,7 @@ func (s *Store) getPostgres(obligationID string) (Schedule, []Item, error) {
 }
 
 func (s *Store) itemsPostgres(scheduleID string) ([]Item, error) {
-	rows, err := s.pool.Query(context.Background(), `SELECT id::text, schedule_id::text, sequence, principal_due_kobo, due_at, grace_hours, collection_at, allocated_kobo, collected_kobo, state, disputed_kobo, COALESCE(collection_block_reason,'') FROM app.schedule_items WHERE schedule_id = $1::uuid ORDER BY sequence`, scheduleID)
+	rows, err := s.pool.Query(s.ctx, `SELECT id::text, schedule_id::text, sequence, principal_due_kobo, due_at, grace_hours, collection_at, allocated_kobo, collected_kobo, state, disputed_kobo, COALESCE(collection_block_reason,'') FROM app.schedule_items WHERE schedule_id = $1::uuid ORDER BY sequence`, scheduleID)
 	if err != nil {
 		return nil, err
 	}
@@ -729,7 +731,7 @@ func (s *Store) allocatePostgres(obligationID string, amount ledger.Money) ([]Al
 	if amount <= 0 {
 		return nil, errors.New("allocation amount must be positive")
 	}
-	ctx := context.Background()
+	ctx := s.ctx
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -805,7 +807,7 @@ func (s *Store) allocatePostgres(obligationID string, amount ledger.Money) ([]Al
 }
 
 func (s *Store) reverseAllocationsPostgres(targets []AllocationTarget) error {
-	ctx := context.Background()
+	ctx := s.ctx
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -839,7 +841,7 @@ func (s *Store) reverseAllocationsPostgres(targets []AllocationTarget) error {
 }
 
 func (s *Store) evaluatePostgres(now time.Time) []Item {
-	ctx := context.Background()
+	ctx := s.ctx
 	_, _ = s.pool.Exec(ctx, `UPDATE app.schedule_items SET state = CASE WHEN now() < due_at THEN 'OPEN' WHEN now() < collection_at THEN 'IN_GRACE' ELSE 'OVERDUE' END WHERE state NOT IN ('PAID','CANCELLED') AND allocated_kobo = 0 AND due_at <= $1`, now)
 	rows, err := s.pool.Query(ctx, `SELECT id::text, schedule_id::text, sequence, principal_due_kobo, due_at, grace_hours, collection_at, allocated_kobo, collected_kobo, state, disputed_kobo, COALESCE(collection_block_reason,'') FROM app.schedule_items WHERE state NOT IN ('PAID','CANCELLED') AND allocated_kobo = 0 ORDER BY collection_at, sequence`)
 	if err != nil {
@@ -861,7 +863,7 @@ func (s *Store) evaluatePostgres(now time.Time) []Item {
 
 func (s *Store) collectionTargetPostgres(obligationID string, now time.Time) (ledger.Money, error) {
 	var total ledger.Money
-	err := s.pool.QueryRow(context.Background(), `SELECT COALESCE(SUM(GREATEST(i.principal_due_kobo-i.allocated_kobo,0)) FILTER (WHERE i.state NOT IN ('PAID','CANCELLED') AND i.collection_at<=$2),0) FROM app.repayment_schedules s LEFT JOIN app.schedule_items i ON i.schedule_id=s.id WHERE s.obligation_id=$1::uuid GROUP BY s.id`, obligationID, now).Scan(&total)
+	err := s.pool.QueryRow(s.ctx, `SELECT COALESCE(SUM(GREATEST(i.principal_due_kobo-i.allocated_kobo,0)) FILTER (WHERE i.state NOT IN ('PAID','CANCELLED') AND i.collection_at<=$2),0) FROM app.repayment_schedules s LEFT JOIN app.schedule_items i ON i.schedule_id=s.id WHERE s.obligation_id=$1::uuid GROUP BY s.id`, obligationID, now).Scan(&total)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, errors.New("schedule not found")
 	}
@@ -872,7 +874,7 @@ func (s *Store) markCollectedPostgres(obligationID string, amount ledger.Money, 
 	if amount <= 0 {
 		return errors.New("amount must be positive")
 	}
-	ctx := context.Background()
+	ctx := s.ctx
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -936,4 +938,11 @@ func (s *Store) markCollectedPostgres(obligationID string, amount ledger.Money, 
 		return errors.New("collected amount exceeds allocated schedule amount")
 	}
 	return tx.Commit(ctx)
+}
+
+func (s *Store) ForContext(ctx context.Context) *Store {
+	if s.pool == nil {
+		return s
+	}
+	return &Store{pool: s.pool, ctx: ctx, now: s.now, newID: s.newID}
 }

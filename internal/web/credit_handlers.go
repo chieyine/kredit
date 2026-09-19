@@ -406,7 +406,7 @@ func (s *Server) getSupplierAgreementDocument(w http.ResponseWriter, r *http.Req
 		writeProblem(w, http.StatusNotFound, "credit_request_not_found", "credit request was not found")
 		return
 	}
-	s.renderAgreementDocument(w, view)
+	s.renderAgreementDocument(w, r, view)
 }
 
 func (s *Server) getBuyerAgreementDocument(w http.ResponseWriter, r *http.Request) {
@@ -424,15 +424,15 @@ func (s *Server) getBuyerAgreementDocument(w http.ResponseWriter, r *http.Reques
 		writeProblem(w, http.StatusNotFound, "credit_request_not_found", "credit request was not found")
 		return
 	}
-	s.renderAgreementDocument(w, view)
+	s.renderAgreementDocument(w, r, view)
 }
 
-func (s *Server) renderAgreementDocument(w http.ResponseWriter, view credit.View) {
+func (s *Server) renderAgreementDocument(w http.ResponseWriter, r *http.Request, view credit.View) {
 	if view.Obligation == nil {
 		writeProblem(w, http.StatusConflict, "agreement_not_activated", "the printable agreement is available after the obligation is activated")
 		return
 	}
-	schedule, items, err := s.runtime.Schedules.GetForObligation(view.Obligation.ID)
+	schedule, items, err := s.runtime.Schedules.ForContext(r.Context()).GetForObligation(view.Obligation.ID)
 	if err != nil {
 		writeProblem(w, http.StatusConflict, "agreement_schedule_unavailable", "the activated agreement schedule is unavailable")
 		return
@@ -762,7 +762,7 @@ func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	_, items, scheduleErr := s.runtime.Schedules.GetForObligation(obligationID)
+	_, items, scheduleErr := s.runtime.Schedules.ForContext(r.Context()).GetForObligation(obligationID)
 	if financialReadError(w, scheduleErr) {
 		return
 	}
@@ -770,7 +770,7 @@ func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 	if financialReadError(w, readErr6) {
 		return
 	}
-	financialRows7, readErr7 := s.runtime.readDisputesForObligation(obligationID)
+	financialRows7, readErr7 := s.runtime.readDisputesForObligation(r.Context(), obligationID)
 	if financialReadError(w, readErr7) {
 		return
 	}
@@ -796,7 +796,7 @@ func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	schedule, items, err := s.runtime.Schedules.GetForObligationAt(v.Obligation.ID, time.Now().UTC())
+	schedule, items, err := s.runtime.Schedules.ForContext(r.Context()).GetForObligationAt(v.Obligation.ID, time.Now().UTC())
 	if err != nil {
 		financialReadError(w, err)
 		return
@@ -834,7 +834,7 @@ func (s *Server) getBuyerSchedule(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	schedule, items, err := s.runtime.Schedules.GetForObligationAt(v.Obligation.ID, time.Now().UTC())
+	schedule, items, err := s.runtime.Schedules.ForContext(r.Context()).GetForObligationAt(v.Obligation.ID, time.Now().UTC())
 	if err != nil {
 		financialReadError(w, err)
 		return
@@ -1506,7 +1506,7 @@ func (s *Server) openDispute(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, SupplierOrganizationID: orgID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
+	dispute, err := s.runtime.ScopedDisputes(r.Context()).Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, SupplierOrganizationID: orgID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
 	if err != nil {
 		writeProblem(w, 422, "dispute_invalid", err.Error())
 		return
@@ -1537,7 +1537,7 @@ func (s *Server) openBuyerDispute(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	dispute, err := s.runtime.Disputes.Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, SupplierOrganizationID: v.Request.SupplierOrganizationID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
+	dispute, err := s.runtime.ScopedDisputes(r.Context()).Open(disputes.OpenInput{ObligationID: v.Obligation.ID, OpenedBy: user.ID, SupplierOrganizationID: v.Request.SupplierOrganizationID, DisputedAmountKobo: ledger.Money(in.DisputedAmountKobo), Reason: in.Reason, Explanation: in.Explanation, CollectionEffect: in.CollectionEffect})
 	if err != nil {
 		writeProblem(w, 422, "dispute_invalid", err.Error())
 		return
@@ -1551,7 +1551,7 @@ func (s *Server) getBuyerDispute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	disputeID, _ := pathID(r, "disputeID")
-	dispute, evidence, decisions, err := s.runtime.Disputes.Get(disputeID)
+	dispute, evidence, decisions, err := s.runtime.ScopedDisputes(r.Context()).Get(disputeID)
 	if err != nil || dispute.BuyerUserID != user.ID {
 		writeProblem(w, 404, "dispute_not_found", "We could not find that problem.")
 		return
@@ -1567,7 +1567,7 @@ func (s *Server) addBuyerDisputeEvidence(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	disputeID, _ := pathID(r, "disputeID")
-	dispute, _, _, err := s.runtime.Disputes.Get(disputeID)
+	dispute, _, _, err := s.runtime.ScopedDisputes(r.Context()).Get(disputeID)
 	if err != nil || dispute.BuyerUserID != user.ID {
 		writeProblem(w, 404, "dispute_not_found", "We could not find that problem.")
 		return
@@ -1585,7 +1585,7 @@ func (s *Server) addBuyerDisputeEvidence(w http.ResponseWriter, r *http.Request)
 		writeProblem(w, 422, "document_not_ready", "Upload a document for this dispute and wait for its safety check before attaching it.")
 		return
 	}
-	evidence, err := s.runtime.Disputes.AddEvidence(disputeID, user.ID, in.DocumentID, in.Statement)
+	evidence, err := s.runtime.ScopedDisputes(r.Context()).AddEvidence(disputeID, user.ID, in.DocumentID, in.Statement)
 	if err != nil {
 		writeProblem(w, 422, "evidence_invalid", err.Error())
 		return
@@ -1598,7 +1598,7 @@ func (s *Server) listDisputes(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	financialRows11, readErr11 := s.runtime.readDisputesForOrganization(orgID)
+	financialRows11, readErr11 := s.runtime.readDisputesForOrganization(r.Context(), orgID)
 	if financialReadError(w, readErr11) {
 		return
 	}
@@ -1610,7 +1610,7 @@ func (s *Server) getDispute(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	dispute, evidence, decisions, err := s.runtime.Disputes.Get(disputeID)
+	dispute, evidence, decisions, err := s.runtime.ScopedDisputes(r.Context()).Get(disputeID)
 	if err != nil || dispute.SupplierOrganizationID != orgID {
 		writeProblem(w, 404, "dispute_not_found", "We could not find that problem.")
 		return
@@ -1627,7 +1627,7 @@ func (s *Server) addDisputeEvidence(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCSRF(w, r) {
 		return
 	}
-	dispute, _, _, err := s.runtime.Disputes.Get(disputeID)
+	dispute, _, _, err := s.runtime.ScopedDisputes(r.Context()).Get(disputeID)
 	if err != nil || dispute.SupplierOrganizationID != orgID {
 		writeProblem(w, 404, "dispute_not_found", "We could not find that problem.")
 		return
@@ -1645,7 +1645,7 @@ func (s *Server) addDisputeEvidence(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 422, "document_not_ready", "Upload a document for this dispute and wait for its safety check before attaching it.")
 		return
 	}
-	evidence, err := s.runtime.Disputes.AddEvidence(disputeID, user.ID, in.DocumentID, in.Statement)
+	evidence, err := s.runtime.ScopedDisputes(r.Context()).AddEvidence(disputeID, user.ID, in.DocumentID, in.Statement)
 	if err != nil {
 		writeProblem(w, 422, "evidence_invalid", err.Error())
 		return

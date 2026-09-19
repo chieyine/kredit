@@ -8,7 +8,7 @@ test('a reversed receipt cannot be mistaken for an active payment', async ({ pag
   await expect(page.getByRole('heading', { name: 'This payment was reversed.' })).toBeVisible();
   await expect(page.getByText('This money was received.', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('status')).toContainText('no longer reduces the balance');
-  await expect(page.getByRole('link', { name: 'Email Kredit support' })).toHaveAttribute('href', /^mailto:hello@kredit\.com\.ng/);
+  await expect(page.getByRole('link', { name: 'Email Kredit support' })).toHaveAttribute('href', /^mailto:hello@kredit\.ng/);
 });
 
 test('public receipt failures recover and missing amounts are never accepted', async ({ page }) => {
