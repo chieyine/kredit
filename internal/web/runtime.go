@@ -1139,5 +1139,5 @@ func whatsAppAssistant(cfg config.Config) *whatsapp.AIParser {
 	if !cfg.WhatsAppAssistant {
 		return nil
 	}
-	return whatsapp.NewAIParser(cfg.GeminiAPIKey)
+	return whatsapp.NewAIParserWithModel(cfg.GeminiAPIKey, cfg.GeminiModel)
 }

@@ -26,6 +26,23 @@ func TestAssistantIsDisabledWithoutAKey(t *testing.T) {
 	}
 }
 
+func TestAIParserModelConfiguration(t *testing.T) {
+	defaultParser := NewAIParser("key")
+	if defaultParser.model != "gemini-3.8-flash" {
+		t.Fatalf("expected default model gemini-3.8-flash, got %s", defaultParser.model)
+	}
+
+	customParser := NewAIParserWithModel("key", "gemini-custom")
+	if customParser.model != "gemini-custom" {
+		t.Fatalf("expected custom model gemini-custom, got %s", customParser.model)
+	}
+
+	fallbackParser := NewAIParserWithModel("key", "  ")
+	if fallbackParser.model != "gemini-3.8-flash" {
+		t.Fatalf("expected whitespace model to fall back to gemini-3.8-flash, got %s", fallbackParser.model)
+	}
+}
+
 // Every inbound message would otherwise reach the model provider, and a voice
 // note also costs a media download. Anyone able to message the business number
 // can send as many as they like, so the budget is what bounds the spend.

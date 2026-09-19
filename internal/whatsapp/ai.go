@@ -22,7 +22,7 @@ const (
 	IntentHelp          = "help"
 	IntentUnknown       = "unknown"
 
-	geminiModel = "gemini-3.6-flash"
+	defaultGeminiModel = "gemini-3.8-flash"
 )
 
 type AIResult struct {
@@ -55,6 +55,7 @@ type senderWindowState struct {
 
 type AIParser struct {
 	apiKey   string
+	model    string
 	client   *http.Client
 	mu       sync.Mutex
 	senders  map[string]senderWindowState
@@ -63,8 +64,16 @@ type AIParser struct {
 }
 
 func NewAIParser(apiKey string) *AIParser {
+	return NewAIParserWithModel(apiKey, defaultGeminiModel)
+}
+
+func NewAIParserWithModel(apiKey, model string) *AIParser {
+	if strings.TrimSpace(model) == "" {
+		model = defaultGeminiModel
+	}
 	return &AIParser{
 		apiKey:  apiKey,
+		model:   model,
 		client:  &http.Client{Timeout: 30 * time.Second},
 		senders: map[string]senderWindowState{},
 		now:     func() time.Time { return time.Now() },
@@ -203,7 +212,11 @@ func (p *AIParser) callGemini(ctx context.Context, payload map[string]any) (AIRe
 
 	// The key travels in a header, never the query string: a URL reaches proxy
 	// access logs, error reports and browser-style referrer chains.
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", geminiModel)
+	model := p.model
+	if strings.TrimSpace(model) == "" {
+		model = defaultGeminiModel
+	}
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", model)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBytes))
 	if err != nil {
 		return AIResult{Intent: IntentUnknown}, fmt.Errorf("create gemini request: %w", err)

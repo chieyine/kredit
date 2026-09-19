@@ -65,6 +65,7 @@ type Config struct {
 	TokenHashKey                       string
 	SettingsEncryptionKey              string
 	GeminiAPIKey                       string `json:"-"`
+	GeminiModel                        string
 	WhatsAppAssistantTransferReference string
 	WhatsAppAssistant                  bool
 	OTelEndpoint                       string
@@ -164,6 +165,7 @@ func Load() (Config, error) {
 		TokenHashKey:                       envOr("TOKEN_HASH_KEY", "development-only-change-me"),
 		SettingsEncryptionKey:              envOr("SETTINGS_ENCRYPTION_KEY", ""),
 		GeminiAPIKey:                       envOr("GEMINI_API_KEY", ""),
+		GeminiModel:                        envOr("GEMINI_MODEL", "gemini-3.8-flash"),
 		WhatsAppAssistantTransferReference: envOr("WHATSAPP_ASSISTANT_TRANSFER_REFERENCE", ""),
 		OTelEndpoint:                       envOr("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		Timezone:                           envOr("BUSINESS_TIMEZONE", defaultTimezone),
