@@ -17,7 +17,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/audit-diagnostics"
-          gh api repos/chieyine/kredit/actions/jobs/106134596867/logs > "$RUNNER_TEMP/audit-diagnostics/ci-1f78860.log"
+          gh api --allow-escape-sequences repos/chieyine/kredit/actions/jobs/106134596867/logs > "$RUNNER_TEMP/audit-diagnostics/ci-1f78860.log"
           gh api repos/chieyine/kredit/contents/internal/buyers/terms_import.go?ref=1f788608e6daaea1fafefe551cfc89913b8182f6 --jq .sha > "$RUNNER_TEMP/audit-diagnostics/terms-blob.txt"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
