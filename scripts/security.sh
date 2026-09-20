@@ -67,7 +67,8 @@ run_scanner gosec gosec -exclude-generated --exclude-rules="$GOSEC_PATH_EXCLUSIO
 
 run_scanner staticcheck staticcheck ./...
 run_scanner osv-scanner osv-scanner scan source -r .
-run_scanner trivy trivy fs --scanners vuln,secret,misconfig .
+# Trivy reports findings with status 0 unless an explicit failure code is set.
+run_scanner trivy trivy fs --exit-code 1 --scanners vuln,secret,misconfig .
 
 if command -v rg >/dev/null 2>&1; then
 	if rg -l --hidden --glob '!.tmp/**' --glob '!node_modules/**' --glob '!.git/**' --glob '!README.md' --glob '!IMPLEMENTATION_PLAN.md' --glob '!*.lock' '(BEGIN (RSA|OPENSSH) PRIVATE KEY|AKIA[0-9A-Z]{16}|password\s*=\s*"[^"$]+")' .; then

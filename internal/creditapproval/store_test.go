@@ -3,10 +3,12 @@ package creditapproval
 import (
 	"context"
 	"errors"
-	"kredit/internal/credit"
 	"os"
 	"testing"
 	"time"
+
+	"kredit/internal/credit"
+	"kredit/internal/db"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -23,7 +25,7 @@ func TestIndependentApprovalCannotBeBypassedOrReusedAfterRevision(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer admin.Close()
-	owner, reviewer, buyer, org, request := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	owner, reviewer, buyer, org, request, profile := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	exec := func(sql string, args ...any) {
 		t.Helper()
 		if _, e := admin.Exec(ctx, sql, args...); e != nil {
@@ -35,17 +37,14 @@ func TestIndependentApprovalCannotBeBypassedOrReusedAfterRevision(t *testing.T) 
 	}
 	exec(`INSERT INTO app.organizations(id,legal_name,business_type,business_address,industry) VALUES($1::uuid,'Approval fixture','limited_company','Lagos','food')`, org)
 	exec(`INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active'),($1::uuid,$3::uuid,'finance','active')`, org, owner, reviewer)
-	exec(`INSERT INTO app.credit_requests(id,supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,goods_description,due_date,collection_at,state,created_by) VALUES($1::uuid,$2::uuid,$3::uuid,gen_random_uuid(),10000,'Goods',current_date+7,now()+interval '7 days','DRAFT',$4::uuid)`, request, org, buyer, owner)
-	cfg, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	exec(`INSERT INTO app.businesses(id,owner_user_id,legal_name,business_type,business_address,industry) VALUES($1::uuid,$2::uuid,'Approval buyer','limited_company','Synthetic','test')`, profile, buyer)
+	exec(`INSERT INTO app.credit_requests(id,supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,goods_description,due_date,collection_at,state,created_by) VALUES($1::uuid,$2::uuid,$3::uuid,$5::uuid,10000,'Goods',current_date+7,now()+interval '7 days','DRAFT',$4::uuid)`, request, org, buyer, owner, profile)
+	runtime, err := db.OpenAsRole(ctx, os.Getenv("APP_DATABASE_URL"), "kredit_app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.ConnConfig.RuntimeParams["role"] = "kredit_app"
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
+	defer runtime.Close()
+	pool := runtime.Raw()
 	s := Store{Pool: pool}
 	if _, err = s.SetControls(ctx, reviewer, org, Controls{Enabled: true}); !errors.Is(err, ErrAuthority) {
 		t.Fatalf("non-owner changed policy: %v", err)
@@ -162,7 +161,7 @@ func TestIndependentApprovalCannotBeBypassedOrReusedAfterRevision(t *testing.T) 
 	}
 
 	repo := credit.NewPostgresStore(pool, nil)
-	offer, err := repo.Create(credit.CreateInput{SupplierOrganizationID: org, SupplierLegalName: "Supplier", BuyerUserID: buyer, BuyerBusinessID: uuid.NewString(), BuyerLegalName: "Distributor", PrincipalKobo: 20000, GoodsDescription: "Reviewed stock", DueDate: time.Now().AddDate(0, 0, 7).Format("2006-01-02"), CollectionAt: time.Now().Add(8 * 24 * time.Hour), CreatedBy: owner})
+	offer, err := repo.Create(credit.CreateInput{SupplierOrganizationID: org, SupplierLegalName: "Supplier", BuyerUserID: buyer, BuyerBusinessID: profile, BuyerLegalName: "Distributor", PrincipalKobo: 20000, GoodsDescription: "Reviewed stock", DueDate: time.Now().AddDate(0, 0, 7).Format("2006-01-02"), CollectionAt: time.Now().Add(8 * 24 * time.Hour), CreatedBy: owner})
 	if err != nil {
 		t.Fatal(err)
 	}

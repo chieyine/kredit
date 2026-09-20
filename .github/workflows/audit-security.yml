@@ -1,0 +1,82 @@
+name: Audit independent security scans
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Prepare evidence and check fail-closed scanner contract
+        run: |
+          mkdir -p "$RUNNER_TEMP/audit-security" "$RUNNER_TEMP/audit-security-bin"
+          printf '%s\n' "$RUNNER_TEMP/audit-security-bin" >> "$GITHUB_PATH"
+          git rev-parse HEAD > "$RUNNER_TEMP/audit-security/source-commit.txt"
+          bash scripts/security-exit-test.sh
+      - name: Install pinned Go vulnerability scanner
+        if: ${{ !cancelled() }}
+        working-directory: ${{ runner.temp }}
+        env:
+          GOBIN: ${{ runner.temp }}/audit-security-bin
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+      - name: Scan reachable Go vulnerabilities
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          govulncheck ./... 2>&1 | tee "$RUNNER_TEMP/audit-security/govulncheck.log"
+      - name: Install pinned Go security analyzer
+        if: ${{ !cancelled() }}
+        working-directory: ${{ runner.temp }}
+        env:
+          GOBIN: ${{ runner.temp }}/audit-security-bin
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
+      - name: Analyze all owned Go source with existing narrow exceptions
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          exclusions='internal/auth/store.go:G115,G505;internal/web/auth_handlers.go:G124;internal/web/user_control_handlers.go:G705;internal/web/reports_handlers.go:G705;internal/web/credit_handlers.go:G705'
+          gosec -exclude-generated --exclude-rules="$exclusions" -fmt=json -out="$RUNNER_TEMP/audit-security/gosec.json" ./... 2>&1 | tee "$RUNNER_TEMP/audit-security/gosec.log"
+      - name: Install pinned dependency scanner
+        if: ${{ !cancelled() }}
+        working-directory: ${{ runner.temp }}
+        env:
+          GOBIN: ${{ runner.temp }}/audit-security-bin
+        run: go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.4.0
+      - name: Scan repository dependency manifests
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          osv-scanner scan source -r . 2>&1 | tee "$RUNNER_TEMP/audit-security/osv.log"
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514
+        if: ${{ !cancelled() }}
+        with:
+          version: v0.74.0
+          cache: true
+      - name: Fail on detected filesystem security findings
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          trivy fs --exit-code 1 --scanners vuln,secret,misconfig . 2>&1 | tee "$RUNNER_TEMP/audit-security/trivy.log"
+      - name: Preserve actual scan results, including failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: audit-security-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-security/
+          retention-days: 7
+          if-no-files-found: error

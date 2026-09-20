@@ -3,12 +3,15 @@ package referrals
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"sync"
 	"testing"
 	"time"
+
+	"kredit/internal/db"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestDSAPermissionsRewardsAndPayouts(t *testing.T) {
@@ -35,17 +38,16 @@ func TestDSAPermissionsRewardsAndPayouts(t *testing.T) {
 	owner, agent, outsider := user(), user(), user()
 	exec(`INSERT INTO app.platform_role_assignments(user_id,role,granted_by,reason) VALUES($1::uuid,'platform_owner',$1::uuid,'Synthetic DSA integration check')`, owner)
 	pool := func(role string) *pgxpool.Pool {
-		c, e := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
-		if e != nil {
-			t.Fatal(e)
+		dsn := os.Getenv("APP_DATABASE_URL")
+		if role == "kredit_worker" {
+			dsn = os.Getenv("RIVER_DATABASE_URL")
 		}
-		c.ConnConfig.RuntimeParams["role"] = role
-		p, e := pgxpool.NewWithConfig(ctx, c)
-		if e != nil {
-			t.Fatal(e)
+		runtime, err := db.OpenAsRole(ctx, dsn, role)
+		if err != nil {
+			t.Fatal(err)
 		}
-		t.Cleanup(p.Close)
-		return p
+		t.Cleanup(runtime.Close)
+		return runtime.Raw()
 	}
 	s := &Store{Pool: pool("kredit_app")}
 	worker := &Store{Pool: pool("kredit_worker")}
@@ -118,7 +120,7 @@ func TestDSAPermissionsRewardsAndPayouts(t *testing.T) {
 	credit, agreement, obligation, fee, invoice := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	exec(`INSERT INTO app.credit_requests(id,supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,goods_description,due_date,collection_at,state,created_by) VALUES($1::uuid,$2::uuid,$3::uuid,$3::uuid,10000000,'Synthetic goods',current_date+30,now()+interval '30 days','DRAFT',$4::uuid)`, credit, org, outsider, owner)
 	exec(`INSERT INTO app.agreement_versions(id,credit_request_id,version,canonical_json,document_hash,terms_version,privacy_version,created_by) VALUES($1::uuid,$2::uuid,1,'{}',$1,'synthetic','synthetic',$3::uuid)`, agreement, credit, owner)
-	exec(`INSERT INTO app.obligations(id,credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,10000000,'NGN','active','unpaid',10000000,1000000,$1::uuid,now())`, obligation, credit, agreement, org, outsider)
+	exec(`INSERT INTO app.obligations(id,credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,10000000,'NGN','ACTIVE','UNPAID',10000000,1000000,$1::uuid,now())`, obligation, credit, agreement, org, outsider)
 	exec(`INSERT INTO app.fees(id,supplier_organization_id,obligation_id,fee_type,basis_amount_kobo,rate_basis_points,amount_kobo,currency,state) VALUES($1::uuid,$2::uuid,$3::uuid,'base_service',10000000,1000,1000000,'NGN','accrued')`, fee, org, obligation)
 	exec(`INSERT INTO app.fee_invoices(id,organization_id,billing_reference,cycle,period_end,due_at,business_name,business_address,payment_instructions) VALUES($1::uuid,$2::uuid,'synthetic','monthly',now(),now()+interval '7 days','Synthetic','Synthetic address','Synthetic bank instructions')`, invoice, org)
 	exec(`INSERT INTO app.fee_invoice_lines(invoice_id,fee_id,organization_id,amount_kobo,waived_at_issue_kobo) VALUES($1::uuid,$2::uuid,$3::uuid,1000000,0)`, invoice, fee, org)
