@@ -14,7 +14,9 @@ for (const area of ['app', 'buyer']) {
       sent.push({ key: route.request().headers()['idempotency-key'], body: route.request().postDataJSON() });
       return sent.length === 1 ? route.abort('failed') : route.fulfill({ status: 201, json: { evidence: { id: 'evidence-1' } } });
     });
-    await page.goto(`/${area}/disputes/problem-1?organization=org-a`);
+    await page.route('**/api/v1/buyer/businesses', route => route.fulfill({ json: { businesses: [{ id: 'business-1', workspace_id: 'org-a', legal_name: 'Synthetic buyer' }] } }));
+    const path = area === 'buyer' ? '/workspace/purchases/disputes' : '/workspace/disputes';
+    await page.goto(`${path}/problem-1?organization=org-a`);
     await page.getByRole('textbox', { name: 'What else should we know?' }).fill('Two cartons were missing from the delivery.');
     const submit = page.getByRole('button', { name: 'Add this information', exact: true });
     await submit.click();

@@ -19,8 +19,7 @@
 		'.motion-scope .process-grid > article',
 		'.motion-scope .capability-list > article',
 		'.motion-scope .control-list > article',
-		'.motion-scope .journey > article',
-		'.site-footer .footer-grid > div'
+		'.motion-scope .journey > article'
 	].join(',');
 
 	function prepare() {

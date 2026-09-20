@@ -10,7 +10,8 @@ for (const area of ['app', 'buyer']) {
       sent_at: '0001-01-01T00:00:00Z', scheduled_at: '2026-09-09T12:00:00Z'
     }] } }) : route.abort('failed'));
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`/${area}/notifications`);
+    // Both business roles now use the same private account history page.
+    await page.goto('/account/messages');
     await expect(page.getByRole('alert')).toContainText('We could not check your message history');
     await expect(page.getByText('No messages yet', { exact: true })).toHaveCount(0);
     ready = true;

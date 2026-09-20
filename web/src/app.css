@@ -304,6 +304,8 @@ p { line-height: 1.65; }
 .header-cta span { color: #6b6862; }
 
 .site-footer {
+	/* This surface is always dark, including in the light theme. */
+	--color-muted: #c3beb5;
 	margin-top: 0; padding: 6rem 0 2rem;
 	color: var(--color-muted);
 	background: #080a0e;
@@ -798,7 +800,7 @@ th { font-size: .72rem; font-weight: 600; letter-spacing: .12em; text-transform:
  * heavy drawer does. Nothing overshoots, because overshoot reads as toy.
  */
 .public-route > * { animation: route-enter 520ms cubic-bezier(.16, .7, .2, 1) both; }
-.motion-ready [data-motion-reveal] { opacity: 0; transform: translateY(18px); transition: opacity 620ms cubic-bezier(.16,.7,.2,1), transform 620ms cubic-bezier(.16,.7,.2,1); transition-delay: calc(var(--motion-order, 0) * 60ms); }
+.motion-ready [data-motion-reveal] { opacity: 1; transform: translateY(18px); transition: transform 620ms cubic-bezier(.16,.7,.2,1); transition-delay: calc(var(--motion-order, 0) * 60ms); }
 .motion-ready [data-motion-reveal].is-revealed { opacity: 1; transform: translateY(0); }
 
 button, .primary, .primary-button, .secondary, .header-cta, .card a, .records a, .nav-links a {

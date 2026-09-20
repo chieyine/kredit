@@ -15,7 +15,7 @@ paths:
       parameters:
         - {name: organizationID, in: path, required: true, schema: {type: string, format: uuid}}
       responses:
-        '200': {description: Current staff permissions; owners can manage, other members see their own permissions}
+        '200': {description: "Current staff permissions; owners can manage, other members see their own permissions"}
         '403': {description: Current membership required}
   /organizations/{organizationID}/purchasing-authority/{memberID}:
     put:
@@ -39,9 +39,9 @@ paths:
                 version: {type: integer, minimum: 0}
       responses:
         '200': {description: Saved permissions or exact retry result}
-        '403': {description: Current owner, elevated identity and CSRF required}
+        '403': {description: "Current owner, elevated identity and CSRF required"}
         '409': {description: Version changed; refresh before retry}
-        '422': {description: Invalid permissions, staff, expiry or limit}
+        '422': {description: "Invalid permissions, staff, expiry or limit"}
   /buyer/me/purchasing-access:
     get:
       operationId: getStaffPurchasingSetup
@@ -109,7 +109,7 @@ paths:
       operationId: readNetworkOperations
       summary: Read supplier-private branches, territories and customer account-manager assignments
       responses:
-        '200': {description: Current branches, relationship assignments, eligible managers and management permission}
+        '200': {description: "Current branches, relationship assignments, eligible managers and management permission"}
         '403': {description: Current business membership required}
         '503': {description: Business database unavailable}
   /organizations/{organizationID}/branches/{branchID}:
@@ -158,7 +158,7 @@ paths:
         '200': {description: Saved or recovered assignment; does not grant additional access}
         '403': {description: Current owner or administrator and fresh MFA required}
         '409': {description: Assignment changed; refresh before editing}
-        '422': {description: Unrelated customer, closed branch or unavailable manager}
+        '422': {description: "Unrelated customer, closed branch or unavailable manager"}
   /organizations/{organizationID}/credit-approvals:
     parameters:
       - $ref: '#/components/parameters/OrganizationID'
@@ -168,7 +168,7 @@ paths:
       responses:
         '200':
           description: Current rule, actor role, and immutable proposal snapshots with stale-state flags
-        '403': {description: Current owner, administrator, sales or finance membership required}
+        '403': {description: "Current owner, administrator, sales or finance membership required"}
         '503': {description: Approval database unavailable}
   /organizations/{organizationID}/credit-approvals/reviewers/{reviewerID}:
     parameters:
@@ -212,7 +212,7 @@ paths:
                 version: {type: integer, minimum: 0, description: Current policy version; zero creates the first policy}
       responses:
         '200': {description: Saved policy and new version}
-        '403': {description: Current owner authority, fresh MFA and CSRF required}
+        '403': {description: "Current owner authority, fresh MFA and CSRF required"}
         '409': {description: Policy changed concurrently; reload before editing}
         '422': {description: Invalid threshold or version}
   /organizations/{organizationID}/credit-requests/{requestID}/approval:
@@ -224,7 +224,7 @@ paths:
       summary: Record the exact current draft version for independent review
       responses:
         '200': {description: New or recovered approval request ID; this does not send or accept the offer}
-        '403': {description: Current credit-creation permission, fresh MFA and CSRF required}
+        '403': {description: "Current credit-creation permission, fresh MFA and CSRF required"}
         '404': {description: Draft unavailable to this business}
         '409': {description: Offer is no longer an editable draft}
   /organizations/{organizationID}/credit-approvals/{approvalID}:
@@ -246,9 +246,9 @@ paths:
                 reason: {type: string, minLength: 3, maxLength: 1000}
       responses:
         '200': {description: Durable decision recorded or recovered; approval does not send the offer}
-        '403': {description: Independent current owner, administrator or finance authority, fresh MFA and CSRF required}
+        '403': {description: "Independent current owner, administrator or finance authority, fresh MFA and CSRF required"}
         '404': {description: Approval unavailable to this business}
-        '409': {description: Terms, version or decision changed; new review required}
+        '409': {description: "Terms, version or decision changed; new review required"}
         '422': {description: Invalid decision or missing reason}
   /organizations/{organizationID}/distributor-imports:
     parameters:
@@ -400,7 +400,7 @@ paths:
       operationId: readBuyerBankEnrollment
       summary: Read the original provider's enrollment instructions for an owned mandate
       responses:
-        '200': {description: Enrollment, mandate and supported bank choices}
+        '200': {description: "Enrollment, mandate and supported bank choices"}
         '404': {description: Bank permission not visible to this buyer}
         '409': {description: Provider response unconfirmed}
     post:
@@ -425,7 +425,7 @@ paths:
                 consent: {type: boolean, const: true}
       responses:
         '200': {description: Enrollment state returned; submission does not establish approval}
-        '409': {description: Permission closed, submissions paused or response unconfirmed}
+        '409': {description: "Permission closed, submissions paused or response unconfirmed"}
   /buyer/mandates/{mandateID}/refresh:
     parameters:
       - {name: mandateID, in: path, required: true, schema: {type: string}}

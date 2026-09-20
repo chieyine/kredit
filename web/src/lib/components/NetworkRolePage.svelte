@@ -5,7 +5,7 @@
   const stage = $derived(network.find(item => item.key === role)!);
 </script>
 
-<svelte:head><title>Kredit for {stage.label.toLowerCase()}</title></svelte:head>
+<!-- Public title and social metadata come from the shared route SEO in +layout. -->
 
 <main class="network-page shell">
   <header class="network-hero">

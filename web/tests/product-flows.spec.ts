@@ -67,7 +67,7 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 	await page.getByRole('button', { name: 'Check terms', exact:true }).click();
 	expect(submitted).toBeUndefined();
 	await page.getByRole('button', { name: 'Save draft sale', exact:true }).click();
-	await expect(page).toHaveURL(/\/app\/credit\/request-1\?organization=org-1/);
+	await expect(page).toHaveURL(/\/workspace\/sales\/request-1\?organization=org-1/);
 	expect(idempotency.length).toBeGreaterThanOrEqual(8);
 	await expect.poll(() => submitted).toMatchObject({ buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', principal_kobo: 120000000, goods_description: 'Twenty cartons of verified inventory' });
 });
@@ -160,7 +160,7 @@ test('buyer can decline exact terms without creating an obligation', async ({ pa
 
 test('buyer payment claim explains and applies a bounded hold', async ({ page }) => {
 	let submitted: Record<string, unknown> | undefined;
-	const request = { id: 'request-3', buyer_business_id:'business-1', state: 'ACTIVE', supplier_legal_name: 'Adebayo Supplies', buyer_legal_name: 'Kano Retail Limited', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Verified inventory', due_date: '2026-09-30' };
+	const request = { id: 'request-3', buyer_user_id:'product-user', buyer_business_id:'business-1', state: 'ACTIVE', supplier_legal_name: 'Adebayo Supplies', buyer_legal_name: 'Kano Retail Limited', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Verified inventory', due_date: '2026-09-30' };
 	await page.route('**/api/v1/buyer/credit-requests/request-3', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request, obligation: { id: 'obligation-3', outstanding_kobo: 50000000 }, agreement: { id:'agreement-1', document_hash: 'a'.repeat(64) } }) }));
 	await page.route('**/api/v1/buyer/credit-requests/request-3/payments', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payments: [] }) }));
 	await page.route('**/api/v1/buyer/credit-requests/request-3/payment-claims', async (route) => { submitted = route.request().postDataJSON(); await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ payment_claim: { id: 'claim-1', state: 'pending', amount_kobo: submitted!.amount_kobo } }) }); });
@@ -172,6 +172,15 @@ test('buyer payment claim explains and applies a bounded hold', async ({ page })
 	await page.getByRole('button', { name: 'Report my transfer', exact:true }).click();
 	await expect(page.getByText('Transfer reported. The seller must confirm receipt before your balance changes.')).toBeVisible();
 	await expect.poll(() => submitted).toMatchObject({ amount_kobo: 12500000, transfer_reference: 'BANK-2026-001' });
+});
+
+test('a viewer without purchasing authority cannot report a transfer', async ({ page }) => {
+ const request = { id: 'request-unowned', buyer_business_id: 'business-1', buyer_user_id: 'different-user', state: 'ACTIVE', supplier_legal_name: 'Synthetic seller', buyer_legal_name: 'Synthetic buyer', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Synthetic goods', due_date: '2026-09-30' };
+ await page.route('**/api/v1/buyer/credit-requests/request-unowned', route => route.fulfill({ json: { request, obligation: { id: 'obligation-unowned', outstanding_kobo: 50000000 } } }));
+ await page.route('**/api/v1/buyer/credit-requests/request-unowned/payments', route => route.fulfill({ json: { payments: [] } }));
+ await page.goto('/workspace/purchases/orders/request-unowned');
+ await page.getByText('Already paid by bank transfer?', { exact: true }).click();
+ await expect(page.getByRole('button', { name: 'Report my transfer', exact: true })).toBeDisabled();
 });
 
 test('buyer can cancel an active mandate', async ({ page }) => {
@@ -188,20 +197,19 @@ test('mobile customer navigation keeps important pages below and every other pag
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.route('**/api/v1/buyer/mandates*', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mandates: [] }) }));
 	await page.goto('/workspace/purchases/mandates');
-	const account = page.getByRole('navigation', { name: 'Customer account' });
+	const account = page.getByRole('navigation', { name: 'Business workspace' });
 	await expect(account.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
-	const mainPages = page.getByRole('navigation', { name: 'Customer account main pages' });
-	await expect(mainPages.getByRole('link')).toHaveCount(4);
+	const mainPages = page.getByRole('navigation', { name: 'Business workspace main pages' });
+	await expect(mainPages.getByRole('link')).toHaveCount(5);
 	await expect(mainPages.getByRole('button')).toHaveCount(0);
 	await account.getByRole('button', { name: 'Menu', exact: true }).click();
-	await expect(page.getByRole('dialog', { name: 'Customer account menu' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Sales and payments' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Messages and choices' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Account and help' })).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(9);
+	await expect(page.getByRole('dialog', { name: 'Business workspace menu' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Your business' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(8);
 	await page.getByRole('link', { name: 'Get help' }).click();
-	await expect(page).toHaveURL(/\/legal\/complaints$/);
-	await expect(page.getByRole('dialog', { name: 'Customer account menu' })).toHaveCount(0);
+	await expect(page).toHaveURL(/\/workspace\/help(?:\?|$)/);
+	await expect(page.getByRole('dialog', { name: 'Business workspace menu' })).toHaveCount(0);
 });
 
 test('public receipt renders only the approved projection', async ({ page }) => {
@@ -289,7 +297,7 @@ test('pilot-ready owner reviews mobile readiness and invites a sales user', asyn
 	await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
 	await expect(page.getByText('10/10')).toBeVisible();
 	await page.getByRole('link', { name: 'Protect staff who handle money →' }).click();
-	await expect(page).toHaveURL(/\/app\/team$/);
+	await expect(page).toHaveURL(/\/workspace\/team$/);
 	await page.getByLabel('Email or phone').fill('sales@fresh-foods.test');
 	await page.getByRole('button', { name: 'Send invite' }).click();
 	await expect(page.getByText('Invitation created. Ask your worker to sign in with the email or phone number you entered.')).toBeVisible();
@@ -305,7 +313,7 @@ test('incomplete supplier sees precise recovery steps before financial activity'
 	];
 	await page.route('**/api/v1/organizations/org-incomplete/onboarding', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ profile: { organization_id: 'org-incomplete', version: 2, kyb_state: 'not_started', settlement_state: 'not_started', billing_state: 'configured' }, readiness: { state: 'incomplete', ready: false, requirements: missing, missing }, permissions: { business: false, settlement: false, billing: false, credit_policy: false, consents: false }, current_terms_version: 'supplier-terms-v1', current_privacy_version: 'privacy-v1' }) }));
 	await page.goto('/workspace/onboarding');
-	await expect(page.getByText('3 things still to do before money can move in or out.')).toBeVisible();
+	await expect(page.getByText('3 things still to do before selling setup is complete.')).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Setup progress' }).getByText('Where we send your money', { exact: true })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Where we send your money →' })).toBeVisible();
 });
@@ -318,7 +326,7 @@ test('user changes notification routing, quiet hours, and optional categories', 
 		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preferences, required_groups: ['SECURITY_REQUIRED', 'TRANSACTIONAL_REQUIRED'] }) });
 	});
 	await page.goto('/account/notifications');
-	await expect(page.getByText(/Important account, sale and payment messages are required/)).toBeVisible();
+	await expect(page.getByText(/Messages about your account, a sale or a payment cannot be switched off/)).toBeVisible();
 	await page.getByLabel('Try this first').selectOption('email');
 	await page.getByLabel('If that fails, use').selectOption('sms');
 	await page.getByLabel('Remind me about payments').uncheck();
