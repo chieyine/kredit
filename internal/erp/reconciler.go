@@ -3,8 +3,12 @@ package erp
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"sort"
+	"strings"
 	"time"
 
 	"kredit/internal/ledger"
@@ -56,88 +60,137 @@ type InternalRecord struct {
 	Date          time.Time    `json:"date"`
 }
 
-// ReconcileExternal compares external ERP entries against internal ledger postings
+// MaxReconciliationRecords bounds both report size and untrusted input work.
+const MaxReconciliationRecords = 10000
+
+var ErrInvalidRecords = errors.New("invalid reconciliation records")
+
+// ReconcileExternal compares unique signed movements, not outstanding balances.
+// Both interval endpoints are inclusive. Reference is a journal transaction ID
+// for the HTTP ledger comparison. Ambiguous duplicates are never overwritten.
 func ReconcileExternal(orgID string, periodStart, periodEnd time.Time, internal []InternalRecord, external []ExternalRecord) (ReconciliationResult, error) {
-	if orgID == "" {
-		return ReconciliationResult{}, errors.New("organization ID is required")
+	invalid := func(message string) (ReconciliationResult, error) {
+		return ReconciliationResult{}, fmt.Errorf("%w: %s", ErrInvalidRecords, message)
 	}
-
+	if strings.TrimSpace(orgID) == "" || periodStart.IsZero() || periodEnd.IsZero() || periodEnd.Before(periodStart) {
+		return invalid("organization and a valid period are required")
+	}
+	if len(internal) > MaxReconciliationRecords || len(external) > MaxReconciliationRecords {
+		return invalid("too many records; select a smaller period")
+	}
+	// Copy before sorting: callers retain ownership of their input slices.
+	ins := append([]InternalRecord{}, internal...)
+	exts := append([]ExternalRecord{}, external...)
+	sort.Slice(ins, func(i, j int) bool { return ins[i].Reference < ins[j].Reference })
+	sort.Slice(exts, func(i, j int) bool { return exts[i].Reference < exts[j].Reference })
+	valid := func(ref string, at time.Time) bool {
+		return strings.TrimSpace(ref) != "" && len(ref) <= 200 && !at.IsZero() && !at.Before(periodStart) && !at.After(periodEnd)
+	}
 	result := ReconciliationResult{
-		OrganizationID: orgID,
-		ReconciledAt:   time.Now().UTC(),
-		PeriodStart:    periodStart,
-		PeriodEnd:      periodEnd,
-		Discrepancies:  []Discrepancy{},
-		Balanced:       true,
+		OrganizationID: orgID, ReconciledAt: time.Now().UTC(),
+		PeriodStart: periodStart.UTC(), PeriodEnd: periodEnd.UTC(),
+		Discrepancies: []Discrepancy{}, Balanced: true,
 	}
-
-	extMap := make(map[string]ExternalRecord, len(external))
-	for _, ext := range external {
-		extMap[ext.Reference] = ext
-		result.TotalExternalKobo += ext.AmountKobo
+	intMap := make(map[string]InternalRecord, len(ins))
+	extMap := make(map[string]ExternalRecord, len(exts))
+	var err error
+	for i := range ins {
+		in := &ins[i]
+		if !valid(in.Reference, in.Date) {
+			return invalid("internal reference or date is invalid")
+		}
+		if _, exists := intMap[in.Reference]; exists {
+			return invalid("duplicate internal reference")
+		}
+		in.Date = in.Date.UTC()
+		intMap[in.Reference] = *in
+		result.TotalInternalKobo, err = ledger.CheckedAdd(result.TotalInternalKobo, in.AmountKobo)
+		if err != nil {
+			return invalid("internal total overflows money range")
+		}
 	}
-
-	intMap := make(map[string]InternalRecord, len(internal))
-	for _, in := range internal {
-		intMap[in.Reference] = in
-		result.TotalInternalKobo += in.AmountKobo
+	for i := range exts {
+		ext := &exts[i]
+		if !valid(ext.Reference, ext.Date) || len(ext.Note) > 2000 {
+			return invalid("external reference, date or note is invalid")
+		}
+		if _, exists := extMap[ext.Reference]; exists {
+			return invalid("duplicate external reference")
+		}
+		ext.Date = ext.Date.UTC()
+		extMap[ext.Reference] = *ext
+		result.TotalExternalKobo, err = ledger.CheckedAdd(result.TotalExternalKobo, ext.AmountKobo)
+		if err != nil {
+			return invalid("external total overflows money range")
+		}
 	}
-
-	// Check all internal records against external
-	for ref, in := range intMap {
-		ext, exists := extMap[ref]
+	for _, in := range ins {
+		ext, exists := extMap[in.Reference]
 		if !exists {
-			result.Balanced = false
 			result.Discrepancies = append(result.Discrepancies, Discrepancy{
-				Type:               DiscrepancyMissingExternal,
-				Reference:          ref,
-				ExpectedAmountKobo: in.AmountKobo,
-				ActualAmountKobo:   0,
-				DifferenceKobo:     in.AmountKobo,
-				Description:        fmt.Sprintf("Internal ledger transaction %s is missing from external ERP", in.TransactionID),
+				Type: DiscrepancyMissingExternal, Reference: in.Reference,
+				ExpectedAmountKobo: in.AmountKobo, DifferenceKobo: in.AmountKobo,
+				Description: "Internal movement is missing from external ERP",
 			})
 			continue
 		}
-
-		if in.AmountKobo != ext.AmountKobo {
-			result.Balanced = false
-			diff := in.AmountKobo - ext.AmountKobo
-			result.Discrepancies = append(result.Discrepancies, Discrepancy{
-				Type:               DiscrepancyAmountMismatch,
-				Reference:          ref,
-				ExpectedAmountKobo: in.AmountKobo,
-				ActualAmountKobo:   ext.AmountKobo,
-				DifferenceKobo:     diff,
-				Description:        fmt.Sprintf("Amount mismatch: internal %d kobo vs external %d kobo", in.AmountKobo, ext.AmountKobo),
-			})
-		} else {
+		if in.AmountKobo == ext.AmountKobo {
 			result.MatchedRecordCount++
+			continue
 		}
-	}
-
-	// Check external records missing from internal
-	for ref, ext := range extMap {
-		if _, exists := intMap[ref]; !exists {
-			result.Balanced = false
-			result.Discrepancies = append(result.Discrepancies, Discrepancy{
-				Type:               DiscrepancyMissingInternal,
-				Reference:          ref,
-				ExpectedAmountKobo: 0,
-				ActualAmountKobo:   ext.AmountKobo,
-				DifferenceKobo:     -ext.AmountKobo,
-				Description:        fmt.Sprintf("External ERP entry %s not found in internal double-entry ledger", ref),
-			})
+		difference, err := checkedDifference(in.AmountKobo, ext.AmountKobo)
+		if err != nil {
+			return invalid("record variance overflows money range")
 		}
+		result.Discrepancies = append(result.Discrepancies, Discrepancy{
+			Type: DiscrepancyAmountMismatch, Reference: in.Reference,
+			ExpectedAmountKobo: in.AmountKobo, ActualAmountKobo: ext.AmountKobo,
+			DifferenceKobo: difference, Description: "Signed movement amounts differ",
+		})
 	}
-
-	result.NetVarianceKobo = result.TotalInternalKobo - result.TotalExternalKobo
-	if result.NetVarianceKobo != 0 || len(result.Discrepancies) > 0 {
-		result.Balanced = false
+	for _, ext := range exts {
+		if _, exists := intMap[ext.Reference]; exists {
+			continue
+		}
+		difference, err := checkedDifference(0, ext.AmountKobo)
+		if err != nil {
+			return invalid("missing-record variance overflows money range")
+		}
+		result.Discrepancies = append(result.Discrepancies, Discrepancy{
+			Type: DiscrepancyMissingInternal, Reference: ext.Reference,
+			ActualAmountKobo: ext.AmountKobo, DifferenceKobo: difference,
+			Description: "External movement is missing from internal ledger",
+		})
 	}
-
-	hashInput := fmt.Sprintf("%s:%d:%d:%d:%d", orgID, result.TotalInternalKobo, result.TotalExternalKobo, result.MatchedRecordCount, len(result.Discrepancies))
-	h := sha256.Sum256([]byte(hashInput))
+	result.NetVarianceKobo, err = checkedDifference(result.TotalInternalKobo, result.TotalExternalKobo)
+	if err != nil {
+		return invalid("net variance overflows money range")
+	}
+	result.Balanced = result.NetVarianceKobo == 0 && len(result.Discrepancies) == 0
+	sort.Slice(result.Discrepancies, func(i, j int) bool {
+		return result.Discrepancies[i].Reference < result.Discrepancies[j].Reference
+	})
+	// Bind the actual period, identities, amounts, dates, notes and findings.
+	// Generation time is excluded so the same evidence has a reproducible hash.
+	stable := result
+	stable.ReconciledAt = time.Time{}
+	raw, err := json.Marshal(struct {
+		Version  string               `json:"version"`
+		Report   ReconciliationResult `json:"report"`
+		Internal []InternalRecord     `json:"internal"`
+		External []ExternalRecord     `json:"external"`
+	}{"erp-reconciliation-v2", stable, ins, exts})
+	if err != nil {
+		return invalid("record dates cannot be encoded")
+	}
+	h := sha256.Sum256(raw)
 	result.ReportHash = hex.EncodeToString(h[:])
-
 	return result, nil
+}
+
+func checkedDifference(left, right ledger.Money) (ledger.Money, error) {
+	if (right > 0 && left < math.MinInt64+right) || (right < 0 && left > math.MaxInt64+right) {
+		return 0, ErrInvalidRecords
+	}
+	return left - right, nil
 }
