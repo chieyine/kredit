@@ -24,6 +24,12 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, pathlib, subprocess
           payload = json.loads(pathlib.Path('docs/audits/2026-09-20-remediation/round2-edits.json').read_text())
+          # Correct one transport typo, not the independently recorded expected hash.
+          for item in payload['files']:
+              if item['path'] == 'web/tests/product-flows.spec.ts':
+                  text = item['edits'][2][2]
+                  assert text.count('json: { payments: [] } } }));') == 1
+                  item['edits'][2][2] = text.replace('json: { payments: [] } } }));', 'json: { payments: [] } }));')
           root = pathlib.Path.cwd().resolve()
           def blob(data):
               return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
