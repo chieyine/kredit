@@ -107,7 +107,7 @@ func ApplySplitTx(ctx context.Context, tx pgx.Tx, payment, key string, amount, c
 	if total == 0 {
 		return nil
 	}
-	_, err = ledger.NewPostgresStore(nil).PostSplitFeeTx(ctx, tx, payment, total, false, at)
+	_, err = splitFeeLedger().PostSplitFeeTx(ctx, tx, payment, total, false, at)
 	return err
 }
 func ReverseSplitTx(ctx context.Context, tx pgx.Tx, payment string, at time.Time) error {
@@ -132,13 +132,31 @@ func ReverseSplitTx(ctx context.Context, tx pgx.Tx, payment string, at time.Time
 		return err
 	}
 	for _, p := range parts {
-		if _, err = tx.Exec(ctx, `UPDATE app.fees SET collected_kobo=collected_kobo-$2 WHERE id=$1::uuid`, p.ID, p.Amount); err != nil {
-			return err
+		// Mirror ApplySplitTx: refuse to subtract more than the fee currently
+		// holds, and require the row to move. A bare subtraction would drive
+		// collected_kobo negative on a second reversal, and the only thing
+		// standing between that and a corrupted fee row is the CHECK added in
+		// migration 140.
+		result, updateErr := tx.Exec(ctx, `UPDATE app.fees SET collected_kobo=collected_kobo-$2 WHERE id=$1::uuid AND collected_kobo>=$2`, p.ID, p.Amount)
+		if updateErr != nil {
+			return updateErr
 		}
+		if result.RowsAffected() != 1 {
+			return errors.New("fee allocation no longer matches the reversed collection")
+		}
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM app.split_fee_allocations WHERE payment_id=$1::uuid`, payment); err != nil {
+		return err
 	}
 	if total == 0 {
 		return nil
 	}
-	_, err = ledger.NewPostgresStore(nil).PostSplitFeeTx(ctx, tx, payment, total, true, at)
+	_, err = splitFeeLedger().PostSplitFeeTx(ctx, tx, payment, total, true, at)
 	return err
 }
+
+// splitFeeLedger posts split-fee journals through the caller's transaction.
+// The store needs no pool because PostSplitFeeTx only writes through the
+// transaction it is given; naming it here keeps that fact in one place instead
+// of constructing a nil-pool store at each call site.
+func splitFeeLedger() *ledger.PostgresStore { return ledger.NewPostgresStore(nil) }

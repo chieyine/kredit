@@ -21,6 +21,7 @@ export interface SaleRequest {
   custom_schedule_items: { amount_kobo: KoboValue; due_date: string }[];
 }
 export interface SaleView {
+  purchasing_actions?: string[];
   timeline?: {label:string;at:string}[];
   request: SaleRequest;
   agreement: { id: string; document_hash: string; terms_version: string; privacy_version: string } | null;
@@ -41,7 +42,7 @@ export function saleView(value: unknown): SaleView {
   if(Array.isArray(view.receipts))for(const value of view.receipts){const receipt=record(value);event(receipt.state==='confirmed'?(receipt.issue_reason==='deemed_acceptance_auto_activated'?'Receipt recorded under the system acceptance process':'Customer confirmed receipt'):'Delivery problem reported',receipt.received_at)}
   if(obligation)event(row.system_acceptance_id?'Sale recognized through recorded automatic acceptance':'Sale balance activated',obligation.activated_at);
   timeline.sort((a,b)=>Date.parse(a.at)-Date.parse(b.at));
-  return { timeline,
+  return { timeline, purchasing_actions: Array.isArray(view.purchasing_actions) && view.purchasing_actions.every(a=>typeof a==='string') ? view.purchasing_actions as string[] : undefined,
     request: {
       invoice_document_id: optionalText(row.invoice_document_id), system_acceptance_id: optionalText(row.system_acceptance_id), id: text(row.id), state: text(row.state), supplier_legal_name: optionalText(row.supplier_legal_name), buyer_legal_name: text(row.buyer_legal_name), buyer_user_id: optionalText(row.buyer_user_id), buyer_business_id: optionalText(row.buyer_business_id),
       principal_kobo: kobo(row.principal_kobo), goods_description: optionalText(row.goods_description), due_date: text(row.due_date), collection_at: optionalText(row.collection_at), grace_hours: typeof row.grace_hours === 'number' ? row.grace_hours : 0,

@@ -8,6 +8,7 @@ import (
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
+	"kredit/internal/buyers"
 	"kredit/internal/corrections"
 	"kredit/internal/notifications"
 	"kredit/internal/reports"
@@ -136,12 +137,61 @@ func (s *Server) exportReceivables(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
+func (s *Server) reportEnterprise(w http.ResponseWriter, r *http.Request) {
+	orgID, err := pathID(r, "organizationID")
+	if err != nil {
+		writeProblem(w, 400, "invalid_path", err.Error())
+		return
+	}
+	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
+	if !ok {
+		return
+	}
+	s.trackOptionalActivity(r, user.ID, "report.enterprise.viewed", orgID, "supplier enterprise reporting", nil)
+	report, err := s.runtime.Reports.EnterpriseReport(r.Context(), orgID)
+	if err != nil {
+		writeProblem(w, 503, "report_unavailable", "We could not open that enterprise report. Please try again.")
+		return
+	}
+	writeJSON(w, 200, report)
+}
+
+func (s *Server) exportEnterpriseCSV(w http.ResponseWriter, r *http.Request) {
+	orgID, err := pathID(r, "organizationID")
+	if err != nil {
+		writeProblem(w, 400, "invalid_path", err.Error())
+		return
+	}
+	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
+	if !ok {
+		return
+	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
+	data, checksum, err := s.runtime.Reports.ExportEnterpriseCSV(r.Context(), orgID)
+	if err != nil {
+		writeProblem(w, 503, "export_failed", "We could not build that enterprise report file. Please try again.")
+		return
+	}
+	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "report.enterprise.exported", ResourceType: "report", ResourceID: "enterprise_csv", Outcome: "success", RequestID: requestIDFromContext(r.Context())})
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=enterprise-exposure.csv")
+	w.Header().Set("X-Report-Checksum", checksum)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
 func (s *Server) buyerHistory(w http.ResponseWriter, r *http.Request) {
 	_, user, ok := s.requireAuth(w, r)
 	if !ok {
 		return
 	}
-	h, err := s.runtime.Reports.HistoryForBuyer(r.Context(), user.ID)
+	businessID, scopedOK := s.buyerWorkspaceScope(w, r, user.ID)
+	if !scopedOK {
+		return
+	}
+	h, err := s.runtime.Reports.HistoryForBuyerBusiness(r.Context(), user.ID, businessID)
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "We could not open your money history. Please try again.")
 		return
@@ -150,6 +200,15 @@ func (s *Server) buyerHistory(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "We could not open your correction history. Please try again.")
 		return
+	}
+	if businessID != "" {
+		obligations := map[string]bool{}
+		for _, row := range h.Obligations {
+			obligations[row.ObligationID] = true
+		}
+		reviewed = purchasingRows(reviewed, func(item corrections.ReviewedRequest) bool {
+			return item.SubjectType == "obligation" && obligations[item.SubjectID]
+		})
 	}
 	h.Shareable = false
 	s.trackOptionalActivity(r, user.ID, "history.viewed", user.ID, "buyer factual history", nil)
@@ -173,7 +232,11 @@ func (s *Server) supplierCustomerHistory(w http.ResponseWriter, r *http.Request)
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	h, err := s.runtime.Reports.HistoryForSupplierBuyer(r.Context(), orgID, buyerID)
+	businessID, scopedOK := s.supplierCustomerBusinessScope(w, r, orgID, buyerID)
+	if !scopedOK {
+		return
+	}
+	h, err := s.runtime.Reports.HistoryForSupplierBusiness(r.Context(), orgID, buyerID, businessID)
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "We could not open your money history. Please try again.")
 		return
@@ -196,7 +259,11 @@ func (s *Server) supplierCustomerStatement(w http.ResponseWriter, r *http.Reques
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	report, err := s.runtime.Reports.CustomerStatement(r.Context(), orgID, buyerID)
+	businessID, scopedOK := s.supplierCustomerBusinessScope(w, r, orgID, buyerID)
+	if !scopedOK {
+		return
+	}
+	report, err := s.runtime.Reports.CustomerBusinessStatement(r.Context(), orgID, buyerID, businessID)
 	if err != nil {
 		writeProblem(w, 503, "report_unavailable", "We could not open that report. Please try again.")
 		return
@@ -340,4 +407,31 @@ func (s *Server) trackOptionalActivity(r *http.Request, actorID, name, subjectID
 		return
 	}
 	_, _ = s.runtime.Reports.TrackContext(ctx, name, subjectID, purpose, metadata)
+}
+
+// Customer statements identify the trading business independently of its owner.
+func (s *Server) supplierCustomerBusinessScope(w http.ResponseWriter, r *http.Request, organizationID, buyerID string) (string, bool) {
+	id := strings.TrimSpace(r.URL.Query().Get("buyer_business_id"))
+	if id == "" {
+		return "", true
+	}
+	var customers []buyers.Customer
+	if reader, ok := s.runtime.Buyers.(interface {
+		ReadCustomers(string) ([]buyers.Customer, error)
+	}); ok {
+		var err error
+		customers, err = reader.ReadCustomers(organizationID)
+		if financialReadError(w, err) {
+			return "", false
+		}
+	} else {
+		customers = s.runtime.Buyers.ListCustomers(organizationID)
+	}
+	for _, customer := range customers {
+		if customer.BuyerUserID == buyerID && customer.BuyerBusinessID == id {
+			return id, true
+		}
+	}
+	writeProblem(w, 404, "customer_not_found", "This business is not connected to your customer network.")
+	return "", false
 }

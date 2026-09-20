@@ -57,6 +57,16 @@ func (s *Server) createBuyerPaymentClaim(w http.ResponseWriter, r *http.Request)
 		writeProblem(w, 404, "obligation_not_found", "We could not find an open sale for that.")
 		return
 	}
+	if view.Request.BuyerUserID != user.ID {
+		allowed := false
+		if s.runtime.Database != nil && view.Request.BuyerBusinessID != "" {
+			_ = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT app.can_purchase($1::uuid, 'claim', 0)`, view.Request.BuyerBusinessID).Scan(&allowed)
+		}
+		if !allowed {
+			writeProblem(w, 403, "purchasing_authority_required", "You do not have permission to submit payment claims for this purchase.")
+			return
+		}
+	}
 	var input paymentClaimInput
 	if err := decodeJSON(w, r, &input); err != nil {
 		writeProblem(w, 400, "invalid_request", err.Error())
@@ -68,7 +78,7 @@ func (s *Server) createBuyerPaymentClaim(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: claim.SupplierOrganizationID, Action: "payment_claim.opened", ResourceType: "payment_claim", ResourceID: claim.ID, Outcome: "success"})
-	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-claim:" + claim.ID, Type: "BuyerPaymentClaimed", OrganizationID: claim.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the payment evidence", SecurePath: "/app/payments"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-claim:" + claim.ID, Type: "BuyerPaymentClaimed", OrganizationID: claim.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the payment evidence", SecurePath: "/workspace/money/received"})
 	writeJSON(w, 201, map[string]any{"payment_claim": claim})
 }
 
@@ -77,9 +87,20 @@ func (s *Server) listBuyerPaymentClaims(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	businessID, scopedOK := s.buyerWorkspaceScope(w, r, user.ID)
+	if !scopedOK {
+		return
+	}
+	obligations, scopedOK := s.buyerWorkspaceObligations(w, r, user.ID, businessID)
+	if !scopedOK {
+		return
+	}
 	financialRows1, readErr1 := s.runtime.readPaymentClaimsForBuyer(r.Context(), user.ID)
 	if financialReadError(w, readErr1) {
 		return
+	}
+	if businessID != "" {
+		financialRows1 = purchasingRows(financialRows1, func(item paymentclaims.Claim) bool { return obligations[item.ObligationID] })
 	}
 	writeJSON(w, 200, map[string]any{"payment_claims": financialRows1})
 }
@@ -90,12 +111,12 @@ func (s *Server) listPaymentClaims(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	view, err := s.runtime.Credit.GetForSupplier(requestID, orgID)
+	view, err := s.runtime.getCreditForSupplier(r.Context(), requestID, orgID)
 	if err != nil || view.Obligation == nil {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	financialRows2, readErr2 := s.runtime.readPaymentClaimsForObligation(db.WithTenantContext(r.Context(), "", orgID), view.Obligation.ID)
+	financialRows2, readErr2 := s.runtime.readPaymentClaimsForObligation(db.WithOrganizationContext(r.Context(), orgID), view.Obligation.ID)
 	if financialReadError(w, readErr2) {
 		return
 	}
@@ -150,7 +171,7 @@ func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "payment_claim." + decision, ResourceType: "payment_claim", ResourceID: claim.ID, Outcome: "success"})
-	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-claim-decision:" + claim.ID, Type: "PaymentClaimDecision", RecipientID: claim.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the supplier decision", SecurePath: "/buyer/payments"})
+	_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "payment-claim-decision:" + claim.ID, Type: "PaymentClaimDecision", RecipientID: claim.BuyerUserID, Priority: notifications.PriorityCritical, AmountKobo: int64(claim.AmountKobo), Currency: claim.Currency, Reference: claim.ID, NextAction: "Review the supplier decision", SecurePath: "/workspace/purchases/payments"})
 	paymentID := claim.PaymentID
 	response := map[string]any{"payment_claim": claim}
 	if paymentID != "" {
@@ -193,7 +214,7 @@ func (s *Server) createPaymentLink(w http.ResponseWriter, r *http.Request) {
 	}
 	requestID, _ := pathID(r, "requestID")
 	view, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)
-	if err != nil || view.Obligation == nil {
+	if err != nil || view.Obligation == nil || view.Request.BuyerUserID != user.ID {
 		writeProblem(w, 404, "obligation_not_found", "We could not find an open sale for that.")
 		return
 	}

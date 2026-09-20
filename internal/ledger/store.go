@@ -24,6 +24,9 @@ const (
 	AccountPlatformCollectionRevenue = "PLATFORM_COLLECTION_REVENUE"
 	AccountReturnsAdjustment         = "RETURNS_ADJUSTMENT_CONTROL"
 	AccountWriteOff                  = "WRITE_OFF_CONTROL"
+	AccountPlatformFeeCash           = "PLATFORM_FEE_CASH"
+	AccountPlatformFeeClearing       = "PLATFORM_FEE_PROVIDER_CLEARING"
+	AccountSellerBankSettlement      = "SELLER_BANK_SETTLEMENT"
 )
 
 type Posting struct {
@@ -124,12 +127,20 @@ func (s *Store) PostAdjustment(referenceID string, amount Money, adjustmentType 
 		return Transaction{}, errors.New("adjustment, positive amount, and idempotency key are required")
 	}
 	account := AccountReturnsAdjustment
+	refType := "dispute"
 	if adjustmentType == "write_off" {
+		// A write-off references the obligation it forgives, not a dispute.
+		// payments.RebuildContext only counts a write_off as forgiven principal
+		// when its reference_type is "obligation"; anything else is invisible to
+		// the balance rebuild and the debt comes back.
 		account = AccountWriteOff
+		refType = "obligation"
+	} else if adjustmentType == "credit_note" {
+		refType = "credit_note"
 	} else if adjustmentType != "dispute_adjustment" {
 		return Transaction{}, errors.New("invalid adjustment type")
 	}
-	return s.post(Transaction{EventType: adjustmentType, ReferenceType: "dispute", ReferenceID: referenceID, IdempotencyKey: idempotencyKey, EffectiveAt: effectiveAt, Postings: []Posting{{Account: account, Debit: amount}, {Account: AccountTradeReceivable, Credit: amount}}})
+	return s.post(Transaction{EventType: adjustmentType, ReferenceType: refType, ReferenceID: referenceID, IdempotencyKey: idempotencyKey, EffectiveAt: effectiveAt, Postings: []Posting{{Account: account, Debit: amount}, {Account: AccountTradeReceivable, Credit: amount}}})
 }
 
 func (s *Store) PostFeeWaiver(referenceID string, amount Money, effectiveAt time.Time, idempotencyKey string) (Transaction, error) {
@@ -272,7 +283,7 @@ func cloneTransaction(transaction Transaction) Transaction {
 func newIdentifier() string {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
-		return fmt.Sprintf("ledger-fallback-%d", time.Now().UnixNano())
+		panic("ledger: system entropy unavailable: " + err.Error())
 	}
 	return "ledger-" + hex.EncodeToString(value[:])
 }

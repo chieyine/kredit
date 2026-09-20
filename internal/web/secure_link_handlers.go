@@ -57,7 +57,7 @@ func safeSecureRedirect(path string) bool {
 	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "\r\n\\") {
 		return false
 	}
-	for _, prefix := range []string{"/app/", "/buyer/", "/buyer-invitations/", "/pay/", "/c/"} {
+	for _, prefix := range []string{"/account/", "/workspace/", "/personal/purchases/", "/buyer-invitations/", "/pay/", "/c/"} {
 		if strings.HasPrefix(path, prefix) {
 			return true
 		}

@@ -298,6 +298,10 @@ func (s *Store) FeesForSupplier(ctx context.Context, orgID string) (Fees, error)
 }
 
 func (s *Store) HistoryForBuyer(ctx context.Context, buyerID string) (History, error) {
+	return s.HistoryForBuyerBusiness(ctx, buyerID, "")
+}
+
+func (s *Store) HistoryForBuyerBusiness(ctx context.Context, buyerID, businessID string) (History, error) {
 	if err := ctx.Err(); err != nil {
 		return History{}, err
 	}
@@ -306,12 +310,22 @@ func (s *Store) HistoryForBuyer(ctx context.Context, buyerID string) (History, e
 		if err != nil {
 			return History{}, err
 		}
-		return snapshot.HistoryForBuyer(ctx, buyerID)
+		return snapshot.HistoryForBuyerBusiness(ctx, buyerID, businessID)
 	}
-	return s.historyFromViews(s.source.BuyerViews(buyerID))
+	views := []credit.View{}
+	for _, view := range s.source.BuyerViews(buyerID) {
+		if businessID == "" || view.Request.BuyerBusinessID == businessID {
+			views = append(views, view)
+		}
+	}
+	return s.historyFromViews(views)
 }
 
 func (s *Store) HistoryForSupplierBuyer(ctx context.Context, orgID, buyerID string) (History, error) {
+	return s.HistoryForSupplierBusiness(ctx, orgID, buyerID, "")
+}
+
+func (s *Store) HistoryForSupplierBusiness(ctx context.Context, orgID, buyerID, businessID string) (History, error) {
 	if err := ctx.Err(); err != nil {
 		return History{}, err
 	}
@@ -320,11 +334,11 @@ func (s *Store) HistoryForSupplierBuyer(ctx context.Context, orgID, buyerID stri
 		if err != nil {
 			return History{}, err
 		}
-		return snapshot.HistoryForSupplierBuyer(ctx, orgID, buyerID)
+		return snapshot.HistoryForSupplierBusiness(ctx, orgID, buyerID, businessID)
 	}
 	views := []credit.View{}
 	for _, view := range s.source.SupplierViews(orgID) {
-		if view.Request.BuyerUserID == buyerID {
+		if view.Request.BuyerUserID == buyerID && (businessID == "" || view.Request.BuyerBusinessID == businessID) {
 			views = append(views, view)
 		}
 	}
@@ -332,6 +346,10 @@ func (s *Store) HistoryForSupplierBuyer(ctx context.Context, orgID, buyerID stri
 }
 
 func (s *Store) CustomerStatement(ctx context.Context, orgID, buyerID string) (Statement, error) {
+	return s.CustomerBusinessStatement(ctx, orgID, buyerID, "")
+}
+
+func (s *Store) CustomerBusinessStatement(ctx context.Context, orgID, buyerID, businessID string) (Statement, error) {
 	if err := ctx.Err(); err != nil {
 		return Statement{}, err
 	}
@@ -340,11 +358,11 @@ func (s *Store) CustomerStatement(ctx context.Context, orgID, buyerID string) (S
 		if err != nil {
 			return Statement{}, err
 		}
-		return snapshot.CustomerStatement(ctx, orgID, buyerID)
+		return snapshot.CustomerBusinessStatement(ctx, orgID, buyerID, businessID)
 	}
 	rows := []credit.View{}
 	for _, view := range s.source.SupplierViews(orgID) {
-		if view.Request.BuyerUserID == buyerID {
+		if view.Request.BuyerUserID == buyerID && (businessID == "" || view.Request.BuyerBusinessID == businessID) {
 			rows = append(rows, view)
 		}
 	}

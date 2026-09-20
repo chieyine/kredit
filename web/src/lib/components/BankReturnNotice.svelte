@@ -14,7 +14,7 @@
     } catch { /* The customer can still find the sale in their account. */ }
   });
 </script>
-{#if requestID && page.url.pathname !== `/buyer/credit-requests/${requestID}`}
-  <aside class="bank-return" aria-label="Continue bank permission"><div><strong>Continue your sale</strong><p>Returning from the bank-permission page does not confirm approval. Open the sale to check its current status.</p></div><a href={`/buyer/credit-requests/${encodeURIComponent(requestID)}`}>Check sale and permission</a></aside>
+{#if requestID && page.url.pathname !== `/workspace/purchases/orders/${requestID}`}
+  <aside class="bank-return" aria-label="Continue bank permission"><div><strong>Continue your sale</strong><p>Returning from the bank-permission page does not confirm approval. Open the sale to check its current status.</p></div><a href={`/workspace/purchases/orders/${encodeURIComponent(requestID)}`}>Check sale and permission</a></aside>
 {/if}
-<style>.bank-return{display:flex;align-items:center;justify-content:space-between;gap:1rem;max-width:70rem;margin:1rem auto;padding:1rem;background:#eef0ff;border:1px solid #b5bdf1;color:#23308d;border-radius:.4rem}.bank-return p{margin:.35rem 0;line-height:1.6;font-size:.95rem}.bank-return a{display:inline-flex;align-items:center;min-height:3rem;flex-shrink:0;padding:.5rem .8rem;color:inherit;border:1px solid currentColor;border-radius:.3rem;font-weight:650}@media(max-width:600px){.bank-return{flex-direction:column;align-items:stretch;margin:1rem}}</style>
+<style>.bank-return{display:flex;align-items:center;justify-content:space-between;gap:1rem;max-width:70rem;margin:1rem auto;padding:1rem;background:var(--color-background);border:1px solid var(--color-primary);color:var(--color-primary);border-radius:.4rem}.bank-return p{margin:.35rem 0;line-height:1.6;font-size:.95rem}.bank-return a{display:inline-flex;align-items:center;min-height:3rem;flex-shrink:0;padding:.5rem .8rem;color:inherit;border:1px solid currentColor;border-radius:.3rem;font-weight:650}@media(max-width:600px){.bank-return{flex-direction:column;align-items:stretch;margin:1rem}}</style>

@@ -83,17 +83,17 @@ func (r *Runtime) QueueOutboxNotification(ctx context.Context, event outbox.Even
 	}
 	securePath := ""
 	if payload.Event == "SCHEDULE_AMENDMENT" {
-		securePath = "/buyer/amendments"
+		securePath = "/workspace/purchases/amendments"
 	}
 	nextAction := "Review your payment details in Kredit"
 	if payload.Event == "SYSTEM_ACCEPTANCE" {
-		securePath = "/buyer/history"
+		securePath = "/workspace/purchases/history"
 	}
 	if payload.Event == "GOODS_RELEASED" {
 		// This notice is the evidence that makes deemed acceptance permissible,
 		// so it must say what silence will be taken to mean and point at the
 		// screen where the buyer can object.
-		securePath = "/buyer/requests"
+		securePath = "/workspace/purchases/orders"
 		nextAction = "Confirm receipt or report a problem before the date shown"
 	}
 	_, err = r.Notifications.Emit(ctx, notifications.Event{ID: "outbox:" + event.ID, Type: template, RecipientID: recipient, OrganizationID: organizationID, Phone: phone, Email: email, Priority: priority, AmountKobo: payload.Amount, Currency: "NGN", Date: date, Reference: event.AggregateID, NextAction: nextAction, SecurePath: securePath, DeferDelivery: true})

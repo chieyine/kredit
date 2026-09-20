@@ -1,66 +1,13 @@
 <script lang="ts">
-	const steps = [
-		{ number: '01', title: 'Write down the sale.', body: 'Put in what they are taking, how much it costs, the day they must pay and any extra days you are giving them.', facts: [['Money owed', '₦1,200,000'], ['Pay in', '30 days'], ['Extra days', '3 days']] },
-		{ number: '02', title: 'Let your customer say yes.', body: 'Send them a private link. They read exactly what you wrote, and nothing moves until they agree to it.', facts: [['Customer', 'Confirmed'], ['Terms', 'Accepted'], ['Bank debit', 'Asked separately']] },
-		{ number: '03', title: 'Send the goods.', body: 'Wait for Kredit to confirm that the sale is ready to release, including bank permission. Then record the goods leaving and keep the delivery proof.', facts: [['Goods sent', 'Saved'], ['Goods received', 'Confirmed'], ['Proof', 'Saved']] },
-		{ number: '04', title: 'Follow every payment.', body: 'Reminders, transfers, problems and the money still owed all live in the same record.', facts: [['Reminders', 'On their phone'], ['Problems', 'Can be reported'], ['Bank debit', 'Only if allowed']] }
-	];
-
-	const events = [
-		['10 Sep · 09:14', 'Sale written down', 'Payment due in 30 days'],
-		['10 Sep · 10:42', 'Customer said yes', 'Customer and terms confirmed'],
-		['12 Sep · 14:06', 'Goods received', 'Delivery proof saved'],
-		['12 Sep · 14:07', 'Payment now being followed', '₦1,200,000 left to pay']
-	];
+  import NetworkChain from '$lib/components/NetworkChain.svelte';
+  import { tradeSteps } from '$lib/network-content';
 </script>
-
-<main class="how-page">
-	<section class="intro shell">
-		<div><p class="eyebrow">How Kredit works</p><h1>From the handshake<br />to the last naira.</h1></div>
-		<div class="intro-note"><span>Four steps. That is all.</span><p>You agree the sale. They confirm the goods arrived. Then you both watch the same balance come down.</p></div>
-	</section>
-
-	<section class="journey shell" aria-label="The Kredit credit sale journey">
-		{#each steps as step}
-			<article>
-				<span class="step-number">{step.number}</span>
-				<div class="step-copy"><h2>{step.title}</h2><p>{step.body}</p></div>
-				<dl>{#each step.facts as [label, value]}<div><dt>{label}</dt><dd>{value}</dd></div>{/each}</dl>
-			</article>
-		{/each}
-	</section>
-
-	<section class="record-section">
-		<div class="shell record-layout">
-			<div class="record-copy"><p class="eyebrow inverse">One record for the whole sale</p><h2>Both of you are looking at the same page.</h2><p>You open the page. They open the page. Same amount, same payment day, same delivery history, same payments. If something is wrong, the record helps both sides review it.</p></div>
-			<div class="record" aria-label="Example credit sale record">
-				<p class="example-label">Illustrative sale · sample data</p><div class="record-head"><span>TC–2048</span><strong>Adebayo Stores</strong><span>ACTIVE</span></div>
-				<ol>{#each events as [time, title, detail]}<li><time>{time}</time><div><strong>{title}</strong><span>{detail}</span></div><i>✓</i></li>{/each}</ol>
-				<div class="record-total"><span>Money left to pay</span><strong>₦1,200,000</strong></div>
-			</div>
-		</div>
-	</section>
-
-	<section class="exceptions shell">
-		<div class="exceptions-title"><p class="eyebrow">When something goes wrong</p><h2>You always know the next step.</h2></div>
-		<div class="exception-list">
-			<article><span>01</span><div><h3>Something is wrong with the goods</h3><p>They report it and add a photo or a paper. The money in question goes on hold while the two of you sort it out.</p></div></article>
-			<article><span>02</span><div><h3>Your customer pays you directly</h3><p>They tell us they have paid. You open your bank, see the money and confirm it. The balance drops the moment you do.</p></div></article>
-			<article><span>03</span><div><h3>The payment day passes</h3><p>Kredit sends reminders first. After the extra days you agreed, Kredit can ask the customer's bank for the money, only with valid permission and after the agreed payment and dispute checks. A dispute holds the amount in question; separate restrictions may stop further collections. A bank debit can still fail. Nobody can promise you the money.</p></div></article>
-		</div>
-		<div class="next"><p>Wondering what it costs?</p><a href="/pricing">See what Kredit charges <span>↗</span></a></div>
-	</section>
+<main class="network-page shell">
+  <header class="network-hero"><p class="eyebrow">How Kredit works</p><h1>From the factory to the last shop.</h1><p class="network-lede">Start with one customer. Put the terms down, record what was delivered, then follow the money. The same four steps hold whether you have one distributor or forty.</p><div class="network-actions"><a class="primary" href="/demo">Try the sample journey →</a><a href="/signin?next=%2Fstart">Get started</a></div></header>
+  <NetworkChain />
+  <section class="network-section"><h2>Four steps, every time.</h2><div class="network-cards four">{#each tradeSteps as [title, body], index}<article><span class="eyebrow">0{index + 1}</span><h3>{title}</h3><p>{body}</p></article>{/each}</div></section>
+  <section class="network-section"><h2>Today’s customer is tomorrow’s supplier.</h2><div class="network-cards"><article><h3>The manufacturer starts it</h3><p>Bring in the roster you already have, or invite one distributor and see how it runs. Each one gets his own limit and his own terms.</p></article><article><h3>The distributor grows into it</h3><p>One workspace handles what he buys from the manufacturer and what he sells on to retailers. A few selling checks have to be done before he can give credit himself.</p></article><article><h3>The retailer serves the street</h3><p>He follows his stock purchases, sells on to other businesses, and sends an individual customer a personal purchase link. That customer keeps a simpler account.</p></article></div></section>
+  <section class="network-note"><h2>Every balance sits on its own trade.</h2><p>What your customers owe you is one book. What you owe your suppliers is another. Nothing is netted off between them, no limit is shared, and repayment is not guaranteed. A bank collection needs the customer’s permission and has to pass the payment checks before it goes out.</p></section>
+  <section class="network-section"><h2>When something goes wrong.</h2><div class="network-cards"><article><h3>The goods were short</h3><p>Report it against that trade and attach what you have. While it is being looked at, you can see the amount in question and whether collection is still running.</p></article><article><h3>He paid you directly</h3><p>Your customer reports the transfer. You check that the money actually landed, then confirm it. Only then does the balance come down.</p></article><article><h3>The money is late</h3><p>Reminders go out, then the grace days you agreed run down. With valid permission the debit can be presented to his bank. It can still fail.</p></article></div></section>
+  <section class="network-cta"><div><h2>Start with one customer.</h2><p>Get one account running properly before you bring the rest on.</p></div><a class="primary" href="/signin?next=%2Fstart">Open Kredit →</a></section>
 </main>
-
-<style>
-	.how-page { color: #17181b; background: #f5f2ea; }
-	.intro { display: grid; grid-template-columns: 1.5fr .55fr; gap: clamp(4rem, 10vw, 10rem); align-items: end; padding-top: clamp(5rem, 10vw, 9rem); padding-bottom: clamp(5rem, 9vw, 8rem); }
-	h1 { max-width: 11ch; margin: 1.2rem 0 0; font-family: var(--font-serif); font-size: clamp(4rem, 8vw, 7.5rem); font-weight: 500; line-height: .88; letter-spacing: -.065em; }
-	.intro-note { padding-top: 1rem; border-top: 1px solid #17181b; }.intro-note span { color: #2738d6; font-size: .68rem; font-weight: 780; letter-spacing: .11em; text-transform: uppercase; }.intro-note p { margin: 1.2rem 0 0; color: #60625f; line-height: 1.65; }
-	.journey { padding-bottom: 9rem; }.journey article { display: grid; grid-template-columns: 4rem 1.15fr .85fr; gap: clamp(1.5rem, 5vw, 5rem); padding: 3.3rem 0; border-top: 1px solid #cec9bf; }.journey article:last-child { border-bottom: 1px solid #cec9bf; }.step-number { color: #2738d6; font-size: .74rem; font-weight: 800; letter-spacing: .1em; }.step-copy h2 { max-width: 16ch; margin: 0 0 1rem; font-family: var(--font-serif); font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 500; line-height: 1; letter-spacing: -.045em; }.step-copy p { max-width: 35rem; margin: 0; color: #686a66; line-height: 1.7; }.journey dl { margin: 0; border-top: 1px solid #cec9bf; }.journey dl div { display: flex; justify-content: space-between; gap: 2rem; padding: .75rem 0; border-bottom: 1px solid #cec9bf; }.journey dt { color: #62645f; font-size: .75rem; }.journey dd { margin: 0; font-size: .78rem; font-weight: 760; text-align: right; }
-	.record-section { padding: clamp(6rem, 10vw, 10rem) 0; color: #f5f2ea; background: #17181b; }.record-layout { display: grid; grid-template-columns: .72fr 1.28fr; gap: clamp(4rem, 9vw, 9rem); align-items: center; }.inverse { color: #9aa2ff; }.record-copy h2 { max-width: 12ch; margin: 1.2rem 0 1.5rem; font-family: var(--font-serif); font-size: clamp(3.2rem, 5vw, 5rem); font-weight: 500; line-height: .95; letter-spacing: -.05em; }.record-copy > p:last-child { max-width: 31rem; color: #aaa9a4; line-height: 1.7; }
-	.example-label{padding:0 1.2rem;color:#c9cdff;font-size:.8rem}.record { border: 1px solid #4b4c50; background: #202126; }.record-head { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 1rem; padding: 1rem 1.2rem; border-bottom: 1px solid #4b4c50; font-size: .7rem; }.record-head strong { color: white; }.record-head span:last-child { color: #c9cdff; text-align: right; }.record ol { margin: 0; padding: 0 1.2rem; list-style: none; }.record li { display: grid; grid-template-columns: 7.5rem 1fr auto; gap: 1.5rem; align-items: center; padding: 1.25rem 0; border-bottom: 1px solid #3c3d41; }.record time { color: #a5a6a2; font-size: .68rem; }.record li div { display: grid; gap: .25rem; }.record li strong { font-size: .86rem; }.record li span { color: #b0b1ad; font-size: .72rem; }.record li i { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border: 1px solid #7e88ff; color: #c9cdff; font-size: .65rem; font-style: normal; }.record-total { display: flex; justify-content: space-between; gap: 2rem; padding: 1.5rem 1.2rem; background: #2738d6; }.record-total span { font-size: .75rem; }.record-total strong { font-family: var(--font-serif); font-size: 1.4rem; font-weight: 500; }
-	.exceptions { padding-top: clamp(6rem, 10vw, 10rem); padding-bottom: clamp(6rem, 10vw, 10rem); }.exceptions-title { display: grid; grid-template-columns: 1fr 2fr; gap: 3rem; align-items: start; }.exceptions-title h2 { max-width: 11ch; margin: 0; font-family: var(--font-serif); font-size: clamp(3.2rem, 6vw, 6rem); font-weight: 500; line-height: .92; letter-spacing: -.055em; }.exception-list { margin-top: 5rem; border-top: 1px solid #cec9bf; }.exception-list article { display: grid; grid-template-columns: 4rem 1fr; gap: 2rem; padding: 2.2rem 0; border-bottom: 1px solid #cec9bf; }.exception-list article > span { color: #2738d6; font-size: .7rem; font-weight: 800; }.exception-list h3 { margin: 0 0 .7rem; font-family: var(--font-serif); font-size: 1.55rem; font-weight: 500; }.exception-list p { max-width: 48rem; margin: 0; color: #686a66; line-height: 1.7; }.next { display: flex; justify-content: space-between; align-items: center; gap: 2rem; margin-top: 4rem; padding-top: 1.2rem; border-top: 3px solid #17181b; }.next p { margin: 0; }.next a { display: inline-flex; gap: 2rem; color: #2738d6; font-weight: 760; text-decoration: none; }
-	@media (max-width: 800px) { .intro, .record-layout, .exceptions-title { grid-template-columns: 1fr; gap: 2.5rem; }.intro-note { max-width: 28rem; }.journey article { grid-template-columns: 2.5rem 1fr; }.journey dl { grid-column: 2; }.record-copy { max-width: 36rem; } }
-	@media (max-width: 560px) { .intro { padding-top: 4rem; }.journey article { grid-template-columns: 1fr; gap: 1rem; padding: 2.3rem 0; }.journey dl { grid-column: 1; margin-top: 1rem; }.record li { grid-template-columns: 1fr auto; gap: .5rem 1rem; }.record time { grid-column: 1 / -1; }.exceptions-title { gap: 1rem; }.exception-list article { grid-template-columns: 2rem 1fr; gap: 1rem; }.next { align-items: flex-start; flex-direction: column; } }
-</style>

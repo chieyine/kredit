@@ -21,8 +21,12 @@ func New() string {
 	var timestamp [8]byte
 	binary.BigEndian.PutUint64(timestamp[:], millis)
 	copy(value[0:6], timestamp[2:])
+	// crypto/rand.Read does not return an error on any supported platform; it
+	// panics if the system source fails. Falling back to a timestamp here would
+	// hand out guessable primary keys, and these identifiers appear in receipt
+	// URLs, so failing loudly is the only safe outcome.
 	if _, err := rand.Read(value[6:]); err != nil {
-		binary.BigEndian.PutUint64(value[8:], uint64(time.Now().UTC().UnixNano()))
+		panic("identifier: system entropy unavailable: " + err.Error())
 	}
 	value[6] = (value[6] & 0x0f) | 0x70
 	value[8] = (value[8] & 0x3f) | 0x80

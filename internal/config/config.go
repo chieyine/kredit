@@ -16,17 +16,20 @@ import (
 const defaultTimezone = "Africa/Lagos"
 
 // Config contains deployment configuration shared by the API and worker.
-// Secrets are read from the environment and are never logged or serialized.
+// Secrets are read from the environment and are never logged or serialized:
+// every field holding a key, token, webhook secret or database URL (which
+// carries a password) is tagged json:"-" so the guarantee is enforced by the
+// struct rather than by nobody having marshalled it yet.
 type Config struct {
 	SettlementEnabled           bool
 	SettlementProvider          string
 	SettlementEndpoint          string
-	SettlementToken             string
+	SettlementToken             string `json:"-"`
 	AdminConfigAutoApply        bool
 	RetainedIdentityProviders   string         `json:"-"`
 	RetainedCollectionProviders string         `json:"-"`
 	AdminConnectionVersions     map[string]int `json:"-"`
-	MetricsScrapeToken          string
+	MetricsScrapeToken          string         `json:"-"`
 	MonoSweepEnabled            bool
 	PartialSweepEnabled         bool
 	CollectionNoticeMinHours    int64
@@ -35,8 +38,8 @@ type Config struct {
 	AutomaticCollectionEnabled  bool
 	AutomaticRetryEnabled       bool
 	MonoAccountName             string
-	MonoSecretKey               string
-	MonoWebhookSecret           string
+	MonoSecretKey               string `json:"-"`
+	MonoWebhookSecret           string `json:"-"`
 	MonoRedirectURL             string
 
 	Environment                        string
@@ -45,25 +48,25 @@ type Config struct {
 	AppBaseURL                         string
 	APIInternalURL                     string
 	APIListenAddr                      string
-	DatabaseURL                        string
-	DatabaseDirectURL                  string
-	RiverDatabaseURL                   string
+	DatabaseURL                        string `json:"-"`
+	DatabaseDirectURL                  string `json:"-"`
+	RiverDatabaseURL                   string `json:"-"`
 	ObjectStorageEndpoint              string
 	ObjectStorageBucket                string
 	ObjectStorageRegion                string
 	ObjectStorageAccessKey             string
-	ObjectStorageSecretKey             string
+	ObjectStorageSecretKey             string `json:"-"`
 	DocumentScannerEnabled             bool
 	DocumentScannerEndpoint            string
-	DocumentScannerToken               string
+	DocumentScannerToken               string `json:"-"`
 	FrontendProxySigningKey            string `json:"-"`
 	TrustedProxies                     []string
-	SessionSigningKey                  string
+	SessionSigningKey                  string `json:"-"`
 	FieldEncryptionKeyID               string
-	FieldEncryptionKey                 string
-	OTPHMACKey                         string
-	TokenHashKey                       string
-	SettingsEncryptionKey              string
+	FieldEncryptionKey                 string `json:"-"`
+	OTPHMACKey                         string `json:"-"`
+	TokenHashKey                       string `json:"-"`
+	SettingsEncryptionKey              string `json:"-"`
 	GeminiAPIKey                       string `json:"-"`
 	GeminiModel                        string
 	WhatsAppAssistantTransferReference string
@@ -73,13 +76,13 @@ type Config struct {
 	Currency                           string
 	MoneyUnit                          string
 	RealCollections                    bool
-	CollectionAPIKey                   string
+	CollectionAPIKey                   string `json:"-"`
 	CollectionContractCode             string
 	CollectionAdapter                  string
 	CollectionProvider                 string
 	CollectionProviderEndpoint         string
-	CollectionProviderToken            string
-	CollectionWebhookSecret            string
+	CollectionProviderToken            string `json:"-"`
+	CollectionWebhookSecret            string `json:"-"`
 	ProviderApprovedAt                 string
 	ProviderApprovalReference          string
 	ProviderApprovedBy                 string
@@ -118,19 +121,19 @@ type Config struct {
 	NotificationEmailWebhookSecret     string `json:"-"`
 	NotificationEmailAdapter           string
 	NotificationEmailEndpoint          string
-	NotificationEmailToken             string
+	NotificationEmailToken             string `json:"-"`
 	NotificationSMSFrom                string
 	NotificationSMSAdapter             string
 	NotificationSMSEndpoint            string
-	NotificationSMSToken               string
+	NotificationSMSToken               string `json:"-"`
 	NotificationWhatsAppAdapter        string
 	NotificationWhatsAppEndpoint       string
-	NotificationWhatsAppToken          string
+	NotificationWhatsAppToken          string `json:"-"`
 	IdentityAdapter                    string
 	IdentityProvider                   string
 	IdentityProviderEndpoint           string
-	IdentityProviderToken              string
-	IdentityWebhookSecret              string
+	IdentityProviderToken              string `json:"-"`
+	IdentityWebhookSecret              string `json:"-"`
 }
 
 func Load() (Config, error) {

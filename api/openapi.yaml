@@ -8,6 +8,459 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /organizations/{organizationID}/purchasing-authority:
+    get:
+      operationId: getPurchasingAuthority
+      summary: Read current business purchasing delegations
+      parameters:
+        - {name: organizationID, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Current staff permissions; owners can manage, other members see their own permissions}
+        '403': {description: Current membership required}
+  /organizations/{organizationID}/purchasing-authority/{memberID}:
+    put:
+      operationId: savePurchasingAuthority
+      summary: Owner sets versioned purchasing authority, expiry and acceptance ceiling
+      parameters:
+        - {name: organizationID, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: memberID, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [actions, ceiling_kobo, expires_at, version]
+              properties:
+                actions: {type: array, uniqueItems: true, items: {type: string, enum: [read, review, accept, receive]}}
+                ceiling_kobo: {type: integer, minimum: 0, maximum: 9007199254740991}
+                expires_at: {type: string, format: date-time}
+                version: {type: integer, minimum: 0}
+      responses:
+        '200': {description: Saved permissions or exact retry result}
+        '403': {description: Current owner, elevated identity and CSRF required}
+        '409': {description: Version changed; refresh before retry}
+        '422': {description: Invalid permissions, staff, expiry or limit}
+  /buyer/me/purchasing-access:
+    get:
+      operationId: getStaffPurchasingSetup
+      summary: Read authorized buying profiles and current notices
+      responses:
+        '200': {description: Authorized profiles and current consent versions}
+    post:
+      operationId: enrollStaffPurchasing
+      summary: Establish the acting staff member's pending identity and authority verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [business_id, full_name, consents_accepted, terms_version, privacy_version, identity_notice_version]
+              properties:
+                business_id: {type: string, format: uuid}
+                full_name: {type: string, minLength: 1, maxLength: 200}
+                consents_accepted: {type: boolean, const: true}
+                terms_version: {type: string}
+                privacy_version: {type: string}
+                identity_notice_version: {type: string}
+      responses:
+        '200': {description: Purchasing profile with actual acting person and pending verification}
+        '422': {description: Current access and current notices required}
+  /organizations/{organizationID}/branch-access:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: readBranchAccess
+      summary: Read current supplier branch access for staff
+      responses:
+        '200': {description: Current scopes and owner management permission}
+        '403': {description: Current business membership required}
+  /organizations/{organizationID}/branch-access/{memberID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: memberID, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: saveBranchAccess
+      summary: Owner assigns versioned branch access to current non-administrative staff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mode, branch_ids, version]
+              properties:
+                mode: {type: string, enum: [all, branches]}
+                branch_ids: {type: array, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+                version: {type: integer, minimum: 0}
+      responses:
+        '200': {description: Saved or exactly replayed scope with immutable history}
+        '403': {description: Current owner and fresh MFA required}
+        '409': {description: Refresh before changing a stale scope}
+        '422': {description: Choose current staff and active branches in this business}
+  /organizations/{organizationID}/network-operations:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: readNetworkOperations
+      summary: Read supplier-private branches, territories and customer account-manager assignments
+      responses:
+        '200': {description: Current branches, relationship assignments, eligible managers and management permission}
+        '403': {description: Current business membership required}
+        '503': {description: Business database unavailable}
+  /organizations/{organizationID}/branches/{branchID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: branchID, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: saveBusinessBranch
+      summary: Create or edit a branch with a stable identity and optimistic version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, active, version]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+                territory: {type: string, maxLength: 160}
+                active: {type: boolean}
+                version: {type: integer, minimum: 0}
+      responses:
+        '200': {description: Saved or recovered branch; every revision retains actor and evidence}
+        '403': {description: Current owner or administrator and fresh MFA required}
+        '409': {description: Version or branch name conflict}
+        '422': {description: Invalid branch details}
+  /organizations/{organizationID}/customers/{businessID}/assignment:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: businessID, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: assignBusinessCustomer
+      summary: Assign a connected customer to an active branch and current supplier account manager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [branch_id, manager_id, version]
+              properties:
+                branch_id: {type: string, description: Branch UUID or empty to unassign}
+                manager_id: {type: string, description: Current staff UUID or empty to unassign}
+                version: {type: integer, minimum: 0}
+      responses:
+        '200': {description: Saved or recovered assignment; does not grant additional access}
+        '403': {description: Current owner or administrator and fresh MFA required}
+        '409': {description: Assignment changed; refresh before editing}
+        '422': {description: Unrelated customer, closed branch or unavailable manager}
+  /organizations/{organizationID}/credit-approvals:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: readBusinessCreditApprovals
+      summary: Read business credit controls and up to 100 approval records with pending reviews first
+      responses:
+        '200':
+          description: Current rule, actor role, and immutable proposal snapshots with stale-state flags
+        '403': {description: Current owner, administrator, sales or finance membership required}
+        '503': {description: Approval database unavailable}
+  /organizations/{organizationID}/credit-approvals/reviewers/{reviewerID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: reviewerID, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: setBusinessCreditReviewerLimit
+      summary: Set an active reviewer's single-offer principal ceiling as business owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ceiling_kobo, version]
+              properties:
+                ceiling_kobo: {type: integer, minimum: 0, maximum: 9007199254740991}
+                version: {type: integer, minimum: 0}
+      responses:
+        '200': {description: Saved limit and next version; every change has immutable history}
+        '403': {description: Current owner authority and fresh MFA required}
+        '404': {description: Active reviewer unavailable to this business}
+        '409': {description: Version changed; refresh before editing}
+        '422': {description: Invalid or missing ceiling or version}
+  /organizations/{organizationID}/credit-approvals/policy:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    put:
+      operationId: setBusinessCreditApprovalPolicy
+      summary: Set an independently reviewed credit-offer threshold as the business owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, threshold_kobo, version]
+              properties:
+                enabled: {type: boolean}
+                threshold_kobo: {type: integer, minimum: 0, maximum: 9007199254740991}
+                version: {type: integer, minimum: 0, description: Current policy version; zero creates the first policy}
+      responses:
+        '200': {description: Saved policy and new version}
+        '403': {description: Current owner authority, fresh MFA and CSRF required}
+        '409': {description: Policy changed concurrently; reload before editing}
+        '422': {description: Invalid threshold or version}
+  /organizations/{organizationID}/credit-requests/{requestID}/approval:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: requestID, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: requestBusinessCreditApproval
+      summary: Record the exact current draft version for independent review
+      responses:
+        '200': {description: New or recovered approval request ID; this does not send or accept the offer}
+        '403': {description: Current credit-creation permission, fresh MFA and CSRF required}
+        '404': {description: Draft unavailable to this business}
+        '409': {description: Offer is no longer an editable draft}
+  /organizations/{organizationID}/credit-approvals/{approvalID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: approvalID, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: decideBusinessCreditApproval
+      summary: Approve or reject unchanged draft terms as an independent reviewer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, reason]
+              properties:
+                decision: {type: string, enum: [approved, rejected]}
+                reason: {type: string, minLength: 3, maxLength: 1000}
+      responses:
+        '200': {description: Durable decision recorded or recovered; approval does not send the offer}
+        '403': {description: Independent current owner, administrator or finance authority, fresh MFA and CSRF required}
+        '404': {description: Approval unavailable to this business}
+        '409': {description: Terms, version or decision changed; new review required}
+        '422': {description: Invalid decision or missing reason}
+  /organizations/{organizationID}/distributor-imports:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: listDistributorImports
+      summary: List the latest 100 saved contact imports
+      description: Current owner, administrator or sales membership and elevated authentication required. Mutations require CSRF. Imports create no debt, credit limits or mandates.
+      responses:
+        '200':
+          description: Persisted result. Completed rows mean invitations exist, not proof of message delivery or accepted trade.
+        '403': {description: Current authorized business membership required}
+        '404': {description: Import unavailable to this business}
+        '409': {description: Changed file payload or invalid batch transition}
+        '422': {description: Invalid contact roster}
+        '503': {description: Database or confirmed result unavailable; recover saved progress before retry}
+    post:
+      operationId: saveDistributorImport
+      summary: Validate and save an encrypted distributor roster
+      description: Current owner, administrator or sales membership and elevated authentication required. Mutations require CSRF. Imports create no debt, credit limits or mandates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_hash, contacts]
+              properties:
+                source_hash: {type: string, pattern: '^[0-9a-f]{64}$'}
+                contacts:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: {$ref: '#/components/schemas/DistributorImportContact'}
+      responses:
+        '201':
+          description: Persisted result. Completed rows mean invitations exist, not proof of message delivery or accepted trade.
+        '403': {description: Current authorized business membership required}
+        '404': {description: Import unavailable to this business}
+        '409': {description: Changed file payload or invalid batch transition}
+        '422': {description: Invalid contact roster}
+        '503': {description: Database or confirmed result unavailable; recover saved progress before retry}
+  /organizations/{organizationID}/distributor-imports/{batchID}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: batchID, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: readDistributorImport
+      summary: Read saved contacts and durable invitation progress
+      description: Current owner, administrator or sales membership and elevated authentication required. Mutations require CSRF. Imports create no debt, credit limits or mandates.
+      responses:
+        '200':
+          description: Persisted result. Completed rows mean invitations exist, not proof of message delivery or accepted trade.
+        '403': {description: Current authorized business membership required}
+        '404': {description: Import unavailable to this business}
+        '409': {description: Changed file payload or invalid batch transition}
+        '422': {description: Invalid contact roster}
+        '503': {description: Database or confirmed result unavailable; recover saved progress before retry}
+    post:
+      operationId: transitionDistributorImport
+      summary: Approve or cancel remaining invitations
+      description: Current owner, administrator or sales membership and elevated authentication required. Mutations require CSRF. Imports create no debt, credit limits or mandates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: {type: string, enum: [approve, cancel]}
+      responses:
+        '200':
+          description: Persisted result. Completed rows mean invitations exist, not proof of message delivery or accepted trade.
+        '403': {description: Current authorized business membership required}
+        '404': {description: Import unavailable to this business}
+        '409': {description: Changed file payload or invalid batch transition}
+        '422': {description: Invalid contact roster}
+        '503': {description: Database or confirmed result unavailable; recover saved progress before retry}
+  /organizations/{organizationID}/distributor-imports/{batchID}/rows/{rowNumber}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+      - {name: batchID, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: rowNumber, in: path, required: true, schema: {type: integer, minimum: 1, maximum: 200}}
+    post:
+      operationId: createDistributorImportInvitation
+      summary: Create or recover one invitation without duplicate delivery
+      description: Current owner, administrator or sales membership and elevated authentication required. Mutations require CSRF. Imports create no debt, credit limits or mandates.
+      responses:
+        '202':
+          description: Persisted result. Completed rows mean invitations exist, not proof of message delivery or accepted trade.
+        '403': {description: Current authorized business membership required}
+        '404': {description: Import unavailable to this business}
+        '409': {description: Changed file payload or invalid batch transition}
+        '422': {description: Invalid contact roster}
+        '503': {description: Database or confirmed result unavailable; recover saved progress before retry}
+  /buyer/businesses:
+    get:
+      operationId: listPurchasingBusinesses
+      summary: List purchasing profiles owned by the signed-in person and their linked workspaces
+      responses:
+        '200':
+          description: Owned purchasing profiles; supplier membership does not grant access.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [businesses]
+                properties:
+                  businesses:
+                    type: array
+                    items: {$ref: '#/components/schemas/BuyerBusiness'}
+        '503': {description: Business profiles could not be read}
+  /organizations/{organizationID}/distributor-invitations:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationID'
+    get:
+      operationId: distributorInvitationPipeline
+      summary: Read the latest 500 distributor invitations for an authorized business
+      responses:
+        '200':
+          description: Invitation state, exact accepted business, trade-record count and zero-principal-balance obligation count. No contact targets or invitation tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitations]
+                properties:
+                  invitations:
+                    type: array
+                    maxItems: 500
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string, format: uuid}
+                        name: {type: string}
+                        source_reference: {type: string}
+                        state: {type: string}
+                        expires_at: {type: string, format: date-time}
+                        created_at: {type: string, format: date-time}
+                        business_id: {type: string}
+                        trades: {type: integer, minimum: 0}
+                        zero_balance_obligations: {type: integer, minimum: 0}
+        '403': {description: Current business membership required}
+  /buyer/bank-authorization/{reference}:
+    parameters:
+      - {name: reference, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: readBuyerBankEnrollment
+      summary: Read the original provider's enrollment instructions for an owned mandate
+      responses:
+        '200': {description: Enrollment, mandate and supported bank choices}
+        '404': {description: Bank permission not visible to this buyer}
+        '409': {description: Provider response unconfirmed}
+    post:
+      operationId: completeBuyerBankEnrollment
+      summary: Submit bank details and explicit consent to the original provider
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, phone, address, bank_code, account_number, consent]
+              properties:
+                name: {type: string, minLength: 2, maxLength: 100}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string, minLength: 5, maxLength: 100}
+                bank_code: {type: string, pattern: '^[0-9]{3,6}$'}
+                account_number: {type: string, pattern: '^[0-9]{10}$'}
+                consent: {type: boolean, const: true}
+      responses:
+        '200': {description: Enrollment state returned; submission does not establish approval}
+        '409': {description: Permission closed, submissions paused or response unconfirmed}
+  /buyer/mandates/{mandateID}/refresh:
+    parameters:
+      - {name: mandateID, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: refreshBuyerMandate
+      summary: Reconcile an owned bank permission with its original provider
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '200': {description: Current bank permission status}
+        '409': {description: Bank response could not be confirmed}
+  /webhooks/paystack/{account}:
+    parameters:
+      - {name: account, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: receivePaystackWebhook
+      summary: Verify and durably enqueue a Paystack account callback
+      security: []
+      description: Requires a valid x-paystack-signature; session authentication is not used.
+      responses:
+        '200': {description: Event accepted or ignored as unsupported}
+        '401': {description: Invalid provider signature}
+        '503': {description: Account unavailable or event could not be saved}
+  /webhooks/bank/{account}:
+    parameters:
+      - {name: account, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: receiveNativeBankWebhook
+      summary: Verify and durably enqueue an original bank-provider account callback
+      security: []
+      description: Requires the configured provider's signature validation; session authentication is not used.
+      responses:
+        '200': {description: Event accepted or ignored as unsupported}
+        '401': {description: Invalid provider signature}
+        '503': {description: Account unavailable or event could not be saved}
   /dsa/code/{code}:
     get:
       operationId: lookupDSACode
@@ -1286,6 +1739,8 @@ paths:
       operationId: buyerScheduleAmendments
       summary: List repayment-date proposals and outcomes for the authenticated buyer
       parameters:
+        - { name: business_id, in: query, description: Owned purchasing business profile; must match organization when both are supplied, schema: { type: string } }
+        - { name: organization, in: query, description: Workspace linked to the owned purchasing profile, schema: { type: string } }
         - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
       responses:
         '200':
@@ -1897,6 +2352,9 @@ paths:
     get:
       operationId: listBuyerCreditRequests
       summary: List credit requests and obligations belonging to the current buyer
+      parameters:
+        - { name: business_id, in: query, description: Owned purchasing business profile; must match organization when both are supplied, schema: { type: string } }
+        - { name: organization, in: query, description: Workspace linked to the owned purchasing profile, schema: { type: string } }
       responses:
         '200':
           description: Buyer-visible credit requests.
@@ -2202,6 +2660,9 @@ paths:
     get:
       operationId: listBuyerPaymentClaims
       summary: List the current buyer's payment claims
+      parameters:
+        - { name: business_id, in: query, description: Owned purchasing business profile; must match organization when both are supplied, schema: { type: string } }
+        - { name: organization, in: query, description: Workspace linked to the owned purchasing profile, schema: { type: string } }
       responses:
         '200':
           description: Buyer-visible payment claims.
@@ -3325,6 +3786,9 @@ paths:
     get:
       operationId: buyerHistory
       summary: Buyer's factual, interpretable repayment history
+      parameters:
+        - { name: business_id, in: query, description: Owned purchasing business profile; must match organization when both are supplied, schema: { type: string } }
+        - { name: organization, in: query, description: Workspace linked to the owned purchasing profile, schema: { type: string } }
       responses:
         '200':
           description: Factual history; score is never returned
@@ -3356,6 +3820,7 @@ paths:
       operationId: supplierCustomerHistory
       summary: Supplier-scoped factual history for one buyer relationship
       parameters:
+        - { name: buyer_business_id, in: query, description: Connected customer business owned by buyerUserID, schema: { type: string } }
         - $ref: '#/components/parameters/OrganizationID'
         - name: buyerUserID
           in: path
@@ -3368,6 +3833,7 @@ paths:
       operationId: supplierCustomerStatement
       summary: Supplier customer ledger statement
       parameters:
+        - { name: buyer_business_id, in: query, description: Connected customer business owned by buyerUserID, schema: { type: string } }
         - $ref: '#/components/parameters/OrganizationID'
         - name: buyerUserID
           in: path
@@ -3455,18 +3921,27 @@ paths:
     get:
       operationId: listBuyerMandates
       summary: List the authenticated buyer's payment mandates
+      parameters:
+        - { name: business_id, in: query, description: Owned purchasing business profile; must match organization when both are supplied, schema: { type: string } }
+        - { name: organization, in: query, description: Workspace linked to the owned purchasing profile, schema: { type: string } }
       responses:
         '200': { description: "Buyer mandates" }
   /buyer/trade-lines:
     get:
       operationId: listBuyerTradeLines
       summary: List the authenticated buyer's trade lines
+      parameters:
+        - { name: business_id, in: query, description: Owned purchasing business profile; must match organization when both are supplied, schema: { type: string } }
+        - { name: organization, in: query, description: Workspace linked to the owned purchasing profile, schema: { type: string } }
       responses:
         '200': { description: "Buyer trade lines" }
   /buyer/disputes:
     get:
       operationId: listBuyerDisputes
       summary: List the authenticated buyer's disputes
+      parameters:
+        - { name: business_id, in: query, description: Owned purchasing business profile; must match organization when both are supplied, schema: { type: string } }
+        - { name: organization, in: query, description: Workspace linked to the owned purchasing profile, schema: { type: string } }
       responses:
         '200': { description: "Buyer disputes" }
   /buyer/disputes/{disputeID}:
@@ -3979,6 +4454,18 @@ components:
         type: string
         minLength: 64
   schemas:
+    DistributorImportContact:
+      type: object
+      required: [source_reference, target, target_type, legal_name, business_type, business_address, industry]
+      properties:
+        source_reference: {type: string, maxLength: 128}
+        target: {type: string, maxLength: 500}
+        target_type: {type: string, enum: [email, phone]}
+        legal_name: {type: string, maxLength: 500}
+        trading_name: {type: string, maxLength: 500}
+        business_type: {type: string, enum: [unregistered_business, registered_business, sole_proprietor, limited_company, partnership]}
+        business_address: {type: string, maxLength: 500}
+        industry: {type: string, maxLength: 500}
     DSARules:
       type: object
       required: [version, enabled, onboarding_kobo, activation_kobo, threshold_kobo, share_bps, share_months, initial_limit]
@@ -4873,6 +5360,7 @@ components:
       type: object
       required: [target, target_type, legal_name, business_type, business_address, industry]
       properties:
+        source_reference: {type: string, maxLength: 128, description: Stable supplier-scoped import identity. Identical pending imports recover the existing invitation; changed payloads are rejected.}
         target:
           type: string
         target_type:
@@ -4929,6 +5417,7 @@ components:
       type: object
       required: [challenge_id, code, full_name, consents_accepted, terms_version, privacy_version, identity_notice_version]
       properties:
+        workspace_id: {type: string, description: Optional existing business workspace UUID. Requires current owner authority; cannot be the inviting supplier.}
         consents_accepted: {type: boolean, const: true}
         terms_version: {type: string}
         privacy_version: {type: string}
@@ -4972,6 +5461,7 @@ components:
       type: object
       required: [id, owner_user_id, legal_name, business_type, business_address, industry, status, created_at]
       properties:
+        workspace_id: {type: string, format: uuid, description: Business workspace linked to this purchasing profile}
         id:
           type: string
         owner_user_id:

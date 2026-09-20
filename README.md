@@ -2,10 +2,12 @@
 
 ## Production V1 Product, Architecture, Engineering, Security, Operations, and AI-Agent Build Specification
 
+Current network flow: [public and account journeys](docs/redesign/current-user-flow.md), [active pages](docs/redesign/current-pages.md), and [implementation status and remaining enterprise work](docs/redesign/implementation-status.md). The flow uses one business workspace for buying and selling, with separate personal purchases. Old frontend routes have been removed without compatibility redirects.
+
 > **Canonical product name:** Kredit  
-> **Product category:** Supplier-funded B2B trade-credit infrastructure  
+> **Product category:** Business-network trade credit with separate personal purchase accounts<br>
 > **Initial market:** Nigeria  
-> **Primary users:** Suppliers, wholesalers, distributors, and their business buyers  
+> **Primary users:** Manufacturers, distributors/wholesalers, retailers and individual consumers<br>
 > **Primary interfaces:** Mobile-first web application; WhatsApp when configured and enabled
 > **Default currency:** NGN  
 > **Money storage unit:** Kobo  
@@ -1303,48 +1305,73 @@ Do not use a global client store as a shadow database.
 
 ### 13.4 Routes
 
-Recommended route map:
+Current customer-facing route map (the complete inventory is in `docs/redesign/current-pages.md`):
 
 ```text
 /
 /how-it-works
+/manufacturers
+/distributors
+/retailers
+/consumers
+/demo
+/demo/consumer
 /pricing
 /security
-/for-suppliers
-/for-buyers
 /faq
 /legal/terms
 /legal/privacy
 /legal/complaints
 
-/app
-/app/overview
-/app/credit/new
-/app/credit/[id]
-/app/customers
-/app/customers/[id]
-/app/trade-lines
-/app/trade-lines/[id]
-/app/payments
-/app/collections
-/app/overdue
-/app/disputes
-/app/reports
-/app/team
-/app/settings
-/app/settings/billing
-/app/settings/settlement
-/app/settings/security
+/signin
+/start
+/account
+/account/security
+/account/privacy
+/account/notifications
+/account/messages
+/account/suppliers
+/account/display
 
-/buyer
-/buyer/requests
-/buyer/obligations
-/buyer/obligations/[id]
-/buyer/trade-lines
-/buyer/history
-/buyer/mandates
-/buyer/disputes
-/buyer/settings
+/workspace/today
+/workspace/sales
+/workspace/sales/quick
+/workspace/sales/new
+/workspace/sales/[id]
+/workspace/sales/limits
+/workspace/sales/consumers
+/workspace/partners
+/workspace/partners/customers
+/workspace/partners/customers/[id]
+/workspace/partners/import
+/workspace/partners/invitations
+/workspace/purchases
+/workspace/purchases/orders
+/workspace/purchases/orders/[requestID]
+/workspace/purchases/obligations
+/workspace/purchases/obligations/[id]
+/workspace/purchases/trade-lines
+/workspace/purchases/history
+/workspace/purchases/mandates
+/workspace/purchases/disputes
+/workspace/purchases/amendments
+/workspace/purchases/payments
+/workspace/money
+/workspace/money/received
+/workspace/money/collections
+/workspace/overdue
+/workspace/disputes
+/workspace/reports
+/workspace/search
+/workspace/team
+/workspace/onboarding
+/workspace/settings
+/workspace/settings/billing
+/workspace/settings/settlement
+/workspace/settings/credit-policy
+
+/personal/purchases
+/personal/purchases/[saleID]
 
 /c/[token]                    # secure buyer invitation
 /pay/[token]                  # optional payment flow

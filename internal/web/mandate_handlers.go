@@ -48,7 +48,7 @@ func (s *Server) cancelBuyerMandate(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, view := range views {
 		s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: view.Request.SupplierOrganizationID, Action: "mandate.cancelled", ResourceType: "payment_mandate", ResourceID: cancelled.ID, Outcome: "success"})
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "mandate-cancelled:" + cancelled.ID + ":" + view.Request.SupplierOrganizationID, Type: "MandateCancelled", OrganizationID: view.Request.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(cancelled.AmountCeiling), Currency: "NGN", Reference: cancelled.ID, NextAction: "Review outstanding credit and suspend new release", SecurePath: "/app/collections"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "mandate-cancelled:" + cancelled.ID + ":" + view.Request.SupplierOrganizationID, Type: "MandateCancelled", OrganizationID: view.Request.SupplierOrganizationID, Priority: notifications.PriorityCritical, AmountKobo: int64(cancelled.AmountCeiling), Currency: "NGN", Reference: cancelled.ID, NextAction: "Review outstanding credit and suspend new release", SecurePath: "/workspace/money/collections"})
 	}
 	writeJSON(w, 200, map[string]any{"mandate": cancelled, "affected_credit_requests": len(views)})
 }

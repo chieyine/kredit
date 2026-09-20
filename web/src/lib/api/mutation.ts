@@ -70,6 +70,14 @@ export class MutationIntent {
       return result;
     } catch (error) {
       if (error instanceof MutationError) throw error;
+      if (sent && error instanceof RequestError && error.status === 409 && ['approval_changed','network_changed', 'purchasing_changed'].includes(error.code)) {
+        this.clear();
+        throw new MutationError('The record changed. Refresh it before making another change.', 'rejected');
+      }
+      if (sent && error instanceof RequestError && error.status === 409 && error.code === 'credit_approval_required') {
+        this.clear();
+        throw new MutationError('Request internal approval for these exact terms. Once approved, you can send the offer.', 'rejected');
+      }
       // This response is emitted only before a financial-review write occurs.
       if (sent && error instanceof RequestError && error.status === 409 && error.code === 'financial_difference_unresolved') {
         this.clear();

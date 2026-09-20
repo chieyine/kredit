@@ -4,7 +4,6 @@
 	import SystemBanner from '$lib/components/SystemBanner.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import HomeProof from '$lib/components/HomeProof.svelte';
 	import MotionObserver from '$lib/components/MotionObserver.svelte';
 	import { jsonLd, nonIndexablePaths, seoForPath, SITE_URL } from '$lib/seo';
 	import { page } from '$app/state';
@@ -12,8 +11,10 @@
 
 	let { children } = $props();
 	let offline = $state(false);
-	let privateShell = $derived(/^\/(app|buyer|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(page.url.pathname));
-	let publicChrome = $derived(page.url.pathname === '/app' || !privateShell);
+	let privateShell = $derived(/^\/(account|start|signin|workspace|personal|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(page.url.pathname));
+	// The deck is presented full-screen, so the site chrome stays out of the room.
+	let deckRoute = $derived(/^\/deck(\/|$)/.test(page.url.pathname));
+	let publicChrome = $derived((page.url.pathname === '/signin' || !privateShell) && !deckRoute);
 
 	const normalizedPath = $derived(page.url.pathname.length > 1 ? page.url.pathname.replace(/\/$/, '') : page.url.pathname);
 	const canonical = $derived(SITE_URL + normalizedPath);
@@ -120,6 +121,5 @@
 	<div id="main-content" class="motion-scope public-route" tabindex="-1">
 		{#key page.url.pathname}{@render children()}{/key}
 	</div>
-	{#if page.url.pathname === '/'}<HomeProof />{/if}
 {/if}
 {#if publicChrome}<SiteFooter />{/if}

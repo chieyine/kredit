@@ -41,8 +41,8 @@ test.describe('real-stack financial journeys', () => {
 		const paymentsBody = await paymentsResponse.json() as { payments?: Array<{ amount_kobo: number }> };
 		expect(paymentsBody.payments).toBeDefined();
 
-		await page.goto('/app/payments');
-		await expect(page.getByRole('heading', { name: 'Your money, clearly.' })).toBeVisible();
+		await page.goto('/workspace/money/received');
+		await expect(page.getByRole('heading', { name: 'Payments received' })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Money received.' })).toBeVisible();
 		await expect(page.getByText('We could not open your payment records.')).toHaveCount(0);
 	});
@@ -53,19 +53,19 @@ test.describe('real-stack financial journeys', () => {
 
 		const credit = await page.request.get('/api/v1/buyer/credit-requests');
 		expect(credit.status()).toBe(200);
-		const creditBody = await credit.json() as { requests?: Array<{ request: { id: string; state: string; goods_description: string } }> };
+		const creditBody = await credit.json() as { requests?: Array<{ request: { id: string; state: string; goods_description: string; buyer_business_id: string } }> };
 		expect(creditBody.requests).toBeDefined();
 		expect(creditBody.requests!.length).toBeGreaterThan(0);
 
-		const listRead = page.waitForResponse(response => response.url().endsWith('/api/v1/buyer/credit-requests') && response.request().method() === 'GET');
-		await page.goto('/buyer/requests');
+		const listRead = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/api/v1/buyer/credit-requests') && response.request().method() === 'GET');
+		await page.goto(`/workspace/purchases/orders?business_id=${creditBody.requests![0].request.buyer_business_id}`);
 		expect((await listRead).status()).toBe(200);
-		await expect(page.getByRole('heading', { name: 'Sales waiting for you', exact: true })).toBeVisible();
-		const waiting = creditBody.requests!.filter(view => ['SENT', 'BUYER_REVIEWING'].includes(view.request.state));
-		if (waiting.length === 0) await expect(page.getByRole('heading', { name: 'No sale is waiting for you' })).toBeVisible();
-		for (const view of waiting.slice(0, 20)) await expect(page.locator(`a[href="/buyer/credit-requests/${view.request.id}"]`)).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Purchase offers', exact: true })).toBeVisible();
+		const waiting = creditBody.requests!.filter(view => view.request.buyer_business_id===creditBody.requests![0].request.buyer_business_id && ['SENT', 'BUYER_REVIEWING'].includes(view.request.state));
+		if (waiting.length === 0) await expect(page.getByRole('heading', { name: 'No purchase offers to review' })).toBeVisible();
+		for (const view of waiting.slice(0, 20)) await expect(page.locator(`a[href^="/workspace/purchases/orders/${view.request.id}?"]`)).toBeVisible();
 		const persisted = creditBody.requests![0].request;
-		await page.goto(`/buyer/credit-requests/${persisted.id}`);
+		await page.goto(`/workspace/purchases/orders/${persisted.id}`);
 		await expect(page.getByText(persisted.goods_description, { exact: true }).first()).toBeVisible();
 		await expect(page.getByText(/Service unavailable|We could not open/i)).toHaveCount(0);
 	});

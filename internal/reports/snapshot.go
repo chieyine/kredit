@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"kredit/internal/credit"
+	"kredit/internal/db"
 	"kredit/internal/disputes"
 	"kredit/internal/ledger"
 	"kredit/internal/payments"
@@ -25,7 +26,16 @@ func (s *Store) financialSnapshot(ctx context.Context, org, buyer string) (*Stor
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true),set_config('app.current_user_id',$2,true)`, org, buyer); err != nil {
+	actor := buyer
+	if org != "" {
+		identity, _ := db.TenantFromContext(ctx)
+		if identity.OrganizationID != "" && identity.OrganizationID != org {
+			return nil, errors.New("report scope does not match authorized business")
+		}
+		// A supplier's customer filter is not the identity of the requesting staff.
+		actor = identity.UserID
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true),set_config('app.current_user_id',$2,true)`, org, actor); err != nil {
 		return nil, err
 	}
 	snapshot, err := s.financialSnapshotTx(ctx, tx, org, buyer)
@@ -47,7 +57,7 @@ func (s *Store) financialSnapshotTx(ctx context.Context, tx pgx.Tx, org, buyer s
  COALESCE((SELECT SUM(f.waived_kobo) FROM app.fees f WHERE f.obligation_id=o.id AND f.supplier_organization_id=o.supplier_organization_id AND f.state!='refunded'),0)
  FROM app.obligations o JOIN app.credit_requests c ON c.id=o.credit_request_id
  LEFT JOIN app.credit_aggregate_snapshots s ON o.credit_request_id::text=s.credit_request_id
- WHERE ($1='' OR o.supplier_organization_id=NULLIF($1,'')::uuid) AND ($2='' OR c.buyer_user_id=NULLIF($2,'')::uuid) ORDER BY o.activated_at,o.id`, org, buyer)
+ WHERE ($1='' OR o.supplier_organization_id=NULLIF($1,'')::uuid) AND ($2='' OR c.buyer_user_id=NULLIF($2,'')::uuid OR ($1='' AND c.buyer_business_id IN (SELECT b.id FROM app.businesses b JOIN app.memberships m ON m.organization_id=b.organization_id WHERE m.user_id=NULLIF($2,'')::uuid AND m.status='active' AND app.can_purchase(b.id)))) ORDER BY o.activated_at,o.id`, org, buyer)
 	if err != nil {
 		return nil, err
 	}

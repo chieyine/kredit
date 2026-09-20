@@ -16,7 +16,7 @@ func TestResolveSecureLink(t *testing.T) {
 	cfg := config.Config{Environment: "development", TokenHashKey: "secure-link-test"}
 	runtime := NewRuntime(cfg)
 	server := NewServerWithRuntime(cfg, platformlogging.New(), runtime)
-	path := "/buyer/credit-requests/request-1"
+	path := "/workspace/purchases/orders/request-1"
 	expires := time.Now().Add(time.Minute).Truncate(time.Second)
 	link, err := url.Parse(runtime.Notifications.SecureLink(path, expires))
 	if err != nil {

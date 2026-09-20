@@ -18,10 +18,10 @@ func notice(ctx context.Context, tx pgx.Tx, s Sale, eventID, action string) erro
 		event := notifications.Event{ID: fmt.Sprintf("consumer:%s:%t", eventID, buyer), Type: "ConsumerPurchaseUpdated", Priority: notifications.PriorityCritical, Reference: s.Terms.Item, NextAction: labels[action], Currency: "NGN"}
 		if buyer {
 			event.RecipientID = s.BuyerID
-			event.SecurePath = "/buyer/purchases/" + s.ID
+			event.SecurePath = "/personal/purchases/" + s.ID
 		} else {
 			event.OrganizationID = s.OrganizationID
-			event.SecurePath = "/app/consumer-sales/" + s.ID + "?organization=" + s.OrganizationID
+			event.SecurePath = "/workspace/sales/consumers/" + s.ID + "?organization=" + s.OrganizationID
 		}
 		raw, e := json.Marshal(map[string]any{"notification": event})
 		if e != nil {
@@ -80,7 +80,7 @@ func (s *Store) enqueueDue(ctx context.Context, id, org, buyer string) error {
 	if due <= 0 {
 		return nil
 	}
-	ev := notifications.Event{ID: "consumer-due:" + id + ":" + today, Type: "ConsumerPaymentDue", RecipientID: buyer, Priority: notifications.PriorityRoutine, AmountKobo: due, Currency: "NGN", Reference: v.Terms.Item, NextAction: "Pay the retailer or report a payment already made.", SecurePath: "/buyer/purchases/" + id}
+	ev := notifications.Event{ID: "consumer-due:" + id + ":" + today, Type: "ConsumerPaymentDue", RecipientID: buyer, Priority: notifications.PriorityRoutine, AmountKobo: due, Currency: "NGN", Reference: v.Terms.Item, NextAction: "Pay the retailer or report a payment already made.", SecurePath: "/personal/purchases/" + id}
 	raw, _ := json.Marshal(map[string]any{"notification": ev})
 	_, e = tx.Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) VALUES('consumer_sale',$1,'notification.requested',$2::jsonb,$3) ON CONFLICT(idempotency_key) DO NOTHING`, id, raw, ev.ID)
 	if e != nil {

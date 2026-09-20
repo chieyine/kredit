@@ -44,5 +44,5 @@
 {/if}
 
 <style>
-	.connectivity{position:sticky;top:0;z-index:40;display:flex;justify-content:center;gap:.6rem;padding:.55rem 1rem;border-bottom:1px solid currentColor;font-size:.9rem;line-height:1.45}.connectivity strong{white-space:nowrap}.offline{background:#fff1d6;color:#714400}.restored{background:#e8f6ed;color:#155f3d}@media(max-width:640px){.connectivity{display:grid;gap:.1rem}.connectivity strong{white-space:normal}}
+	.connectivity{position:sticky;top:0;z-index:40;display:flex;justify-content:center;gap:.6rem;padding:.55rem 1rem;border-bottom:1px solid currentColor;font-size:.9rem;line-height:1.45}.connectivity strong{white-space:nowrap}.offline{background:var(--color-surface-muted);color:var(--color-warning)}.restored{background:var(--color-background);color:var(--color-positive)}@media(max-width:640px){.connectivity{display:grid;gap:.1rem}.connectivity strong{white-space:normal}}
 </style>

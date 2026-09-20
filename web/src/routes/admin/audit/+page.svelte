@@ -145,7 +145,7 @@
 	.filters label { display: grid; gap: .35rem; font-weight: 650; }
 	.filters .find { flex: 1; min-width: min(100%, 16rem); }
 	.filters input { box-sizing: border-box; width: 100%; min-height: 3rem; padding: .7rem; border: 1px solid var(--color-border); background: var(--color-surface); font: inherit; }
-	.filters button { min-height: 3rem; padding: .7rem 1.1rem; border: 1px solid var(--color-primary); background: var(--color-primary); color: #fff; font: inherit; font-weight: 700; }
+	.filters button { min-height: 3rem; padding: .7rem 1.1rem; border: 1px solid var(--color-primary); background: var(--color-primary); color:var(--color-on-primary); font: inherit; font-weight: 700; }
 	.count { color: var(--color-muted); }
 	.table-wrap { overflow-x: auto; }
 	table { width: 100%; border-collapse: collapse; }
@@ -161,7 +161,7 @@
 	code { overflow-wrap: anywhere; font-size: .82rem; }
 	.empty { padding: 2rem; border: 1px dashed var(--color-border); }
 	.empty h2 { margin: 0 0 .4rem; font-size: 1.15rem; }
-	.error { padding: 1rem; border-left: 3px solid var(--color-destructive); background: #ffebe9; line-height: 1.6; }
+	.error { padding: 1rem; border-left: 3px solid var(--color-destructive); background:var(--color-background); line-height: 1.6; }
 	.error button { margin-left: .5rem; padding: .45rem .75rem; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; }
 	@media (max-width: 640px) { .filters label { width: 100%; } .filters button { width: 100%; } }
 </style>

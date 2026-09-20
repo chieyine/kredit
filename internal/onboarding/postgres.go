@@ -194,7 +194,7 @@ func (s *PostgresStore) apply(org, actor, change string, fn memoryMutation, hook
 
 	if strings.HasPrefix(change, "settlement.") || strings.HasPrefix(change, "billing.") {
 		eventID := "onboarding-sensitive:" + org + ":" + fmt.Sprint(next.Version)
-		notice := notifications.Event{ID: eventID, Type: "SupplierSensitiveSettingChanged", OrganizationID: org, Priority: notifications.PriorityCritical, Reference: change, NextAction: "Review the change in business settings.", SecurePath: "/app/onboarding"}
+		notice := notifications.Event{ID: eventID, Type: "SupplierSensitiveSettingChanged", OrganizationID: org, Priority: notifications.PriorityCritical, Reference: change, NextAction: "Review the change in business settings.", SecurePath: "/workspace/onboarding"}
 		payload, marshalErr := json.Marshal(map[string]any{"notification": notice})
 		if marshalErr != nil {
 			return Profile{}, Summary{}, marshalErr

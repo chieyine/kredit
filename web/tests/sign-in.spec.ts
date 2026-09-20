@@ -48,7 +48,7 @@ test('a six-digit code is accepted by the field that asks for six digits', async
 		});
 	});
 
-	await page.goto('/app');
+	await page.goto('/signin');
 	await page.getByRole('radio', { name: /WhatsApp/ }).check();
 	await page.getByLabel('Phone number').fill('08012345678');
 	await page.getByRole('button', { name: 'Send me a code' }).click();
@@ -69,7 +69,7 @@ test('a six-digit code is accepted by the field that asks for six digits', async
 
 test('a code the field should refuse is refused, and the button stays closed', async ({ page }) => {
 	await stubChallenge(page);
-	await page.goto('/app');
+	await page.goto('/signin');
 	await page.getByRole('radio', { name: /WhatsApp/ }).check();
 	await page.getByLabel('Phone number').fill('08012345678');
 	await page.getByRole('button', { name: 'Send me a code' }).click();
@@ -90,7 +90,7 @@ test('a wrong code is explained in words a person can act on', async ({ page }) 
 		});
 	});
 
-	await page.goto('/app');
+	await page.goto('/signin');
 	await page.getByRole('radio', { name: /WhatsApp/ }).check();
 	await page.getByLabel('Phone number').fill('08012345678');
 	await page.getByRole('button', { name: 'Send me a code' }).click();
@@ -101,7 +101,7 @@ test('a wrong code is explained in words a person can act on', async ({ page }) 
 	await expect(message).toContainText('That code is incorrect or has expired');
 	// It has to say what to do next, not only that something went wrong.
 	await expect(message).toContainText('request a new code');
-	await expect(page).toHaveURL(/\/app$/);
+	await expect(page).toHaveURL(/\/signin$/);
 });
 
 test('an expired code closes the field and offers a new one', async ({ page }) => {
@@ -117,7 +117,7 @@ test('an expired code closes the field and offers a new one', async ({ page }) =
 			})
 		});
 	});
-	await page.goto('/app');
+	await page.goto('/signin');
 	await page.getByRole('radio', { name: /WhatsApp/ }).check();
 	await page.getByLabel('Phone number').fill('08012345678');
 	await page.getByRole('button', { name: 'Send me a code' }).click();
@@ -131,7 +131,7 @@ test('an expired code closes the field and offers a new one', async ({ page }) =
 });
 
 test('the sign-in page says a code will never be asked for by support', async ({ page }) => {
-	await page.goto('/app');
+	await page.goto('/signin');
 	await expect(
 		page.getByText('Kredit support will never ask you to share your sign-in code.')
 	).toBeVisible();

@@ -24,6 +24,6 @@ export default defineConfig({
 		? undefined
 		: {
 			command: `./node_modules/.bin/vite ${ci ? 'preview' : 'dev'} --host 127.0.0.1 --port 5173 --strictPort`,
-			cwd: '.', url: 'http://127.0.0.1:5173', reuseExistingServer: !ci
+			cwd: '.', url: 'http://127.0.0.1:5173', reuseExistingServer: !ci, timeout: 180_000
 		}
 });

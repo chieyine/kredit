@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Fraunces;src:url('f/fraunces-opsz.woff2') format('woff2');font-weight:100 900;font-display:block}
+@font-face{font-family:Inter;src:url('f/inter.woff2') format('woff2');font-weight:100 900;font-display:block}
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:1200px;height:630px;overflow:hidden;background:#0b0d12;font-family:Inter,system-ui;position:relative}
+.bg{position:absolute;inset:0;background-image:
+  radial-gradient(70rem 40rem at 82% -14%, rgba(45,56,92,.62), transparent 62%),
+  radial-gradient(46rem 30rem at 4% 10%, rgba(226,96,58,.10), transparent 60%)}
+.grain{position:absolute;inset:0;opacity:.5;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='.34'/%3E%3C/svg%3E")}
+.wrap{position:relative;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:72px 76px}
+.mark{display:flex;align-items:center;gap:16px}
+.seal{width:52px;height:52px;display:grid;place-items:center;background:#e2603a;color:#fffcf7;
+  font-family:Fraunces;font-weight:600;font-size:28px;line-height:1;
+  clip-path:polygon(3% 5%,33% 1%,68% 4%,97% 0%,100% 32%,96% 66%,99% 96%,70% 99%,34% 96%,4% 100%,1% 67%,5% 34%)}
+.mark b{font-family:Fraunces;font-weight:600;font-size:34px;letter-spacing:-.035em;color:#f4f1ea}
+h1{font-family:Fraunces;font-weight:450;font-size:104px;line-height:.94;letter-spacing:-.045em;color:#f4f1ea;max-width:17ch}
+h1 em{font-style:normal;color:#e2603a}
+.sub{display:flex;align-items:center;justify-content:space-between;gap:40px;padding-top:26px;border-top:1px solid rgba(255,255,255,.12)}
+.sub p{color:#a9a69e;font-size:22px;line-height:1.5;max-width:60ch}
+.tag{flex:none;color:#a9a69e;font-size:15px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;display:flex;align-items:center;gap:12px}
+.tag::before{content:'';width:9px;height:9px;background:#e2603a}
+</style></head><body>
+<div class="bg"></div><div class="grain"></div>
+<div class="wrap">
+  <div class="mark"><span class="seal">K</span><b>Kredit</b></div>
+  <h1>Trade credit.<br><em>Connected.</em></h1>
+  <div class="sub">
+    <p>Manage the credit your business gives and receives — from manufacturers to distributors, retailers and consumers.</p>
+    <span class="tag">kredit.ng</span>
+  </div>
+</div></body></html>

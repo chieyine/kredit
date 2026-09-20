@@ -71,3 +71,17 @@ Consent is per buyer/supplier relationship, versioned and evidenced in
 trade relationship already exists. Until the assessment's decisions are signed,
 the disclosed field set is not treated as settled and sharing is not enabled for
 a real buyer.
+
+## Business workspace and distributor imports
+
+Purchasing profiles link to their business workspace through `app.businesses.organization_id`; this is an identity link, not permission to see another supplier's transactions. Accepted invitations retain `accepted_business_id` so account recovery opens the exact business that accepted the invitation.
+
+Imported invitations retain a supplier-scoped `source_reference`, SHA-256 `source_fingerprint`, and encrypted `token_ciphertext`. The raw invitation token is never stored in plaintext. Only the currently authorized supplier invitation flow can recover a pending, unexpired import link. Changing the payload under an existing reference is rejected. Browser CSV content and returned private links remain in page memory; request-recovery storage contains only the existing idempotency metadata and payload digest. Expiry still follows the invitation's recorded lifetime. Treat the encrypted link and import contact data as restricted onboarding information; do not include raw tokens in analytics, logs or exports.
+
+## Business credit review evidence
+
+`app.business_credit_controls` stores each supplier's current independent-review threshold; `app.business_credit_control_history` retains each version and changing actor. `app.credit_offer_approvals` captures the exact draft proposal, its fingerprint and version, requester, independent reviewer, decision reason and timestamps. These records contain confidential commercial terms and staff attribution. They are business-scoped, unavailable to unrelated businesses and personal purchasers, and are not exposed to collection workers. Runtime users cannot rewrite captured proposal facts or completed decisions. Policy history has no runtime write permission. Retention follows financial/audit holds and the approved retention register; this implementation introduces no automatic evidence deletion or new retention period.
+
+## Reviewer limits and network operations
+
+`app.credit_reviewer_limits` and `app.credit_reviewer_limit_history` store supplier-scoped staff approval ceilings and their versions/actors. `app.business_branches` contains branch names, territories and availability. `app.partner_assignments` ties an existing supplier-customer relationship to a branch and account manager; `app.network_operation_history` preserves each revision. These records contain private operational structure and staff attribution. Current business membership is required; owner/administrator authority manages assignments, and owner authority manages reviewer limits. Assignment is not an access grant. Removed managers are flagged without erasing historical attribution. Runtime workers have no access, and runtime application history is read-only. Existing financial/audit retention holds apply; no deletion schedule or new retention period is introduced.

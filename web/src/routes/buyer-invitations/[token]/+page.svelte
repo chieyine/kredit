@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { untrack } from 'svelte';
+	import { untrack, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { checkedJSON, LatestRequest, record, text, publicError, RequestError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
@@ -18,7 +18,10 @@
 		supplier: { legal_name: string; trading_name: string };
 	};
 
-	let preview = $state<Preview | null>(null);
+	let workspaceID=$state('');
+ let existingBusinesses=$state<{id:string;name:string}[]>([]);
+ onMount(()=>{const abort=new AbortController(); void checkedJSON('/api/v1/organizations',value=>{const items=record(value).organizations;if(!Array.isArray(items))throw new Error('Invalid businesses');return items.map(v=>{const r=record(v);return{id:text(r.id),name:text(r.trading_name)||text(r.legal_name)}})},{signal:abort.signal}).then(items=>existingBusinesses=items).catch(()=>{});return()=>abort.abort();});
+ let preview = $state<Preview | null>(null);
 	let challengeId = $state('');
 	let developmentCode = $state('');
 	let code = $state('');
@@ -67,10 +70,10 @@
 		const token = activeToken; busy=true;error='';
 		try {
 			acceptance ??= new MutationIntent('accept-buyer-invitation',invitationPath()+'/accept');
-			await acceptance.run({challenge_id:challengeId,code,full_name:fullName.trim(),consents_accepted:consentsAccepted,...preview.legal_versions,identity_notice_version:preview.identity_notice_version},value=>{
-				const row=record(value);text(record(row.user).id);text(record(row.session).id);record(row.portal);return row;
+			const acceptedBusiness = await acceptance.run({workspace_id:workspaceID,challenge_id:challengeId,code,full_name:fullName.trim(),consents_accepted:consentsAccepted,...preview.legal_versions,identity_notice_version:preview.identity_notice_version},value=>{
+				const row=record(value);text(record(row.user).id);text(record(row.session).id);return text(record(record(row.portal).business).id);
 			});
-			if (token === activeToken) await goto('/buyer');
+			if (token === activeToken) await goto(`/workspace/purchases?business_id=${encodeURIComponent(acceptedBusiness)}`);
 		}catch(cause){if (token === activeToken) error=cause instanceof Error?cause.message:'We could not confirm your details.';}
 		finally{if (token === activeToken) busy=false;}
 	}
@@ -103,6 +106,7 @@
 				<div><dt>Address</dt><dd>{preview.invitation.proposed_address}</dd></div>
 				<div><dt>What you sell</dt><dd>{preview.invitation.proposed_industry}</dd></div>
 			</dl>
+			{#if existingBusinesses.length}<label>Business joining this supplier<select bind:value={workspaceID} disabled={busy||!!acceptance?.unresolved}><option value="">Create the business shown above</option>{#each existingBusinesses as b}<option value={b.id}>{b.name}</option>{/each}</select></label><p>Choose an existing business only if you own it. Its verified account details will be used; the supplier relationship stays separate.</p>{/if}
 			{#if !challengeId}
 				<button class="primary" disabled={busy} onclick={requestCode}>{busy ? 'Sending…' : 'Send me my code'}</button>
 			{:else}
@@ -124,14 +128,14 @@
 
 <style>
 	.panel { max-width: 42rem; margin: 5rem auto; padding: 2rem; border: 1px solid var(--color-border); border-radius: 1.25rem; background: var(--color-surface); }
-	.eyebrow { color: #2738d6; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; }
+	.eyebrow { color:var(--color-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; }
 	h1 { font-size: clamp(2rem, 6vw, 4rem); line-height: 1; letter-spacing: -0.045em; }
 	dl { display: grid; gap: 0.75rem; margin: 2rem 0; }
 	dl div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; }
 	dt { color: var(--color-muted); } dd { margin: 0; font-weight: 700; text-align: right; }
 	label { display: grid; gap: 0.35rem; margin: 1rem 0; font-weight: 700; }
-	input { border: 1px solid #aaa69e; border-radius: 0.6rem; padding: 0.75rem; }
+	input { border:1px solid var(--color-border); border-radius: 0.6rem; padding: 0.75rem; }
 	button { border: 0; border-radius: 999px; padding: 0.8rem 1.2rem; font-weight: 700; cursor: pointer; }
-	.primary { color: white; background: #2738d6; }
-	.hint { color: #2738d6; } .error { color: #b42318; }
+	.primary { color: var(--color-on-primary); background:var(--color-primary); }
+	.hint { color:var(--color-primary); } .error { color:var(--color-overdue); }
 </style>

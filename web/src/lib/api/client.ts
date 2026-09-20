@@ -75,5 +75,5 @@ export async function signOut(): Promise<void> {
 	});
 	if (!response.ok && response.status !== 401) throw new Error('Sign-out was not confirmed. Your account may still be open. Try again before leaving this device.');
 	clearPrivateBrowserData();
-	location.assign('/app?signed_out=1');
+	location.assign('/signin?signed_out=1');
 }

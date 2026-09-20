@@ -46,6 +46,7 @@ type InvitationPreview struct {
 }
 
 type CreateInvitationInput struct {
+	SourceReference string `json:"source_reference,omitempty"`
 	Target          string
 	TargetType      string
 	LegalName       string
@@ -59,6 +60,7 @@ const IdentityNoticeVersion = "buyer-identity-v1-2026-09-12"
 const IdentityNotice = "I authorise Kredit and its verification provider to check my identity, business details and authority to act for this business. These checks help prevent fraud and confirm who can accept a sale. Read the privacy notice for how this information is used and kept."
 
 type AcceptInput struct {
+	WorkspaceID           string
 	ConsentsAccepted      bool
 	TermsVersion          string
 	PrivacyVersion        string
@@ -80,6 +82,7 @@ type Person struct {
 }
 
 type Business struct {
+	WorkspaceID     string    `json:"workspace_id,omitempty"`
 	ID              string    `json:"id"`
 	OwnerUserID     string    `json:"owner_user_id"`
 	LegalName       string    `json:"legal_name"`
@@ -149,6 +152,7 @@ type Portal struct {
 }
 
 type CreateInvitationResult struct {
+	Replayed   bool
 	Invitation Invitation
 	RawToken   string
 }
@@ -162,6 +166,11 @@ type Customer struct {
 	Status          string `json:"status"`
 }
 
+type memoryImport struct {
+	input  CreateInvitationInput
+	result CreateInvitationResult
+}
+
 type invitationRecord struct {
 	Invitation     Invitation
 	targetValue    string
@@ -170,6 +179,7 @@ type invitationRecord struct {
 }
 
 type Store struct {
+	imports             map[string]memoryImport
 	acceptMu            sync.Mutex
 	mu                  sync.RWMutex
 	tokenHashKey        []byte
@@ -194,6 +204,8 @@ type Store struct {
 // share this contract so the runtime cannot accidentally mix persistence
 // semantics between environments.
 type Service interface {
+	InvitationPipeline(context.Context, string, string) ([]InvitationProgress, error)
+	ListBusinessProfiles(context.Context, string) ([]Business, error)
 	RefreshVerification(context.Context, string) (Portal, error)
 	RefreshBusinessVerification(context.Context, string, string) (Portal, error)
 	ReadBusinessPortal(context.Context, string, string) (Portal, error)
@@ -257,6 +269,7 @@ func NewStore(tokenHashKey string, provider identity.IdentityProvider) *Store {
 	}
 	return &Store{
 		tokenHashKey:        []byte(tokenHashKey),
+		imports:             make(map[string]memoryImport),
 		identity:            provider,
 		invitations:         make(map[string]*invitationRecord),
 		persons:             make(map[string]*Person),
@@ -295,9 +308,31 @@ func (s *Store) CreateInvitation(actorUserID, organizationID string, input Creat
 	invitation := Invitation{ID: s.newID(), OrganizationID: organizationID, TargetType: input.TargetType, ProposedLegalName: strings.TrimSpace(input.LegalName), ProposedTradingName: strings.TrimSpace(input.TradingName), ProposedBusinessType: strings.TrimSpace(input.BusinessType), ProposedAddress: strings.TrimSpace(input.BusinessAddress), ProposedIndustry: strings.TrimSpace(input.Industry), Status: "pending", ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now}
 	record := &invitationRecord{Invitation: invitation, targetValue: normalizeTarget(input.Target), tokenHash: s.hashToken(rawToken)}
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := organizationID + ":" + input.SourceReference
+	if input.SourceReference != "" {
+		if len(input.SourceReference) > 128 {
+			return CreateInvitationResult{}, errors.New("import reference is too long")
+		}
+		if prior, ok := s.imports[key]; ok {
+			if prior.input != input {
+				return CreateInvitationResult{}, errors.New("this import reference already belongs to different customer details")
+			}
+			current := s.invitations[s.hashToken(prior.result.RawToken)]
+			if current == nil || current.Invitation.Status != "pending" || !current.Invitation.ExpiresAt.After(now) {
+				return CreateInvitationResult{}, errors.New("the imported invitation is no longer pending")
+			}
+			result := prior.result
+			result.Replayed = true
+			return result, nil
+		}
+	}
 	s.invitations[record.tokenHash] = record
-	s.mu.Unlock()
-	return CreateInvitationResult{Invitation: invitation, RawToken: rawToken}, nil
+	result := CreateInvitationResult{Invitation: invitation, RawToken: rawToken}
+	if input.SourceReference != "" {
+		s.imports[key] = memoryImport{input: input, result: result}
+	}
+	return result, nil
 }
 
 func (s *Store) Preview(rawToken string) (InvitationPreview, error) {
@@ -329,6 +364,9 @@ func (s *Store) InvitationTarget(rawToken string) (string, string, error) {
 }
 
 func (s *Store) Accept(ctx context.Context, rawToken, userID string, input AcceptInput) (Portal, error) {
+	if input.WorkspaceID != "" {
+		return Portal{}, errors.New("joining an existing business requires the persistent business database")
+	}
 	if err := ctx.Err(); err != nil {
 		return Portal{}, err
 	}

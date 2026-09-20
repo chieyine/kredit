@@ -42,36 +42,37 @@ func (r PlatformRole) Valid() bool {
 type Permission string
 
 const (
-	PermissionApproveChanges     Permission = "changes:approve"
-	PermissionAdminFinancial     Permission = "platform_financial:manage"
-	PermissionManageAccess       Permission = "platform_access:manage"
-	PermissionManagePolicies     Permission = "business_policy:manage"
-	PermissionReadOrganization   Permission = "organization:read"
-	PermissionManageOrganization Permission = "organization:manage"
-	PermissionInviteMembers      Permission = "members:invite"
-	PermissionManageMembers      Permission = "members:manage"
-	PermissionInviteBuyers       Permission = "buyers:invite"
-	PermissionReadConsumerSales  Permission = "consumer:read"
-	PermissionCreateCredit       Permission = "credit:create"
-	PermissionReleaseGoods       Permission = "goods:release"
-	PermissionReadAudit          Permission = "audit:read"
-	PermissionReadFinancial      Permission = "financial:read"
-	PermissionManageFinancial    Permission = "financial:manage"
-	PermissionManageDisputes     Permission = "disputes:manage"
-	PermissionSupportSearch      Permission = "support:search"
-	PermissionManageCases        Permission = "support:cases:manage"
-	PermissionReviewCompliance   Permission = "compliance:review"
-	PermissionReviewDisputes     Permission = "disputes:review"
-	PermissionProviderOperations Permission = "providers:operate"
-	PermissionOperateJobs        Permission = "operations:jobs"
-	PermissionOperateCollections Permission = "operations:collections"
-	PermissionSuspendAccounts    Permission = "operations:accounts"
-	PermissionBreakGlass         Permission = "platform:break_glass"
-	PermissionRecoverAccounts    Permission = "accounts:recover"
-	PermissionReviewPrivacy      Permission = "privacy:review"
-	PermissionManageRiskHold     Permission = "risk_hold:manage"
-	PermissionPlatformOwner      Permission = "platform_owner:manage"
-	PermissionPlatformSettings   Permission = "platform_settings:manage"
+	PermissionApproveBusinessCredit Permission = "credit:approve"
+	PermissionApproveChanges        Permission = "changes:approve"
+	PermissionAdminFinancial        Permission = "platform_financial:manage"
+	PermissionManageAccess          Permission = "platform_access:manage"
+	PermissionManagePolicies        Permission = "business_policy:manage"
+	PermissionReadOrganization      Permission = "organization:read"
+	PermissionManageOrganization    Permission = "organization:manage"
+	PermissionInviteMembers         Permission = "members:invite"
+	PermissionManageMembers         Permission = "members:manage"
+	PermissionInviteBuyers          Permission = "buyers:invite"
+	PermissionReadConsumerSales     Permission = "consumer:read"
+	PermissionCreateCredit          Permission = "credit:create"
+	PermissionReleaseGoods          Permission = "goods:release"
+	PermissionReadAudit             Permission = "audit:read"
+	PermissionReadFinancial         Permission = "financial:read"
+	PermissionManageFinancial       Permission = "financial:manage"
+	PermissionManageDisputes        Permission = "disputes:manage"
+	PermissionSupportSearch         Permission = "support:search"
+	PermissionManageCases           Permission = "support:cases:manage"
+	PermissionReviewCompliance      Permission = "compliance:review"
+	PermissionReviewDisputes        Permission = "disputes:review"
+	PermissionProviderOperations    Permission = "providers:operate"
+	PermissionOperateJobs           Permission = "operations:jobs"
+	PermissionOperateCollections    Permission = "operations:collections"
+	PermissionSuspendAccounts       Permission = "operations:accounts"
+	PermissionBreakGlass            Permission = "platform:break_glass"
+	PermissionRecoverAccounts       Permission = "accounts:recover"
+	PermissionReviewPrivacy         Permission = "privacy:review"
+	PermissionManageRiskHold        Permission = "risk_hold:manage"
+	PermissionPlatformOwner         Permission = "platform_owner:manage"
+	PermissionPlatformSettings      Permission = "platform_settings:manage"
 )
 
 func ParseRole(value string) (Role, error) {
@@ -139,6 +140,8 @@ func Can(role Role, permission Permission) bool {
 		return true
 	}
 	switch permission {
+	case PermissionApproveBusinessCredit:
+		return role == RoleAdministrator || role == RoleFinance
 	case PermissionReadOrganization:
 		return role.Valid()
 	case PermissionManageOrganization:
@@ -162,9 +165,17 @@ func Can(role Role, permission Permission) bool {
 	}
 }
 
+// RequiresStepUp names every permission whose use must be backed by recently
+// proved MFA, on either surface. The organisation gate consults it directly;
+// the platform gate requires freshness for any request that changes something,
+// so these entries describe the policy rather than drive it there.
 func RequiresStepUp(permission Permission) bool {
 	switch permission {
-	case PermissionManageOrganization, PermissionInviteMembers, PermissionManageMembers, PermissionInviteBuyers, PermissionCreateCredit, PermissionReleaseGoods, PermissionManageFinancial, PermissionManageDisputes, PermissionPlatformOwner, PermissionPlatformSettings:
+	case PermissionApproveBusinessCredit, PermissionManageOrganization, PermissionInviteMembers, PermissionManageMembers, PermissionInviteBuyers, PermissionCreateCredit, PermissionReleaseGoods, PermissionManageFinancial, PermissionManageDisputes:
+		return true
+	case PermissionPlatformOwner, PermissionPlatformSettings, PermissionBreakGlass, PermissionManageAccess,
+		PermissionSuspendAccounts, PermissionRecoverAccounts, PermissionAdminFinancial, PermissionApproveChanges,
+		PermissionManagePolicies, PermissionOperateCollections, PermissionManageRiskHold, PermissionReviewPrivacy:
 		return true
 	default:
 		return false

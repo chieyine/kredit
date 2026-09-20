@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"kredit/internal/db"
 	"kredit/internal/platform/logging"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -114,7 +115,7 @@ func sensitiveMetadataKey(key string) bool {
 func newID() string {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
-		return hex.EncodeToString([]byte(time.Now().String()))
+		panic("audit: system entropy unavailable: " + err.Error())
 	}
 	return hex.EncodeToString(value[:])
 }
@@ -191,7 +192,12 @@ func (s *PostgresStore) ReadForOrganization(ctx context.Context, org string) ([]
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, org); err != nil {
+	// The branch boundary policy on app.audit_events resolves the reader, not
+	// just the organisation. Setting the organisation alone leaves
+	// app.current_user_id() NULL, and every row is filtered out as soon as the
+	// business puts a single member on branch scoping.
+	identity, _ := db.TenantFromContext(ctx)
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true),set_config('app.current_user_id',$2,true)`, org, identity.UserID); err != nil {
 		return nil, err
 	}
 	rows, err := tx.Query(ctx, `SELECT id::text,occurred_at,COALESCE(actor_user_id::text,''),COALESCE(organization_id::text,''),action,COALESCE(resource_type,''),COALESCE(resource_id,''),outcome,COALESCE(request_id,''),severity,metadata FROM app.audit_events WHERE organization_id=$1::uuid ORDER BY occurred_at DESC,id DESC`, org)

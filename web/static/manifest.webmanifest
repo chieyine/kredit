@@ -3,13 +3,13 @@
   "name": "Kredit: sell on credit, get paid",
   "short_name": "Kredit",
   "description": "Write down who took your goods, how much they owe and when they are paying. Kredit reminds them, and shows you every payment.",
-  "start_url": "/app/overview?source=pwa",
+  "start_url": "/workspace/today?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "any",
-  "background_color": "#f5f2ea",
-  "theme_color": "#2738d6",
+  "background_color": "#f7f4ee",
+  "theme_color": "#0b0d12",
   "lang": "en-NG",
   "dir": "ltr",
   "categories": ["business", "finance", "productivity"],
@@ -20,8 +20,8 @@
     { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Seller account", "short_name": "Home", "url": "/app/overview?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Add a sale", "short_name": "Add sale", "url": "/app/credit/new?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Customer account", "short_name": "Customer", "url": "/buyer?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Business overview", "short_name": "Today", "url": "/workspace/today?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Add a sale", "short_name": "Add sale", "url": "/workspace/sales/new?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "My purchases", "short_name": "Purchases", "url": "/personal/purchases?source=pwa-shortcut", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
   ]
 }

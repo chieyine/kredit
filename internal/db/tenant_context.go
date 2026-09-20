@@ -38,3 +38,10 @@ func TenantFromContext(ctx context.Context) (TenantContext, bool) {
 	}
 	return identity, true
 }
+
+// WithOrganizationContext changes the selected business without discarding the
+// authenticated actor. Background callers retain an empty actor explicitly.
+func WithOrganizationContext(ctx context.Context, organizationID string) context.Context {
+	identity, _ := TenantFromContext(ctx)
+	return WithTenantContext(ctx, identity.UserID, organizationID)
+}

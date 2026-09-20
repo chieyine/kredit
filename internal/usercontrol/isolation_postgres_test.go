@@ -101,7 +101,9 @@ func TestRecoveryAndPrivacyThroughRestrictedLogin(t *testing.T) {
 	if _, err = s.PrivacyExport(ctx, privacy.ID, second); err == nil {
 		t.Fatal("another subject read private export")
 	}
-	if _,err=s.CreatePrivacyRequest(ctx,user,"","ACCESS","Pending synthetic review");err!=nil{t.Fatal(err)}
+	if _, err = s.CreatePrivacyRequest(ctx, user, "", "ACCESS", "Pending synthetic review"); err != nil {
+		t.Fatal(err)
+	}
 	if rows, err := s.ListPrivacyReview(db.WithTenantContext(ctx, second, "")); err != nil || len(rows) == 0 {
 		t.Fatalf("active reviewer cannot read: %v", err)
 	}

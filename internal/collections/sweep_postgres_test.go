@@ -116,7 +116,11 @@ func financialFixture(t *testing.T, terms ...*ledger.FeeTerms) collectionFixture
 	if err := pool.QueryRow(ctx, `INSERT INTO app.obligations(credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at) SELECT $1::uuid,$2::uuid,$3::uuid,buyer_business_id,principal_kobo,'NGN','ACTIVE','UNPAID',principal_kobo,50,$4::uuid,now() FROM app.credit_requests WHERE id=$1::uuid RETURNING id::text`, requestID, agreementID, organizationID, activationTransactionID).Scan(&obligationID); err != nil {
 		t.Fatal(err)
 	}
-	view := map[string]any{"request": map[string]any{"fee_terms": feeTerms, "id": requestID, "buyer_user_id": userID, "supplier_organization_id": organizationID, "version": 1}, "obligation": map[string]any{"id": obligationID, "credit_request_id": requestID, "supplier_organization_id": organizationID, "currency": "NGN", "outstanding_kobo": 50000000, "payment_status": "UNPAID"}}
+	var businessID string
+	if err := pool.QueryRow(ctx, `SELECT buyer_business_id::text FROM app.credit_requests WHERE id=$1::uuid`, requestID).Scan(&businessID); err != nil {
+		t.Fatal(err)
+	}
+	view := map[string]any{"request": map[string]any{"fee_terms": feeTerms, "id": requestID, "buyer_business_id": businessID, "buyer_user_id": userID, "supplier_organization_id": organizationID, "version": 1}, "obligation": map[string]any{"id": obligationID, "credit_request_id": requestID, "supplier_organization_id": organizationID, "currency": "NGN", "outstanding_kobo": 50000000, "payment_status": "UNPAID"}}
 	payload, _ := json.Marshal(view)
 	if _, err := pool.Exec(ctx, `INSERT INTO app.credit_aggregate_snapshots(credit_request_id,supplier_organization_id,buyer_user_id,aggregate,version) VALUES($1,$2,$3,$4,1)`, requestID, organizationID, userID, payload); err != nil {
 		t.Fatal(err)

@@ -43,6 +43,7 @@ type TradeLine struct {
 	SupplierOrganizationID string       `json:"supplier_organization_id"`
 	BuyerUserID            string       `json:"buyer_user_id"`
 	BuyerBusinessID        string       `json:"buyer_business_id"`
+	BuyerOrganizationID    string       `json:"buyer_organization_id,omitempty"`
 	ApprovedLimitKobo      ledger.Money `json:"approved_limit_kobo"`
 	CurrentExposureKobo    ledger.Money `json:"current_exposure_kobo"`
 	ReservedPendingKobo    ledger.Money `json:"reserved_pending_kobo"`
@@ -165,6 +166,7 @@ type Service interface {
 	Get(string) (TradeLine, bool)
 	ListForSupplier(string) []TradeLine
 	ListForBuyer(string) []TradeLine
+	ListForBuyerOrganization(string) []TradeLine
 	ReserveDrawdown(CreateDrawdownInput) (Drawdown, Reservation, TradeLine, error)
 	ConfirmDrawdown(string, string, string) (Drawdown, TradeLine, error)
 	ReleaseDrawdown(ReleaseInput) (Drawdown, TradeLine, error)
@@ -194,10 +196,17 @@ type Store struct {
 	maxDrawdownsPerLineDay int
 	maxActiveExposureKobo  ledger.Money
 	activationHandler      func(ActivationInput) (string, error)
+	isAuthorizedBuyer      func(businessID, userID, action string, amount ledger.Money) bool
 }
 
 func NewStore() *Store {
 	return &Store{lines: map[string]*TradeLine{}, drawdowns: map[string]*Drawdown{}, reservations: map[string]*Reservation{}, byKey: map[string]string{}, byLine: map[string][]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier}
+}
+
+func (s *Store) SetAuthorizedBuyerCheck(fn func(businessID, userID, action string, amount ledger.Money) bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.isAuthorizedBuyer = fn
 }
 
 func (s *Store) SetLineGuard(guard func(CreateLineInput) error) {
@@ -321,6 +330,18 @@ func (s *Store) ListForBuyer(buyerUserID string) []TradeLine {
 	return out
 }
 
+func (s *Store) ListForBuyerOrganization(org string) []TradeLine {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []TradeLine{}
+	for _, line := range s.lines {
+		if line.BuyerOrganizationID == org {
+			out = append(out, cloneLine(*line))
+		}
+	}
+	return out
+}
+
 func (s *Store) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Reservation, TradeLine, error) {
 	if err := input.FeeTerms.Validate(); err != nil {
 		return Drawdown{}, Reservation{}, TradeLine{}, err
@@ -426,7 +447,7 @@ func (s *Store) ConfirmDrawdown(drawdownID, buyerUserID, agreementHash string) (
 		return Drawdown{}, TradeLine{}, errors.New("drawdown not found")
 	}
 	line := s.lines[d.TradeLineID]
-	if line == nil || line.BuyerUserID != buyerUserID {
+	if line == nil || (line.BuyerUserID != buyerUserID && (s.isAuthorizedBuyer == nil || !s.isAuthorizedBuyer(line.BuyerBusinessID, buyerUserID, "drawdown", d.PrincipalKobo))) {
 		return Drawdown{}, TradeLine{}, errors.New("buyer mismatch")
 	}
 	// Replaying a confirmation is safe only for a drawdown that is still on the
@@ -506,7 +527,7 @@ func (s *Store) RecordDrawdownReceipt(input ReceiptInput) (Drawdown, TradeLine, 
 		return Drawdown{}, TradeLine{}, errors.New("drawdown not found")
 	}
 	line := s.lines[d.TradeLineID]
-	if line == nil || line.BuyerUserID != input.BuyerUserID {
+	if line == nil || (line.BuyerUserID != input.BuyerUserID && (s.isAuthorizedBuyer == nil || !s.isAuthorizedBuyer(line.BuyerBusinessID, input.BuyerUserID, "receive", 0))) {
 		return Drawdown{}, TradeLine{}, errors.New("buyer mismatch")
 	}
 	if input.State == "no_issue" && d.State == DrawdownActivated && d.ReceiptState == input.State && d.ReceiptActorID == input.BuyerUserID {

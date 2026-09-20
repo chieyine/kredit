@@ -26,7 +26,7 @@ test('malformed message history is an error rather than an empty list', async ({
   await context.addCookies([{ name: 'kredit_session', value: 'synthetic-history-session', url: baseURL! }]);
   await page.route('**/api/v1/me', route => route.fulfill({ json: { user: { id: 'history-user' } } }));
   await page.route('**/api/v1/me/notifications', route => route.fulfill({ json: {} }));
-  await page.goto('/buyer/notifications');
+  await page.goto('/account/messages');
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByText('No messages yet', { exact: true })).toHaveCount(0);
 });

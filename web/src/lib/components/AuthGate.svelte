@@ -19,7 +19,7 @@
       if (!request.current()) return;
       if (error instanceof RequestError && error.status === 401) {
         clearPrivateBrowserData();
-        location.replace(`/app?next=${encodeURIComponent(location.pathname + location.search)}`);
+        location.replace(`/signin?next=${encodeURIComponent(location.pathname + location.search)}`);
         return;
       }
       gateStatus = 'error';
@@ -45,5 +45,5 @@
   </main>
 {/if}
 <style>
-  .account-gate{min-height:100svh;box-sizing:border-box;padding:clamp(1.25rem,4vw,3rem);background:var(--color-background);color:var(--color-foreground)}.gate-brand{display:inline-flex;align-items:center;gap:.65rem;text-decoration:none;font-weight:750}.gate-brand span{display:grid;place-items:center;width:2rem;height:2rem;background:var(--color-primary);color:#fff}.account-gate section{max-width:34rem;margin:clamp(3rem,15vh,9rem) auto}.account-gate h1{font-family:inherit;font-size:clamp(1.8rem,4vw,2.5rem);line-height:1.2;letter-spacing:-.03em}.account-gate p{line-height:1.6;color:var(--color-muted)}.gate-actions{display:flex;gap:1rem;flex-wrap:wrap}.gate-actions button,.gate-actions a{display:inline-flex;align-items:center;justify-content:center;padding:.75rem 1rem;border:1px solid var(--color-border);border-radius:.4rem;font:inherit;text-decoration:none}.gate-actions button{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+  .account-gate{min-height:100svh;box-sizing:border-box;padding:clamp(1.25rem,4vw,3rem);background:var(--color-background);color:var(--color-foreground)}.gate-brand{display:inline-flex;align-items:center;gap:.65rem;text-decoration:none;font-weight:750}.gate-brand span{display:grid;place-items:center;width:2rem;height:2rem;background:var(--color-primary);color:var(--color-on-primary)}.account-gate section{max-width:34rem;margin:clamp(3rem,15vh,9rem) auto}.account-gate h1{font-family:inherit;font-size:clamp(1.8rem,4vw,2.5rem);line-height:1.2;letter-spacing:-.03em}.account-gate p{line-height:1.6;color:var(--color-muted)}.gate-actions{display:flex;gap:1rem;flex-wrap:wrap}.gate-actions button,.gate-actions a{display:inline-flex;align-items:center;justify-content:center;padding:.75rem 1rem;border:1px solid var(--color-border);border-radius:.4rem;font:inherit;text-decoration:none}.gate-actions button{background:var(--color-primary);color:var(--color-on-primary);border-color:var(--color-primary)}
 </style>

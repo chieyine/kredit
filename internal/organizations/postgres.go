@@ -214,26 +214,38 @@ func (s *PostgresStore) ReadForUser(ctx context.Context, userID string) ([]Organ
 	return result, nil
 }
 
+// Membership keeps the historical boolean shape for the Service interface.
+// New callers use ReadMembership, which can say why it failed.
 func (s *PostgresStore) Membership(organizationID, userID string) (Membership, bool) {
-	tx, err := s.beginTenantTx(userID, organizationID)
+	membership, err := s.ReadMembership(context.Background(), organizationID, userID)
+	return membership, err == nil
+}
+
+// ReadMembership is the authorization lookup. A database failure returns that
+// failure rather than an empty membership, so the caller can answer "we could
+// not check" instead of "you do not have access".
+func (s *PostgresStore) ReadMembership(ctx context.Context, organizationID, userID string) (Membership, error) {
+	tx, err := s.beginTenantTxContext(ctx, userID, organizationID)
 	if err != nil {
-		return Membership{}, false
+		return Membership{}, err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 	var membership Membership
-	err = tx.QueryRow(context.Background(), `
+	err = tx.QueryRow(ctx, `
 		SELECT id::text, organization_id::text, user_id::text, role, status,
 		       COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
 		       COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at
 		FROM app.memberships WHERE organization_id = $1 AND user_id = $2 AND status = 'active'`, organizationID, userID).Scan(membershipScanArgs(&membership)...)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Membership{}, false
+		return Membership{}, ErrMembershipNotFound
 	}
 	if err != nil {
-		return Membership{}, false
+		return Membership{}, err
 	}
-	_ = tx.Commit(context.Background())
-	return membership, true
+	if err = tx.Commit(ctx); err != nil {
+		return Membership{}, err
+	}
+	return membership, nil
 }
 
 func (s *PostgresStore) ListMembers(organizationID string) []Membership {

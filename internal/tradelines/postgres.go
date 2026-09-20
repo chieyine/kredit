@@ -111,6 +111,9 @@ func (s *PostgresStore) ListForSupplier(org string) []TradeLine {
 func (s *PostgresStore) ListForBuyer(user string) []TradeLine {
 	return s.list(`buyer_user_id=$1::uuid`, user)
 }
+func (s *PostgresStore) ListForBuyerOrganization(org string) []TradeLine {
+	return s.list(`buyer_organization_id=$1::uuid`, org)
+}
 func (s *PostgresStore) list(where, value string) []TradeLine {
 	rows, err := s.readList(where, value)
 	if err != nil {
@@ -158,6 +161,11 @@ func (s *PostgresStore) ConfirmDrawdown(drawdownID, buyer, agreementHash string)
 		return Drawdown{}, TradeLine{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	local.SetAuthorizedBuyerCheck(func(businessID, userID, action string, amount ledger.Money) bool {
+		var allowed bool
+		_ = tx.QueryRow(ctx, `SELECT app.can_purchase($1::uuid, $2, $3)`, businessID, action, int64(amount)).Scan(&allowed)
+		return allowed
+	})
 	drawdown, line, err := local.ConfirmDrawdown(drawdownID, buyer, agreementHash)
 	if err != nil {
 		return Drawdown{}, TradeLine{}, err
@@ -202,6 +210,11 @@ func (s *PostgresStore) RecordDrawdownReceipt(input ReceiptInput) (Drawdown, Tra
 		return Drawdown{}, TradeLine{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	local.SetAuthorizedBuyerCheck(func(businessID, userID, action string, amount ledger.Money) bool {
+		var allowed bool
+		_ = tx.QueryRow(ctx, `SELECT app.can_purchase($1::uuid, $2, $3)`, businessID, action, int64(amount)).Scan(&allowed)
+		return allowed
+	})
 	var finalize func()
 	s.mu.RLock()
 	transactionalHandler := s.transactionalActivationHandler
@@ -354,13 +367,13 @@ func (s *PostgresStore) loadForMutation(ctx context.Context, lineID, drawdownID 
 	return tx, local, lineID, nil
 }
 
-const lineSelect = `SELECT id::text,supplier_organization_id::text,buyer_user_id::text,buyer_business_id::text,approved_limit_kobo,current_exposure_kobo,reserved_pending_kobo,available_limit_kobo,cadence,default_grace_hours,start_at,end_at,state,COALESCE(mandate_id::text,''),mandate_active,COALESCE(suspension_reason,''),terms_version,created_at,updated_at,version FROM app.trade_lines`
+const lineSelect = `SELECT id::text,supplier_organization_id::text,buyer_user_id::text,buyer_business_id::text,approved_limit_kobo,current_exposure_kobo,reserved_pending_kobo,available_limit_kobo,cadence,default_grace_hours,start_at,end_at,state,COALESCE(mandate_id::text,''),mandate_active,COALESCE(suspension_reason,''),terms_version,created_at,updated_at,version,COALESCE(buyer_organization_id::text,'') FROM app.trade_lines`
 
 type scanner interface{ Scan(...any) error }
 
 func scanLine(row scanner) (TradeLine, error) {
 	var v TradeLine
-	err := row.Scan(&v.ID, &v.SupplierOrganizationID, &v.BuyerUserID, &v.BuyerBusinessID, &v.ApprovedLimitKobo, &v.CurrentExposureKobo, &v.ReservedPendingKobo, &v.AvailableLimitKobo, &v.Cadence, &v.DefaultGraceHours, &v.StartAt, &v.EndAt, &v.State, &v.MandateID, &v.MandateActive, &v.SuspensionReason, &v.TermsVersion, &v.CreatedAt, &v.UpdatedAt, &v.Version)
+	err := row.Scan(&v.ID, &v.SupplierOrganizationID, &v.BuyerUserID, &v.BuyerBusinessID, &v.ApprovedLimitKobo, &v.CurrentExposureKobo, &v.ReservedPendingKobo, &v.AvailableLimitKobo, &v.Cadence, &v.DefaultGraceHours, &v.StartAt, &v.EndAt, &v.State, &v.MandateID, &v.MandateActive, &v.SuspensionReason, &v.TermsVersion, &v.CreatedAt, &v.UpdatedAt, &v.Version, &v.BuyerOrganizationID)
 	return v, err
 }
 func loadAggregateTx(ctx context.Context, tx pgx.Tx, local *Store, lineID string, lock bool) error {
@@ -572,6 +585,10 @@ func (s *PostgresStore) ReadForSupplier(id string) ([]TradeLine, error) {
 
 func (s *PostgresStore) ReadForBuyer(id string) ([]TradeLine, error) {
 	return s.readList(`buyer_user_id=$1::uuid`, id)
+}
+
+func (s *PostgresStore) ReadForBuyerOrganization(id string) ([]TradeLine, error) {
+	return s.readList(`buyer_organization_id=$1::uuid`, id)
 }
 
 func feeTermsJSON(f *ledger.FeeTerms) []byte { b, _ := json.Marshal(f); return b }

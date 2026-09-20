@@ -1,6 +1,8 @@
 <script lang="ts">
+ import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+ import { workspaceHref } from '$lib/workspace-navigation';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import Money from '$lib/components/Money.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
@@ -66,6 +68,12 @@
 	let loading = $state(true), error = $state(''), records = $state<Row[]>([]);
 	let organizations = $state<Row[]>([]), organizationID = $state(''), query = $state(''), pageNumber = $state(1);
 	const pageSize = 20;
+	const scopedPrimaryHref = $derived.by(() => {
+		if (!primaryHref || !organizationPath || !organizationID || !primaryHref.startsWith('/')) return primaryHref;
+		const url = new URL(primaryHref, 'https://kredit.invalid');
+		url.searchParams.set('organization', organizationID);
+		return url.pathname + url.search + url.hash;
+	});
 
 	// Search reads the words this page actually shows. Matching a stringified
 	// record meant a search for "paid" hit any row whose internal id contained
@@ -96,7 +104,7 @@
 		async function read(url: string) {
 			try { return await checkedJSON<any>(url, value => value, { signal }); }
 			catch(cause) {
-				if(cause instanceof RequestError && cause.status === 401) location.assign(`/app?next=${encodeURIComponent(page.url.pathname + page.url.search)}`);
+				if(cause instanceof RequestError && cause.status === 401) location.assign(`/signin?next=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 				throw cause;
 			}
 		}
@@ -110,8 +118,7 @@
                   text(item.id); text(item.legal_name);
                   return item;
                 });
-				const requested = new URLSearchParams(location.search).get('organization');
-				organizationID = organizations.find((item) => item.id === requested)?.id ?? organizations[0]?.id ?? '';
+				organizationID = requestedWorkspace(organizations as {id:string}[]);
 			}
 			if (organizationPath && !organizationID) return;
 			const data = await read(organizationPath ? `/api/v1/organizations/${encodeURIComponent(organizationID)}${organizationPath}` : endpoint);
@@ -144,14 +151,14 @@
 			<h1>{title}</h1>
 			<p class="lede">{description}</p>
 		</div>
-		{#if primaryHref}<a class="primary" href={primaryHref}>{primaryLabel}</a>{/if}
+		{#if primaryHref}<a class="primary" href={scopedPrimaryHref}>{primaryLabel}</a>{/if}
 	</header>
 
 	{#if endpoint || organizationPath}
 		<div class="toolbar">
 			{#if organizations.length > 1}
 				<label>Business
-					<select bind:value={organizationID} onchange={() => refresh()}>
+					<select bind:value={organizationID} onchange={()=>chooseWorkspace(organizationID)}>
 						{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}
 					</select>
 				</label>
@@ -170,7 +177,7 @@
 		<ul class="records">
 			<!-- Several attempts or businesses can legitimately link to the same detail page. -->
 			{#each visible as record}
-				{@const href = rowHref(record, organizationID)}
+				{@const href = workspaceHref(rowHref(record, organizationID), page.url)}
 				{@const amount = rowAmount(record)}
 				<li>
 					<svelte:element this={href ? 'a' : 'div'} href={href || undefined} class="record">
@@ -197,7 +204,7 @@
 		<section class="empty">
 			<h2>{query ? 'Nothing matches that' : emptyTitle}</h2>
 			<p>{query ? 'Try a different name or word.' : emptyCopy}</p>
-			{#if primaryHref && !query}<a class="primary" href={primaryHref}>{primaryLabel}</a>{/if}
+			{#if primaryHref && !query}<a class="primary" href={scopedPrimaryHref}>{primaryLabel}</a>{/if}
 		</section>
 	{/if}
 </main>
@@ -224,7 +231,7 @@
 	.empty { margin-top: 1.5rem; padding: 2rem; border: 1px dashed var(--color-border); }
 	.empty h2 { margin: 0 0 .4rem; font-size: 1.15rem; }
 	.empty p { margin: 0 0 1rem; color: var(--color-muted); line-height: 1.6; }
-	.error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; padding: 1rem; border-left: 3px solid var(--color-destructive); background: #ffebe9; }
+	.error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; padding: 1rem; border-left: 3px solid var(--color-destructive); background:var(--color-background); }
 	.error p { margin: 0; line-height: 1.6; }
 	.error button { min-height: 2.75rem; padding: .55rem .9rem; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; }
 	@media (max-width: 640px) {

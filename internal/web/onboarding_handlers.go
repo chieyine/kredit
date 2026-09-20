@@ -403,13 +403,13 @@ func (s *Server) finishOnboardingChange(w http.ResponseWriter, r *http.Request, 
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: action, ResourceType: "supplier_onboarding", ResourceID: orgID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"readiness_state": sum.State}})
 	if s.runtime.Database == nil && (strings.Contains(action, "settlement") || strings.Contains(action, "billing")) {
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: action + ":" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierSensitiveSettingChanged", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: action, NextAction: "Review the change in supplier settings.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: action + ":" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierSensitiveSettingChanged", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: action, NextAction: "Review the change in supplier settings.", SecurePath: "/workspace/onboarding"})
 	}
 	if strings.Contains(action, "kyb") {
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/workspace/onboarding"})
 	}
 	if sum.Ready && p.ReadinessChangedAt.Equal(p.UpdatedAt) {
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/app/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/workspace/onboarding"})
 	}
 	writeJSON(w, 200, map[string]any{"profile": p, "readiness": sum})
 }
@@ -463,7 +463,7 @@ func (s *Server) requireSupplierReady(w http.ResponseWriter, organizationID, act
 	}
 	_, summary, err := s.runtime.Onboarding.Get(organizationID)
 	if err != nil {
-		writeProblem(w, http.StatusConflict, "supplier_onboarding_required", "Complete supplier onboarding before "+action+". Open /app/onboarding to continue.")
+		writeProblem(w, http.StatusConflict, "supplier_onboarding_required", "Complete supplier onboarding before "+action+". Open /workspace/onboarding to continue.")
 		return false
 	}
 	if summary.Ready {

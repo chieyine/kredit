@@ -53,4 +53,13 @@ done
 grep -qF 'Sitemap:' "$check_dir/robots.body"
 grep -qF '<urlset' "$check_dir/sitemap.body"
 
+if [[ -n "${API_URL:-}" ]]; then
+	api_status="$(curl --fail --silent --show-error --max-time 15 "$API_URL/api/v1/healthz" | grep -o '"status":"ok"' || true)"
+	if [[ "$api_status" != '"status":"ok"' ]]; then
+		printf 'API health check failed on %s\n' "$API_URL" >&2
+		exit 1
+	fi
+	printf 'API health check passed on %s.\n' "$API_URL"
+fi
+
 printf 'Post-deployment check passed for %s.\n' "$BASE_URL"

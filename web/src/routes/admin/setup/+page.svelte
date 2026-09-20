@@ -41,4 +41,4 @@
 <p><a href="/admin/settlement-review">Review business bank accounts</a></p>
 <a href="/admin/provider-work">Review pending provider work</a>
 {/if}</main>
-<style>main{padding-block:2rem}h1{font-size:2rem}h2{font-size:1.2rem}p{line-height:1.6}.tasks{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:1rem;margin-block:1.5rem}article,.service-status{padding:1.3rem;background:#fff;border:1px solid #d8dfd8;border-radius:.75rem}.service-status{margin-top:1rem}button{padding:.7rem 1rem;font:inherit}article strong{font-size:.9rem}article a{display:inline-block;margin-top:.5rem}</style>
+<style>main{padding-block:2rem}h1{font-size:2rem}h2{font-size:1.2rem}p{line-height:1.6}.tasks{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:1rem;margin-block:1.5rem}article,.service-status{padding:1.3rem;background:var(--color-surface);border:1px solid var(--color-border);border-radius:.75rem}.service-status{margin-top:1rem}button{padding:.7rem 1rem;font:inherit}article strong{font-size:.9rem}article a{display:inline-block;margin-top:.5rem}</style>

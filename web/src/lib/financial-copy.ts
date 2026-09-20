@@ -8,7 +8,7 @@ export function disputeEffectCopy(effect: string, amount?: KoboValue): string {
   return `Only the amount in question${amount == null ? '' : ` (${formatKobo(amount)})`} will be held once this report is saved. Undisputed amounts may still be collected. ${submittedDebitCaveat}`;
 }
 export function hostedAuthorizationURL(value: string, provider: string): string | null {
-  if (/^\/buyer\/bank-authorization\/[a-f0-9]{32}$/.test(value)) return value;
+  if (/^\/workspace\/purchases\/bank-authorization\/[a-f0-9]{32}$/.test(value)) return value;
   try {
     const url = new URL(value);
     const allowed = url.hostname === 'authorise.mono.co' || url.hostname === 'link.paystack.com' || url.hostname === 'checkout.paystack.com';

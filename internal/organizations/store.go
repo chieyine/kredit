@@ -192,6 +192,25 @@ func (s *Store) ListForUser(userID string) []Organization {
 	return result
 }
 
+// ErrMembershipNotFound means the person genuinely is not a member. Anything
+// else returned by ReadMembership is an infrastructure failure, and the caller
+// must not read it as a refusal: telling someone they have no access to their
+// own business because a query failed is a wrong answer, and recording it as
+// an authorization denial puts a decision in the audit trail that nobody made.
+var ErrMembershipNotFound = errors.New("membership not found")
+
+// ReadMembership separates "not a member" from "could not tell".
+func (s *Store) ReadMembership(ctx context.Context, organizationID, userID string) (Membership, error) {
+	if err := ctx.Err(); err != nil {
+		return Membership{}, err
+	}
+	membership, ok := s.Membership(organizationID, userID)
+	if !ok {
+		return Membership{}, ErrMembershipNotFound
+	}
+	return membership, nil
+}
+
 func (s *Store) Membership(organizationID, userID string) (Membership, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

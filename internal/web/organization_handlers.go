@@ -244,8 +244,12 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
 	}
-	membership, ok := s.runtime.Organizations.Membership(organizationID, user.ID)
-	if !ok || membership.Status != "active" || !access.Can(membership.Role, permission) {
+	membership, membershipErr := s.runtime.readMembership(r.Context(), organizationID, user.ID)
+	if membershipErr != nil && !errors.Is(membershipErr, organizations.ErrMembershipNotFound) {
+		writeProblem(w, http.StatusServiceUnavailable, "organization_unavailable", "Business access could not be checked")
+		return auth.Session{}, auth.User{}, organizations.Membership{}, false
+	}
+	if membershipErr != nil || membership.Status != "active" || !access.Can(membership.Role, permission) {
 		s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "authorization.organization_denied", ResourceType: "organization", ResourceID: organizationID, Outcome: "denied", Severity: "warning", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"permission": string(permission)}})
 		writeProblem(w, http.StatusForbidden, "organization_forbidden", "you do not have access to this organization")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
@@ -290,6 +294,17 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 		s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "authorization.step_up_required", ResourceType: "organization", ResourceID: organizationID, Outcome: "denied", Severity: "warning", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"permission": string(permission)}})
 		writeProblem(w, http.StatusForbidden, "step_up_required", "step-up authentication is required")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
+	}
+	if membership.Role != access.RoleOwner && membership.Role != access.RoleAdministrator && !branchScopedRoute(r.Pattern) {
+		all, err := s.hasCompanyWideAccess(r.Context(), user.ID, organizationID)
+		if err != nil {
+			writeProblem(w, 503, "branch_access_unavailable", "Your business access could not be verified.")
+			return auth.Session{}, auth.User{}, organizations.Membership{}, false
+		}
+		if !all {
+			writeProblem(w, 403, "company_wide_access_required", "This page requires company-wide access. Your branch access covers assigned business customers and their sales records.")
+			return auth.Session{}, auth.User{}, organizations.Membership{}, false
+		}
 	}
 	*r = *r.WithContext(db.WithTenantContext(r.Context(), user.ID, organizationID))
 	return session, user, membership, true

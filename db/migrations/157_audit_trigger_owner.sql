@@ -5,12 +5,14 @@
 -- These policies are usable only while a trigger is running as this exact
 -- function owner. Runtime roles neither own the function nor may create app
 -- triggers. No UPDATE/DELETE permission or runtime bypass is added.
+DROP POLICY IF EXISTS audit_activity_trigger_insert ON app.audit_events;
 CREATE POLICY audit_activity_trigger_insert ON app.audit_events FOR INSERT
 WITH CHECK (
- pg_trigger_depth()>0 AND current_user=pg_get_userbyid(
-   (SELECT proowner FROM pg_proc WHERE oid='app.record_domain_activity()'::regprocedure))
+  pg_trigger_depth()>0 AND current_user=pg_get_userbyid(
+    (SELECT proowner FROM pg_proc WHERE oid='app.record_domain_activity()'::regprocedure))
 );
 -- INSERT ... RETURNING also needs SELECT visibility for the inserted row.
+DROP POLICY IF EXISTS audit_activity_trigger_returning ON app.audit_events;
 CREATE POLICY audit_activity_trigger_returning ON app.audit_events FOR SELECT
 USING (
  pg_trigger_depth()>0 AND current_user=pg_get_userbyid(

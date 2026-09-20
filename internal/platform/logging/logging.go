@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -83,8 +84,19 @@ func sensitiveMetadataKey(key string) bool {
 	return false
 }
 
+// sqlStatePattern extracts the five-character SQLSTATE that PostgreSQL appends
+// to driver errors. The code and a constraint name identify what went wrong
+// without carrying any row data.
+var sqlStatePattern = regexp.MustCompile(`SQLSTATE ([0-9A-Za-z]{5})`)
+var constraintPattern = regexp.MustCompile(`constraint "([a-zA-Z0-9_]{1,63})"`)
+
 // SafeError preserves an error-shaped value for slog while removing internal
 // connection details, credentials and provider payload fragments.
+//
+// Suppressing the whole message when it mentions the driver used to mean every
+// database failure logged as "operation failed", which is the one thing an
+// on-call engineer cannot work with. SQLSTATE codes and constraint names are
+// schema facts, not customer data, so they are kept.
 func SafeError(err error) string {
 	if err == nil {
 		return ""
@@ -93,6 +105,12 @@ func SafeError(err error) string {
 	lower := strings.ToLower(detail)
 	for _, marker := range []string{"postgres", "pgx", "provider", "response body", "webhook body", "authorization", "cookie", "secret", "password", "token", "stack trace"} {
 		if strings.Contains(lower, marker) {
+			if state := sqlStatePattern.FindStringSubmatch(detail); state != nil {
+				if constraint := constraintPattern.FindStringSubmatch(detail); constraint != nil {
+					return "database error SQLSTATE " + state[1] + " on " + constraint[1]
+				}
+				return "database error SQLSTATE " + state[1]
+			}
 			return "operation failed"
 		}
 	}

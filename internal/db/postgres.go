@@ -75,9 +75,13 @@ func open(ctx context.Context, databaseURL, runtimeRole string) (*Pool, error) {
 	}
 	stmtTimeout := "30000"
 	if val := os.Getenv("DATABASE_STATEMENT_TIMEOUT_MS"); val != "" {
-		if _, err := strconv.Atoi(val); err == nil {
-			stmtTimeout = val
+		// PostgreSQL reads statement_timeout=0 as "no timeout", which removes
+		// the only bound on a runaway query holding a pool connection. A
+		// deployment that sets this to 0 almost certainly meant to unset it.
+		if n, err := strconv.Atoi(val); err != nil || n <= 0 {
+			return nil, errors.New("DATABASE_STATEMENT_TIMEOUT_MS must be a positive number of milliseconds")
 		}
+		stmtTimeout = val
 	}
 	setRuntimeDefault(config.ConnConfig.RuntimeParams, "statement_timeout", stmtTimeout)
 	setRuntimeDefault(config.ConnConfig.RuntimeParams, "lock_timeout", "5000")

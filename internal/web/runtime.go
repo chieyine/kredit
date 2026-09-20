@@ -262,7 +262,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	}
 	paystackAccounts := map[string]*paystack.Client{}
 	if database != nil && cfg.CollectionAdapter == "paystack" && cfg.CollectionProviderToken != "" {
-		client, err := paystack.New(cfg.CollectionProvider, cfg.CollectionProviderToken, strings.TrimRight(cfg.AppBaseURL, "/")+"/buyer/mandates", cfg.Environment == "production", paystackEmailLookup(database))
+		client, err := paystack.New(cfg.CollectionProvider, cfg.CollectionProviderToken, strings.TrimRight(cfg.AppBaseURL, "/")+"/workspace/purchases/mandates", cfg.Environment == "production", paystackEmailLookup(database))
 		if err != nil {
 			providerFailures = append(providerFailures, err.Error())
 		} else {
@@ -276,7 +276,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 				if account.Adapter != "paystack" || paystackAccounts[account.Name] != nil {
 					continue
 				}
-				client, createErr := paystack.New(account.Name, account.Token, strings.TrimRight(cfg.AppBaseURL, "/")+"/buyer/mandates", cfg.Environment == "production", paystackEmailLookup(database))
+				client, createErr := paystack.New(account.Name, account.Token, strings.TrimRight(cfg.AppBaseURL, "/")+"/workspace/purchases/mandates", cfg.Environment == "production", paystackEmailLookup(database))
 				if createErr != nil {
 					providerFailures = append(providerFailures, "saved Paystack account unavailable")
 				} else {
@@ -296,7 +296,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		case "flutterwave":
 			native, err = flutterwave.New(cfg.CollectionProvider, cfg.CollectionProviderToken, cfg.CollectionWebhookSecret, cfg.Environment == "production", store)
 		case "monnify":
-			native, err = monnify.New(cfg.CollectionProvider, cfg.CollectionAPIKey, cfg.CollectionProviderToken, cfg.CollectionContractCode, strings.TrimRight(cfg.AppBaseURL, "/")+"/buyer/mandates", cfg.Environment == "production", store)
+			native, err = monnify.New(cfg.CollectionProvider, cfg.CollectionAPIKey, cfg.CollectionProviderToken, cfg.CollectionContractCode, strings.TrimRight(cfg.AppBaseURL, "/")+"/workspace/purchases/mandates", cfg.Environment == "production", store)
 		}
 		if err != nil {
 			providerFailures = append(providerFailures, err.Error())
@@ -318,7 +318,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 				case "flutterwave":
 					client, createErr = flutterwave.New(account.Name, account.Token, account.WebhookSecret, cfg.Environment == "production", store)
 				case "monnify":
-					client, createErr = monnify.New(account.Name, account.APIKey, account.Token, account.ContractCode, strings.TrimRight(cfg.AppBaseURL, "/")+"/buyer/mandates", cfg.Environment == "production", store)
+					client, createErr = monnify.New(account.Name, account.APIKey, account.Token, account.ContractCode, strings.TrimRight(cfg.AppBaseURL, "/")+"/workspace/purchases/mandates", cfg.Environment == "production", store)
 				default:
 					continue
 				}

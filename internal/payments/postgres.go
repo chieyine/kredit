@@ -463,7 +463,7 @@ func (s *PostgresStore) RebuildContext(ctx context.Context, obligationID string)
 		return 0, err
 	}
 	var forgiven ledger.Money
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(p.credit_kobo-p.debit_kobo),0) FROM ledger.postings p JOIN ledger.accounts a ON a.id=p.account_id JOIN ledger.transactions t ON t.id=p.transaction_id WHERE a.code=$2 AND ((t.event_type='write_off' AND t.reference_type='obligation' AND t.reference_id=$1) OR (t.event_type='dispute_adjustment' AND t.reference_type='dispute' AND EXISTS(SELECT 1 FROM app.disputes d WHERE d.id::text=t.reference_id AND d.obligation_id=$1::uuid)))`, obligationID, ledger.AccountTradeReceivable).Scan(&forgiven); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(p.credit_kobo-p.debit_kobo),0) FROM ledger.postings p JOIN ledger.accounts a ON a.id=p.account_id JOIN ledger.transactions t ON t.id=p.transaction_id WHERE a.code=$2 AND ((t.event_type='write_off' AND t.reference_type='obligation' AND t.reference_id=$1) OR (t.event_type='dispute_adjustment' AND t.reference_type='dispute' AND EXISTS(SELECT 1 FROM app.disputes d WHERE d.id::text=t.reference_id AND d.obligation_id=$1::uuid)) OR (t.event_type='credit_note' AND t.reference_type='credit_note' AND EXISTS(SELECT 1 FROM app.order_credit_notes n WHERE n.id::text=t.reference_id AND n.obligation_id=$1::uuid AND n.status IN ('approved','applied'))))`, obligationID, ledger.AccountTradeReceivable).Scan(&forgiven); err != nil {
 		return 0, err
 	}
 	if paid < 0 || paid > principal || forgiven < 0 || forgiven > principal-paid {

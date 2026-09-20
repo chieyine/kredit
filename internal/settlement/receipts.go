@@ -202,7 +202,7 @@ func (s *ReceiptStore) Record(ctx context.Context, actor, org, attempt string, i
 	if _, err = tx.Exec(ctx, `INSERT INTO app.audit_events(actor_user_id,organization_id,action,resource_type,resource_id,outcome,severity,metadata) VALUES($1::uuid,$2::uuid,'seller.settlement.recorded','seller_settlement_receipt',$3,'success','high',$4::jsonb)`, actor, org, in.ID, meta); err != nil {
 		return v, err
 	}
-	notice := notifications.Event{ID: "seller-settlement:" + in.ID, Type: "SellerSettlementRecorded", OrganizationID: org, Priority: notifications.PriorityCritical, Reference: attempt, NextAction: "Open your bank settings to review the recorded seller payout or return.", SecurePath: "/app/settings/settlement"}
+	notice := notifications.Event{ID: "seller-settlement:" + in.ID, Type: "SellerSettlementRecorded", OrganizationID: org, Priority: notifications.PriorityCritical, Reference: attempt, NextAction: "Open your bank settings to review the recorded seller payout or return.", SecurePath: "/workspace/settings/settlement"}
 	payload, err := json.Marshal(map[string]any{"notification": notice})
 	if err != nil {
 		return v, err

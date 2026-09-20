@@ -24,5 +24,5 @@ try {
   if(width===390){await page.screenshot({path:'docs/launch-readiness/evidence/after-terms-mobile-closed.png'});await page.locator('.mobile-contents summary').click();await page.screenshot({path:'docs/launch-readiness/evidence/after-terms-mobile-open.png'});await page.locator('.mobile-contents a').last().click();assert.equal(await page.locator('.mobile-contents').getAttribute('open'),null)}
   console.log('PASS legal reflow and anchors',width);
  }
- await page.goto(base+'/admin/platform-settings');assert.match(page.url(),/\/app\?next=/);console.log('PASS protected guest redirect');
+ await page.goto(base+'/admin/platform-settings');assert.match(page.url(),/\/signin\?next=/);console.log('PASS protected guest redirect');
 } finally {await browser.close()}

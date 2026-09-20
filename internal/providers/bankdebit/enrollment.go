@@ -92,7 +92,7 @@ func (s *Store) Create(ctx context.Context, provider string, in mandates.Authori
 	if e = tx.Commit(ctx); e != nil {
 		return mandates.Mandate{}, e
 	}
-	return mandates.Mandate{Provider: provider, ProviderID: in.Reference, Reference: in.Reference, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, Variable: true, AuthorizationURL: "/buyer/bank-authorization/" + in.Reference}, nil
+	return mandates.Mandate{Provider: provider, ProviderID: in.Reference, Reference: in.Reference, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, Variable: true, AuthorizationURL: "/workspace/purchases/bank-authorization/" + in.Reference}, nil
 }
 func (s *Store) Load(ctx context.Context, provider, ref string) (Enrollment, error) {
 	var owner string

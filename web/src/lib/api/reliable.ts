@@ -109,9 +109,9 @@ export function clearPrivateBrowserData(): void {
   }
 }
 export function safeNext(value: string | null, origin: string): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || /[\\\x00-\x1f]/.test(value)) return '/app/overview';
-  try { const parsed = new URL(value, origin); return parsed.origin === origin && parsed.pathname !== '/app' ? parsed.pathname + parsed.search + parsed.hash : '/app/overview'; }
-  catch { return '/app/overview'; }
+  if (!value || !value.startsWith('/') || value.startsWith('//') || /[\\\x00-\x1f]/.test(value)) return '/start';
+  try { const parsed = new URL(value, origin); return parsed.origin === origin && parsed.pathname !== '/signin' ? parsed.pathname + parsed.search + parsed.hash : '/start'; }
+  catch { return '/start'; }
 }
 export function normalizeNigerianPhone(value: string): string {
   const compact = value.trim().replace(/[\s()-]/g, '');

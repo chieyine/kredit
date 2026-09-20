@@ -373,7 +373,7 @@ func (s *Store) RecordReceipt(ctx context.Context, org, actor, id string, in Rec
 	return v, tx.Commit(ctx)
 }
 func notify(ctx context.Context, tx pgx.Tx, org, id, kind string) error {
-	event := notifications.Event{ID: "billing:" + id, Type: kind, OrganizationID: org, Priority: notifications.PriorityCritical, Reference: id, NextAction: "Open Kredit fees to see your bill and payment record.", SecurePath: "/app/settings/billing"}
+	event := notifications.Event{ID: "billing:" + id, Type: kind, OrganizationID: org, Priority: notifications.PriorityCritical, Reference: id, NextAction: "Open Kredit fees to see your bill and payment record.", SecurePath: "/workspace/settings/billing"}
 	raw, err := json.Marshal(map[string]any{"notification": event})
 	if err != nil {
 		return err

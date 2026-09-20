@@ -3,13 +3,16 @@ package web
 import (
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"kredit/internal/access"
 	"kredit/internal/buyers"
 	"kredit/internal/db"
+	"kredit/internal/disputes"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
+	"kredit/internal/tradelines"
 )
 
 func (s *Server) listOrganizationPayments(w http.ResponseWriter, r *http.Request) {
@@ -173,10 +176,17 @@ func (s *Server) listBuyerMandates(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	businessID, scopedOK := s.buyerOwnerWorkspaceScope(w, r, user.ID)
+	if !scopedOK {
+		return
+	}
 	if reader, ok := s.runtime.Mandates.(mandates.BuyerReader); ok {
 		items, err := reader.ReadForBuyer(r.Context(), user.ID)
 		if financialReadError(w, err) {
 			return
+		}
+		if businessID != "" {
+			items = purchasingRows(items, func(item mandates.Mandate) bool { return item.BusinessID == businessID })
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"mandates": items})
 		return
@@ -188,7 +198,7 @@ func (s *Server) listBuyerMandates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, view := range financialRows7 {
-		if view.Mandate != nil && !seen[view.Mandate.ID] {
+		if (businessID == "" || view.Request.BuyerBusinessID == businessID) && view.Mandate != nil && !seen[view.Mandate.ID] {
 			seen[view.Mandate.ID] = true
 			items = append(items, *view.Mandate)
 		}
@@ -201,9 +211,23 @@ func (s *Server) listBuyerTradeLines(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	financialRows8, readErr8 := s.runtime.readTradeLinesForBuyer(r.Context(), user.ID)
+	businessID, scopedOK := s.buyerOwnerWorkspaceScope(w, r, user.ID)
+	if !scopedOK {
+		return
+	}
+	workspaceID := strings.TrimSpace(r.URL.Query().Get("organization"))
+	var financialRows8 []tradelines.TradeLine
+	var readErr8 error
+	if workspaceID != "" {
+		financialRows8, readErr8 = s.runtime.readTradeLinesForBuyerOrganization(r.Context(), workspaceID)
+	} else {
+		financialRows8, readErr8 = s.runtime.readTradeLinesForBuyer(r.Context(), user.ID)
+	}
 	if financialReadError(w, readErr8) {
 		return
+	}
+	if businessID != "" {
+		financialRows8 = purchasingRows(financialRows8, func(item tradelines.TradeLine) bool { return item.BuyerBusinessID == businessID })
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"trade_lines": financialRows8})
 }
@@ -213,9 +237,20 @@ func (s *Server) listBuyerDisputes(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	businessID, scopedOK := s.buyerOwnerWorkspaceScope(w, r, user.ID)
+	if !scopedOK {
+		return
+	}
+	obligations, scopedOK := s.buyerWorkspaceObligations(w, r, user.ID, businessID)
+	if !scopedOK {
+		return
+	}
 	financialRows9, readErr9 := s.runtime.readDisputesForBuyer(r.Context(), user.ID)
 	if financialReadError(w, readErr9) {
 		return
+	}
+	if businessID != "" {
+		financialRows9 = purchasingRows(financialRows9, func(item disputes.Dispute) bool { return obligations[item.ObligationID] })
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"disputes": financialRows9})
 }

@@ -14,6 +14,7 @@ import (
 )
 
 type buyerInvitationRequest struct {
+	SourceReference string `json:"source_reference"`
 	Target          string `json:"target"`
 	TargetType      string `json:"target_type"`
 	LegalName       string `json:"legal_name"`
@@ -24,6 +25,7 @@ type buyerInvitationRequest struct {
 }
 
 type buyerInvitationAcceptRequest struct {
+	WorkspaceID           string `json:"workspace_id"`
 	ConsentsAccepted      bool   `json:"consents_accepted"`
 	TermsVersion          string `json:"terms_version"`
 	PrivacyVersion        string `json:"privacy_version"`
@@ -57,7 +59,7 @@ func (s *Server) createBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	result, err := s.runtime.Buyers.CreateInvitation(user.ID, organizationID, buyers.CreateInvitationInput{Target: input.Target, TargetType: strings.ToLower(input.TargetType), LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
+	result, err := s.runtime.Buyers.CreateInvitation(user.ID, organizationID, buyers.CreateInvitationInput{SourceReference: input.SourceReference, Target: input.Target, TargetType: strings.ToLower(input.TargetType), LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
 	if err != nil {
 		writeProblem(w, http.StatusUnprocessableEntity, "buyer_invitation_invalid", err.Error())
 		return
@@ -65,7 +67,9 @@ func (s *Server) createBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "buyer.invitation.created", ResourceType: "buyer_invitation", ResourceID: result.Invitation.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"target_type": result.Invitation.TargetType}})
 	invitationURL := strings.TrimRight(s.config.PublicBaseURL, "/") + "/buyer-invitations/" + result.RawToken
 	deliveryState := "sent"
-	if err := s.runtime.Notifications.SendInvitation(r.Context(), input.Target, strings.ToLower(input.TargetType), invitationURL); err != nil {
+	if result.Replayed {
+		deliveryState = "existing_invitation"
+	} else if err := s.runtime.Notifications.SendInvitation(r.Context(), input.Target, strings.ToLower(input.TargetType), invitationURL); err != nil {
 		deliveryState = "manual_handoff_required"
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"invitation": result.Invitation, "invitation_url": invitationURL, "delivery_state": deliveryState})
@@ -141,7 +145,7 @@ func (s *Server) acceptBuyerInvitation(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusUnauthorized, "otp_invalid", err.Error())
 		return
 	}
-	portal, err := s.runtime.Buyers.Accept(r.Context(), token, user.ID, buyers.AcceptInput{ConsentsAccepted: input.ConsentsAccepted, TermsVersion: input.TermsVersion, PrivacyVersion: input.PrivacyVersion, IdentityNoticeVersion: input.IdentityNoticeVersion, FullName: input.FullName, LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
+	portal, err := s.runtime.Buyers.Accept(r.Context(), token, user.ID, buyers.AcceptInput{WorkspaceID: input.WorkspaceID, ConsentsAccepted: input.ConsentsAccepted, TermsVersion: input.TermsVersion, PrivacyVersion: input.PrivacyVersion, IdentityNoticeVersion: input.IdentityNoticeVersion, FullName: input.FullName, LegalName: input.LegalName, TradingName: input.TradingName, BusinessType: input.BusinessType, BusinessAddress: input.BusinessAddress, Industry: input.Industry})
 	if err != nil {
 		_ = s.runtime.Auth.RevokeSession(rawSessionToken)
 		writeProblem(w, http.StatusUnprocessableEntity, "buyer_onboarding_failed", err.Error())
@@ -184,4 +188,35 @@ func (s *Server) refreshBuyerVerification(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, 200, map[string]any{"portal": portal, "verification_current": buyers.VerificationCurrent(portal, time.Now())})
+}
+
+func (s *Server) listBuyerBusinesses(w http.ResponseWriter, r *http.Request) {
+	_, user, ok := s.requireAuth(w, r)
+	if !ok {
+		return
+	}
+	items, err := s.runtime.Buyers.ListBusinessProfiles(r.Context(), user.ID)
+	if err != nil {
+		writeProblem(w, 503, "businesses_unavailable", "Your purchasing businesses could not be loaded.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"businesses": items})
+}
+
+func (s *Server) distributorInvitationPipeline(w http.ResponseWriter, r *http.Request) {
+	org, err := pathID(r, "organizationID")
+	if err != nil {
+		writeProblem(w, 400, "invalid_business", err.Error())
+		return
+	}
+	_, user, _, ok := s.requireOrganizationAccess(w, r, org, access.PermissionReadOrganization)
+	if !ok {
+		return
+	}
+	items, err := s.runtime.Buyers.InvitationPipeline(r.Context(), user.ID, org)
+	if err != nil {
+		writeProblem(w, 503, "invitations_unavailable", "Your distributor invitations could not be loaded.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"invitations": items})
 }

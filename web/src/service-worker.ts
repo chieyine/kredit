@@ -25,7 +25,7 @@ self.addEventListener('fetch', (event) => {
 	// Financial, identity, obligation, payment, invitation, document, and admin responses
 	// must NEVER be cached or replayed while offline to prevent stale state,
 	// unauthorized offline actions, or shared-device data leakage.
-	const privatePrefixes = ['/api/', '/app/', '/buyer/', '/pay/', '/c/', '/receipt/', '/admin/', '/buyer-invitations/', '/secure/', '/recover/'];
+	const privatePrefixes = ['/account', '/start', '/api/', '/signin', '/workspace', '/personal', '/pay/', '/c/', '/receipt/', '/admin/', '/buyer-invitations/', '/secure/', '/recover/'];
 	if (privatePrefixes.some((prefix) => url.pathname.startsWith(prefix))) return;
 	if (request.destination === 'document') return;
 	if (!staticAssets.has(url.pathname)) return;

@@ -40,3 +40,20 @@ func LockPlatformAuthority(ctx context.Context, tx pgx.Tx, actor string, permiss
 	}
 	return nil
 }
+
+// LockOrganizationAuthority keeps a supplier command ordered against membership
+// revocation and account/business suspension through its financial commit.
+func LockOrganizationAuthority(ctx context.Context, tx pgx.Tx, actor, organization string, permission Permission) error {
+	var role Role
+	err := tx.QueryRow(ctx, `SELECT m.role FROM app.memberships m JOIN app.users u ON u.id=m.user_id JOIN app.organizations o ON o.id=m.organization_id WHERE m.organization_id=$1::uuid AND m.user_id=$2::uuid AND m.status='active' AND u.status='active' AND o.status<>'suspended' FOR SHARE OF m,u,o`, organization, actor).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("current business authority is required")
+	}
+	if err != nil {
+		return err
+	}
+	if !Can(role, permission) {
+		return errors.New("current business permission is required")
+	}
+	return nil
+}

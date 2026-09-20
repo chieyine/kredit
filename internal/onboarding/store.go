@@ -408,16 +408,16 @@ func summarize(p Profile, now time.Time, selected ...legalpublication.Versions) 
 	}
 	kybApproved := p.KYBState == "approved" && (p.KYBExpiresAt.IsZero() || now.Before(p.KYBExpiresAt))
 	reqs := []Requirement{
-		{Code: "business_identity", Label: "Business identity and authorised representative", Complete: p.AuthorizedRepresentativeName != "" && p.AuthorizedRepresentativeTitle != "", ManagePath: "/app/onboarding"},
-		{Code: "email_verified", Label: "Owner email verified", Complete: !p.OwnerEmailVerifiedAt.IsZero(), ManagePath: "/app/onboarding"},
-		{Code: "phone_verified", Label: "Owner phone verified", Complete: !p.OwnerPhoneVerifiedAt.IsZero(), ManagePath: "/app/onboarding"},
-		{Code: "kyb_approved", Label: "Business verification approved", Complete: kybApproved, ManagePath: "/app/onboarding"},
-		{Code: "settlement_verified", Label: "Settlement destination verified", Complete: p.SettlementState == "verified" && (p.KYBReasonCode != "owner_identity_approved" || identity.NamesMatch(p.AuthorizedRepresentativeName, p.SettlementAccountName)), ManagePath: "/app/settings/settlement"},
-		{Code: "billing_configured", Label: "Billing method configured", Complete: p.BillingState == "configured", ManagePath: "/app/settings/billing"},
-		{Code: "credit_policy", Label: "Default credit policy configured", Complete: !p.DefaultCreditPolicyUpdatedAt.IsZero(), ManagePath: "/app/settings/credit-policy"},
-		{Code: "current_consents", Label: "Current terms and privacy accepted", Complete: p.TermsVersion == versions.Terms && p.PrivacyVersion == versions.Privacy, ManagePath: "/app/onboarding"},
-		{Code: "owner_mfa", Label: "Owner MFA active", Complete: !p.OwnerMFAVerifiedAt.IsZero(), ManagePath: "/app/settings/security"},
-		{Code: "finance_mfa", Label: "Every active finance user has MFA", Complete: p.FinanceMFAComplete, ManagePath: "/app/team"},
+		{Code: "business_identity", Label: "Business identity and authorised representative", Complete: p.AuthorizedRepresentativeName != "" && p.AuthorizedRepresentativeTitle != "", ManagePath: "/workspace/onboarding"},
+		{Code: "email_verified", Label: "Owner email verified", Complete: !p.OwnerEmailVerifiedAt.IsZero(), ManagePath: "/workspace/onboarding"},
+		{Code: "phone_verified", Label: "Owner phone verified", Complete: !p.OwnerPhoneVerifiedAt.IsZero(), ManagePath: "/workspace/onboarding"},
+		{Code: "kyb_approved", Label: "Business verification approved", Complete: kybApproved, ManagePath: "/workspace/onboarding"},
+		{Code: "settlement_verified", Label: "Settlement destination verified", Complete: p.SettlementState == "verified" && (p.KYBReasonCode != "owner_identity_approved" || identity.NamesMatch(p.AuthorizedRepresentativeName, p.SettlementAccountName)), ManagePath: "/workspace/settings/settlement"},
+		{Code: "billing_configured", Label: "Billing method configured", Complete: p.BillingState == "configured", ManagePath: "/workspace/settings/billing"},
+		{Code: "credit_policy", Label: "Default credit policy configured", Complete: !p.DefaultCreditPolicyUpdatedAt.IsZero(), ManagePath: "/workspace/settings/credit-policy"},
+		{Code: "current_consents", Label: "Current terms and privacy accepted", Complete: p.TermsVersion == versions.Terms && p.PrivacyVersion == versions.Privacy, ManagePath: "/workspace/onboarding"},
+		{Code: "owner_mfa", Label: "Owner MFA active", Complete: !p.OwnerMFAVerifiedAt.IsZero(), ManagePath: "/account/security"},
+		{Code: "finance_mfa", Label: "Every active finance user has MFA", Complete: p.FinanceMFAComplete, ManagePath: "/workspace/team"},
 	}
 	missing := []Requirement{}
 	for _, r := range reqs {

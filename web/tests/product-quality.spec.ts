@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 const publicRoutes = [
-	'/', '/demo', '/how-it-works', '/for-suppliers', '/for-buyers', '/pricing', '/security',
+	'/', '/demo', '/how-it-works', '/manufacturers', '/distributors', '/pricing', '/security',
 	'/faq', '/glossary', '/blog', '/legal/complaints'
 ];
 
@@ -12,31 +12,30 @@ test('public navigation is clear, complete and closes after a mobile choice', as
 	const menu = page.locator('.site-menu-disclosure');
 	await menu.locator('summary').click();
 	await expect(menu).toHaveAttribute('open', '');
-	await menu.getByRole('link', { name: 'For sellers' }).click();
-	await expect(page).toHaveURL(/\/for-suppliers$/);
+	await menu.getByRole('link', { name: 'For business' }).click();
+	await expect(page).toHaveURL(/\/manufacturers$/);
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	await expect(page.locator('.site-menu-disclosure')).not.toHaveAttribute('open', '');
 	const footer = page.locator('footer.site-footer');
-	await expect(footer.getByRole('link', { name: 'For customers' })).toBeVisible();
-	await expect(footer.getByRole('link', { name: 'How we keep it safe' })).toBeVisible();
+	await expect(footer.getByRole('link', { name: 'Consumers' })).toBeVisible();
+	await expect(footer.getByRole('link', { name: 'Account safety' })).toBeVisible();
 });
 
-test('homepage distinguishes sample records and explains confirmed payments', async ({ page }) => {
+test('homepage explains both sides of trade and the full business-to-consumer network',async({page})=>{
  await page.goto('/');
- await expect(page.locator('.hero-product')).toContainText('Example sale');
- await expect(page.locator('.hero-product')).toContainText('not a real account');
- await expect(page.locator('.hero-product [aria-hidden="true"] a')).toHaveCount(0);
- await page.getByRole('tab', { name: /The money/ }).click();
- await expect(page.getByRole('tabpanel')).toContainText('Confirmed payments reduce the balance');
- await expect(page.getByRole('tabpanel').getByRole('link', { name: /Explore the payment record/ })).toHaveAttribute('href', '/demo');
+ await expect(page.getByLabel('How your workspace is organised')).toContainText('What customers owe you');
+ await expect(page.getByLabel('How your workspace is organised')).toContainText('What you owe suppliers');
+ await expect(page.getByLabel('From manufacturer to consumer')).toContainText('Manufacturers');
+ await expect(page.getByLabel('From manufacturer to consumer')).toContainText('Consumers');
+ await expect(page.getByText('Separate balances. Clear responsibilities.')).toBeVisible();
 });
 
 test('both sale-creation entry points preserve authentication and the intended destination', async ({ request }) => {
- for (const path of ['/app/credit/quick?customer=u1&goods=Rice&amount=100000','/app/credit/new?advanced=1']) {
+ for (const path of ['/workspace/sales/quick?customer=u1&goods=Rice&amount=100000','/workspace/sales/new?advanced=1']) {
   const response=await request.get(path,{maxRedirects:0});
   expect(response.status()).toBe(303);
   const location=new URL(response.headers().location,'http://127.0.0.1:5173');
-  expect(location.pathname).toBe('/app');
+  expect(location.pathname).toBe('/signin');
   expect(location.searchParams.get('next')).toBe(path);
   expect(response.headers()['cache-control']).toContain('no-store');
  }
@@ -85,7 +84,7 @@ test('responsive public pages avoid horizontal overflow and serious accessibilit
 
 test('index boundaries, error recovery, sitemap and install assets are safe and complete', async ({ page, request }) => {
 	// Account areas are never indexable, whatever else is true.
-	for (const path of ['/app/overview', '/buyer', '/admin', '/recover']) {
+	for (const path of ['/workspace/today', '/workspace/purchases', '/admin', '/recover']) {
 		const response = await page.goto(path);
 		await expect(page.locator('meta[name="robots"]'), path).toHaveAttribute('content', 'noindex,nofollow');
 		expect(response?.headers()['cache-control'], path).toContain('no-store');
@@ -111,9 +110,9 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 
 	const sitemap = await (await request.get('/sitemap.xml')).text();
 	for (const path of publicRoutes) expect(sitemap, `sitemap ${path}`).toContain(`<loc>https://kredit.ng${path}</loc>`);
-	for (const path of ['/app/', '/buyer/', '/admin/', '/recover']) expect(sitemap).not.toContain(`<loc>https://kredit.ng${path}`);
+	for (const path of ['/signin/', '/workspace/purchases/', '/admin/', '/recover']) expect(sitemap).not.toContain(`<loc>https://kredit.ng${path}`);
 	const robots = await (await request.get('/robots.txt')).text();
-	for (const path of ['/app', '/buyer', '/admin', '/recover']) expect(robots).toContain(`Disallow: ${path}`);
+	for (const path of ['/signin', '/workspace/purchases', '/admin', '/recover']) expect(robots).toContain(`Disallow: ${path}`);
 	// The third place publication state shows up. A legal document that robots.txt
 	// shuts out must not be advertised in the sitemap, and one that is published
 	// must be — the meta tag, robots.txt and the sitemap are one decision, and a

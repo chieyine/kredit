@@ -39,7 +39,7 @@ test('a failed financial read never displays an empty successful payment history
  await page.route('**/api/v1/organizations',route=>route.fulfill({json:{organizations:[{id:'org',legal_name:'Test Supplier'}]}}));
  await page.route('**/api/v1/organizations/org/payments',route=>route.fulfill({status:503,json:{detail:'Financial data unavailable'}}));
  await page.route('**/api/v1/organizations/org/payment-claims',route=>route.fulfill({json:{payment_claims:[]}}));
- await page.goto('/app/payments');
+ await page.goto('/workspace/money/received');
  await expect(page.getByText('We could not open your payments.')).toBeVisible();
  await expect(page.getByText('No payment has arrived yet.')).toHaveCount(0);
 });

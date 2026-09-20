@@ -220,3 +220,25 @@ func TestHistoryDoesNotReplaceScheduleOutageWithOriginalDueDate(t *testing.T) {
 		t.Fatalf("schedule outage became a usable report: %v", err)
 	}
 }
+
+func TestBusinessReportsDoNotCombineTwoBusinessesOwnedByOnePerson(t *testing.T) {
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	views := []credit.View{}
+	for i, id := range []string{"business-a", "business-b"} {
+		amount := ledger.Money((i + 1) * 1000)
+		views = append(views, credit.View{Request: credit.CreditRequest{ID: "request-" + id, SupplierOrganizationID: "supplier", BuyerUserID: "same-owner", BuyerBusinessID: id, BuyerLegalName: id, DueDate: "2026-10-01"}, Obligation: &credit.Obligation{ID: "debt-" + id, CreditRequestID: "request-" + id, BuyerBusinessID: id, PrincipalKobo: amount, OutstandingKobo: amount, PaymentStatus: "UNPAID", ActivatedAt: now}})
+	}
+	store := NewStore(Source{BuyerViews: func(string) []credit.View { return views }, SupplierViews: func(string) []credit.View { return views }, Now: func() time.Time { return now }})
+	buyer, err := store.HistoryForBuyerBusiness(context.Background(), "same-owner", "business-a")
+	if err != nil || buyer.CurrentActivePrincipalKobo != 1000 || len(buyer.Obligations) != 1 {
+		t.Fatalf("mixed buyer history: %#v %v", buyer, err)
+	}
+	supplier, err := store.HistoryForSupplierBusiness(context.Background(), "supplier", "same-owner", "business-b")
+	if err != nil || supplier.CurrentActivePrincipalKobo != 2000 || len(supplier.Obligations) != 1 {
+		t.Fatalf("mixed customer history: %#v %v", supplier, err)
+	}
+	statement, err := store.CustomerBusinessStatement(context.Background(), "supplier", "same-owner", "business-a")
+	if err != nil || len(statement.Rows) != 1 || statement.Rows[0].BuyerBusinessID != "business-a" {
+		t.Fatalf("mixed customer statement: %#v %v", statement, err)
+	}
+}

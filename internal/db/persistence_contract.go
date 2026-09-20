@@ -14,6 +14,7 @@ import (
 // checking only the ledger and job tables; a migrated-but-partial database
 // must never be reported as ready.
 var RequiredPersistenceObjects = []string{
+	"app.member_branch_scopes", "app.member_branch_scope_history",
 	"app.bank_debit_enrollments",
 	"app.fee_authorizations", "app.fee_debits", "app.fee_bank_receipts",
 	"app.dsa_program", "app.dsa_agents", "app.dsa_referrals", "app.dsa_earnings", "app.dsa_payouts", "app.consumer_sales", "app.consumer_events", "app.consumer_settings", "app.consumer_restrictions", "app.split_fee_allocations", "app.native_identity_history",
@@ -78,6 +79,8 @@ var RequiredPersistenceObjects = []string{
 	"app.dispute_evidence",
 	"app.dispute_decisions",
 	"app.operation_actions",
+	"app.operations_commands",
+	"app.order_credit_notes",
 	"app.notification_templates",
 	"app.notification_preferences",
 	"app.notifications",
@@ -106,6 +109,7 @@ var RequiredPersistenceObjects = []string{
 // PostgreSQL authentication adapter. A complete table set without these
 // functions would still fail at runtime.
 var RequiredPersistenceFunctions = []string{
+	"app.ensure_business_workspace(uuid)",
 	"app.isolation_operations_counts()", "app.dispute_reference_lookup(text)", "app.notification_recovery_subject(uuid)",
 	"app.recovery_subject(uuid)",
 	"app.notification_due_work(integer)",
@@ -221,8 +225,13 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	if err := p.inner.QueryRow(ctx, `SELECT COALESCE(MAX(version_id),0) FROM (SELECT DISTINCT ON(version_id) version_id,is_applied FROM public.goose_db_version ORDER BY version_id,id DESC) v WHERE is_applied`).Scan(&version); err != nil {
 		return fmt.Errorf("check required migration version: %w", err)
 	}
-	if version < 164 {
-		return fmt.Errorf("database migrations are incomplete: version %d, require at least 164", version)
+	// Keep this in step with the highest migration in db/migrations. A floor
+	// that lags lets a partially migrated database pass startup and serve
+	// traffic: at 167 it was 32 versions behind, which included the branch
+	// row-level security added in 189.
+	const requiredMigration = 200
+	if version < requiredMigration {
+		return fmt.Errorf("database migrations are incomplete: version %d, require at least %d", version, requiredMigration)
 	}
 	return nil
 }

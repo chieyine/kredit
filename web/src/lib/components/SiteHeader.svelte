@@ -3,8 +3,8 @@
 
 	const links = [
 		['How it works', '/how-it-works'],
-		['For sellers', '/for-suppliers'],
-		['For customers', '/for-buyers'],
+		['For business', '/manufacturers'],
+		['For consumers', '/consumers'],
 		['Pricing', '/pricing']
 	];
 	let menu: HTMLDetailsElement;
@@ -21,8 +21,8 @@
 			{/each}
 		</div>
 		<div class="nav-actions">
-			<a href="/app" onclick={closeMobileMenu}>Sign in</a>
-			<a class="header-cta" href="/demo" onclick={closeMobileMenu}>Try it free <span aria-hidden="true">↗</span></a>
+			<a href="/start" onclick={closeMobileMenu}>Open Kredit</a>
+			<a class="header-cta" href="/demo" onclick={closeMobileMenu}>Explore the demo <span aria-hidden="true">↗</span></a>
 		</div>
 	</div>
 {/snippet}

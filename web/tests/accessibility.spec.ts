@@ -13,12 +13,13 @@ async function mockAPI(page: Page) {
 		let body: unknown = {};
 		let status = 200;
 		if (path === '/api/v1/me' && route.request().method() === 'GET') {
-			if (new URL(page.url()).pathname === '/app') status = 401;
+			if (new URL(page.url()).pathname === '/signin') status = 401;
 			else body = { user: { id: 'user-a11y', status: 'active', created_at: '2026-01-01T00:00:00Z' }, session: { id: 'session-a11y', user_id: 'user-a11y', authentication_level: 'AAL1', created_at: '2026-01-01T00:00:00Z', expires_at: '2027-01-01T00:00:00Z' }, mfa_enrolled: false, organizations: [organization] };
 		}
 		else if (path === '/api/v1/platform/capabilities') body = { features: { trade_lines: true, drawdowns: true } };
+		else if (path === '/api/v1/buyer/businesses') body={businesses:[{id:'business-a11y',workspace_id:'buyer-workspace',legal_name:'Inclusive Retail Limited'}]};
 		else if (path === '/api/v1/organizations') body = { organizations: [organization] };
-		else if (path.endsWith('/onboarding')) body = { profile: { version: 5, kyb_state: 'approved', settlement_state: 'verified', billing_state: 'configured', authorized_representative_name: 'Ada Example', authorized_representative_title: 'Director', terms_version: 'supplier-terms-v1', privacy_version: 'privacy-v1' }, readiness: { state: 'pilot_ready', ready: true, requirements: [{ code: 'business_identity', label: 'Business identity', complete: true, manage_path: '/app/onboarding' }], missing: [] }, permissions: { business: true, consents: true }, current_terms_version: 'supplier-terms-v1', current_privacy_version: 'privacy-v1' };
+		else if (path.endsWith('/onboarding')) body = { profile: { version: 5, kyb_state: 'approved', settlement_state: 'verified', billing_state: 'configured', authorized_representative_name: 'Ada Example', authorized_representative_title: 'Director', terms_version: 'supplier-terms-v1', privacy_version: 'privacy-v1' }, readiness: { state: 'pilot_ready', ready: true, requirements: [{ code: 'business_identity', label: 'Business identity', complete: true, manage_path: '/workspace/onboarding' }], missing: [] }, permissions: { business: true, consents: true }, current_terms_version: 'supplier-terms-v1', current_privacy_version: 'privacy-v1' };
 		else if (path.endsWith('/customers')) body = { customers: [{ id: 'buyer-a11y', buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', legal_name: 'Inclusive Retail Limited', state: 'verified' }] };
 		else if (path.endsWith('/trade-lines/line-a11y/statement')) body = { line, drawdowns: [drawdown] };
 		else if (path.endsWith('/trade-lines')) body = { trade_lines: [line] };
@@ -47,21 +48,21 @@ test.beforeEach(async ({ page, context, baseURL }) => {
 });
 
 for (const journey of [
-	['login', '/app'],
-	['supplier onboarding', '/app/onboarding'],
-	['credit creation', '/app/credit/new?advanced=1'],
-	['buyer acceptance', '/buyer/credit-requests/request-a11y'],
-	['goods release', '/app/trade-lines/line-a11y'],
-	['goods receipt and drawdown', '/buyer/trade-lines'],
-	['payments', '/app/payments'],
-	['supplier disputes', '/app/disputes/dispute-a11y?organization=org-a11y'],
-	['settings', '/app/settings'],
+	['login', '/signin'],
+	['supplier onboarding', '/workspace/onboarding'],
+	['credit creation', '/workspace/sales/new?advanced=1'],
+	['buyer acceptance', '/workspace/purchases/orders/request-a11y'],
+	['goods release', '/workspace/sales/limits/line-a11y'],
+	['goods receipt and drawdown', '/workspace/purchases/trade-lines'],
+	['payments', '/workspace/money/received'],
+	['supplier disputes', '/workspace/disputes/dispute-a11y?organization=org-a11y'],
+	['settings', '/workspace/settings'],
 	['account recovery', '/recover'],
-	['privacy', '/app/settings/privacy']
+	['privacy', '/account/privacy']
 ] as const) {
 	test(`${journey[0]} has no serious or critical WCAG violations`, async ({ page }) => {
 		await page.goto(journey[1]);
-		if (journey[1] !== '/app') await expect(page.locator('.account-gate')).toHaveCount(0);
+		if (journey[1] !== '/signin') await expect(page.locator('.account-gate')).toHaveCount(0);
 		await expect(page.locator('h1')).toBeVisible();
 		if (journey[0] === 'supplier onboarding') await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
 		if (journey[0] === 'credit creation') await expect(page.getByRole('combobox', { name: 'Customer', exact: true })).toBeVisible();
@@ -78,7 +79,7 @@ test('operations command surface has no serious or critical WCAG violations', as
 
 test('keyboard, focus, reflow, reduced motion, and touch-target safeguards remain active', async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
-	await page.goto('/app/overview');
+	await page.goto('/workspace/today');
 	await expect(page.locator('.account-gate')).toHaveCount(0);
 	await page.keyboard.press('Tab');
 	await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
@@ -101,7 +102,7 @@ test('keyboard, focus, reflow, reduced motion, and touch-target safeguards remai
 });
 
 test('credit validation focuses a linked error summary', async ({ page }) => {
-	await page.goto('/app/credit/new?advanced=1');
+	await page.goto('/workspace/sales/new?advanced=1');
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-a11y:business-a11y');
 	await page.getByLabel('Sale amount (₦)').fill('0');
 	await page.getByLabel('What goods are they taking?').fill('Inventory');
@@ -114,7 +115,7 @@ test('credit validation focuses a linked error summary', async ({ page }) => {
 });
 
 test('offline mode is announced and financial actions remain unqueued', async ({ page, context }) => {
-	await page.goto('/app/settings');
+	await page.goto('/workspace/settings');
 	await expect(page.locator('.palette-trigger')).toHaveAttribute('data-ready', 'true');
 	await context.setOffline(true);
 	await expect(page.getByText('You are offline. New money actions cannot be sent. An earlier request may still be processing.')).toBeVisible();
@@ -122,7 +123,7 @@ test('offline mode is announced and financial actions remain unqueued', async ({
 });
 
 test('keyboard selection opens the focused command-palette result', async ({ page }) => {
-  await page.goto('/app/overview');
+  await page.goto('/workspace/today');
   await page.getByRole('button', { name: /Search/ }).click();
   const result = page.getByRole('option').nth(1);
   const destination = await result.locator('span').innerText();

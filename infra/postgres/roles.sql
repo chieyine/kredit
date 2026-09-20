@@ -297,3 +297,58 @@ GRANT EXECUTE ON FUNCTION app.notification_due_work(integer),app.notification_wo
 GRANT EXECUTE ON FUNCTION app.notification_receipt_subject(text,text,text),app.notification_meta_candidates(text) TO kredit_app,kredit_worker;
 
 GRANT EXECUTE ON FUNCTION app.isolation_operations_counts(),app.dispute_reference_lookup(text),app.notification_recovery_subject(uuid) TO kredit_app;
+
+GRANT EXECUTE ON FUNCTION app.ensure_business_workspace(uuid) TO kredit_app;
+
+-- Durable network imports and independent credit-offer review.
+GRANT SELECT,INSERT,UPDATE ON app.distributor_import_batches TO kredit_app;
+GRANT SELECT,INSERT ON app.distributor_import_rows TO kredit_app;
+REVOKE UPDATE,DELETE ON app.distributor_import_rows FROM kredit_app,kredit_worker;
+REVOKE ALL ON app.distributor_import_batches,app.distributor_import_rows FROM kredit_worker;
+GRANT EXECUTE ON FUNCTION app.purchasing_authority_current(uuid,uuid),app.request_authority_current(uuid),app.obligation_authority_current(uuid),app.lock_purchasing_authority(uuid,uuid),app.lock_request_authority(uuid),app.lock_obligation_authority(uuid),app.guard_current_purchasing_authority() TO kredit_app,kredit_worker;
+GRANT SELECT,INSERT,UPDATE ON app.business_credit_controls,app.credit_offer_approvals TO kredit_app;
+REVOKE ALL ON app.business_credit_controls,app.credit_offer_approvals FROM kredit_worker;
+REVOKE ALL ON app.business_credit_control_history FROM kredit_app,kredit_worker;
+GRANT SELECT ON app.business_credit_control_history TO kredit_app;
+
+GRANT SELECT,INSERT,UPDATE ON app.credit_reviewer_limits TO kredit_app;
+REVOKE DELETE ON app.credit_reviewer_limits FROM kredit_app;
+REVOKE ALL ON app.credit_reviewer_limits,app.credit_reviewer_limit_history FROM kredit_worker;
+REVOKE ALL ON app.credit_reviewer_limit_history FROM kredit_app;
+GRANT SELECT ON app.credit_reviewer_limit_history TO kredit_app;
+
+GRANT SELECT,INSERT,UPDATE ON app.business_branches,app.partner_assignments TO kredit_app;
+REVOKE ALL ON app.business_branches,app.partner_assignments,app.network_operation_history FROM kredit_worker;
+REVOKE ALL ON app.network_operation_history FROM kredit_app;
+GRANT SELECT ON app.network_operation_history TO kredit_app;
+
+-- Explicit business purchasing delegation; immutable history and no worker access.
+REVOKE ALL ON app.purchasing_delegations,app.purchasing_delegation_history FROM kredit_app,kredit_worker;
+GRANT SELECT,INSERT,UPDATE ON app.purchasing_delegations TO kredit_app;
+GRANT SELECT ON app.purchasing_delegation_history TO kredit_app;
+GRANT EXECUTE ON FUNCTION app.can_purchase(uuid,text,bigint),app.purchase_request_read(uuid),app.lock_purchase_permission(uuid,text,bigint) TO kredit_app,kredit_worker;
+
+GRANT EXECUTE ON FUNCTION app.purchase_obligation_read(uuid) TO kredit_app,kredit_worker;
+
+-- Branch boundaries narrow existing tenant rights; scope history is immutable.
+REVOKE ALL ON app.member_branch_scopes,app.member_branch_scope_history FROM kredit_app,kredit_worker;
+GRANT SELECT,INSERT,UPDATE ON app.member_branch_scopes TO kredit_app;
+GRANT SELECT ON app.member_branch_scope_history TO kredit_app;
+GRANT EXECUTE ON FUNCTION app.branch_scope_all(uuid),app.branch_customer_access(uuid,uuid),app.branch_credit_access(uuid),app.branch_obligation_access(uuid),app.branch_line_access(uuid),app.branch_drawdown_access(uuid) TO kredit_app,kredit_worker;
+
+-- Blueprint redesign extensions (migrations 195 - 199).
+-- 195: Canonical organization consolidation functions
+GRANT EXECUTE ON FUNCTION app.organization_purchasing_profile(uuid), app.purchasing_profile_organization(uuid), app.can_purchase_organization(uuid, text, bigint) TO kredit_app, kredit_worker;
+
+-- 197: Independent drawdown approvals
+REVOKE ALL ON app.tradeline_drawdown_approvals FROM kredit_app, kredit_worker;
+GRANT SELECT, INSERT, UPDATE ON app.tradeline_drawdown_approvals TO kredit_app, kredit_worker;
+GRANT EXECUTE ON FUNCTION app.drawdown_approval_proposal(app.drawdowns), app.drawdown_approval_fingerprint(app.drawdowns) TO kredit_app, kredit_worker;
+
+-- 198: Item-level order lifecycles, shipments, delivery receipts, and credit notes
+REVOKE ALL ON app.order_line_items, app.order_shipments, app.order_shipment_items, app.order_delivery_receipts, app.order_credit_notes FROM kredit_app, kredit_worker;
+GRANT SELECT, INSERT, UPDATE, DELETE ON app.order_line_items, app.order_shipments, app.order_shipment_items, app.order_delivery_receipts, app.order_credit_notes TO kredit_app, kredit_worker;
+
+-- 199: Partner terms and opening balance import batches
+REVOKE ALL ON app.partner_terms_import_batches, app.partner_terms_import_rows FROM kredit_app, kredit_worker;
+GRANT SELECT, INSERT, UPDATE ON app.partner_terms_import_batches, app.partner_terms_import_rows TO kredit_app, kredit_worker;

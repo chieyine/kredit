@@ -10,7 +10,7 @@ test('uncertain customer-limit changes retry the original amount and version',as
  await page.route('**/api/v1/platform/capabilities',r=>r.fulfill({json:{features:{drawdowns:true}}}));
  const sent:{body:any;key:string}[]=[];
  await page.route('**/api/v1/organizations/org/trade-lines/first',r=>{sent.push({body:r.request().postDataJSON(),key:r.request().headers()['idempotency-key']});return r.fulfill(sent.length===1?{status:503,json:{detail:'Result unknown'}}:{json:{trade_line:{...line('first'),version:5,approved_limit_kobo:80000,available_limit_kobo:80000}}});});
- await page.goto('/app/trade-lines/first?organization=org');
+ await page.goto('/workspace/sales/limits/first?organization=org');
  await page.getByLabel('New limit (₦)').fill('800');
  await page.getByRole('button',{name:'Change limit to ₦800.00'}).click();
  await expect(page.getByRole('button',{name:'Retry the original change'})).toBeVisible();
@@ -24,13 +24,13 @@ test('uncertain customer-limit changes retry the original amount and version',as
 test('customer-limit route changes clear prior input and capability outages remain retryable',async({page})=>{
  let calls=0;
  await page.route('**/api/v1/platform/capabilities',r=>r.fulfill(++calls===1?{status:503,json:{detail:'Unavailable'}}:{json:{features:{drawdowns:true}}}));
- await page.goto('/app/trade-lines/first?organization=org');
+ await page.goto('/workspace/sales/limits/first?organization=org');
  await expect(page.getByRole('button',{name:'Check sale availability again'})).toBeVisible();
  await expect(page.getByText(/Selling from a customer limit is switched off/)).toHaveCount(0);
  await page.getByRole('button',{name:'Check sale availability again'}).click();
  await page.getByLabel('What are they buying?').fill('First limit goods');
  await page.getByLabel('Why are you pausing this limit?').fill('Reason for first limit');
- await page.evaluate(()=>{const a=document.createElement('a');a.href='/app/trade-lines/second?organization=org';a.textContent='Open second limit';document.body.append(a);});
+ await page.evaluate(()=>{const a=document.createElement('a');a.href='/workspace/sales/limits/second?organization=org';a.textContent='Open second limit';document.body.append(a);});
  await page.getByRole('link',{name:'Open second limit'}).click();
  await expect(page.getByLabel('What are they buying?')).toHaveValue('');
  await expect(page.getByLabel('Why are you pausing this limit?')).toHaveValue('');

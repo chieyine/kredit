@@ -14,14 +14,14 @@ func TestCriticalNotificationFallsBackAndDeduplicates(t *testing.T) {
 	email := NewMockProvider(ChannelEmail)
 	store.RegisterProvider(whatsapp)
 	store.RegisterProvider(email)
-	deliveries, err := store.Emit(context.Background(), Event{ID: "event-1", Type: "CollectionSubmitted", RecipientID: "buyer", Priority: PriorityCritical, AmountKobo: 700000, Currency: "NGN", Reference: "TCC-1", NextAction: "review", Date: time.Now(), SecurePath: "/buyer/credit"})
+	deliveries, err := store.Emit(context.Background(), Event{ID: "event-1", Type: "CollectionSubmitted", RecipientID: "buyer", Priority: PriorityCritical, AmountKobo: 700000, Currency: "NGN", Reference: "TCC-1", NextAction: "review", Date: time.Now(), SecurePath: "/workspace/purchases/credit"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(deliveries) != 3 || deliveries[0].State != StateFailed || deliveries[1].State != StateSent {
 		t.Fatalf("deliveries=%+v", deliveries)
 	}
-	duplicate, err := store.Emit(context.Background(), Event{ID: "event-1", Type: "CollectionSubmitted", RecipientID: "buyer", Priority: PriorityCritical, AmountKobo: 700000, Currency: "NGN", Reference: "TCC-1", NextAction: "review", Date: time.Now(), SecurePath: "/buyer/credit"})
+	duplicate, err := store.Emit(context.Background(), Event{ID: "event-1", Type: "CollectionSubmitted", RecipientID: "buyer", Priority: PriorityCritical, AmountKobo: 700000, Currency: "NGN", Reference: "TCC-1", NextAction: "review", Date: time.Now(), SecurePath: "/workspace/purchases/credit"})
 	if err != nil || len(duplicate) != 3 {
 		t.Fatalf("duplicate err=%v len=%d", err, len(duplicate))
 	}
@@ -34,7 +34,7 @@ func TestNotificationReplayCannotChangeRecipientOrTerms(t *testing.T) {
 	store := NewStore("secret")
 	provider := NewMockProvider(ChannelEmail)
 	store.RegisterProvider(provider)
-	event := Event{ID: "immutable-event", Type: "PaymentRecorded", RecipientID: "buyer", Email: "buyer@example.test", Priority: PriorityCritical, AmountKobo: 1000, Currency: "NGN", SecurePath: "/buyer/credit/original"}
+	event := Event{ID: "immutable-event", Type: "PaymentRecorded", RecipientID: "buyer", Email: "buyer@example.test", Priority: PriorityCritical, AmountKobo: 1000, Currency: "NGN", SecurePath: "/workspace/purchases/credit/original"}
 	if _, err := store.Emit(context.Background(), event); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestNotificationReplayCannotChangeRecipientOrTerms(t *testing.T) {
 		func(e *Event) { e.RecipientID = "another-buyer" },
 		func(e *Event) { e.AmountKobo++ },
 		func(e *Event) { e.Email = "other@example.test" },
-		func(e *Event) { e.SecurePath = "/buyer/credit/other" },
+		func(e *Event) { e.SecurePath = "/workspace/purchases/credit/other" },
 	} {
 		changed := event
 		mutate(&changed)

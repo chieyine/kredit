@@ -216,13 +216,14 @@ type Obligation struct {
 }
 
 type View struct {
-	Request    CreditRequest         `json:"request"`
-	Agreement  AgreementVersion      `json:"agreement"`
-	Acceptance *Acceptance           `json:"acceptance,omitempty"`
-	Mandate    *mandates.Mandate     `json:"mandate,omitempty"`
-	Release    *GoodsRelease         `json:"release,omitempty"`
-	Receipts   []ReceiptConfirmation `json:"receipts"`
-	Obligation *Obligation           `json:"obligation,omitempty"`
+	PurchasingActions []string              `json:"purchasing_actions"`
+	Request           CreditRequest         `json:"request"`
+	Agreement         AgreementVersion      `json:"agreement"`
+	Acceptance        *Acceptance           `json:"acceptance,omitempty"`
+	Mandate           *mandates.Mandate     `json:"mandate,omitempty"`
+	Release           *GoodsRelease         `json:"release,omitempty"`
+	Receipts          []ReceiptConfirmation `json:"receipts"`
+	Obligation        *Obligation           `json:"obligation,omitempty"`
 }
 
 type CollectionState struct {
@@ -309,6 +310,8 @@ type agreementCanonical struct {
 }
 
 type Store struct {
+	purchasePermission      func(*CreditRequest, string, string) bool
+	purchaseActions         func(*CreditRequest, string) []string
 	legalReader             legalpublication.Reader
 	mu                      sync.RWMutex
 	mandates                mandates.Provider
@@ -675,7 +678,7 @@ func (s *Store) Review(requestID, buyerUserID string) (View, error) {
 	if r == nil {
 		return View{}, errors.New("credit request not found")
 	}
-	if r.BuyerUserID != buyerUserID {
+	if !s.canPurchaseLocked(r, buyerUserID, "review") {
 		return View{}, errors.New("buyer mismatch")
 	}
 	if r.State == Sent {
@@ -696,7 +699,7 @@ func (s *Store) Decline(requestID, buyerUserID string) (View, error) {
 	if r == nil {
 		return View{}, errors.New("credit request not found")
 	}
-	if r.BuyerUserID != buyerUserID {
+	if !s.canPurchaseLocked(r, buyerUserID, "review") {
 		return View{}, errors.New("buyer mismatch")
 	}
 	if r.State != Sent && r.State != BuyerReviewing {
@@ -715,7 +718,7 @@ func (s *Store) AuthorizeMandate(ctx context.Context, requestID, buyerUserID str
 	if r == nil {
 		return View{}, errors.New("credit request not found")
 	}
-	if r.BuyerUserID != buyerUserID {
+	if r.BuyerUserID != buyerUserID || !s.canPurchaseLocked(r, buyerUserID, "bank") {
 		return View{}, errors.New("buyer mismatch")
 	}
 	if r.State != Sent && r.State != BuyerReviewing && r.State != BuyerAccepted && r.State != ReadyToRelease && r.State != Active && r.State != ReceiptConfirmationPending {
@@ -786,7 +789,7 @@ func (s *Store) Accept(requestID, buyerUserID, agreementID, agreementHash, manda
 	if r == nil {
 		return View{}, errors.New("credit request not found")
 	}
-	if r.BuyerUserID != buyerUserID {
+	if !s.canPurchaseLocked(r, buyerUserID, "accept") {
 		return View{}, errors.New("buyer mismatch")
 	}
 	if r.State != Sent && r.State != BuyerReviewing {
@@ -797,7 +800,7 @@ func (s *Store) Accept(requestID, buyerUserID, agreementID, agreementHash, manda
 		return View{}, errors.New("agreement hash mismatch")
 	}
 	m := s.mandateMap[mandateID]
-	if mandateID != "" && (m == nil || m.AmountCeiling < int64(r.PrincipalKobo) || m.UserID != buyerUserID || m.BusinessID != r.BuyerBusinessID || m.SupplierOrganizationID != r.SupplierOrganizationID) {
+	if mandateID != "" && (m == nil || m.AmountCeiling < int64(r.PrincipalKobo) || m.UserID != r.BuyerUserID || m.BusinessID != r.BuyerBusinessID || m.SupplierOrganizationID != r.SupplierOrganizationID) {
 		return View{}, errors.New("mandate ownership or ceiling mismatch")
 	}
 	if !identityVerified || !authorityVerified {
@@ -912,7 +915,7 @@ func (s *Store) recordReceiptLocked(requestID, buyerUserID, state, issueReason, 
 	if r == nil {
 		return View{}, nil, errors.New("credit request not found")
 	}
-	if r.BuyerUserID != buyerUserID {
+	if !s.canPurchaseLocked(r, buyerUserID, "receive") {
 		return View{}, nil, errors.New("buyer mismatch")
 	}
 	if r.State != ReceiptConfirmationPending {
@@ -1000,10 +1003,10 @@ func (s *Store) GetForBuyer(requestID, buyerUserID string) (View, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	r := s.requests[requestID]
-	if r == nil || r.BuyerUserID != buyerUserID || r.State == Draft {
+	if r == nil || !s.canPurchaseLocked(r, buyerUserID, "read") || r.State == Draft {
 		return View{}, errors.New("credit request not found")
 	}
-	return s.viewLocked(r), nil
+	return s.buyerViewLocked(r, buyerUserID), nil
 }
 func (s *Store) GetPublic(requestID string) (View, error) {
 	s.mu.RLock()
@@ -1018,8 +1021,8 @@ func (s *Store) GetByObligationForBuyer(obligationID, buyerUserID string) (View,
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, r := range s.requests {
-		if r.ObligationID == obligationID && r.BuyerUserID == buyerUserID {
-			return s.viewLocked(r), nil
+		if r.ObligationID == obligationID && s.canPurchaseLocked(r, buyerUserID, "read") {
+			return s.buyerViewLocked(r, buyerUserID), nil
 		}
 	}
 	return View{}, errors.New("obligation not found")
@@ -1048,8 +1051,8 @@ func (s *Store) ListForBuyer(buyerUserID string) []View {
 	defer s.mu.RUnlock()
 	out := []View{}
 	for _, r := range s.requests {
-		if r.BuyerUserID == buyerUserID && r.State != Draft {
-			out = append(out, s.viewLocked(r))
+		if s.canPurchaseLocked(r, buyerUserID, "read") && r.State != Draft {
+			out = append(out, s.buyerViewLocked(r, buyerUserID))
 		}
 	}
 	return out
@@ -1299,4 +1302,36 @@ func (s *Store) CollectionStateContext(ctx context.Context, obligationID string)
 		return CollectionState{}, err
 	}
 	return s.CollectionState(obligationID)
+}
+
+// The production callback rechecks current authority; the development adapter
+// has no delegation and never infers it from supplier membership.
+func (s *Store) canPurchaseLocked(r *CreditRequest, actor, action string) bool {
+	if r == nil {
+		return false
+	}
+	if s.purchasePermission != nil {
+		return s.purchasePermission(r, actor, action)
+	}
+	return r.BuyerUserID == actor
+}
+func (s *Store) buyerViewLocked(r *CreditRequest, actor string) View {
+	v := s.viewLocked(r)
+	v.PurchasingActions = []string{}
+	if s.purchaseActions != nil {
+		v.PurchasingActions = s.purchaseActions(r, actor)
+	} else {
+		for _, action := range []string{"read", "review", "accept", "receive"} {
+			if s.canPurchaseLocked(r, actor, action) {
+				v.PurchasingActions = append(v.PurchasingActions, action)
+			}
+		}
+		if actor == r.BuyerUserID && s.canPurchaseLocked(r, actor, "bank") {
+			v.PurchasingActions = append(v.PurchasingActions, "bank", "payments", "disputes")
+		}
+	}
+	if v.Mandate != nil && actor != r.BuyerUserID {
+		v.Mandate.AuthorizationURL = ""
+	}
+	return v
 }

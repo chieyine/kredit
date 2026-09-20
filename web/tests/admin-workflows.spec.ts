@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
-async function auth(page:any,context:any,baseURL:any){await context.addCookies([{name:'kredit_session',value:'admin-test',url:baseURL||'http://127.0.0.1:5173'}]);await page.route('**/api/v1/me', (r:any)=>r.fulfill({json:{user:{id:'buyer'},session:{authentication_level:'AAL2'},organizations:[]}}));}
+async function auth(page:any,context:any,baseURL:any){await context.addCookies([{name:'kredit_session',value:'admin-test',url:baseURL||'http://127.0.0.1:5173'}]);await page.route('**/api/v1/buyer/businesses',(route:any)=>route.fulfill({json:{businesses:[{id:'business-1',workspace_id:'buyer-workspace',legal_name:'Buyer business'}]}}));
+ await page.route('**/api/v1/me', (r:any)=>r.fulfill({json:{user:{id:'buyer'},session:{authentication_level:'AAL2'},organizations:[]}}));}
 test('financial operator proposes naira amount and independent reviewer approves exact amount',async({page,context,baseURL})=>{
  await auth(page,context,baseURL);let actor='maker',roles=['finance_operator'];let changes:any[]=[];
  await page.route('**/api/v1/ops/capabilities',r=>r.fulfill({json:{actor_id:actor,roles}}));
@@ -17,7 +18,7 @@ test('financial operator proposes naira amount and independent reviewer approves
 test('buyer reviews dates and must explicitly consent before accepting',async({page,context,baseURL})=>{
  await auth(page,context,baseURL);const proposal:any={id:'change',obligation_id:'debt',state:'awaiting_buyer',reason:'Requested payment extension',expires_at:'2027-01-01T10:00:00Z',items:[{id:'item',principal_due_kobo:2000000,allocated_kobo:0,due_at:'2026-12-01T10:00:00Z'}],dates:[{item_id:'item',due_at:'2026-12-15T10:00:00Z'}]};
  await page.route('**/api/v1/buyer/amendments?*',r=>r.fulfill({json:{changes:[proposal]}}));await page.route('**/api/v1/buyer/amendments/change/decision',async r=>{expect(r.request().postDataJSON().action).toBe('accept');proposal.state='applied';await r.fulfill({json:{recorded:true}})});
- await page.goto('/buyer/amendments');await expect(page.getByRole('cell',{name:'₦20,000.00'})).toBeVisible();await expect(page.getByRole('button',{name:'Yes, I accept these dates'})).toBeDisabled();await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Yes, I accept these dates'}).click();await expect(page.getByRole('status')).toContainText('Your acceptance was confirmed. The new payment days now apply.');await expect(page.getByRole('heading',{name:'applied',exact:true})).toBeVisible();
+ await page.goto('/workspace/purchases/amendments');await expect(page.getByRole('cell',{name:'₦20,000.00'})).toBeVisible();await expect(page.getByRole('button',{name:'Yes, I accept these dates'})).toBeDisabled();await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Yes, I accept these dates'}).click();await expect(page.getByRole('status')).toContainText('Your acceptance was confirmed. The new payment days now apply.');await expect(page.getByRole('heading',{name:'applied',exact:true})).toBeVisible();
 });
 test('inbox records ownership and history exposes previous and proposed values',async({page,context,baseURL})=>{
  await auth(page,context,baseURL);let owner:string|null=null;

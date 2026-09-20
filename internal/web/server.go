@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,6 +23,7 @@ import (
 	"kredit/internal/config"
 	"kredit/internal/idempotency"
 	"kredit/internal/observability"
+	"kredit/internal/organizations"
 	platformlogging "kredit/internal/platform/logging"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -207,8 +209,12 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 				parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 				for i, part := range parts {
 					if part == "organizations" && i+1 < len(parts) && strings.HasPrefix(r.URL.Path, "/api/v1/organizations/") {
-						membership, found := s.runtime.Organizations.Membership(parts[i+1], user.ID)
-						if !found || membership.Status != "active" {
+						membership, membershipErr := s.runtime.readMembership(r.Context(), parts[i+1], user.ID)
+						if membershipErr != nil && !errors.Is(membershipErr, organizations.ErrMembershipNotFound) {
+							writeProblem(w, http.StatusServiceUnavailable, "organization_unavailable", "Business access could not be checked")
+							return
+						}
+						if membershipErr != nil || membership.Status != "active" {
 							writeProblem(w, http.StatusForbidden, "organization_forbidden", "organization access could not be verified")
 							return
 						}
@@ -385,6 +391,7 @@ func (r *idempotencyRecorder) Write(body []byte) (int, error) {
 func (s *Server) registerRoutes() {
 	for _, prefix := range []string{"", "/api/v1"} {
 		s.mux.HandleFunc(prefix+"/healthz", s.health)
+		s.mux.HandleFunc(prefix+"/health", s.health)
 		s.mux.HandleFunc(prefix+"/readyz", s.ready)
 		s.mux.HandleFunc(prefix+"/meta", s.meta)
 	}
@@ -452,6 +459,28 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/ops/disputes/{disputeID}/documents/{documentID}/download", s.disputeDocument)
 	s.mux.HandleFunc("GET /api/v1/buyer/credit-requests/{requestID}/invoice", s.buyerInvoice)
 	s.mux.HandleFunc("GET /api/v1/buyer/me", s.buyerPortal)
+	s.mux.HandleFunc("GET /api/v1/buyer/businesses", s.listBuyerBusinesses)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/distributor-invitations", s.distributorInvitationPipeline)
+	s.mux.HandleFunc("GET /api/v1/buyer/me/purchasing-access", s.purchasingStaffSetup)
+	s.mux.HandleFunc("POST /api/v1/buyer/me/purchasing-access", s.purchasingStaffSetup)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/purchasing-authority", s.purchasingAuthority)
+	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/purchasing-authority/{memberID}", s.purchasingAuthority)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/network-operations", s.networkOperations)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/branch-access", s.networkOperations)
+	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/branch-access/{memberID}", s.networkOperations)
+	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/branches/{branchID}", s.networkOperations)
+	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/customers/{businessID}/assignment", s.networkOperations)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/credit-approvals", s.businessCreditApprovals)
+	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/credit-approvals/policy", s.businessCreditApprovals)
+	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/credit-approvals/reviewers/{reviewerID}", s.businessCreditApprovals)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/approval", s.businessCreditApprovals)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/drawdowns/{drawdownID}/approval", s.businessCreditApprovals)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-approvals/{approvalID}", s.businessCreditApprovals)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/distributor-imports", s.distributorImports)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/distributor-imports", s.distributorImports)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/distributor-imports/{batchID}", s.distributorImports)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/distributor-imports/{batchID}", s.distributorImports)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/distributor-imports/{batchID}/rows/{rowNumber}", s.distributorImports)
 	s.mux.HandleFunc("POST /api/v1/buyer/me/verification/refresh", s.refreshBuyerVerification)
 	s.mux.HandleFunc("GET /api/v1/buyer/credit-requests", s.listBuyerCreditRequests)
 	s.mux.HandleFunc("GET /api/v1/buyer/mandates", s.listBuyerMandates)
@@ -655,12 +684,25 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/reports/ageing", s.reportAgeing)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/reports/fees", s.reportFees)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/reports/exports", s.exportReceivables)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/reports/enterprise", s.reportEnterprise)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/reports/enterprise/exports", s.exportEnterpriseCSV)
 	s.mux.HandleFunc("GET /api/v1/buyer/history", s.buyerHistory)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/customers/{buyerUserID}/history", s.supplierCustomerHistory)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/customers/{buyerUserID}/statement", s.supplierCustomerStatement)
 	s.mux.HandleFunc("POST /api/v1/buyer/history/corrections", s.openCorrection)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/corrections", s.listCorrections)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/corrections/{correctionID}/decide", s.decideCorrection)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/credit-requests/{requestID}/deliveries", s.orderDeliveries)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/line-items", s.createLineItems)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/shipments", s.createShipment)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/receipts", s.recordReceipt)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/credit-notes", s.createCreditNote)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-notes/{noteID}/approve", s.approveCreditNote)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/terms-imports", s.termsImports)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/terms-imports", s.termsImports)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/terms-imports/{batchID}", s.termsImports)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/terms-imports/{batchID}", s.termsImports)
+	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/erp/reconcile", s.erpReconcile)
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {

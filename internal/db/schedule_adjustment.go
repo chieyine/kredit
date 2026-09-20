@@ -83,3 +83,43 @@ func ReduceSchedulePrincipalTx(ctx context.Context, tx pgx.Tx, obligation string
 	}
 	return nil
 }
+
+// UpdateObligationBalanceTx is the single way an obligation's outstanding
+// balance changes. It moves the balance, derives the payment status from the
+// same two numbers every other writer uses, bumps the credit request version
+// and patches the read projection — and fails if the projection is missing,
+// because a balance that moved without its projection is a lie the next reader
+// will believe.
+//
+// payments, operations and disputes each carry a private copy of this. They
+// agree; the copy that was written independently (order credit notes) did not,
+// and lost the projection, the version and the status vocabulary. New callers
+// use this one.
+func UpdateObligationBalanceTx(ctx context.Context, tx pgx.Tx, requestID, obligationID string, outstanding, principal ledger.Money) error {
+	if tx == nil || requestID == "" || obligationID == "" || outstanding < 0 || principal < 0 || outstanding > principal {
+		return errors.New("valid transaction, credit request, obligation and balance within principal are required")
+	}
+	var status string
+	switch outstanding {
+	case 0:
+		status = "PAID"
+	case principal:
+		status = "UNPAID"
+	default:
+		status = "PARTIALLY_PAID"
+	}
+	if _, err := tx.Exec(ctx, `UPDATE app.obligations SET outstanding_kobo=$2,payment_status=$3 WHERE id=$1::uuid`, obligationID, int64(outstanding), status); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE app.credit_requests SET version=version+1,updated_at=now() WHERE id=$1::uuid`, requestID); err != nil {
+		return err
+	}
+	command, err := tx.Exec(ctx, `UPDATE app.credit_aggregate_snapshots SET aggregate=jsonb_set(jsonb_set(jsonb_set(aggregate,'{obligation,outstanding_kobo}',to_jsonb($2::bigint),false),'{obligation,payment_status}',to_jsonb($3::text),false),'{request,version}',to_jsonb(version+1),false),version=version+1,updated_at=now() WHERE credit_request_id=$1`, requestID, int64(outstanding), status)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() != 1 {
+		return errors.New("credit aggregate snapshot not found")
+	}
+	return nil
+}

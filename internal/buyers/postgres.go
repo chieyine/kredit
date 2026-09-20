@@ -14,7 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"kredit/internal/db"
 	"kredit/internal/identity"
+	"kredit/internal/onboarding"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -88,6 +90,24 @@ func (s *PostgresStore) CreateInvitation(actorUserID, organizationID string, inp
 			return CreateInvitationResult{}, err
 		}
 	}
+	ctx := context.Background()
+	tx, err := s.beginTx(actorUserID, organizationID)
+	if err != nil {
+		return CreateInvitationResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	result, err := s.createInvitationTx(ctx, tx, actorUserID, organizationID, input, false)
+	if err != nil {
+		return CreateInvitationResult{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return CreateInvitationResult{}, err
+	}
+	return result, nil
+}
+
+// The caller owns the transaction so an import row and its invitation commit together.
+func (s *PostgresStore) createInvitationTx(ctx context.Context, tx pgx.Tx, actorUserID, organizationID string, input CreateInvitationInput, acceptedReplay bool) (CreateInvitationResult, error) {
 	rawToken, err := randomToken()
 	if err != nil {
 		return CreateInvitationResult{}, err
@@ -99,13 +119,19 @@ func (s *PostgresStore) CreateInvitation(actorUserID, organizationID string, inp
 	now := time.Now().UTC()
 	expires := now.Add(7 * 24 * time.Hour)
 	id := newUUID()
-	tx, err := s.beginTx(actorUserID, organizationID)
-	if err != nil {
-		return CreateInvitationResult{}, err
+	if len(input.SourceReference) > 128 {
+		return CreateInvitationResult{}, errors.New("import reference is too long")
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	if input.SourceReference != "" {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 616))`, organizationID+":"+input.SourceReference); err != nil {
+			return CreateInvitationResult{}, err
+		}
+		if result, found, err := s.replayImport(ctx, tx, organizationID, input, acceptedReplay); err != nil || found {
+			return result, err
+		}
+	}
 	var invitation Invitation
-	if err := tx.QueryRow(context.Background(), `
+	if err := tx.QueryRow(ctx, `
 		INSERT INTO app.buyer_invitations
 			(id, organization_id, target_type, target_hash, target_ciphertext,
 			 proposed_legal_name, proposed_trading_name, proposed_business_type,
@@ -126,8 +152,14 @@ func (s *PostgresStore) CreateInvitation(actorUserID, organizationID string, inp
 		&invitation.CreatedAt); err != nil {
 		return CreateInvitationResult{}, fmt.Errorf("create buyer invitation: %w", err)
 	}
-	if err := tx.Commit(context.Background()); err != nil {
-		return CreateInvitationResult{}, fmt.Errorf("commit buyer invitation: %w", err)
+	if input.SourceReference != "" {
+		encrypted, err := s.encrypt([]byte(rawToken))
+		if err != nil {
+			return CreateInvitationResult{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE app.buyer_invitations SET source_reference=$2,source_fingerprint=$3,token_ciphertext=$4 WHERE id=$1::uuid`, id, input.SourceReference, invitationFingerprint(input), encrypted); err != nil {
+			return CreateInvitationResult{}, err
+		}
 	}
 	return CreateInvitationResult{Invitation: invitation, RawToken: rawToken}, nil
 }
@@ -186,7 +218,17 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 		return Portal{}, err
 	}
 	if row.Status == "accepted" && row.AcceptedByUserID != nil && *row.AcceptedByUserID == userID {
-		return s.ReadPortal(ctx, userID)
+		tx, err := s.beginTxContext(ctx, userID, row.OrganizationID)
+		if err != nil {
+			return Portal{}, err
+		}
+		var acceptedBusiness string
+		err = tx.QueryRow(ctx, `SELECT COALESCE(accepted_business_id::text,'') FROM app.buyer_invitations WHERE id=$1::uuid AND accepted_by_user_id=$2::uuid`, row.ID, userID).Scan(&acceptedBusiness)
+		_ = tx.Rollback(ctx)
+		if err != nil || acceptedBusiness == "" {
+			return Portal{}, errors.New("the accepted business could not be confirmed")
+		}
+		return s.ReadBusinessPortal(ctx, userID, acceptedBusiness)
 	}
 	if row.Status != "pending" {
 		return Portal{}, errors.New("invitation is no longer available")
@@ -214,12 +256,32 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 	if err := tx.QueryRow(ctx, `SELECT id::text FROM app.users WHERE id=$1::uuid FOR UPDATE`, userID).Scan(&lockedUser); err != nil {
 		return Portal{}, err
 	}
+	if input.WorkspaceID != "" {
+		if _, err := uuid.Parse(input.WorkspaceID); err != nil {
+			return Portal{}, errors.New("invalid business workspace")
+		}
+		if input.WorkspaceID == row.OrganizationID {
+			return Portal{}, errors.New("a business cannot trade with itself")
+		}
+		if _, err := tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, input.WorkspaceID); err != nil {
+			return Portal{}, err
+		}
+		err := tx.QueryRow(ctx, `SELECT o.legal_name,COALESCE(o.trading_name,''),o.business_type,o.business_address,o.industry FROM app.organizations o JOIN app.memberships m ON m.organization_id=o.id WHERE o.id=$1::uuid AND m.user_id=$2::uuid AND m.role='owner' AND m.status='active' AND o.status NOT IN ('suspended','closed') FOR UPDATE OF m`, input.WorkspaceID, userID).Scan(&legalName, &tradingName, &businessType, &address, &industry)
+		if err != nil {
+			return Portal{}, errors.New("current owner authority for this business is required")
+		}
+		if _, err := tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, row.OrganizationID); err != nil {
+			return Portal{}, err
+		}
+	}
 	personID, businessID, representativeID := newUUID(), newUUID(), newUUID()
 	err = tx.QueryRow(ctx, `SELECT id::text FROM app.persons WHERE user_id=$1::uuid`, userID).Scan(&personID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Portal{}, err
 	}
-	err = tx.QueryRow(ctx, `SELECT id::text FROM app.businesses WHERE owner_user_id=$1::uuid AND lower(legal_name)=lower($2) AND business_address=$3 AND business_type=$4 ORDER BY created_at,id LIMIT 1`, userID, legalName, address, businessType).Scan(&businessID)
+	// A selected workspace is an identity, not a name/address match. Its
+	// purchasing profile must survive changes to the business's contact details.
+	err = tx.QueryRow(ctx, `SELECT id::text FROM app.businesses WHERE owner_user_id=$1::uuid AND (($5<>'' AND organization_id=NULLIF($5,'')::uuid) OR ($5='' AND lower(legal_name)=lower($2) AND business_address=$3 AND business_type=$4)) ORDER BY created_at,id LIMIT 1`, userID, legalName, address, businessType, input.WorkspaceID).Scan(&businessID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Portal{}, err
 	}
@@ -245,6 +307,11 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 	if _, err := tx.Exec(ctx, `INSERT INTO app.businesses (id, owner_user_id, legal_name, trading_name, business_type, business_address, industry, status, created_at) VALUES ($1, $2, $3, NULLIF($4,''), $5, $6, $7, 'pending_verification', $8) ON CONFLICT (id) DO NOTHING`, businessID, userID, legalName, tradingName, businessType, address, industry, now); err != nil {
 		return Portal{}, fmt.Errorf("create buyer business: %w", err)
 	}
+	if input.WorkspaceID != "" {
+		if _, err := tx.Exec(ctx, `UPDATE app.businesses SET organization_id=$2::uuid,legal_name=$3,trading_name=NULLIF($4,''),business_type=$5,business_address=$6,industry=$7 WHERE id=$1::uuid AND (organization_id IS NULL OR organization_id=$2::uuid)`, businessID, input.WorkspaceID, legalName, tradingName, businessType, address, industry); err != nil {
+			return Portal{}, err
+		}
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO app.business_representatives (id, business_id, person_id, role_title, authority_type, authority_verification_status, created_at) VALUES ($1, $2, $3, $4, $5, 'pending', $6) ON CONFLICT (id) DO NOTHING`, representativeID, businessID, personID, "authorised representative", "buyer_acceptance", now); err != nil {
 		return Portal{}, fmt.Errorf("create buyer representative: %w", err)
 	}
@@ -261,9 +328,26 @@ func (s *PostgresStore) Accept(ctx context.Context, rawToken, userID string, inp
 			return Portal{}, fmt.Errorf("record buyer consent: %w", err)
 		}
 	}
-	result, err := tx.Exec(ctx, `UPDATE app.buyer_invitations SET status = 'accepted', accepted_at = $2, accepted_by_user_id = $3 WHERE id = $1 AND status = 'pending' AND expires_at > clock_timestamp()`, row.ID, now, userID)
+	result, err := tx.Exec(ctx, `UPDATE app.buyer_invitations SET status = 'accepted', accepted_at = $2, accepted_by_user_id = $3, accepted_business_id = $4::uuid WHERE id = $1 AND status = 'pending' AND expires_at > clock_timestamp()`, row.ID, now, userID, businessID)
 	if err != nil || result.RowsAffected() != 1 {
 		return Portal{}, errors.New("invitation was accepted by another session")
+	}
+	var workspaceID string
+	if err := tx.QueryRow(ctx, `SELECT app.ensure_business_workspace($1::uuid)::text`, businessID).Scan(&workspaceID); err != nil {
+		return Portal{}, fmt.Errorf("create business workspace: %w", err)
+	}
+	if workspaceID == row.OrganizationID {
+		return Portal{}, errors.New("a business cannot trade with itself")
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, workspaceID); err != nil {
+		return Portal{}, err
+	}
+	var emailVerified, phoneVerified bool
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(normalized_email,'')<>'',COALESCE(normalized_phone,'')<>'' FROM app.users WHERE id=$1::uuid`, userID).Scan(&emailVerified, &phoneVerified); err != nil {
+		return Portal{}, err
+	}
+	if _, err := onboarding.EnsureProfileTx(ctx, tx, workspaceID, userID, emailVerified, phoneVerified, now); err != nil {
+		return Portal{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Portal{}, fmt.Errorf("commit buyer acceptance: %w", err)
@@ -326,7 +410,7 @@ func (s *PostgresStore) ReadBusinessPortal(ctx context.Context, userID, business
 	}
 	var business Business
 	var representative Representative
-	if err := tx.QueryRow(ctx, `SELECT b.id::text, b.owner_user_id::text, b.legal_name, COALESCE(b.trading_name,''), b.business_type, b.business_address, b.industry, b.status, b.created_at, r.id::text, r.person_id::text, r.role_title, r.authority_type, r.authority_verification_status, r.created_at FROM app.businesses b JOIN app.business_representatives r ON r.business_id = b.id WHERE b.owner_user_id = $1 AND r.person_id = $2 AND ($3='' OR b.id=NULLIF($3,'')::uuid) ORDER BY b.created_at DESC, b.id DESC, r.created_at DESC, r.id DESC LIMIT 1`, userID, person.ID, businessID).Scan(&business.ID, &business.OwnerUserID, &business.LegalName, &business.TradingName, &business.BusinessType, &business.BusinessAddress, &business.Industry, &business.Status, &business.CreatedAt, &representative.ID, &representative.PersonID, &representative.RoleTitle, &representative.AuthorityType, &representative.AuthorityStatus, &representative.CreatedAt); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT b.id::text, b.owner_user_id::text, b.legal_name, COALESCE(b.trading_name,''), b.business_type, b.business_address, b.industry, b.status, b.created_at, COALESCE(b.organization_id::text,''), r.id::text, r.person_id::text, r.role_title, r.authority_type, r.authority_verification_status, r.created_at FROM app.businesses b JOIN app.business_representatives r ON r.business_id = b.id WHERE (b.owner_user_id = $1 OR app.can_purchase(b.id)) AND r.person_id = $2 AND ($3='' OR b.id=NULLIF($3,'')::uuid) ORDER BY b.created_at DESC, b.id DESC, r.created_at DESC, r.id DESC LIMIT 1`, userID, person.ID, businessID).Scan(&business.ID, &business.OwnerUserID, &business.LegalName, &business.TradingName, &business.BusinessType, &business.BusinessAddress, &business.Industry, &business.Status, &business.CreatedAt, &business.WorkspaceID, &representative.ID, &representative.PersonID, &representative.RoleTitle, &representative.AuthorityType, &representative.AuthorityStatus, &representative.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Portal{}, ErrPortalNotFound
 		}
@@ -455,6 +539,10 @@ func (s *PostgresStore) beginTx(userID, organizationID string) (pgx.Tx, error) {
 }
 
 func (s *PostgresStore) beginTxContext(ctx context.Context, userID, organizationID string) (pgx.Tx, error) {
+	if userID == "" {
+		identity, _ := db.TenantFromContext(ctx)
+		userID = identity.UserID
+	}
 	if s == nil || s.pool == nil {
 		return nil, errors.New("buyer database is not configured")
 	}
@@ -519,7 +607,7 @@ func insertVerification(ctx context.Context, tx pgx.Tx, subjectID, subjectType s
 	if err != nil {
 		return err
 	}
-	result, err := tx.Exec(ctx, `INSERT INTO app.verification_cases (id, subject_type, subject_id, provider, provider_reference, verification_level, state, reasons, safe_result, started_at, completed_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, CASE WHEN $7 IN ('verified','failed','expired') THEN $10 END, $11) ON CONFLICT(provider,provider_reference) DO UPDATE SET state=EXCLUDED.state,reasons=EXCLUDED.reasons,safe_result=EXCLUDED.safe_result,verification_level=EXCLUDED.verification_level,completed_at=EXCLUDED.completed_at,expires_at=EXCLUDED.expires_at WHERE app.verification_cases.subject_id=EXCLUDED.subject_id AND app.verification_cases.subject_type=EXCLUDED.subject_type`, newUUID(), subjectType, subjectID, session.Provider, session.ProviderID, session.VerificationLevel, session.State, reasons, safe, now, expires)
+	result, err := tx.Exec(ctx, `INSERT INTO app.verification_cases (id, subject_type, subject_id, provider, provider_reference, verification_level, state, reasons, safe_result, started_at, completed_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::timestamptz, CASE WHEN $7 IN ('verified','failed','expired') THEN $10::timestamptz END, $11::timestamptz) ON CONFLICT(provider,provider_reference) DO UPDATE SET state=EXCLUDED.state,reasons=EXCLUDED.reasons,safe_result=EXCLUDED.safe_result,verification_level=EXCLUDED.verification_level,completed_at=EXCLUDED.completed_at,expires_at=EXCLUDED.expires_at WHERE app.verification_cases.subject_id=EXCLUDED.subject_id AND app.verification_cases.subject_type=EXCLUDED.subject_type`, newUUID(), subjectType, subjectID, session.Provider, session.ProviderID, session.VerificationLevel, session.State, reasons, safe, now, expires)
 	if err != nil {
 		return fmt.Errorf("save verification case: %w", err)
 	}

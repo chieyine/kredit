@@ -65,6 +65,15 @@ func (s *Server) requirePlatformAccess(w http.ResponseWriter, r *http.Request, p
 		writeProblem(w, http.StatusForbidden, "step_up_required", "step-up authentication is required for platform operations")
 		return auth.Session{}, auth.User{}, "", false
 	}
+	// Every platform action that changes something needs MFA proved recently,
+	// not once at sign-in. Forty of the forty-two mutating handlers already
+	// call requireFreshMFA themselves; doing it here makes those redundant
+	// rather than load-bearing, and closes the two that did not. Reads keep the
+	// AAL2 requirement only, so an operator can work through the console
+	// without re-authenticating every fifteen minutes.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && !s.requireFreshMFA(w, session) {
+		return auth.Session{}, auth.User{}, "", false
+	}
 	*r = *r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))
 	return session, user, selected, true
 }
@@ -332,7 +341,7 @@ func (s *Server) notifyOperationsTarget(r *http.Request, in platformops.CommandI
 		}
 	}
 	for _, recipient := range recipients {
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "operations:" + command.ID + ":" + recipient.ID, Type: "OperationsControlApplied", RecipientID: recipient.ID, Email: recipient.Email, Phone: recipient.Phone, OrganizationID: in.OrganizationID, Priority: notifications.PriorityCritical, Reference: fmt.Sprintf("%s (%s)", in.Type, command.ID), NextAction: "Review this protected account or organization change and contact support if unexpected.", SecurePath: "/app/settings"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "operations:" + command.ID + ":" + recipient.ID, Type: "OperationsControlApplied", RecipientID: recipient.ID, Email: recipient.Email, Phone: recipient.Phone, OrganizationID: in.OrganizationID, Priority: notifications.PriorityCritical, Reference: fmt.Sprintf("%s (%s)", in.Type, command.ID), NextAction: "Review this protected account or organization change and contact support if unexpected.", SecurePath: "/workspace/settings"})
 	}
 }
 

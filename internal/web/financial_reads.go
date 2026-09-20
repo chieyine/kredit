@@ -6,12 +6,39 @@ import (
 	"kredit/internal/corrections"
 	"kredit/internal/credit"
 	"kredit/internal/disputes"
+	"kredit/internal/organizations"
 	"kredit/internal/paymentclaims"
 	"kredit/internal/payments"
 	"kredit/internal/tradelines"
 	"net/http"
 	"time"
 )
+
+// readMembership distinguishes "not a member" from "could not check". The
+// authorization gate needs that difference: a failed lookup must not be
+// reported to a business owner as a refusal, and must not be written to the
+// audit trail as a denial nobody decided.
+func (r *Runtime) readMembership(ctx context.Context, organizationID, userID string) (organizations.Membership, error) {
+	if source, ok := r.Organizations.(interface {
+		ReadMembership(context.Context, string, string) (organizations.Membership, error)
+	}); ok {
+		return source.ReadMembership(ctx, organizationID, userID)
+	}
+	membership, found := r.Organizations.Membership(organizationID, userID)
+	if !found {
+		return organizations.Membership{}, organizations.ErrMembershipNotFound
+	}
+	return membership, nil
+}
+
+func (r *Runtime) getCreditForSupplier(ctx context.Context, requestID, organizationID string) (credit.View, error) {
+	if source, ok := r.Credit.(interface {
+		GetForSupplierContext(context.Context, string, string) (credit.View, error)
+	}); ok {
+		return source.GetForSupplierContext(ctx, requestID, organizationID)
+	}
+	return r.Credit.GetForSupplier(requestID, organizationID)
+}
 
 func (r *Runtime) readCreditForSupplier(ctx context.Context, id string) ([]credit.View, error) {
 	if source, ok := r.Credit.(interface {
@@ -90,6 +117,14 @@ func (r *Runtime) readTradeLinesForBuyer(ctx context.Context, id string) ([]trad
 		return source.ReadForBuyer(id)
 	}
 	return r.ScopedTradeLines(ctx).ListForBuyer(id), nil
+}
+func (r *Runtime) readTradeLinesForBuyerOrganization(ctx context.Context, org string) ([]tradelines.TradeLine, error) {
+	if source, ok := r.ScopedTradeLines(ctx).(interface {
+		ReadForBuyerOrganization(org string) ([]tradelines.TradeLine, error)
+	}); ok {
+		return source.ReadForBuyerOrganization(org)
+	}
+	return r.ScopedTradeLines(ctx).ListForBuyerOrganization(org), nil
 }
 func (r *Runtime) readPaymentClaimsForBuyer(ctx context.Context, id string) ([]paymentclaims.Claim, error) {
 	if source, ok := r.PaymentClaims.(interface {

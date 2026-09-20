@@ -21,8 +21,8 @@ async function draftCount(page: Page) {
   return page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('kredit.quick-sale.')).length);
 }
 for (const [kind, path, goodsLabel] of [
-  ['quick', '/app/credit/quick?organization=org-a', 'Goods and quantity'],
-  ['advanced', '/app/credit/new?advanced=1&organization=org-a', 'What goods are they taking?']
+  ['quick', '/workspace/sales/quick?organization=org-a', 'Goods and quantity'],
+  ['advanced', '/workspace/sales/new?advanced=1&organization=org-a', 'What goods are they taking?']
 ]) {
   test(`${kind} draft storage requires consent, restores only opted-in fields and can be revoked`, async ({ page, context, baseURL }) => {
     await signedIn(page, context, baseURL);
@@ -58,7 +58,7 @@ for (const [kind, path, goodsLabel] of [
 
 test('switching business does not transfer draft contents or draft consent', async ({ page, context, baseURL }) => {
   await signedIn(page, context, baseURL);
-  await page.goto('/app/credit/quick?organization=org-a');
+  await page.goto('/workspace/sales/quick?organization=org-a');
   const consent = page.getByRole('checkbox', { name: /Keep this draft/ });
   await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
@@ -93,7 +93,7 @@ test('feedback recovers from a dropped response and success survives unavailable
     keys.push(route.request().headers()['idempotency-key']);
     return keys.length === 1 ? route.abort('failed') : route.fulfill({ status: 201, json: { feedback: { answer: 'yes' } } });
   });
-  await page.goto('/app/overview');
+  await page.goto('/workspace/today');
   const yes = page.getByRole('button', { name: 'Yes', exact: true });
   await yes.click();
   await expect(page.getByRole('status').filter({ hasText: 'We could not confirm your answer' })).toBeVisible();
@@ -145,7 +145,7 @@ test('sale-detail payment retry preserves its key, amount and paid-at timestamp 
     await page.getByLabel('When did the money reach you? (Nigerian time)').fill('2026-09-01T12:00');
     await page.getByRole('button', { name: 'Save this payment', exact: true }).click();
   };
-  await page.goto('/app/credit/retry-sale?organization=org-a'); await enter();
+  await page.goto('/workspace/sales/retry-sale?organization=org-a'); await enter();
   await expect(page.getByRole('alert')).toContainText('We have not confirmed the result');
   await expect(page.getByLabel('How much did you receive? (₦)')).toHaveValue('100.49');
   await expect(page.getByRole('button', { name: 'Save this payment', exact: true })).toBeEnabled();
@@ -160,7 +160,7 @@ test('sale-detail failed payment and schedule reads never become empty successfu
   for (const path of ['payments', 'schedule', 'payment-claims', 'collections', 'collection/eligibility']) {
     await page.route(`**/credit-requests/retry-sale/${path}`, route => route.fulfill({ status: 503, json: { code: 'unavailable' } }));
   }
-  await page.goto('/app/credit/retry-sale?organization=org-a');
+  await page.goto('/workspace/sales/retry-sale?organization=org-a');
   await expect(page.getByRole('alert').filter({ hasText: 'payment history' })).toBeVisible();
   await expect(page.getByText('No payment yet.', { exact: true })).toHaveCount(0);
   await page.getByText('Payment days', { exact: true }).click();
@@ -177,7 +177,7 @@ test('sale-detail transfer confirmation cannot bypass the bank-check dialog', as
   await page.route('**/credit-requests/retry-sale/payment-claims', route => route.fulfill({ json: { payment_claims: [claim] } }));
   let submitted = 0;
   await page.route('**/payment-claims/claim-1/decide', route => { submitted++; return route.fulfill({ json: { payment_claim: { ...claim, state: 'confirmed' } } }); });
-  await page.goto('/app/credit/retry-sale?organization=org-a');
+  await page.goto('/workspace/sales/retry-sale?organization=org-a');
   await page.getByLabel('Why are you accepting or rejecting this?').fill('Synthetic bank verification');
   await page.getByRole('button', { name: 'Yes, this money reached me' }).click();
   const dialog = page.getByRole('dialog', { name: 'Confirm money received' });
