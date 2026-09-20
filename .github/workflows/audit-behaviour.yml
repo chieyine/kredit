@@ -43,6 +43,8 @@ jobs:
       - name: Prepare isolated PostgreSQL and restricted test logins
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/database-audit"
+          git rev-parse HEAD > "$RUNNER_TEMP/database-audit/source-commit.txt"
           go run ./cmd/migrate
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
@@ -51,23 +53,32 @@ jobs:
             -v backup_login_password=kredit-backup-development-only \
             -v demote_owner=false -f infra/postgres/development-logins.sql
           # Native-provider tests deliberately refuse every other database name.
-          # Provision their separate disposable database; never relax that guard.
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE kredit_native_audit'
           DATABASE_DIRECT_URL="$KREDIT_NATIVE_TEST_DB" go run ./cmd/migrate
           psql "$KREDIT_NATIVE_TEST_DB" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
       - name: Execute all database integration packages
         run: |
           set -euo pipefail
-          bash scripts/test-integration.sh 2>&1 | tee "$RUNNER_TEMP/audit-integration.log"
-      - name: Check inventory and row-security policy shape
+          bash scripts/test-integration.sh 2>&1 | tee "$RUNNER_TEMP/database-audit/integration.log"
+      - name: Check field-level inventory against the actual schema
+        if: ${{ !cancelled() }}
         run: |
-          bash scripts/data-inventory-check.sh
-          bash scripts/rls-policy-shape-check.sh
-      - name: Preserve completed test evidence
+          set -euo pipefail
+          bash scripts/data-inventory-check.sh 2>&1 | tee "$RUNNER_TEMP/database-audit/inventory.log"
+      - name: Check row-security policy shape independently
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          bash scripts/rls-policy-shape-check.sh 2>&1 | tee "$RUNNER_TEMP/database-audit/rls-shape.log"
+      - name: Preserve actual schema for reviewing missing inventory entries
+        if: ${{ !cancelled() }}
+        run: |
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -A -F $'\t' -t -c "SELECT c.table_schema,c.table_name,c.column_name,c.data_type FROM information_schema.columns c JOIN information_schema.tables t USING(table_schema,table_name) WHERE t.table_type='BASE TABLE' AND c.table_schema IN ('app','ledger','river','jobs') ORDER BY 1,2,c.ordinal_position" > "$RUNNER_TEMP/database-audit/schema.tsv"
+      - name: Preserve completed test and policy evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: audit-integration-${{ github.sha }}
-          path: ${{ runner.temp }}/audit-integration.log
+          path: ${{ runner.temp }}/database-audit/
           retention-days: 7
           if-no-files-found: ignore

@@ -1,0 +1,39 @@
+name: Audit infrastructure validation
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          # Exercise the module's declared 1.8 compatibility, not a live cluster.
+          terraform_version: 1.8.5
+          terraform_wrapper: false
+      - name: Verify committed HCL formatting
+        run: terraform -chdir=infra/environments fmt -check -diff
+      - name: Validate configuration without backend or cluster access
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/infrastructure-audit"
+          git rev-parse HEAD > "$RUNNER_TEMP/infrastructure-audit/source-commit.txt"
+          terraform -chdir=infra/environments init -backend=false -input=false 2>&1 | tee "$RUNNER_TEMP/infrastructure-audit/init.log"
+          terraform -chdir=infra/environments validate -no-color 2>&1 | tee "$RUNNER_TEMP/infrastructure-audit/validate.log"
+      - name: Preserve static validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: infrastructure-audit-${{ github.sha }}
+          path: ${{ runner.temp }}/infrastructure-audit/
+          retention-days: 7
+          if-no-files-found: ignore
