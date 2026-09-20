@@ -1,0 +1,58 @@
+name: Prepare reviewed audit tree
+
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.audit-transport/**, .github/workflows/audit-patch-transport.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: github.repository == 'chieyine/kredit' && github.ref == 'refs/heads/audit/2026-09-20-integrity-remediation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact reviewed patch and create unreferenced tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma, os, pathlib, subprocess, urllib.request
+          payload = ''.join(pathlib.Path(f'.audit-transport/patch.{i}').read_text() for i in range(1, 5))
+          patch = lzma.decompress(base64.b64decode(payload, validate=True))
+          expected = '0eb976413b5659537b90ad9af9fe1ec116f4ce9a6e33234268fda7898f8a4345'
+          if hashlib.sha256(patch).hexdigest() != expected:
+              raise SystemExit('Reviewed patch checksum mismatch')
+          subprocess.run(['git', 'apply', '--check', '--index', '-'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '--index', '-'], input=patch, check=True)
+          changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only', '-z']).decode().split('\0')
+          def api(endpoint, body):
+              req = urllib.request.Request('https://api.github.com/repos/chieyine/kredit/git/' + endpoint,
+                  data=json.dumps(body).encode(), method='POST',
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28'})
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.load(response)
+          entries = []
+          for name in filter(None, changed):
+              path = pathlib.Path(name)
+              if path.is_absolute() or '..' in path.parts or path.is_symlink():
+                  raise SystemExit('Invalid patch path')
+              if path.exists():
+                  blob = api('blobs', {'content': base64.b64encode(path.read_bytes()).decode(), 'encoding': 'base64'})
+                  entries.append({'path': name, 'type': 'blob', 'mode': '100644', 'sha': blob['sha']})
+              else:
+                  entries.append({'path': name, 'type': 'blob', 'mode': '100644', 'sha': None})
+          for name in ['.github/workflows/audit-patch-transport.yml'] + [f'.audit-transport/patch.{i}' for i in range(1, 5)]:
+              entries.append({'path': name, 'type': 'blob', 'mode': '100644', 'sha': None})
+          tree = api('trees', {'base_tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}']).decode().strip(), 'tree': entries})
+          print('AUDIT_TREE_SHA=' + tree['sha'])
+          print('REVIEWED_PATCH_SHA256=' + expected)
+          print('CHANGED_SOURCE_FILES=' + str(len(list(filter(None, changed)))))
+          # No branch, commit, deployment or external account is changed here.
+          # The connected repository owner publishes the verified tree separately.
+          PY
