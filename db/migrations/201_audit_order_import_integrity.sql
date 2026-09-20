@@ -208,7 +208,9 @@ GRANT UPDATE(state,approved_by,approved_at,cancelled_by,cancelled_at) ON app.par
 -- Collection reconciliation must read approved reductions, but cannot author
 -- or change supplier/buyer evidence. Parent RLS and the selected tenant still apply.
 GRANT SELECT ON app.order_credit_notes TO kredit_worker;
-GRANT EXECUTE ON FUNCTION app.order_evidence_visible(uuid) TO kredit_worker;
+-- The reconciliation read path requires both nested invoker predicates.
+-- This read-only predicate does not confer evidence mutation authority.
+GRANT EXECUTE ON FUNCTION app.order_evidence_visible(uuid),app.order_supplier_authorized(uuid,text[]) TO kredit_worker;
 
 -- +goose Down
 -- Reverting these guards would reopen financial evidence vulnerabilities and
