@@ -1,0 +1,237 @@
+name: Isolated source audit
+
+on:
+  push:
+    branches: [audit/2026-09-20-source-review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isolated-source-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+# This workflow is confined to the audit branch. It checks an immutable source
+# revision, uses synthetic credentials only, and has no deployment permissions.
+env:
+  AUDITED_SHA: 1bfc68ab338f630e2e023ce079e9227f2285152d
+
+jobs:
+  source-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 1bfc68ab338f630e2e023ce079e9227f2285152d
+          persist-credentials: false
+      - name: Archive tracked source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$AUDITED_SHA"
+          mkdir -p "$RUNNER_TEMP/source-audit"
+          git archive --format=tar.gz --output="$RUNNER_TEMP/source-audit/kredit-source.tar.gz" HEAD
+          git ls-files -z > "$RUNNER_TEMP/source-audit/tracked-files.nul"
+          git rev-parse HEAD > "$RUNNER_TEMP/source-audit/commit.txt"
+          sha256sum "$RUNNER_TEMP/source-audit/kredit-source.tar.gz" > "$RUNNER_TEMP/source-audit/archive.sha256"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: audited-source-1bfc68a
+          path: ${{ runner.temp }}/source-audit/
+          if-no-files-found: error
+          retention-days: 1
+
+  backend-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+      APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 1bfc68ab338f630e2e023ce079e9227f2285152d
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Prepare evidence directory
+        run: mkdir -p audit-evidence
+      - name: Reproduce original fresh-migration result
+        id: baseline
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          go run ./cmd/migrate 2>&1 | tee audit-evidence/baseline-migration.log
+      - name: Bootstrap roles in disposable database and finish migration
+        id: schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Test-harness workaround only: never changes a production database.
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='kredit_app') THEN
+              CREATE ROLE kredit_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='kredit_worker') THEN
+              CREATE ROLE kredit_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+            END IF;
+          END $$;
+          SQL
+          go run ./cmd/migrate 2>&1 | tee audit-evidence/bootstrap-migration.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql > audit-evidence/roles.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false \
+            -f infra/postgres/development-logins.sql >> audit-evidence/roles.log
+      - name: Go unit tests
+        id: unit
+        if: always() && steps.schema.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -json ./... 2>&1 | tee audit-evidence/go-unit.jsonl
+      - name: Go vet
+        id: vet
+        if: always() && steps.schema.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          go vet ./... 2>&1 | tee audit-evidence/go-vet.log
+      - name: Full Go race tests
+        id: race
+        if: always() && steps.schema.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -race -json ./... 2>&1 | tee audit-evidence/go-race.jsonl
+      - name: Database integration tests
+        id: integration
+        if: always() && steps.schema.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bash scripts/test-integration.sh 2>&1 | tee audit-evidence/integration.log
+      - name: Record exact outcomes
+        if: always()
+        env:
+          BASELINE: ${{ steps.baseline.outcome }}
+          SCHEMA: ${{ steps.schema.outcome }}
+          UNIT: ${{ steps.unit.outcome }}
+          VET: ${{ steps.vet.outcome }}
+          RACE: ${{ steps.race.outcome }}
+          INTEGRATION: ${{ steps.integration.outcome }}
+        run: |
+          mkdir -p audit-evidence
+          python3 - <<'PY'
+          import json, os
+          keys = ['AUDITED_SHA', 'BASELINE', 'SCHEMA', 'UNIT', 'VET', 'RACE', 'INTEGRATION']
+          with open('audit-evidence/outcomes.json', 'w') as f:
+              json.dump({k: os.environ.get(k) for k in keys}, f, indent=2)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: backend-audit-evidence-1bfc68a
+          path: audit-evidence/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Fail on an unsuccessful verification stage
+        if: always()
+        env:
+          SCHEMA: ${{ steps.schema.outcome }}
+          UNIT: ${{ steps.unit.outcome }}
+          VET: ${{ steps.vet.outcome }}
+          RACE: ${{ steps.race.outcome }}
+          INTEGRATION: ${{ steps.integration.outcome }}
+        run: |
+          test "$SCHEMA" = success && test "$UNIT" = success && test "$VET" = success && test "$RACE" = success && test "$INTEGRATION" = success
+
+  frontend-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 1bfc68ab338f630e2e023ce079e9227f2285152d
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - name: Install locked dependencies
+        run: |
+          npm install --global pnpm@11.17.0
+          pnpm install --frozen-lockfile
+          mkdir -p audit-evidence
+      - name: Type and Svelte checks
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --dir web check 2>&1 | tee audit-evidence/frontend-check.log
+      - name: Production frontend build
+        id: build
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --dir web build 2>&1 | tee audit-evidence/frontend-build.log
+      - name: Frontend tests
+        id: tests
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --dir web test 2>&1 | tee audit-evidence/frontend-test.log
+      - name: Record frontend outcomes
+        if: always()
+        env:
+          CHECK: ${{ steps.check.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+        run: |
+          mkdir -p audit-evidence
+          python3 - <<'PY'
+          import json, os
+          with open('audit-evidence/frontend-outcomes.json', 'w') as f:
+              json.dump({k: os.environ.get(k) for k in ['AUDITED_SHA', 'CHECK', 'BUILD', 'TESTS']}, f, indent=2)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: frontend-audit-evidence-1bfc68a
+          path: audit-evidence/
+          retention-days: 7
+      - name: Fail on an unsuccessful frontend stage
+        if: always()
+        env:
+          CHECK: ${{ steps.check.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+        run: test "$CHECK" = success && test "$BUILD" = success && test "$TESTS" = success
