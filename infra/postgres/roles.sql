@@ -360,3 +360,7 @@ GRANT UPDATE(status,approved_by,approved_at) ON app.order_credit_notes TO kredit
 REVOKE ALL ON app.partner_terms_import_batches,app.partner_terms_import_rows FROM kredit_app,kredit_worker;
 GRANT SELECT,INSERT ON app.partner_terms_import_batches,app.partner_terms_import_rows TO kredit_app;
 GRANT UPDATE(state,approved_by,approved_at,cancelled_by,cancelled_at) ON app.partner_terms_import_batches TO kredit_app;
+
+-- Read-only credit-note provenance for tenant-scoped balance reconciliation.
+GRANT SELECT ON app.order_credit_notes TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.order_evidence_visible(uuid) TO kredit_worker;

@@ -52,16 +52,16 @@ func TestAuditServicesPersistAcrossRequestsWithoutCrossServerState(t *testing.T)
 }
 func TestAuditTermsReviewPermissionUsesBatchRoute(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /terms-imports/{batchID}/review", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /terms-imports/{batchID}", func(w http.ResponseWriter, r *http.Request) {
 		if termsImportPermission(r) != access.PermissionApproveBusinessCredit {
 			t.Fatal("review selected invitation permission")
 		}
 	})
-	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/terms-imports/batch-1/review", strings.NewReader(`{"decision":"approved"}`)))
+	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/terms-imports/batch-1", strings.NewReader(`{"decision":"approved"}`)))
 	if access.Can(access.RoleSales, access.PermissionApproveBusinessCredit) {
 		t.Fatal("sales can approve")
 	}
-	for _, path := range []string{"/api/v1/organizations/org/terms-imports", "/api/v1/organizations/org/terms-imports/batch/review", "/api/v1/organizations/org/credit-notes/note/approve"} {
+	for _, path := range []string{"/api/v1/organizations/org/terms-imports", "/api/v1/organizations/org/terms-imports/batch", "/api/v1/organizations/org/credit-notes/note/approve"} {
 		if !requiresIdempotencyKey(httptest.NewRequest("POST", path, nil)) {
 			t.Fatalf("mutation missing idempotency: %s", path)
 		}

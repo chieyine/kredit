@@ -648,24 +648,33 @@ func (p *PostgresStore) ListShipments(ctx context.Context, orderID string) ([]Sh
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-
-	rows, err := tx.Query(ctx, `
-		SELECT id::text, order_id::text, supplier_organization_id::text, tracking_reference, carrier, dispatched_by::text, dispatched_at, status
-		FROM app.order_shipments
-		WHERE order_id = $1::uuid
-		ORDER BY dispatched_at DESC
-	`, orderID)
+	rows, err := tx.Query(ctx, `SELECT s.id::text,s.order_id::text,s.supplier_organization_id::text,
+        s.tracking_reference,s.carrier,s.dispatched_by::text,s.dispatched_at,s.status,
+        i.line_item_id::text,i.quantity
+        FROM app.order_shipments s LEFT JOIN app.order_shipment_items i
+        ON i.shipment_id=s.id AND i.order_id=s.order_id
+        WHERE s.order_id=$1::uuid ORDER BY s.dispatched_at DESC,s.id DESC,i.line_item_id`, orderID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []Shipment{}
 	for rows.Next() {
-		var s Shipment
-		if err := rows.Scan(&s.ID, &s.OrderID, &s.SupplierOrganizationID, &s.TrackingReference, &s.Carrier, &s.DispatchedBy, &s.DispatchedAt, &s.Status); err != nil {
+		var shipment Shipment
+		var lineID *string
+		var quantity *int64
+		if err := rows.Scan(&shipment.ID, &shipment.OrderID, &shipment.SupplierOrganizationID,
+			&shipment.TrackingReference, &shipment.Carrier, &shipment.DispatchedBy, &shipment.DispatchedAt,
+			&shipment.Status, &lineID, &quantity); err != nil {
 			return nil, err
 		}
-		out = append(out, s)
+		if len(out) == 0 || out[len(out)-1].ID != shipment.ID {
+			shipment.Items = []ShipmentItem{}
+			out = append(out, shipment)
+		}
+		if lineID != nil && quantity != nil {
+			out[len(out)-1].Items = append(out[len(out)-1].Items, ShipmentItem{ShipmentID: shipment.ID, LineItemID: *lineID, Quantity: *quantity})
+		}
 	}
 	return out, rows.Err()
 }

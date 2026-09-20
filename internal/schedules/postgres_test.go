@@ -38,7 +38,7 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO ledger.transactions (event_type, reference_type, reference_id, idempotency_key, effective_at) VALUES ('test', 'credit_request', $1::uuid, $2, now()) RETURNING id::text`, requestID, "schedule-test-"+requestID).Scan(&transactionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(ctx, `INSERT INTO app.obligations (credit_request_id, agreement_version_id, supplier_organization_id, buyer_business_id, principal_kobo, currency, lifecycle_status, payment_status, outstanding_kobo, base_fee_kobo, ledger_transaction_id, activated_at) SELECT $1::uuid, $2::uuid, $3::uuid, buyer_business_id, principal_kobo, 'NGN', 'ACTIVE', 'CURRENT', principal_kobo, 0, $4::uuid, now() FROM app.credit_requests WHERE id = $1::uuid RETURNING id::text`, requestID, agreementID, organizationID, transactionID).Scan(&obligationID); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO app.obligations (credit_request_id, agreement_version_id, supplier_organization_id, buyer_business_id, principal_kobo, currency, lifecycle_status, payment_status, outstanding_kobo, base_fee_kobo, ledger_transaction_id, activated_at) SELECT $1::uuid, $2::uuid, $3::uuid, buyer_business_id, principal_kobo, 'NGN', 'ACTIVE', 'UNPAID', principal_kobo, 0, $4::uuid, now() FROM app.credit_requests WHERE id = $1::uuid RETURNING id::text`, requestID, agreementID, organizationID, transactionID).Scan(&obligationID); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {

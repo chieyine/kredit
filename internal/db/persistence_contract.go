@@ -14,6 +14,8 @@ import (
 // checking only the ledger and job tables; a migrated-but-partial database
 // must never be reported as ready.
 var RequiredPersistenceObjects = []string{
+	"app.order_line_items", "app.order_shipments", "app.order_shipment_items", "app.order_delivery_receipts",
+	"app.partner_terms_import_batches", "app.partner_terms_import_rows",
 	"app.member_branch_scopes", "app.member_branch_scope_history",
 	"app.bank_debit_enrollments",
 	"app.fee_authorizations", "app.fee_debits", "app.fee_bank_receipts",
@@ -109,6 +111,9 @@ var RequiredPersistenceObjects = []string{
 // PostgreSQL authentication adapter. A complete table set without these
 // functions would still fail at runtime.
 var RequiredPersistenceFunctions = []string{
+	"app.order_supplier_authorized(uuid,text[])", "app.order_evidence_visible(uuid)",
+	"app.apply_order_shipment_item()", "app.complete_order_receipt()",
+	"app.guard_order_credit_note()", "app.guard_terms_import_review()", "app.guard_terms_import_row()",
 	"app.ensure_business_workspace(uuid)",
 	"app.isolation_operations_counts()", "app.dispute_reference_lookup(text)", "app.notification_recovery_subject(uuid)",
 	"app.recovery_subject(uuid)",
@@ -229,7 +234,7 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	// that lags lets a partially migrated database pass startup and serve
 	// traffic: at 167 it was 32 versions behind, which included the branch
 	// row-level security added in 189.
-	const requiredMigration = 200
+	const requiredMigration = 201
 	if version < requiredMigration {
 		return fmt.Errorf("database migrations are incomplete: version %d, require at least %d", version, requiredMigration)
 	}

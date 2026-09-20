@@ -225,6 +225,13 @@ func TestAuditPostgresShipmentRelationsConcurrencyAndReceipts(t *testing.T) {
 		t.Fatalf("concurrent over-fulfilment: successes=%d failures=%d", len(results), len(failures))
 	}
 	ship := <-results
+	listed, err := s.ListShipments(f.as(f.sales), f.order[0])
+	if err != nil || len(listed) != 1 || len(listed[0].Items) != 1 {
+		t.Fatalf("shipment items missing from list: %+v %v", listed, err)
+	}
+	if item := listed[0].Items[0]; item.ShipmentID != ship.ID || item.LineItemID != a[0].ID || item.Quantity != 6 {
+		t.Fatalf("shipment list changed item identity or quantity: %+v", item)
+	}
 	if n := f.scalar(t, `SELECT fulfilled_quantity FROM app.order_line_items WHERE id=$1::uuid`, a[0].ID); n != 6 {
 		t.Fatalf("quantity was not applied exactly once: %d", n)
 	}
@@ -325,6 +332,34 @@ func TestAuditPostgresCreditNoteBindsOrderAndRollsBackFinancialAggregate(t *test
 	}
 	if n := f.scalar(t, `SELECT outstanding_kobo FROM app.obligations WHERE id=$1::uuid`, f.obligation[1]); n != 10000 {
 		t.Fatal("another order's balance changed")
+	}
+	// Workers need tenant-scoped read access for reconciliation, never authority
+	// to author or edit supplier financial evidence.
+	if os.Getenv("RIVER_DATABASE_URL") == "" {
+		t.Fatal("restricted worker login is required")
+	}
+	worker, err := db.OpenAsRole(f.ctx, os.Getenv("RIVER_DATABASE_URL"), "kredit_worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(worker.Close)
+	workerDB := &db.ScopedDatabase{Pool: worker.Raw()}
+	workerCtx := db.WithTenantContext(f.ctx, "", f.org)
+	var visible int64
+	if err = workerDB.QueryRow(workerCtx, `SELECT count(*) FROM app.order_credit_notes WHERE id=$1::uuid AND status='approved'`, note.ID).Scan(&visible); err != nil || visible != 1 {
+		t.Fatalf("reconciler cannot read approved reduction: %d %v", visible, err)
+	}
+	if err = workerDB.QueryRow(db.WithTenantContext(f.ctx, "", f.buyerOrg), `SELECT count(*) FROM app.order_credit_notes WHERE id=$1::uuid`, note.ID).Scan(&visible); err != nil || visible != 0 {
+		t.Fatalf("reconciler read another supplier's evidence: %d %v", visible, err)
+	}
+	for _, query := range []string{
+		`UPDATE app.order_credit_notes SET reason='changed' WHERE id=$1::uuid`,
+		`DELETE FROM app.order_credit_notes WHERE id=$1::uuid`,
+		`INSERT INTO app.order_credit_notes SELECT * FROM app.order_credit_notes WHERE id=$1::uuid`,
+	} {
+		if _, err = workerDB.Exec(workerCtx, query, note.ID); err == nil {
+			t.Fatal("worker mutated financial evidence")
+		}
 	}
 }
 

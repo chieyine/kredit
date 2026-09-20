@@ -31,8 +31,13 @@ func TestAuditSpreadsheetCSVNeutralizesTextButMachineCSVIsLossless(t *testing.T)
 		if safeRows[1][3] != "12345" || safeRows[1][4] != "0" {
 			t.Fatal("spreadsheet export changed numeric money")
 		}
+		expected := "'" + value
+		// A quote followed by a newline stays inside one quoted CSV cell.
+		if value == "\"\n=1+1" {
+			expected = value
+		}
 		for _, cell := range []string{safeRows[1][1], safeRows[1][2], safeRows[1][5], safeRows[1][6], safeRows[2][6], safeRows[3][6]} {
-			if cell != spreadsheetText(value) {
+			if cell != expected {
 				t.Fatalf("text column not encoded: %q", cell)
 			}
 		}

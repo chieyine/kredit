@@ -42,8 +42,10 @@ $$;
 CREATE FUNCTION app.order_evidence_visible(order_ref uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path=pg_catalog,app,pg_temp AS $$
  SELECT EXISTS(SELECT 1 FROM app.credit_requests cr WHERE cr.id=order_ref AND
- (app.order_supplier_authorized(cr.id,ARRAY['owner','administrator','sales','finance','viewer'])
- OR app.can_purchase(cr.buyer_business_id,'read')));
+ CASE WHEN current_user='kredit_worker' THEN
+   cr.supplier_organization_id=app.current_organization_id()
+ ELSE app.order_supplier_authorized(cr.id,ARRAY['owner','administrator','sales','finance','viewer'])
+   OR app.can_purchase(cr.buyer_business_id,'read') END);
 $$;
 DO $$ DECLARE tab text; BEGIN
  FOREACH tab IN ARRAY ARRAY['order_line_items','order_shipments','order_shipment_items','order_delivery_receipts','order_credit_notes'] LOOP
@@ -149,9 +151,9 @@ CREATE TRIGGER audit_credit_note_intent BEFORE INSERT OR UPDATE ON app.order_cre
 -- Review is a decision about immutable imported proposals, NOT debt creation.
 CREATE FUNCTION app.guard_terms_import_review() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,app,pg_temp AS $$
-DECLARE current_role text;
+DECLARE actor_role text;
 BEGIN
- SELECT m.role INTO current_role FROM app.memberships m JOIN app.users u ON u.id=m.user_id
+ SELECT m.role INTO actor_role FROM app.memberships m JOIN app.users u ON u.id=m.user_id
  JOIN app.organizations o ON o.id=m.organization_id
  WHERE m.organization_id=NEW.organization_id AND m.user_id=app.current_user_id()
  AND m.status='active' AND u.status='active' AND o.status<>'suspended' FOR SHARE OF m,u,o;
@@ -159,7 +161,7 @@ BEGIN
   RAISE EXCEPTION 'current company-wide import authority required' USING ERRCODE='42501';
  END IF;
  IF TG_OP='INSERT' THEN
-  IF current_role NOT IN ('owner','administrator','sales') OR NEW.uploaded_by IS DISTINCT FROM app.current_user_id()
+  IF actor_role NOT IN ('owner','administrator','sales') OR NEW.uploaded_by IS DISTINCT FROM app.current_user_id()
   OR NEW.state<>'staged' OR NEW.approved_by IS NOT NULL OR NEW.cancelled_by IS NOT NULL
   OR NEW.valid_rows+NEW.invalid_rows<>NEW.total_rows OR NEW.valid_rows<0 OR NEW.invalid_rows<0 THEN
    RAISE EXCEPTION 'invalid staged import' USING ERRCODE='42501';
@@ -169,7 +171,7 @@ BEGIN
    IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['state','approved_by','approved_at','cancelled_by','cancelled_at']) THEN
    RAISE EXCEPTION 'import source evidence is immutable' USING ERRCODE='23514';
   END IF;
-  IF current_role NOT IN ('owner','administrator','finance') OR NEW.uploaded_by=app.current_user_id()
+  IF actor_role NOT IN ('owner','administrator','finance') OR NEW.uploaded_by=app.current_user_id()
    OR OLD.state NOT IN ('staged','reviewing') OR NEW.state NOT IN ('approved','cancelled') THEN
    RAISE EXCEPTION 'independent import reviewer required' USING ERRCODE='42501';
   END IF;
@@ -202,6 +204,11 @@ GRANT UPDATE(status,approved_by,approved_at) ON app.order_credit_notes TO kredit
 REVOKE ALL ON app.partner_terms_import_batches,app.partner_terms_import_rows FROM kredit_app,kredit_worker;
 GRANT SELECT,INSERT ON app.partner_terms_import_batches,app.partner_terms_import_rows TO kredit_app;
 GRANT UPDATE(state,approved_by,approved_at,cancelled_by,cancelled_at) ON app.partner_terms_import_batches TO kredit_app;
+
+-- Collection reconciliation must read approved reductions, but cannot author
+-- or change supplier/buyer evidence. Parent RLS and the selected tenant still apply.
+GRANT SELECT ON app.order_credit_notes TO kredit_worker;
+GRANT EXECUTE ON FUNCTION app.order_evidence_visible(uuid) TO kredit_worker;
 
 -- +goose Down
 -- Reverting these guards would reopen financial evidence vulnerabilities and
