@@ -110,7 +110,18 @@ func ApplySplitTx(ctx context.Context, tx pgx.Tx, payment, key string, amount, c
 	_, err = splitFeeLedger().PostSplitFeeTx(ctx, tx, payment, total, false, at)
 	return err
 }
+
+// ReverseSplitTx is part of the caller-owned payment reversal transaction.
+// Allocation rows are immutable evidence; the reversed payment state excludes
+// them from current cash/reward totals. A journal is the durable undo marker.
 func ReverseSplitTx(ctx context.Context, tx pgx.Tx, payment string, at time.Time) error {
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT state FROM app.payments WHERE id=$1::uuid AND reversal_of IS NULL FOR UPDATE`, payment).Scan(&state); err != nil {
+		return err
+	}
+	if state != "reversed" {
+		return errors.New("a reversed original payment is required")
+	}
 	rows, err := tx.Query(ctx, `SELECT fee_id::text,amount_kobo FROM app.split_fee_allocations WHERE payment_id=$1::uuid ORDER BY fee_id`, payment)
 	if err != nil {
 		return err
@@ -123,20 +134,32 @@ func ReverseSplitTx(ctx context.Context, tx pgx.Tx, payment string, at time.Time
 			rows.Close()
 			return err
 		}
+		if p.Amount <= 0 {
+			rows.Close()
+			return errors.New("invalid original fee allocation")
+		}
+		total, err = ledger.CheckedAdd(total, p.Amount)
+		if err != nil {
+			rows.Close()
+			return err
+		}
 		parts = append(parts, p)
-		total += p.Amount
 	}
 	err = rows.Err()
 	rows.Close()
-	if err != nil {
+	if err != nil || total == 0 {
+		return err
+	}
+	var reversed bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ledger.transactions WHERE idempotency_key=$1)`, "split_fee_reversed:"+payment).Scan(&reversed); err != nil {
+		return err
+	}
+	if reversed {
+		// Validate the prior journal's exact intent without subtracting twice.
+		_, err = splitFeeLedger().PostSplitFeeTx(ctx, tx, payment, total, true, at)
 		return err
 	}
 	for _, p := range parts {
-		// Mirror ApplySplitTx: refuse to subtract more than the fee currently
-		// holds, and require the row to move. A bare subtraction would drive
-		// collected_kobo negative on a second reversal, and the only thing
-		// standing between that and a corrupted fee row is the CHECK added in
-		// migration 140.
 		result, updateErr := tx.Exec(ctx, `UPDATE app.fees SET collected_kobo=collected_kobo-$2 WHERE id=$1::uuid AND collected_kobo>=$2`, p.ID, p.Amount)
 		if updateErr != nil {
 			return updateErr
@@ -144,12 +167,6 @@ func ReverseSplitTx(ctx context.Context, tx pgx.Tx, payment string, at time.Time
 		if result.RowsAffected() != 1 {
 			return errors.New("fee allocation no longer matches the reversed collection")
 		}
-	}
-	if _, err = tx.Exec(ctx, `DELETE FROM app.split_fee_allocations WHERE payment_id=$1::uuid`, payment); err != nil {
-		return err
-	}
-	if total == 0 {
-		return nil
 	}
 	_, err = splitFeeLedger().PostSplitFeeTx(ctx, tx, payment, total, true, at)
 	return err

@@ -17,6 +17,11 @@ fi
 : "${APP_DATABASE_URL:?APP_DATABASE_URL must point to the restricted application login for the isolated test database}"
 : "${RIVER_DATABASE_URL:?RIVER_DATABASE_URL must point to the restricted worker login for the isolated test database}"
 
+# Keep legacy fixture names on the same restricted connections. Without these
+# aliases older tests silently fall back to the privileged setup connection.
+export KREDIT_TEST_APP_DATABASE_URL="$APP_DATABASE_URL"
+export KREDIT_TEST_WORKER_DATABASE_URL="$RIVER_DATABASE_URL"
+
 # Integration setup and cleanup deliberately use the migration/test owner.
 # Individual authorization tests enter the restricted runtime roles themselves.
 export DATABASE_URL="${TEST_DATABASE_URL:-${DATABASE_DIRECT_URL:-$DATABASE_URL}}"
