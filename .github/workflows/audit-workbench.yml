@@ -6,19 +6,79 @@ on:
 permissions:
   contents: read
 jobs:
-  source:
+  prepare:
     if: github.repository == 'chieyine/kredit' && github.ref == 'refs/heads/audit/2026-09-20-integrity-remediation'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Export tracked source only
-        run: git archive --format=tar.gz --output="$RUNNER_TEMP/kredit-source.tar.gz" "$GITHUB_SHA"
+      - name: Validate original and resulting file hashes
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, subprocess
+          root = pathlib.Path.cwd().resolve()
+          payload = json.loads(pathlib.Path('docs/audits/2026-09-20-remediation/round4-edits.json').read_text())
+          def blob(data):
+              return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          seen = set()
+          for item in payload['files']:
+              relative = pathlib.PurePosixPath(item['path'])
+              assert not relative.is_absolute() and '..' not in relative.parts and '.git' not in relative.parts
+              assert item['path'] not in seen
+              seen.add(item['path'])
+              path = root / relative
+              assert not path.is_symlink() and path.resolve().is_relative_to(root)
+              original = path.read_bytes()
+              assert blob(original) == item['before'], 'Source changed: ' + item['path']
+              text = original.decode('utf-8')
+              previous = 0
+              for start, end, replacement in item['edits']:
+                  assert 0 <= previous <= start <= end <= len(text)
+                  assert isinstance(replacement, str)
+                  previous = end
+              for start, end, replacement in reversed(item['edits']):
+                  text = text[:start] + replacement + text[end:]
+              result = text.encode('utf-8')
+              assert blob(result) == item['after'], 'Result mismatch: ' + item['path']
+              path.write_bytes(result)
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          print('Verified', len(seen), 'reviewed source changes')
+          PY
+      - name: Run source regression checks
+        run: |
+          bash scripts/phase6-governance-test.sh
+          bash scripts/readme-conformance.sh
+          bash scripts/implementation-plan-conformance-test.sh
+          node --experimental-strip-types scripts/content-audit.mjs
+          node --test web/test-support/public-api.test.mjs
+      - name: Store the verified source blobs only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, urllib.request
+          payload = json.loads(pathlib.Path('docs/audits/2026-09-20-remediation/round4-edits.json').read_text())
+          entries = []
+          for item in payload['files']:
+              raw = pathlib.Path(item['path']).read_bytes()
+              actual = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
+              assert actual == item['after']
+              request = urllib.request.Request('https://api.github.com/repos/chieyine/kredit/git/blobs', data=json.dumps({'content':raw.decode('utf-8'),'encoding':'utf-8'}).encode(), headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'}, method='POST')
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  stored = json.load(response)
+              assert stored['sha'] == actual
+              entries.append({'path':item['path'],'mode':'100644','type':'blob','sha':actual})
+          result = {'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'tree_elements':entries}
+          (pathlib.Path(os.environ['RUNNER_TEMP']) / 'prepared-blobs.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: audit-source-${{ github.sha }}
-          path: ${{ runner.temp }}/kredit-source.tar.gz
+          name: audit-prepared-${{ github.sha }}
+          path: ${{ runner.temp }}/prepared-blobs.json
           retention-days: 1
           if-no-files-found: error
