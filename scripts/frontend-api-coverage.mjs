@@ -27,6 +27,16 @@ for (const match of frontend.matchAll(/api\.(?:GET|POST|PUT|PATCH|DELETE)\(\s*['
 // These routes are deliberately not separate product screens. The reason is
 // kept beside the exception so a new backend route cannot silently disappear.
 const noSeparateScreen = new Map([
+ ["POST /api/v1/organizations/{id}/drawdowns/{id}/approval", "API-only drawdown review request; no shipped browser controller"],
+ ["POST /api/v1/organizations/{id}/credit-requests/{id}/line-items", "API-only item setup; deliveries screen reads but does not create line items"],
+ ["POST /api/v1/organizations/{id}/credit-requests/{id}/receipts", "legacy API alias for buyer-owned receipt evidence; not a supplier UI action"],
+ ["POST /api/v1/buyer/credit-requests/{id}/shipments/{id}/receipt", "API-only item-level buyer receipt; existing buyer UI confirms aggregate receipt only"],
+ ["POST /api/v1/organizations/{id}/credit-notes/{id}/approve", "API-only independent approval; no shipped reviewer UI"],
+ ["GET /api/v1/organizations/{id}/terms-imports", "API-only proposed-terms staging; financial application and browser workflow remain deferred"],
+ ["POST /api/v1/organizations/{id}/terms-imports", "API-only proposed-terms staging; financial application and browser workflow remain deferred"],
+ ["GET /api/v1/organizations/{id}/terms-imports/{id}", "API-only terms review; not the separate distributor-contact import UI"],
+ ["POST /api/v1/organizations/{id}/terms-imports/{id}", "API-only independent terms review; does not apply opening balances"],
+ ["POST /api/v1/organizations/{id}/erp/reconcile", "API-only comparison report; browser controller and broader accounting verification remain pending"],
 	['POST /api/v1/webhooks/paystack/{id}', 'provider-to-server callback; no browser action'],
  ['POST /api/v1/webhooks/bank/{id}', 'provider-to-server callback; no browser action'],
  ['GET /healthz', 'service health check'],
@@ -51,6 +61,10 @@ const noSeparateScreen = new Map([
 // string matching cannot reconstruct those paths, so each one is tied to the
 // component that exposes it. Removing that component makes this check fail.
 const coveredThroughComponent = new Map([
+ ["GET /api/v1/organizations/{id}/credit-requests/{id}/deliveries", "web/src/routes/workspace/sales/[id]/deliveries/+page.svelte"],
+ ["POST /api/v1/organizations/{id}/credit-requests/{id}/shipments", "web/src/routes/workspace/sales/[id]/deliveries/+page.svelte"],
+ ["POST /api/v1/organizations/{id}/credit-requests/{id}/credit-notes", "web/src/routes/workspace/sales/[id]/deliveries/+page.svelte"],
+ ["GET /api/v1/organizations/{id}/reports/enterprise", "web/src/routes/workspace/reports/+page.svelte"],
  ['GET /api/v1/organizations/{id}/branch-access', 'web/src/routes/workspace/partners/access/+page.svelte'],
  ['PUT /api/v1/organizations/{id}/branch-access/{id}', 'web/src/routes/workspace/partners/access/+page.svelte'],
  ['GET /api/v1/organizations/{id}/purchasing-authority', 'web/src/routes/workspace/purchases/permissions/+page.svelte'],
@@ -139,6 +153,8 @@ for (const [route, file] of coveredThroughComponent) {
 // These paths are assembled from local helper/base variables. Check their
 // actual request expressions as well as the screen mapping above.
 const dynamicBindings = [
+ ['web/src/routes/workspace/sales/[id]/deliveries/+page.svelte', ['checkedJSON(`${base}/deliveries`', '`${base}/shipments`', '`${base}/credit-notes`']],
+ ['web/src/routes/workspace/reports/+page.svelte', ['checkedJSON(`${root}/reports/enterprise`']],
  ['web/src/routes/workspace/partners/access/+page.svelte', ['checkedJSON(`${base()}/branch-access`','`${base()}/branch-access/${encodeURIComponent(s.user_id)}`']],
  ['web/src/routes/workspace/partners/operations/+page.svelte', ['checkedJSON(`${base()}/network-operations`','save(`/branches/${encodeURIComponent(b.id)}`','save(`/customers/${encodeURIComponent(p.business_id)}/assignment`']],
 	['web/src/routes/workspace/sales/approvals/+page.svelte', ['checkedJSON(`${base()}/credit-approvals`', "change('/credit-approvals/policy'", 'change(`/credit-requests/${draft!.id}/approval`', 'change(`/credit-approvals/${item.id}`', 'change(`/credit-approvals/reviewers/${encodeURIComponent(reviewer.user_id)}`']],

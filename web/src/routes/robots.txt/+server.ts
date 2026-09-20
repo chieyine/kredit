@@ -1,7 +1,7 @@
-import { SITE_URL } from '$lib/seo';
+import { privateRouteRoots, unlistedRouteRoots, SITE_URL } from '$lib/seo';
 import { loadLegalConfig } from '$lib/server/legal-config';
 
-const privatePaths = ['/account', '/start', '/signin', '/workspace', '/personal', '/agents', '/admin', '/c', '/pay', '/receipt', '/secure', '/recover', '/buyer-invitations'];
+const privatePaths = [...privateRouteRoots, ...unlistedRouteRoots];
 
 export function GET() {
 	const legalActive = loadLegalConfig().active;

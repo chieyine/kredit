@@ -54,7 +54,7 @@ export const pageSEOByPath: Record<string, PageSEO> = {
 		title: 'What you owe and what you are owed — Kredit for distributors',
 		description: 'Read the goods, the amount and the payment day before you agree. Confirm what arrived. Report a shortage. See every naira you have paid.'
 	},
-	'/retailers': { title: 'Keep the shop’s credit straight â Kredit for retailers', description: 'Follow what you took from your distributor and what your own customers still owe you, from one workspace.' },
+	'/retailers': { title: 'Keep the shop’s credit straight — Kredit for retailers', description: 'Follow what you took from your distributor and what your own customers still owe you, from one workspace.' },
 	'/consumers': { title: 'Know the full price before you agree — Kredit for consumers', description: 'The seller, the total and the dates you are to pay, all in front of you before you accept. You do not need to register a business.' },
 	'/pricing': {
 		title: 'Kredit pricing. No monthly fee, free to start',
@@ -93,6 +93,18 @@ export const pageSEOByPath: Record<string, PageSEO> = {
 		description: 'The rules for using Kredit: your account, sales on credit, delivery, payments, fees, bank-debit permission and how to complain.'
 	}
 };
+
+// Account and token-bearing flows are not public discovery pages.
+export const privateRouteRoots = ['/account', '/start', '/signin', '/workspace', '/personal', '/admin', '/agents', '/c', '/pay', '/receipt', '/secure', '/recover', '/buyer-invitations'];
+export function isPrivateRoute(pathname: string): boolean {
+ return privateRouteRoots.some(root => pathname === root || pathname.startsWith(root + '/'));
+}
+
+// These public links are deliberately shared directly, not advertised in search.
+export const unlistedRouteRoots = ['/deck', '/join'];
+export function isUnlistedRoute(pathname: string): boolean {
+ return unlistedRouteRoots.some(root => pathname === root || pathname.startsWith(root + '/'));
+}
 
 export const nonIndexablePaths = new Set(['/legal/privacy', '/legal/terms', '/deck']);
 

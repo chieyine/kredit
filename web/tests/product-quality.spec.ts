@@ -112,7 +112,10 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 	for (const path of publicRoutes) expect(sitemap, `sitemap ${path}`).toContain(`<loc>https://kredit.ng${path}</loc>`);
 	for (const path of ['/signin/', '/workspace/purchases/', '/admin/', '/recover']) expect(sitemap).not.toContain(`<loc>https://kredit.ng${path}`);
 	const robots = await (await request.get('/robots.txt')).text();
-	for (const path of ['/signin', '/workspace/purchases', '/admin', '/recover']) expect(robots).toContain(`Disallow: ${path}`);
+	for (const path of ['/signin', '/workspace', '/admin', '/recover']) {
+		expect(robots).toContain(`Disallow: ${path}$`);
+		expect(robots).toContain(`Disallow: ${path}/`);
+	}
 	// The third place publication state shows up. A legal document that robots.txt
 	// shuts out must not be advertised in the sitemap, and one that is published
 	// must be — the meta tag, robots.txt and the sitemap are one decision, and a

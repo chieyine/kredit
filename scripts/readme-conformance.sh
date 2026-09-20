@@ -33,15 +33,16 @@ components=(Money StatusPill DocumentUploader DocumentLayout PaymentReview Dispu
 for component in "${components[@]}"; do require_file "web/src/lib/components/${component}.svelte"; done
 
 routes=(
-  '+page.svelte' 'how-it-works/+page.svelte' 'pricing/+page.svelte' 'security/+page.svelte' 'for-suppliers/+page.svelte' 'for-buyers/+page.svelte' 'faq/+page.svelte'
+  '+page.svelte' 'how-it-works/+page.svelte' 'pricing/+page.svelte' 'security/+page.svelte' 'manufacturers/+page.svelte' 'distributors/+page.svelte' 'faq/+page.svelte'
   'legal/terms/+page.svelte' 'legal/privacy/+page.svelte' 'legal/complaints/+page.svelte'
-  'app/+page.svelte' 'app/overview/+page.svelte' 'app/credit/new/+page.svelte' 'app/credit/[id]/+page.svelte' 'app/customers/+page.svelte' 'app/customers/[id]/+page.svelte' 'app/trade-lines/+page.svelte' 'app/trade-lines/[id]/+page.svelte' 'app/payments/+page.svelte' 'app/collections/+page.svelte' 'app/overdue/+page.svelte' 'app/disputes/+page.svelte' 'app/reports/+page.svelte' 'app/team/+page.svelte' 'app/settings/+page.svelte' 'app/settings/billing/+page.svelte' 'app/settings/settlement/+page.svelte' 'app/settings/security/+page.svelte'
-  'app/onboarding/+page.svelte' 'app/settings/credit-policy/+page.svelte'
-  'app/settings/notifications/+page.svelte' 'app/settings/privacy/+page.svelte' 'recover/+page.svelte' 'admin/recovery/+page.svelte' 'admin/privacy/+page.svelte'
-  'buyer/+page.svelte' 'buyer/requests/+page.svelte' 'buyer/obligations/+page.svelte' 'buyer/obligations/[id]/+page.svelte' 'buyer/trade-lines/+page.svelte' 'buyer/history/+page.svelte' 'buyer/mandates/+page.svelte' 'buyer/disputes/+page.svelte' 'buyer/settings/+page.svelte'
+  'workspace/today/+page.svelte' 'workspace/today/+page.svelte' 'workspace/sales/new/+page.svelte' 'workspace/sales/[id]/+page.svelte' 'workspace/partners/customers/+page.svelte' 'workspace/partners/customers/[id]/+page.svelte' 'workspace/sales/limits/+page.svelte' 'workspace/sales/limits/[id]/+page.svelte' 'workspace/money/received/+page.svelte' 'workspace/money/collections/+page.svelte' 'workspace/overdue/+page.svelte' 'workspace/disputes/+page.svelte' 'workspace/reports/+page.svelte' 'workspace/team/+page.svelte' 'workspace/settings/+page.svelte' 'workspace/settings/billing/+page.svelte' 'workspace/settings/settlement/+page.svelte' 'account/security/+page.svelte'
+  'workspace/onboarding/+page.svelte' 'workspace/settings/credit-policy/+page.svelte'
+  'account/notifications/+page.svelte' 'account/privacy/+page.svelte' 'recover/+page.svelte' 'admin/recovery/+page.svelte' 'admin/privacy/+page.svelte'
+  'workspace/purchases/+page.svelte' 'workspace/purchases/orders/+page.svelte' 'workspace/purchases/obligations/+page.svelte' 'workspace/purchases/obligations/[id]/+page.svelte' 'workspace/purchases/trade-lines/+page.svelte' 'workspace/purchases/history/+page.svelte' 'workspace/purchases/mandates/+page.svelte' 'workspace/purchases/disputes/+page.svelte' 'account/+page.svelte'
   'c/[token]/+page.svelte' 'pay/[token]/+page.svelte' 'receipt/[public_token]/+page.svelte'
   'admin/+page.svelte' 'admin/users/+page.svelte' 'admin/organizations/+page.svelte' 'admin/money/+page.svelte' 'admin/search/+page.svelte' 'admin/cases/+page.svelte' 'admin/cases/[id]/+page.svelte' 'admin/disputes/+page.svelte' 'admin/disputes/[id]/+page.svelte' 'admin/provider-events/+page.svelte' 'admin/jobs/+page.svelte' 'admin/team/+page.svelte' 'admin/audit/+page.svelte'
   'admin/analytics/+page.svelte'
+  'retailers/+page.svelte' 'consumers/+page.svelte' 'personal/purchases/+page.svelte' 'personal/purchases/[saleID]/+page.svelte'
 )
 for route in "${routes[@]}"; do require_file "web/src/routes/${route}"; done
 

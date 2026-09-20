@@ -2,7 +2,7 @@
 
 import { globSync, readFileSync } from 'node:fs';
 import { articleCategories, articleCategoryDetails, articles, categorySlug } from '../web/src/lib/blog/articles.ts';
-import { pageSEOByPath, publicSitemapEntries } from '../web/src/lib/seo.ts';
+import { isPrivateRoute, isUnlistedRoute, pageSEOByPath, publicSitemapEntries } from '../web/src/lib/seo.ts';
 
 const failures=[];
 const fail=(slug,message)=>failures.push(`${slug}: ${message}`);
@@ -87,11 +87,9 @@ for(const entry of publicSitemapEntries){
 	if(pageDescriptions.has(seo.description))fail(entry.path,'duplicate public-page description');pageDescriptions.add(seo.description);
 }
 for(const path of Object.keys(pageSEOByPath)){if(!publicSitemapEntries.some(entry=>entry.path===path))fail(path,'SEO record is missing from the public sitemap registry')}
-const privateRouteRoots=new Set(['admin','app','buyer','buyer-invitations','c','pay','receipt','recover','secure']);
 for(const route of globSync('web/src/routes/**/+page.svelte')){
 	const path=`/${route.replace(/^web\/src\/routes\//,'').replace(/(?:^|\/)\+page\.svelte$/,'')}`.replace(/\/$/,'')||'/';
-	const root=path.split('/').filter(Boolean)[0]??'';
-	if(path.includes('[')||privateRouteRoots.has(root))continue;
+	if(path.includes('[')||isPrivateRoute(path)||isUnlistedRoute(path))continue;
 	if(!publicSitemapEntries.some(entry=>entry.path===path))fail(path,'public page is missing from the shared SEO and sitemap registry');
 }
 const discoveryPaths=[...publicSitemapEntries.map(entry=>entry.path),...articles.map(article=>`/blog/${article.slug}`)];

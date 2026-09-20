@@ -8,6 +8,1102 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /organizations/{organizationID}/terms-imports:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: listTermsImports
+      summary: List staged terms-import batches
+      description: Reviews proposed terms only. Approval does not create invitations, change credit limits, create obligations, post opening balances or move money. Financial application remains not_applied. Current company-wide invitation or approval authority is required for reads.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batches:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        organization_id:
+                          type: string
+                          format: uuid
+                        source_hash:
+                          type: string
+                        state:
+                          type: string
+                          enum:
+                          - staged
+                          - approved
+                          - cancelled
+                        financial_application:
+                          type: string
+                          const: not_applied
+                        total_rows:
+                          type: integer
+                          format: int64
+                          minimum: 0
+                          maximum: 9007199254740991
+                        valid_rows:
+                          type: integer
+                          format: int64
+                          minimum: 0
+                          maximum: 9007199254740991
+                        invalid_rows:
+                          type: integer
+                          format: int64
+                          minimum: 0
+                          maximum: 9007199254740991
+                      required:
+                      - id
+                      - organization_id
+                      - state
+                      - financial_application
+                required:
+                - batches
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+    post:
+      operationId: stageTermsImport
+      summary: Stage a proposed-terms batch
+      description: Reviews proposed terms only. Approval does not create invitations, change credit limits, create obligations, post opening balances or move money. Financial application remains not_applied. Current company-wide invitation or approval authority is required for reads. Invitation authority and CSRF are required. The source hash derives from the typed rows, not from the request key.
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  organization_id:
+                    type: string
+                    format: uuid
+                  source_hash:
+                    type: string
+                  state:
+                    type: string
+                    enum:
+                    - staged
+                    - approved
+                    - cancelled
+                  financial_application:
+                    type: string
+                    const: not_applied
+                  total_rows:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 9007199254740991
+                  valid_rows:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 9007199254740991
+                  invalid_rows:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 9007199254740991
+                required:
+                - id
+                - organization_id
+                - state
+                - financial_application
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rows:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      customer_name:
+                        type: string
+                      contact_email:
+                        type: string
+                      contact_phone:
+                        type: string
+                      proposed_credit_limit_kobo:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                        maximum: 9007199254740991
+                      proposed_grace_hours:
+                        type: integer
+                        minimum: 0
+                        maximum: 720
+                      opening_balance_kobo:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                        maximum: 9007199254740991
+                      opening_balance_reference:
+                        type: string
+                    required:
+                    - customer_name
+                  minItems: 1
+                  maxItems: 500
+              required:
+              - rows
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/terms-imports/{batchID}:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: batchID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: getTermsImport
+      summary: Read a terms-import batch
+      description: Reviews proposed terms only. Approval does not create invitations, change credit limits, create obligations, post opening balances or move money. Financial application remains not_applied. Current company-wide invitation or approval authority is required for reads.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      organization_id:
+                        type: string
+                        format: uuid
+                      source_hash:
+                        type: string
+                      state:
+                        type: string
+                        enum:
+                        - staged
+                        - approved
+                        - cancelled
+                      financial_application:
+                        type: string
+                        const: not_applied
+                      total_rows:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                        maximum: 9007199254740991
+                      valid_rows:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                        maximum: 9007199254740991
+                      invalid_rows:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                        maximum: 9007199254740991
+                    required:
+                    - id
+                    - organization_id
+                    - state
+                    - financial_application
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        customer_name:
+                          type: string
+                        contact_email:
+                          type: string
+                        contact_phone:
+                          type: string
+                        proposed_credit_limit_kobo:
+                          type: integer
+                          format: int64
+                          minimum: 0
+                          maximum: 9007199254740991
+                        proposed_grace_hours:
+                          type: integer
+                          minimum: 0
+                          maximum: 720
+                        opening_balance_kobo:
+                          type: integer
+                          format: int64
+                          minimum: 0
+                          maximum: 9007199254740991
+                        opening_balance_reference:
+                          type: string
+                      required:
+                      - customer_name
+                required:
+                - batch
+                - rows
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+    post:
+      operationId: reviewTermsImport
+      summary: Approve or cancel a proposed-terms batch
+      description: Reviews proposed terms only. Approval does not create invitations, change credit limits, create obligations, post opening balances or move money. Financial application remains not_applied. Current company-wide invitation or approval authority is required for reads. Requires credit-approval authority, CSRF and a reviewer other than the uploader. Matching terminal decisions may be replayed.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  organization_id:
+                    type: string
+                    format: uuid
+                  source_hash:
+                    type: string
+                  state:
+                    type: string
+                    enum:
+                    - staged
+                    - approved
+                    - cancelled
+                  financial_application:
+                    type: string
+                    const: not_applied
+                  total_rows:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 9007199254740991
+                  valid_rows:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 9007199254740991
+                  invalid_rows:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 9007199254740991
+                required:
+                - id
+                - organization_id
+                - state
+                - financial_application
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decision:
+                  type: string
+                  enum:
+                  - approve
+                  - cancel
+              required:
+              - decision
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/credit-requests/{requestID}/deliveries:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: getOrderDeliveries
+      summary: Read order line items and delivery evidence
+      description: Supplier membership and parent-order branch access are required. Unavailable reads return an error, never invented empty history.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  line_items:
+                    type: array
+                    items:
+                      type: object
+                  shipments:
+                    type: array
+                    items:
+                      type: object
+                  credit_notes:
+                    type: array
+                    items:
+                      type: object
+                required:
+                - line_items
+                - shipments
+                - credit_notes
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+  /organizations/{organizationID}/credit-requests/{requestID}/line-items:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: createOrderLineItems
+      summary: Record itemized order lines
+      description: Requires credit-creation permission, CSRF and the authorized parent order. Item totals must fit safe integer kobo arithmetic.
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    const: created
+                  count:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 9007199254740991
+                required:
+                - status
+                - count
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      sku:
+                        type: string
+                      description:
+                        type: string
+                      unit_price_kobo:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                        maximum: 9007199254740991
+                      quantity:
+                        type: integer
+                        format: int64
+                        minimum: 1
+                        maximum: 9007199254740991
+                    required:
+                    - description
+                    - unit_price_kobo
+                    - quantity
+                  minItems: 1
+                  maxItems: 500
+              required:
+              - items
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/credit-requests/{requestID}/shipments:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: dispatchOrderShipment
+      summary: Dispatch items from one order
+      description: Requires goods-release permission and CSRF. Every unique line-item identifier must belong to this order. Dispatch and fulfilled quantities commit together.
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                carrier:
+                  type: string
+                tracking_reference:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      line_item_id:
+                        type: string
+                        format: uuid
+                      quantity:
+                        type: integer
+                        format: int64
+                        minimum: 1
+                        maximum: 9007199254740991
+                    required:
+                    - line_item_id
+                    - quantity
+                  minItems: 1
+                  maxItems: 500
+              required:
+              - items
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/credit-requests/{requestID}/receipts:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: recordOrderReceipt
+      summary: Record buyer-owned delivery evidence
+      description: The organization path is the supplier, not a grant of supplier write authority. Current buyer receiving authority and CSRF are required. Matching retries recover the original receipt; changed evidence conflicts.
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shipment_id:
+                  type: string
+                  format: uuid
+                condition_notes:
+                  type: string
+                signed_proof:
+                  type: string
+                  minLength: 1
+              required:
+              - shipment_id
+              - signed_proof
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /buyer/credit-requests/{requestID}/shipments/{shipmentID}/receipt:
+    parameters:
+    - name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: shipmentID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: recordBuyerShipmentReceipt
+      summary: Confirm receipt of a specific shipment
+      description: Requires current buyer receiving authority and CSRF. An optional body shipment_id must match the path. Records buyer evidence and performs only the narrowly permitted shipment transition.
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shipment_id:
+                  type: string
+                  format: uuid
+                condition_notes:
+                  type: string
+                signed_proof:
+                  type: string
+                  minLength: 1
+              required:
+              - signed_proof
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/credit-requests/{requestID}/credit-notes:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: requestID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: createOrderCreditNote
+      summary: Draft an order credit note
+      description: Requires credit-creation authority and CSRF. Any supplied obligation must belong to this same order and supplier. A draft is not a financial adjustment.
+      responses:
+        '201':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount_kobo:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                  maximum: 9007199254740991
+                reason:
+                  type: string
+                  minLength: 1
+                obligation_id:
+                  type: string
+                  format: uuid
+              required:
+              - amount_kobo
+              - reason
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/credit-notes/{noteID}/approve:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: noteID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: approveOrderCreditNote
+      summary: Approve and apply an order credit note
+      description: Requires current credit-approval authority and CSRF. The issuer cannot approve their own note. Durable application locks the related obligation and commits journal, schedule and outstanding balance together; unavailable financial dependencies fail closed.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    const: approved
+                required:
+                - id
+                - status
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/drawdowns/{drawdownID}/approval:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: drawdownID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: requestDrawdownApproval
+      summary: Request independent drawdown review
+      description: Requires current credit-creation authority and CSRF. Creates a review request, not an approval or a goods release. The existing credit-approvals decision endpoint performs the separate reviewer action.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    const: recorded
+                required:
+                - id
+                - status
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/reports/enterprise:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: getEnterpriseReport
+      summary: Read enterprise exposure projections
+      description: Requires financial-read permission. The result is a projection of the authorized organization, not a separate financial balance.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organization_id:
+                    type: string
+                    format: uuid
+                  generated_at:
+                    type: string
+                    format: date-time
+                  summary:
+                    type: object
+                  portfolio_health:
+                    type: object
+                  branch_exposures:
+                    type: array
+                    items:
+                      type: object
+                  integrity_hash:
+                    type: string
+                required:
+                - organization_id
+                - generated_at
+                - summary
+                - portfolio_health
+                - branch_exposures
+                - integrity_hash
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+  /organizations/{organizationID}/reports/enterprise/exports:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: exportEnterpriseReport
+      summary: Export enterprise exposure CSV
+      description: Requires financial-read permission and CSRF. Returns a CSV report and X-Report-Checksum; this digest identifies report bytes, not independent assurance.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            text/csv:
+              schema:
+                type: string
+          headers:
+            X-Report-Checksum:
+              description: Report content digest
+              schema:
+                type: string
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /organizations/{organizationID}/erp/reconcile:
+    parameters:
+    - name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: reconcileERPRecords
+      summary: Compare submitted ERP records
+      description: Requires financial-read permission and CSRF. Produces a comparison report only; it does not apply corrections or import balances. This endpoint currently has no shipped browser controller.
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Malformed path or payload
+        '401':
+          description: Authentication required
+        '403':
+          description: Current authority or CSRF check failed
+        '404':
+          description: The resource is not visible to the current actor
+        '409':
+          description: Conflicting evidence or a closed operation
+        '422':
+          description: Invalid domain input
+        '503':
+          description: The operation could not be confirmed; refresh before retrying
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                period_start:
+                  type: string
+                  format: date-time
+                period_end:
+                  type: string
+                  format: date-time
+                external_records:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      reference:
+                        type: string
+                      amount_kobo:
+                        type: integer
+                        format: int64
+                      date:
+                        type: string
+                        format: date-time
+                      note:
+                        type: string
+      parameters:
+      - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
   /organizations/{organizationID}/purchasing-authority:
     get:
       operationId: getPurchasingAuthority
