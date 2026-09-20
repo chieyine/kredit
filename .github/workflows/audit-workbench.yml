@@ -1,0 +1,27 @@
+name: Audit workbench (temporary)
+
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-workbench.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    if: github.repository == 'chieyine/kredit' && github.ref == 'refs/heads/audit/2026-09-20-integrity-remediation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Export tracked source without credentials or runtime files
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/kredit-source.tar.gz" "$GITHUB_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: audit-source-${{ github.sha }}
+          path: ${{ runner.temp }}/kredit-source.tar.gz
+          retention-days: 1
+          if-no-files-found: error
