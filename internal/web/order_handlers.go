@@ -8,15 +8,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"kredit/internal/access"
 	"kredit/internal/audit"
+	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/orders"
 )
 
 func (s *Server) getOrdersService() orders.Service {
-	if s.runtime.Database != nil {
-		return orders.NewPostgresStore(s.runtime.Database.Raw(), s.runtime.Ledger)
-	}
-	return orders.NewMemoryStore()
+	s.initDomainServices()
+	return s.domainServices.orders
 }
 
 type lineItemInput struct {
@@ -64,9 +63,13 @@ func (s *Server) createLineItems(w http.ResponseWriter, r *http.Request) {
 			Quantity:      it.Quantity,
 		}
 	}
+	if _, err := s.runtime.getCreditForSupplier(r.Context(), requestID, orgID); err != nil {
+		s.writeOrderProblem(w, r, err)
+		return
+	}
 	svc := s.getOrdersService()
 	if err := svc.CreateLineItems(r.Context(), requestID, items); err != nil {
-		writeProblem(w, 500, "create_line_items_failed", err.Error())
+		s.writeOrderProblem(w, r, err)
 		return
 	}
 	s.auditCredit(user.ID, orgID, "order.line_items.created", requestID)
@@ -89,18 +92,25 @@ func (s *Server) orderDeliveries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := s.runtime.getCreditForSupplier(r.Context(), requestID, orgID); err != nil {
+		s.writeOrderProblem(w, r, err)
+		return
+	}
 	svc := s.getOrdersService()
 	items, err := svc.ListLineItems(r.Context(), requestID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		items = []orders.LineItem{}
+	if err != nil {
+		s.writeOrderProblem(w, r, err)
+		return
 	}
 	shipments, err := svc.ListShipments(r.Context(), requestID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		shipments = []orders.Shipment{}
+	if err != nil {
+		s.writeOrderProblem(w, r, err)
+		return
 	}
 	creditNotes, err := svc.ListCreditNotes(r.Context(), requestID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		creditNotes = []orders.CreditNote{}
+	if err != nil {
+		s.writeOrderProblem(w, r, err)
+		return
 	}
 
 	writeJSON(w, 200, map[string]any{
@@ -150,6 +160,10 @@ func (s *Server) createShipment(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	if _, err := s.runtime.getCreditForSupplier(r.Context(), requestID, orgID); err != nil {
+		s.writeOrderProblem(w, r, err)
+		return
+	}
 	svc := s.getOrdersService()
 	shipment, err := svc.DispatchShipment(r.Context(), orders.DispatchInput{
 		OrderID:                requestID,
@@ -160,7 +174,7 @@ func (s *Server) createShipment(w http.ResponseWriter, r *http.Request) {
 		Items:                  items,
 	})
 	if err != nil {
-		writeProblem(w, 422, "dispatch_failed", err.Error())
+		s.writeOrderProblem(w, r, err)
 		return
 	}
 
@@ -178,17 +192,13 @@ func (s *Server) createShipment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) recordReceipt(w http.ResponseWriter, r *http.Request) {
-	orgID, err := pathID(r, "organizationID")
-	if err != nil {
-		writeProblem(w, 400, "invalid_business", err.Error())
-		return
-	}
+	orgID := r.PathValue("organizationID")
 	requestID, err := pathID(r, "requestID")
 	if err != nil {
 		writeProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReleaseGoods)
+	_, user, ok := s.requireAuth(w, r)
 	if !ok {
 		return
 	}
@@ -206,6 +216,39 @@ func (s *Server) recordReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	*r = *r.WithContext(db.WithTenantContext(r.Context(), user.ID, ""))
+	// The durable receipt policy checks current purchasing authority again
+	// under locks. Memory simulation must still authenticate the real buyer.
+	if s.runtime.Database == nil {
+		view, err := s.runtime.Credit.GetForBuyer(requestID, user.ID)
+		if err != nil || (orgID != "" && orgID != view.Request.SupplierOrganizationID) {
+			writeProblem(w, 404, "order_not_found", "Order was not found.")
+			return
+		}
+		orgID = view.Request.SupplierOrganizationID
+	} else {
+		var supplier string
+		scoped := &db.ScopedDatabase{Pool: s.runtime.Database.Raw()}
+		err := scoped.QueryRow(r.Context(), `SELECT supplier_organization_id::text FROM app.credit_requests
+            WHERE id=$1::uuid AND app.can_purchase(buyer_business_id,'receive')`, requestID).Scan(&supplier)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && orgID != "" && orgID != supplier) {
+			writeProblem(w, 404, "order_not_found", "Order was not found.")
+			return
+		}
+		if err != nil {
+			s.writeOrderProblem(w, r, err)
+			return
+		}
+		// Audit attribution only: the database context stays user-scoped.
+		orgID = supplier
+	}
+	if shipmentID := r.PathValue("shipmentID"); shipmentID != "" {
+		if in.ShipmentID != "" && in.ShipmentID != shipmentID {
+			writeProblem(w, 400, "invalid_shipment", "Shipment identifiers disagree.")
+			return
+		}
+		in.ShipmentID = shipmentID
+	}
 	svc := s.getOrdersService()
 	receipt, err := svc.RecordDeliveryReceipt(r.Context(), orders.DeliveryInput{
 		ShipmentID:     in.ShipmentID,
@@ -215,7 +258,7 @@ func (s *Server) recordReceipt(w http.ResponseWriter, r *http.Request) {
 		SignedProof:    in.SignedProof,
 	})
 	if err != nil {
-		writeProblem(w, 422, "receipt_failed", err.Error())
+		s.writeOrderProblem(w, r, err)
 		return
 	}
 
@@ -261,6 +304,10 @@ func (s *Server) createCreditNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := s.runtime.getCreditForSupplier(r.Context(), requestID, orgID); err != nil {
+		s.writeOrderProblem(w, r, err)
+		return
+	}
 	svc := s.getOrdersService()
 	cn, err := svc.CreateCreditNote(r.Context(), orders.CreditNoteInput{
 		OrderID:                requestID,
@@ -271,7 +318,7 @@ func (s *Server) createCreditNote(w http.ResponseWriter, r *http.Request) {
 		IssuedBy:               user.ID,
 	})
 	if err != nil {
-		writeProblem(w, 422, "credit_note_failed", err.Error())
+		s.writeOrderProblem(w, r, err)
 		return
 	}
 
@@ -314,7 +361,7 @@ func (s *Server) approveCreditNote(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, 403, "dual_control_required", "The issuer cannot approve their own credit note. A different authorized person must approve.")
 			return
 		}
-		writeProblem(w, 422, "approval_failed", err.Error())
+		s.writeOrderProblem(w, r, err)
 		return
 	}
 

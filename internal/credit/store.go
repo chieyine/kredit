@@ -561,7 +561,7 @@ func (s *Store) UpdateDraft(requestID, actorID string, input UpdateDraftInput) (
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return CreditRequest{}, errors.New("credit request not found")
+		return CreditRequest{}, ErrRequestNotFound
 	}
 	if r.CreatedBy != actorID {
 		return CreditRequest{}, errors.New("only the request creator may amend this draft")
@@ -629,7 +629,7 @@ func (s *Store) sendWithLegalVersions(requestID, actorID string, versions legalp
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	if actorID == "" || r.CreatedBy != actorID {
 		return View{}, errors.New("only the request creator may send this credit request")
@@ -657,7 +657,7 @@ func (s *Store) Cancel(requestID, actorID string) (View, error) {
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	if r.CreatedBy != actorID {
 		return View{}, errors.New("only the request creator may cancel this credit request")
@@ -676,7 +676,7 @@ func (s *Store) Review(requestID, buyerUserID string) (View, error) {
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	if !s.canPurchaseLocked(r, buyerUserID, "review") {
 		return View{}, errors.New("buyer mismatch")
@@ -697,7 +697,7 @@ func (s *Store) Decline(requestID, buyerUserID string) (View, error) {
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	if !s.canPurchaseLocked(r, buyerUserID, "review") {
 		return View{}, errors.New("buyer mismatch")
@@ -716,7 +716,7 @@ func (s *Store) AuthorizeMandate(ctx context.Context, requestID, buyerUserID str
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	if r.BuyerUserID != buyerUserID || !s.canPurchaseLocked(r, buyerUserID, "bank") {
 		return View{}, errors.New("buyer mismatch")
@@ -768,7 +768,7 @@ func (s *Store) SetMandate(requestID, buyerUserID string, mandate mandates.Manda
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil || r.BuyerUserID != buyerUserID {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	if mandate.UserID != buyerUserID || mandate.BusinessID != r.BuyerBusinessID || mandate.SupplierOrganizationID != r.SupplierOrganizationID || mandate.ID == "" || mandate.ProviderID == "" {
 		return View{}, errors.New("mandate ownership does not match credit request")
@@ -787,7 +787,7 @@ func (s *Store) Accept(requestID, buyerUserID, agreementID, agreementHash, manda
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	if !s.canPurchaseLocked(r, buyerUserID, "accept") {
 		return View{}, errors.New("buyer mismatch")
@@ -826,7 +826,7 @@ func (s *Store) Release(requestID, supplierOrgID, actorID, deliveryMethod, notes
 	defer s.mu.Unlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	if r.SupplierOrganizationID != supplierOrgID {
 		return View{}, errors.New("supplier mismatch")
@@ -913,7 +913,7 @@ func (s *Store) RecordReceipt(requestID, buyerUserID, state, issueReason string)
 func (s *Store) recordReceiptLocked(requestID, buyerUserID, state, issueReason, systemAcceptanceID string) (View, *ledger.Transaction, error) {
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, nil, errors.New("credit request not found")
+		return View{}, nil, ErrRequestNotFound
 	}
 	if !s.canPurchaseLocked(r, buyerUserID, "receive") {
 		return View{}, nil, errors.New("buyer mismatch")
@@ -991,7 +991,7 @@ func (s *Store) GetForSupplier(requestID, orgID string) (View, error) {
 	defer s.mu.RUnlock()
 	r := s.requests[requestID]
 	if r == nil || r.SupplierOrganizationID != orgID {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	view := s.viewLocked(r)
 	if view.Mandate != nil {
@@ -1004,7 +1004,7 @@ func (s *Store) GetForBuyer(requestID, buyerUserID string) (View, error) {
 	defer s.mu.RUnlock()
 	r := s.requests[requestID]
 	if r == nil || !s.canPurchaseLocked(r, buyerUserID, "read") || r.State == Draft {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	return s.buyerViewLocked(r, buyerUserID), nil
 }
@@ -1013,7 +1013,7 @@ func (s *Store) GetPublic(requestID string) (View, error) {
 	defer s.mu.RUnlock()
 	r := s.requests[requestID]
 	if r == nil {
-		return View{}, errors.New("credit request not found")
+		return View{}, ErrRequestNotFound
 	}
 	return s.viewLocked(r), nil
 }
@@ -1205,7 +1205,7 @@ func (s *Store) PaymentSnapshot(obligationID string) (payments.ObligationSnapsho
 	}
 	r := s.requests[o.CreditRequestID]
 	if r == nil {
-		return payments.ObligationSnapshot{}, errors.New("credit request not found")
+		return payments.ObligationSnapshot{}, ErrRequestNotFound
 	}
 	return payments.ObligationSnapshot{FeeTerms: r.FeeTerms.Clone(), ID: o.ID, BuyerUserID: r.BuyerUserID, SupplierOrganizationID: o.SupplierOrganizationID, PrincipalKobo: o.PrincipalKobo, OutstandingKobo: o.OutstandingKobo, CollectionAt: r.CollectionAt, Currency: o.Currency}, nil
 }
@@ -1255,7 +1255,7 @@ func (s *Store) CollectionState(obligationID string) (CollectionState, error) {
 	}
 	r := s.requests[o.CreditRequestID]
 	if r == nil {
-		return CollectionState{}, errors.New("credit request not found")
+		return CollectionState{}, ErrRequestNotFound
 	}
 	mandate := s.mandateMap[r.MandateID]
 	remaining := ledger.Money(0)

@@ -2,7 +2,6 @@ package buyers
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"sync"
 	"time"
@@ -49,19 +48,20 @@ type TermsImportRow struct {
 }
 
 type TermsImportBatch struct {
-	ID             string     `json:"id"`
-	OrganizationID string     `json:"organization_id"`
-	SourceHash     string     `json:"source_hash"`
-	TotalRows      int        `json:"total_rows"`
-	ValidRows      int        `json:"valid_rows"`
-	InvalidRows    int        `json:"invalid_rows"`
-	State          string     `json:"state"`
-	UploadedBy     string     `json:"uploaded_by"`
-	ApprovedBy     string     `json:"approved_by,omitempty"`
-	CancelledBy    string     `json:"cancelled_by,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ApprovedAt     *time.Time `json:"approved_at,omitempty"`
-	CancelledAt    *time.Time `json:"cancelled_at,omitempty"`
+	ID                   string     `json:"id"`
+	OrganizationID       string     `json:"organization_id"`
+	SourceHash           string     `json:"source_hash"`
+	FinancialApplication string     `json:"financial_application"`
+	TotalRows            int        `json:"total_rows"`
+	ValidRows            int        `json:"valid_rows"`
+	InvalidRows          int        `json:"invalid_rows"`
+	State                string     `json:"state"`
+	UploadedBy           string     `json:"uploaded_by"`
+	ApprovedBy           string     `json:"approved_by,omitempty"`
+	CancelledBy          string     `json:"cancelled_by,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	ApprovedAt           *time.Time `json:"approved_at,omitempty"`
+	CancelledAt          *time.Time `json:"cancelled_at,omitempty"`
 }
 
 type TermsImportService interface {
@@ -91,21 +91,32 @@ func NewMemoryTermsImportStore(l ...ledger.Service) *MemoryTermsImportStore {
 }
 
 func (m *MemoryTermsImportStore) StageTermsBatch(ctx context.Context, userID, orgID, sourceHash string, inputRows []TermsImportRowInput) (TermsImportBatch, error) {
-	if len(inputRows) == 0 || len(inputRows) > 500 {
-		return TermsImportBatch{}, errors.New("batch row count must be between 1 and 500")
+	canonicalHash, err := TermsSourceHash(inputRows)
+	if err != nil {
+		return TermsImportBatch{}, err
 	}
+	if sourceHash != "" && sourceHash != canonicalHash {
+		return TermsImportBatch{}, ErrTermsInvalidRow
+	}
+	sourceHash = canonicalHash
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	for _, existing := range m.batches {
+		if existing.OrganizationID == orgID && existing.SourceHash == sourceHash {
+			return cloneTermsBatch(*existing), nil
+		}
+	}
 	batchID := identifier.New()
 	batch := &TermsImportBatch{
-		ID:             batchID,
-		OrganizationID: orgID,
-		SourceHash:     sourceHash,
-		TotalRows:      len(inputRows),
-		State:          "staged",
-		UploadedBy:     userID,
-		CreatedAt:      time.Now().UTC(),
+		ID:                   batchID,
+		OrganizationID:       orgID,
+		SourceHash:           sourceHash,
+		FinancialApplication: "not_applied",
+		TotalRows:            len(inputRows),
+		State:                "staged",
+		UploadedBy:           userID,
+		CreatedAt:            time.Now().UTC(),
 	}
 
 	validCount := 0
@@ -149,10 +160,19 @@ func (m *MemoryTermsImportStore) StageTermsBatch(ctx context.Context, userID, or
 	m.batches[batchID] = batch
 	m.rows[batchID] = storedRows
 
-	return *batch, nil
+	return cloneTermsBatch(*batch), nil
 }
 
 func (m *MemoryTermsImportStore) ReviewTermsBatch(ctx context.Context, reviewerID, orgID, batchID, decision string) (TermsImportBatch, error) {
+	if reviewerID == "" || orgID == "" {
+		return TermsImportBatch{}, ErrTermsAuthority
+	}
+	if err := ctx.Err(); err != nil {
+		return TermsImportBatch{}, err
+	}
+	if decision != "approved" && decision != "cancelled" {
+		return TermsImportBatch{}, ErrTermsInvalidRow
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -163,6 +183,9 @@ func (m *MemoryTermsImportStore) ReviewTermsBatch(ctx context.Context, reviewerI
 	if batch.UploadedBy == reviewerID {
 		return TermsImportBatch{}, ErrTermsDualControl
 	}
+	if batch.State == decision && ((decision == "approved" && batch.ApprovedBy == reviewerID) || (decision == "cancelled" && batch.CancelledBy == reviewerID)) {
+		return cloneTermsBatch(*batch), nil
+	}
 	if batch.State != "staged" && batch.State != "reviewing" {
 		return TermsImportBatch{}, ErrTermsAlreadyClosed
 	}
@@ -172,14 +195,9 @@ func (m *MemoryTermsImportStore) ReviewTermsBatch(ctx context.Context, reviewerI
 		batch.State = "approved"
 		batch.ApprovedBy = reviewerID
 		batch.ApprovedAt = &now
-		for i := range m.rows[batchID] {
-			if m.rows[batchID][i].ValidationStatus == "valid" {
-				m.rows[batchID][i].ValidationStatus = "applied"
-				if m.rows[batchID][i].OpeningBalanceKobo > 0 && m.ledger != nil {
-					_, _ = m.ledger.PostActivation(m.rows[batchID][i].ID, m.rows[batchID][i].OpeningBalanceKobo, now, "opening-balance:"+m.rows[batchID][i].ID)
-				}
-			}
-		}
+		// Review records independent approval only. Applying credit terms or
+		// an opening balance needs a separately linked, accepted obligation.
+		// A staging-row ID must never be used as an obligation/journal reference.
 	} else if decision == "cancelled" {
 		batch.State = "cancelled"
 		batch.CancelledBy = reviewerID
@@ -188,16 +206,16 @@ func (m *MemoryTermsImportStore) ReviewTermsBatch(ctx context.Context, reviewerI
 		return TermsImportBatch{}, errors.New("decision must be approved or cancelled")
 	}
 
-	return *batch, nil
+	return cloneTermsBatch(*batch), nil
 }
 
 func (m *MemoryTermsImportStore) ListTermsBatches(ctx context.Context, userID, orgID string) ([]TermsImportBatch, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var out []TermsImportBatch
+	out := []TermsImportBatch{}
 	for _, b := range m.batches {
 		if b.OrganizationID == orgID {
-			out = append(out, *b)
+			out = append(out, cloneTermsBatch(*b))
 		}
 	}
 	return out, nil
@@ -213,7 +231,7 @@ func (m *MemoryTermsImportStore) GetTermsBatch(ctx context.Context, userID, orgI
 	rows := m.rows[batchID]
 	outRows := make([]TermsImportRow, len(rows))
 	copy(outRows, rows)
-	return *batch, outRows, nil
+	return cloneTermsBatch(*batch), outRows, nil
 }
 
 // PostgresTermsImportStore implements TermsImportService against PostgreSQL
@@ -235,242 +253,157 @@ func (p *PostgresTermsImportStore) SetLedger(l ledger.Service) {
 }
 
 func (p *PostgresTermsImportStore) StageTermsBatch(ctx context.Context, userID, orgID, sourceHash string, inputRows []TermsImportRowInput) (TermsImportBatch, error) {
-	if p.pool == nil {
-		return TermsImportBatch{}, errors.New("database pool unavailable")
+	canonicalHash, err := TermsSourceHash(inputRows)
+	if err != nil {
+		return TermsImportBatch{}, err
 	}
-	if len(inputRows) == 0 || len(inputRows) > 500 {
-		return TermsImportBatch{}, errors.New("batch row count must be between 1 and 500")
+	if sourceHash != "" && sourceHash != canonicalHash {
+		return TermsImportBatch{}, ErrTermsInvalidRow
 	}
-
-	hash := sha256.Sum256([]byte(sourceHash))
-
-	tx, err := p.pool.Begin(ctx)
+	sourceHash = canonicalHash
+	tx, err := p.beginTermsTx(ctx, userID, orgID, "stage")
 	if err != nil {
 		return TermsImportBatch{}, err
 	}
 	defer tx.Rollback(ctx)
-
-	var batch TermsImportBatch
 	validCount := 0
-	invalidCount := 0
-
 	for _, r := range inputRows {
-		if r.CustomerName == "" || r.ProposedCreditLimitKobo < 0 || r.OpeningBalanceKobo < 0 {
-			invalidCount++
-		} else {
+		if r.CustomerName != "" {
 			validCount++
 		}
 	}
-
-	err = tx.QueryRow(ctx, `
-		INSERT INTO app.partner_terms_import_batches (
-			organization_id, source_hash, payload_hash, payload_ciphertext, total_rows, valid_rows, invalid_rows, state, uploaded_by
-		) VALUES (
-			$1::uuid, $2, $3, $4, $5, $6, $7, 'staged', $8::uuid
-		) RETURNING id::text, organization_id::text, source_hash, total_rows, valid_rows, invalid_rows, state, uploaded_by::text, created_at
-	`, orgID, sourceHash, hash[:], []byte(sourceHash), len(inputRows), validCount, invalidCount, userID).
-		Scan(&batch.ID, &batch.OrganizationID, &batch.SourceHash, &batch.TotalRows, &batch.ValidRows, &batch.InvalidRows, &batch.State, &batch.UploadedBy, &batch.CreatedAt)
-	if err != nil {
-		return TermsImportBatch{}, err
-	}
-
-	for i, r := range inputRows {
-		status := "valid"
-		errMsg := ""
-		if r.CustomerName == "" {
-			status = "invalid"
-			errMsg = "Customer name is required"
-		} else if r.ProposedCreditLimitKobo < 0 || r.OpeningBalanceKobo < 0 {
-			status = "invalid"
-			errMsg = "Financial amounts cannot be negative"
-		}
-
-		_, err = tx.Exec(ctx, `
-			INSERT INTO app.partner_terms_import_rows (
-				batch_id, row_number, customer_name, contact_email, contact_phone, proposed_credit_limit_kobo, proposed_grace_hours, opening_balance_kobo, opening_balance_reference, validation_status, validation_error
-			) VALUES (
-				$1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-			)
-		`, batch.ID, i+1, r.CustomerName, r.ContactEmail, r.ContactPhone, int64(r.ProposedCreditLimitKobo), r.ProposedGraceHours, int64(r.OpeningBalanceKobo), r.OpeningBalanceReference, status, errMsg)
+	batch, err := scanTermsBatch(tx.QueryRow(ctx, `
+        INSERT INTO app.partner_terms_import_batches
+        (organization_id,source_hash,payload_hash,payload_ciphertext,total_rows,valid_rows,invalid_rows,state,uploaded_by)
+        VALUES($1::uuid,$2,decode($2,'hex'),$3,$4,$5,$6,'staged',$7::uuid)
+        ON CONFLICT(organization_id,source_hash) DO NOTHING
+        RETURNING `+termsBatchColumns, orgID, sourceHash, []byte{}, len(inputRows), validCount, len(inputRows)-validCount, userID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		batch, err = scanTermsBatch(tx.QueryRow(ctx, `SELECT `+termsBatchColumns+`
+            FROM app.partner_terms_import_batches WHERE organization_id=$1::uuid AND source_hash=$2`, orgID, sourceHash))
 		if err != nil {
 			return TermsImportBatch{}, err
 		}
+		return batch, tx.Commit(ctx)
 	}
-
-	if err := tx.Commit(ctx); err != nil {
+	if err != nil {
 		return TermsImportBatch{}, err
 	}
-	return batch, nil
+	// Structured rows below are the input record. No unencrypted input is
+	// mislabeled as ciphertext: there is no separately retained raw upload.
+	for i, r := range inputRows {
+		status, detail := "valid", ""
+		if r.CustomerName == "" {
+			status, detail = "invalid", "Customer name is required"
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO app.partner_terms_import_rows
+            (batch_id,row_number,customer_name,contact_email,contact_phone,proposed_credit_limit_kobo,proposed_grace_hours,opening_balance_kobo,opening_balance_reference,validation_status,validation_error)
+            VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, batch.ID, i+1, r.CustomerName, r.ContactEmail, r.ContactPhone, int64(r.ProposedCreditLimitKobo), r.ProposedGraceHours, int64(r.OpeningBalanceKobo), r.OpeningBalanceReference, status, detail); err != nil {
+			return TermsImportBatch{}, err
+		}
+	}
+	return batch, tx.Commit(ctx)
 }
 
 func (p *PostgresTermsImportStore) ReviewTermsBatch(ctx context.Context, reviewerID, orgID, batchID, decision string) (TermsImportBatch, error) {
-	if p.pool == nil {
-		return TermsImportBatch{}, errors.New("database pool unavailable")
+	if decision != "approved" && decision != "cancelled" {
+		return TermsImportBatch{}, ErrTermsInvalidRow
 	}
-
-	tx, err := p.pool.Begin(ctx)
+	tx, err := p.beginTermsTx(ctx, reviewerID, orgID, "review")
 	if err != nil {
 		return TermsImportBatch{}, err
 	}
 	defer tx.Rollback(ctx)
-
-	if orgID != "" || reviewerID != "" {
-		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, reviewerID, orgID); err != nil {
-			return TermsImportBatch{}, err
-		}
+	batch, err := scanTermsBatch(tx.QueryRow(ctx, `SELECT `+termsBatchColumns+`
+        FROM app.partner_terms_import_batches WHERE id=$1::uuid AND organization_id=$2::uuid FOR UPDATE`, batchID, orgID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return TermsImportBatch{}, ErrTermsBatchNotFound
 	}
-
-	var uploadedBy, state string
-	err = tx.QueryRow(ctx, `
-		SELECT uploaded_by::text, state FROM app.partner_terms_import_batches
-		WHERE id = $1::uuid AND organization_id = $2::uuid FOR UPDATE
-	`, batchID, orgID).Scan(&uploadedBy, &state)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return TermsImportBatch{}, ErrTermsBatchNotFound
-		}
 		return TermsImportBatch{}, err
 	}
-	if uploadedBy == reviewerID {
+	if batch.UploadedBy == reviewerID {
 		return TermsImportBatch{}, ErrTermsDualControl
 	}
-	if state != "staged" && state != "reviewing" {
+	if batch.State == decision && ((decision == "approved" && batch.ApprovedBy == reviewerID) || (decision == "cancelled" && batch.CancelledBy == reviewerID)) {
+		return batch, tx.Commit(ctx)
+	}
+	if batch.State != "staged" && batch.State != "reviewing" {
 		return TermsImportBatch{}, ErrTermsAlreadyClosed
 	}
-
-	var batch TermsImportBatch
-	now := time.Now().UTC()
 	if decision == "approved" {
-		err = tx.QueryRow(ctx, `
-			UPDATE app.partner_terms_import_batches
-			SET state = 'approved', approved_by = $3::uuid, approved_at = $4
-			WHERE id = $1::uuid AND organization_id = $2::uuid
-			RETURNING id::text, organization_id::text, source_hash, total_rows, valid_rows, invalid_rows, state, uploaded_by::text, COALESCE(approved_by::text, ''), created_at, approved_at
-		`, batchID, orgID, reviewerID, now).
-			Scan(&batch.ID, &batch.OrganizationID, &batch.SourceHash, &batch.TotalRows, &batch.ValidRows, &batch.InvalidRows, &batch.State, &batch.UploadedBy, &batch.ApprovedBy, &batch.CreatedAt, &batch.ApprovedAt)
-		if err != nil {
-			return TermsImportBatch{}, err
-		}
-
-		rows, err := tx.Query(ctx, `
-			SELECT id::text, opening_balance_kobo
-			FROM app.partner_terms_import_rows
-			WHERE batch_id = $1::uuid AND validation_status = 'valid'
-		`, batchID)
-		if err != nil {
-			return TermsImportBatch{}, err
-		}
-		defer rows.Close()
-
-		type rowBal struct {
-			id  string
-			bal int64
-		}
-		var validRows []rowBal
-		for rows.Next() {
-			var rb rowBal
-			if err := rows.Scan(&rb.id, &rb.bal); err == nil {
-				validRows = append(validRows, rb)
-			}
-		}
-		rows.Close()
-
-		_, err = tx.Exec(ctx, `
-			UPDATE app.partner_terms_import_rows
-			SET validation_status = 'applied'
-			WHERE batch_id = $1::uuid AND validation_status = 'valid'
-		`, batchID)
-		if err != nil {
-			return TermsImportBatch{}, err
-		}
-
-		for _, vr := range validRows {
-			if vr.bal > 0 && p.ledger != nil {
-				_, err = p.ledger.PostActivation(vr.id, ledger.Money(vr.bal), now, "opening-balance:"+vr.id)
-				if err != nil {
-					return TermsImportBatch{}, err
-				}
-			}
-		}
-	} else if decision == "cancelled" {
-		err = tx.QueryRow(ctx, `
-			UPDATE app.partner_terms_import_batches
-			SET state = 'cancelled', cancelled_by = $3::uuid, cancelled_at = $4
-			WHERE id = $1::uuid AND organization_id = $2::uuid
-			RETURNING id::text, organization_id::text, source_hash, total_rows, valid_rows, invalid_rows, state, uploaded_by::text, COALESCE(cancelled_by::text, ''), created_at, cancelled_at
-		`, batchID, orgID, reviewerID, now).
-			Scan(&batch.ID, &batch.OrganizationID, &batch.SourceHash, &batch.TotalRows, &batch.ValidRows, &batch.InvalidRows, &batch.State, &batch.UploadedBy, &batch.CancelledBy, &batch.CreatedAt, &batch.CancelledAt)
-		if err != nil {
-			return TermsImportBatch{}, err
-		}
+		batch, err = scanTermsBatch(tx.QueryRow(ctx, `UPDATE app.partner_terms_import_batches
+            SET state='approved',approved_by=$3::uuid,approved_at=statement_timestamp()
+            WHERE id=$1::uuid AND organization_id=$2::uuid RETURNING `+termsBatchColumns, batchID, orgID, reviewerID))
 	} else {
-		return TermsImportBatch{}, errors.New("decision must be approved or cancelled")
+		batch, err = scanTermsBatch(tx.QueryRow(ctx, `UPDATE app.partner_terms_import_batches
+            SET state='cancelled',cancelled_by=$3::uuid,cancelled_at=statement_timestamp()
+            WHERE id=$1::uuid AND organization_id=$2::uuid RETURNING `+termsBatchColumns, batchID, orgID, reviewerID))
 	}
-
+	if err != nil {
+		return TermsImportBatch{}, err
+	}
+	// Approval does not apply a row, originate debt, change a credit limit or
+	// debit an account. Keep validation_status valid/invalid/duplicate.
+	// Financial application is intentionally unavailable until each row has
+	// verified business, agreement and obligation linkage with atomic posting.
 	return batch, tx.Commit(ctx)
 }
 
 func (p *PostgresTermsImportStore) ListTermsBatches(ctx context.Context, userID, orgID string) ([]TermsImportBatch, error) {
-	if p.pool == nil {
-		return nil, errors.New("database pool unavailable")
+	tx, err := p.beginTermsTx(ctx, userID, orgID, "read")
+	if err != nil {
+		return nil, err
 	}
-	rows, err := p.pool.Query(ctx, `
-		SELECT id::text, organization_id::text, source_hash, total_rows, valid_rows, invalid_rows, state, uploaded_by::text, COALESCE(approved_by::text, ''), COALESCE(cancelled_by::text, ''), created_at, approved_at, cancelled_at
-		FROM app.partner_terms_import_batches
-		WHERE organization_id = $1::uuid
-		ORDER BY created_at DESC
-	`, orgID)
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `SELECT `+termsBatchColumns+` FROM app.partner_terms_import_batches
+        WHERE organization_id=$1::uuid ORDER BY created_at DESC,id DESC`, orgID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []TermsImportBatch
+	out := []TermsImportBatch{}
 	for rows.Next() {
-		var b TermsImportBatch
-		if err := rows.Scan(&b.ID, &b.OrganizationID, &b.SourceHash, &b.TotalRows, &b.ValidRows, &b.InvalidRows, &b.State, &b.UploadedBy, &b.ApprovedBy, &b.CancelledBy, &b.CreatedAt, &b.ApprovedAt, &b.CancelledAt); err != nil {
+		batch, err := scanTermsBatch(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, b)
+		out = append(out, batch)
 	}
 	return out, rows.Err()
 }
 
 func (p *PostgresTermsImportStore) GetTermsBatch(ctx context.Context, userID, orgID, batchID string) (TermsImportBatch, []TermsImportRow, error) {
-	if p.pool == nil {
-		return TermsImportBatch{}, nil, errors.New("database pool unavailable")
-	}
-	var b TermsImportBatch
-	err := p.pool.QueryRow(ctx, `
-		SELECT id::text, organization_id::text, source_hash, total_rows, valid_rows, invalid_rows, state, uploaded_by::text, COALESCE(approved_by::text, ''), COALESCE(cancelled_by::text, ''), created_at, approved_at, cancelled_at
-		FROM app.partner_terms_import_batches
-		WHERE id = $1::uuid AND organization_id = $2::uuid
-	`, batchID, orgID).
-		Scan(&b.ID, &b.OrganizationID, &b.SourceHash, &b.TotalRows, &b.ValidRows, &b.InvalidRows, &b.State, &b.UploadedBy, &b.ApprovedBy, &b.CancelledBy, &b.CreatedAt, &b.ApprovedAt, &b.CancelledAt)
+	tx, err := p.beginTermsTx(ctx, userID, orgID, "read")
 	if err != nil {
+		return TermsImportBatch{}, nil, err
+	}
+	defer tx.Rollback(ctx)
+	batch, err := scanTermsBatch(tx.QueryRow(ctx, `SELECT `+termsBatchColumns+`
+        FROM app.partner_terms_import_batches WHERE id=$1::uuid AND organization_id=$2::uuid`, batchID, orgID))
+	if errors.Is(err, pgx.ErrNoRows) {
 		return TermsImportBatch{}, nil, ErrTermsBatchNotFound
 	}
-
-	rows, err := p.pool.Query(ctx, `
-		SELECT id::text, batch_id::text, row_number, customer_name, contact_email, contact_phone, proposed_credit_limit_kobo, proposed_grace_hours, opening_balance_kobo, opening_balance_reference, validation_status, validation_error, COALESCE(invitation_id::text, ''), created_at
-		FROM app.partner_terms_import_rows
-		WHERE batch_id = $1::uuid
-		ORDER BY row_number
-	`, batchID)
+	if err != nil {
+		return TermsImportBatch{}, nil, err
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text,batch_id::text,row_number,customer_name,contact_email,contact_phone,
+        proposed_credit_limit_kobo,proposed_grace_hours,opening_balance_kobo,opening_balance_reference,
+        validation_status,validation_error,COALESCE(invitation_id::text,''),created_at
+        FROM app.partner_terms_import_rows WHERE batch_id=$1::uuid ORDER BY row_number`, batchID)
 	if err != nil {
 		return TermsImportBatch{}, nil, err
 	}
 	defer rows.Close()
-
-	var outRows []TermsImportRow
+	out := []TermsImportRow{}
 	for rows.Next() {
-		var r TermsImportRow
-		var lim, bal int64
-		if err := rows.Scan(&r.ID, &r.BatchID, &r.RowNumber, &r.CustomerName, &r.ContactEmail, &r.ContactPhone, &lim, &r.ProposedGraceHours, &bal, &r.OpeningBalanceReference, &r.ValidationStatus, &r.ValidationError, &r.InvitationID, &r.CreatedAt); err != nil {
+		var row TermsImportRow
+		if err := rows.Scan(&row.ID, &row.BatchID, &row.RowNumber, &row.CustomerName, &row.ContactEmail, &row.ContactPhone,
+			&row.ProposedCreditLimitKobo, &row.ProposedGraceHours, &row.OpeningBalanceKobo, &row.OpeningBalanceReference,
+			&row.ValidationStatus, &row.ValidationError, &row.InvitationID, &row.CreatedAt); err != nil {
 			return TermsImportBatch{}, nil, err
 		}
-		r.ProposedCreditLimitKobo = ledger.Money(lim)
-		r.OpeningBalanceKobo = ledger.Money(bal)
-		outRows = append(outRows, r)
+		out = append(out, row)
 	}
-	return b, outRows, rows.Err()
+	return batch, out, rows.Err()
 }

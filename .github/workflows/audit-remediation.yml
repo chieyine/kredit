@@ -35,13 +35,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Preserve reviewed source snapshot (no git credentials or runtime data)
-        run: git archive --format=zip HEAD > "$RUNNER_TEMP/kredit-reviewed-source.zip"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: kredit-reviewed-source-${{ github.sha }}
-          path: ${{ runner.temp }}/kredit-reviewed-source.zip
-          retention-days: 3
       - uses: actions/setup-go@v5
         with:
           go-version-file: .go-version
@@ -58,9 +51,11 @@ jobs:
             -v backup_login_password=kredit-backup-development-only \
             -v demote_owner=false -f infra/postgres/development-logins.sql
       - name: Domain and handler tests
-        run: go test -count=1 ./internal/buyers ./internal/orders ./internal/erp ./internal/web ./cmd/migrate
+        run: go test -count=1 ./internal/buyers ./internal/orders ./internal/erp ./internal/web ./internal/credit ./cmd/migrate
       - name: Restricted-role integration tests
         run: |
           set -euo pipefail
           go run ./cmd/seed
           KREDIT_INTEGRATION=1 go test -count=1 -p 1 -tags=integration ./internal/buyers ./internal/orders ./internal/erp ./internal/web
+      - name: Audit concurrency regressions
+        run: KREDIT_INTEGRATION=1 go test -race -count=1 -run '^TestAudit' ./internal/orders ./internal/buyers ./internal/erp ./internal/web

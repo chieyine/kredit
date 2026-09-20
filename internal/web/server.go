@@ -30,6 +30,7 @@ import (
 )
 
 type Server struct {
+	domainServices
 	config       config.Config
 	logger       *slog.Logger
 	runtime      *Runtime
@@ -343,7 +344,7 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		"/bank-authorization/", "/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
 		"/onboarding/", "/notification-preferences", "/recovery-codes", "/account-recovery/", "/privacy-requests", "/support-cases", "/product-feedback",
 		"/ops/seller-settlements/", "/identity/checks/", "/ops/billing-review/", "/ops/message-submissions/", "/ops/verification-requests/", "/ops/mandate-authorizations/",
-		"/dsa", "/consumer-bank", "/consumer-sales", "/consumer-settings", "/purchases", "/fee-operations/", "/fee-authorizations", "/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
+		"/terms-imports", "/credit-notes/", "/dsa", "/consumer-bank", "/consumer-sales", "/consumer-settings", "/purchases", "/fee-operations/", "/fee-authorizations", "/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
 	} {
 		if strings.Contains(path, suffix) {
 			return true
@@ -696,6 +697,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/line-items", s.createLineItems)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/shipments", s.createShipment)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/receipts", s.recordReceipt)
+	s.mux.HandleFunc("POST /api/v1/buyer/credit-requests/{requestID}/shipments/{shipmentID}/receipt", s.recordReceipt)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/credit-notes", s.createCreditNote)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-notes/{noteID}/approve", s.approveCreditNote)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/terms-imports", s.termsImports)
