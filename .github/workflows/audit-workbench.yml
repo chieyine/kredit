@@ -24,6 +24,11 @@ jobs:
           import base64, hashlib, json, os, pathlib, subprocess, zlib
           root = pathlib.Path.cwd().resolve()
           encoded = pathlib.Path('docs/audits/2026-09-20-remediation/round3-edits.zlib.b64').read_text().strip()
+          # Only repair the exact diagnosed transport; all independent source hashes stay fixed.
+          assert hashlib.sha256(encoded.encode()).hexdigest() == '5c10e56dc84bea22ebd92711779cd5ff843ba870607846be0db6f1af0cf5b576'
+          repairs = [[2405,2406,''],[2631,2631,'4'],[3564,3566,''],[3583,3584,''],[4987,4989,'X'],[4997,4999,''],[5023,5029,'9mrv'],[9242,9244,'']]
+          for start, end, text in reversed(repairs):
+              encoded = encoded[:start] + text + encoded[end:]
           raw = zlib.decompress(base64.b64decode(encoded, validate=True))
           assert hashlib.sha256(raw).hexdigest() == '86d5dc20a9bc245d69b31c6e9fc090a9ddc1c5176586f57a6c566136d0b94683'
           payload = json.loads(raw)
