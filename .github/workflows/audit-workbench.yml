@@ -5,23 +5,20 @@ on:
     paths: [.github/workflows/audit-workbench.yml]
 permissions:
   contents: read
-  actions: read
 jobs:
-  diagnostics:
+  source:
     if: github.repository == 'chieyine/kredit' && github.ref == 'refs/heads/audit/2026-09-20-integrity-remediation'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Preserve the existing failed job log without rerunning tests
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/audit-diagnostics"
-          gh api --allow-escape-sequences repos/chieyine/kredit/actions/jobs/106134596867/logs > "$RUNNER_TEMP/audit-diagnostics/ci-1f78860.log"
-          gh api repos/chieyine/kredit/contents/internal/buyers/terms_import.go?ref=1f788608e6daaea1fafefe551cfc89913b8182f6 --jq .sha > "$RUNNER_TEMP/audit-diagnostics/terms-blob.txt"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Export tracked source only
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/kredit-source.tar.gz" "$GITHUB_SHA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: audit-diagnostics-${{ github.sha }}
-          path: ${{ runner.temp }}/audit-diagnostics/
+          name: audit-source-${{ github.sha }}
+          path: ${{ runner.temp }}/kredit-source.tar.gz
           retention-days: 1
           if-no-files-found: error
