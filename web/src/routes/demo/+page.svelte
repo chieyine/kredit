@@ -2,7 +2,9 @@
 	import { onMount, tick } from 'svelte';
 	import { DEMO_SALE } from '$lib/demo-sale';
 	let interactive = $state(false);
-	onMount(() => { interactive = true; });
+	onMount(() => {
+		interactive = true;
+	});
 	let stageHeading: HTMLHeadingElement | undefined = $state();
 	let stage = $state(0);
 	let amount = $state(DEMO_SALE.principalKobo / 100);
@@ -16,79 +18,942 @@
 		{ role: 'Seller', title: 'Record a payment', action: 'Enter a sample payment' },
 		{ role: 'Both sides', title: 'One record, both sides', action: '' }
 	] as const;
-	const payment = $derived(Math.round(amount * 100 / 3) / 100);
+	const payment = $derived(Math.round((amount * 100) / 3) / 100);
 	const balance = $derived((amount * 100 - Math.round(payment * 100)) / 100);
 	const current = $derived(stages[stage]);
 	const progress = $derived(((stage + 1) / stages.length) * 100);
-	function money(value: number) { return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value); }
-	async function next() { if (stage < stages.length - 1) stage += 1; await tick(); stageHeading?.focus(); }
-	async function restart() { stage = 0; await tick(); stageHeading?.focus(); }
+	function money(value: number) {
+		return new Intl.NumberFormat('en-NG', {
+			style: 'currency',
+			currency: 'NGN',
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2
+		}).format(value);
+	}
+	async function next() {
+		if (stage < stages.length - 1) stage += 1;
+		await tick();
+		stageHeading?.focus();
+	}
+	async function restart() {
+		stage = 0;
+		await tick();
+		stageHeading?.focus();
+	}
 </script>
 
 <svelte:head><meta name="theme-color" content="#0b0d12" /></svelte:head>
 
 <main class="demo-page">
 	<section class="demo-intro shell" aria-labelledby="demo-title">
-		<div><p class="eyebrow"><span></span> Try it yourself</p><h1 id="demo-title">One sale,<br /><em>start to finish.</em></h1></div>
-		<div class="intro-copy"><p>Play both sides of a trade. Manufacturer to distributor, or distributor to retailer. Nothing here is real and no money moves.</p><div class="demo-promise"><b>No sign-in</b><b>No real money</b><b>About 60 seconds</b></div></div>
+		<div>
+			<p class="eyebrow"><span></span> Try it yourself</p>
+			<h1 id="demo-title">One sale,<br /><em>start to finish.</em></h1>
+		</div>
+		<div class="intro-copy">
+			<p>
+				Play both sides of a trade. Manufacturer to distributor, or distributor to retailer. Nothing here is real and no
+				money moves.
+			</p>
+			<div class="demo-promise"><b>No sign-in</b><b>No real money</b><b>About 60 seconds</b></div>
+		</div>
 	</section>
 
-	<nav class="shell demo-type" aria-label="Choose a demo"><a href="/demo" aria-current="page">Business trade</a><a href="/demo/consumer">Personal purchase →</a></nav>
+	<nav class="shell demo-type" aria-label="Choose a demo">
+		<a href="/demo" aria-current="page">Business trade</a><a href="/demo/consumer">Personal purchase →</a>
+	</nav>
 	<section class="experience" aria-label="Interactive Kredit demonstration">
 		<div class="shell experience-shell">
 			<aside class="journey" aria-label="Demo progress">
 				<div class="journey-top"><span>Sample sale</span><strong>{stage + 1} of {stages.length}</strong></div>
 				<div class="progress" aria-hidden="true"><span style={`width:${progress}%`}></span></div>
-				<ol>{#each stages as item, index}<li class:done={index < stage} class:active={index === stage}><span>{index < stage ? '✓' : index + 1}</span><div><small>{item.role}</small><strong>{item.title}</strong></div></li>{/each}</ol>
+				<ol>
+					{#each stages as item, index}<li class:done={index < stage} class:active={index === stage}>
+							<span>{index < stage ? '✓' : index + 1}</span>
+							<div><small>{item.role}</small><strong>{item.title}</strong></div>
+						</li>{/each}
+				</ol>
 				<p class="sample-note">This is a sample. Nothing is saved and nobody is sent a message.</p>
 			</aside>
 
 			<div class="demo-stage">
-				<header><div><p>You are now the</p><strong>{current.role}</strong></div><span class="live-mark"><i></i> Illustrative sample</span></header>
+				<header>
+					<div>
+						<p>You are now the</p>
+						<strong>{current.role}</strong>
+					</div>
+					<span class="live-mark"><i></i> Illustrative sample</span>
+				</header>
 				<div class="stage-copy">
-					<p class="stage-number">STEP {String(stage + 1).padStart(2, '0')}</p><h2 bind:this={stageHeading} tabindex="-1">{current.title}</h2>
-					{#if stage === 0}<p>Start with the goods, the amount and the day it falls due. What you put here is what your customer reads.</p>
-					{:else if stage === 1}<p>Nothing is buried. He sees the goods, the amount and the day before he agrees to anything.</p>
-					{:else if stage === 2}<p>Accepting the sale does not grant bank permission. In the real service, the customer authorises the provider separately, and Kredit waits for verified permission before goods release. This button only simulates that check.</p>
-					{:else if stage === 3}<p>You record the day the goods left, and the delivery note stays attached to that sale.</p>
-					{:else if stage === 4}<p>Your customer confirms what actually arrived. If the count is short, he says so there, before any money moves.</p>
-					{:else if stage === 5}<p>When the money lands you enter it once. The balance moves on both sides at the same moment.</p>
-					{:else}<p>Now both of you give the same answer on what was sent, what was paid and what is left. When there is an argument later, that record is what settles it.</p>{/if}
+					<p class="stage-number">STEP {String(stage + 1).padStart(2, '0')}</p>
+					<h2 bind:this={stageHeading} tabindex="-1">{current.title}</h2>
+					{#if stage === 0}<p>
+							Start with the goods, the amount and the day it falls due. What you put here is what your customer reads.
+						</p>
+					{:else if stage === 1}<p>
+							Nothing is buried. He sees the goods, the amount and the day before he agrees to anything.
+						</p>
+					{:else if stage === 2}<p>
+							Accepting the sale does not grant bank permission. In the real service, the customer authorises the
+							provider separately, and Kredit waits for verified permission before goods release. This button only
+							simulates that check.
+						</p>
+					{:else if stage === 3}<p>
+							You record the day the goods left, and the delivery note stays attached to that sale.
+						</p>
+					{:else if stage === 4}<p>
+							Your customer confirms what actually arrived. If the count is short, he says so there, before any money
+							moves.
+						</p>
+					{:else if stage === 5}<p>
+							When the money lands you enter it once. The balance moves on both sides at the same moment.
+						</p>
+					{:else}<p>
+							Now both of you give the same answer on what was sent, what was paid and what is left. When there is an
+							argument later, that record is what settles it.
+						</p>{/if}
 				</div>
 
 				<div class="product-frame" class:complete={stage === 6}>
-					<div class="product-bar"><a href="/" aria-label="Kredit home"><span>K</span>Kredit</a><b>{current.role} view</b></div>
-					{#if stage === 0}<div class="amount-choice"><p>Choose a sample amount</p><div>{#each amounts as option}<button class:chosen={amount === option} disabled={!interactive} onclick={() => amount = option}>{money(option)}</button>{/each}</div></div>{/if}
-					<div class="deal-head"><div><small>Customer</small><h3>Adebayo Stores</h3></div><span class:accepted={stage >= 2}>{stage === 0 ? 'Not sent' : stage === 1 ? 'Waiting for you' : 'Accepted'}</span></div>
-					{#if stage === 1}<div class="plain-notice"><b>Read this before you accept</b><span>Once you agree, the seller cannot go back and quietly change any of it.</span></div>{/if}
-					<div class="deal-facts"><div><small>Goods</small><strong>40 cartons of cooking oil</strong></div><div><small>Total to pay</small><strong>{money(amount)}</strong></div><div><small>Pay before</small><strong>18 September 2026</strong></div><div><small>Extra time</small><strong>{DEMO_SALE.graceHours} hours</strong></div></div>
-					{#if stage >= 2}<div class="record-line"><span>✓</span><div><b>Sale accepted</b><small>Adebayo Stores · Sample acceptance</small></div></div>{/if}
-					{#if stage >= 3}<div class="record-line"><span>✓</span><div><b>Sample bank permission ready</b><small>Illustrative provider confirmation, not a real bank result</small></div></div>{/if}
-					{#if stage >= 4}<div class="record-line"><span>✓</span><div><b>Goods released</b><small>Delivery note saved by Kora Wholesale</small></div></div>{/if}
-					{#if stage >= 5}<div class="record-line"><span>✓</span><div><b>Goods received</b><small>Customer confirmed · No problem reported</small></div></div>{/if}
-					{#if stage >= 5}<div class="balance-card"><div><small>{stage === 6 ? 'Money left to pay' : 'Current balance'}</small><strong>{stage === 6 ? money(balance) : money(amount)}</strong></div><span>{stage === 6 ? `Payment of ${money(payment)} recorded` : `Sample payment: ${money(payment)}`}</span></div>{/if}
-					{#if stage < 6}<button class="next-action" disabled={!interactive} onclick={next}>{current.action}<span aria-hidden="true">→</span></button>
-					{:else}<div class="finish-panel" aria-live="polite"><span class="finish-check">✓</span><div><small>SAMPLE FINISHED</small><h3>Both sides see {money(balance)} left.</h3><p>One sale. One balance. Every step still on the record.</p></div></div>{/if}
+					<div class="product-bar">
+						<a href="/" aria-label="Kredit home"><span>K</span>Kredit</a><b>{current.role} view</b>
+					</div>
+					{#if stage === 0}<div class="amount-choice">
+							<p>Choose a sample amount</p>
+							<div>
+								{#each amounts as option}<button
+										class:chosen={amount === option}
+										disabled={!interactive}
+										onclick={() => (amount = option)}>{money(option)}</button
+									>{/each}
+							</div>
+						</div>{/if}
+					<div class="deal-head">
+						<div>
+							<small>Customer</small>
+							<h3>Adebayo Stores</h3>
+						</div>
+						<span class:accepted={stage >= 2}
+							>{stage === 0 ? 'Not sent' : stage === 1 ? 'Waiting for you' : 'Accepted'}</span
+						>
+					</div>
+					{#if stage === 1}<div class="plain-notice">
+							<b>Read this before you accept</b><span
+								>Once you agree, the seller cannot go back and quietly change any of it.</span
+							>
+						</div>{/if}
+					<div class="deal-facts">
+						<div><small>Goods</small><strong>40 cartons of cooking oil</strong></div>
+						<div><small>Total to pay</small><strong>{money(amount)}</strong></div>
+						<div><small>Pay before</small><strong>18 September 2026</strong></div>
+						<div><small>Extra time</small><strong>{DEMO_SALE.graceHours} hours</strong></div>
+					</div>
+					{#if stage >= 2}<div class="record-line">
+							<span>✓</span>
+							<div><b>Sale accepted</b><small>Adebayo Stores · Sample acceptance</small></div>
+						</div>{/if}
+					{#if stage >= 3}<div class="record-line">
+							<span>✓</span>
+							<div>
+								<b>Sample bank permission ready</b><small
+									>Illustrative provider confirmation, not a real bank result</small
+								>
+							</div>
+						</div>{/if}
+					{#if stage >= 4}<div class="record-line">
+							<span>✓</span>
+							<div><b>Goods released</b><small>Delivery note saved by Kora Wholesale</small></div>
+						</div>{/if}
+					{#if stage >= 5}<div class="record-line">
+							<span>✓</span>
+							<div><b>Goods received</b><small>Customer confirmed · No problem reported</small></div>
+						</div>{/if}
+					{#if stage >= 5}<div class="balance-card">
+							<div>
+								<small>{stage === 6 ? 'Money left to pay' : 'Current balance'}</small><strong
+									>{stage === 6 ? money(balance) : money(amount)}</strong
+								>
+							</div>
+							<span>{stage === 6 ? `Payment of ${money(payment)} recorded` : `Sample payment: ${money(payment)}`}</span>
+						</div>{/if}
+					{#if stage < 6}<button class="next-action" disabled={!interactive} onclick={next}
+							>{current.action}<span aria-hidden="true">→</span></button
+						>
+					{:else}<div class="finish-panel" aria-live="polite">
+							<span class="finish-check">✓</span>
+							<div>
+								<small>SAMPLE FINISHED</small>
+								<h3>Both sides see {money(balance)} left.</h3>
+								<p>One sale. One balance. Every step still on the record.</p>
+							</div>
+						</div>{/if}
 				</div>
-				<div class="stage-footer">{#if stage > 0}<button class="restart" onclick={restart}>Start again</button>{/if}{#if stage === 6}<a class="start-real" href="/signin">Now add my first real sale <span>↗</span></a>{:else}<span>Your choices stay on this device.</span>{/if}</div>
+				<div class="stage-footer">
+					{#if stage > 0}<button class="restart" onclick={restart}>Start again</button>{/if}{#if stage === 6}<a
+							class="start-real"
+							href="/signin">Now add my first real sale <span>↗</span></a
+						>{:else}<span>Your choices stay on this device.</span>{/if}
+				</div>
 			</div>
 		</div>
 	</section>
 
 	<section class="after-demo shell">
-		<div><p class="eyebrow"><span></span> What just happened?</p><h2>Six details both sides can check.</h2></div>
-		<div class="answers"><p><span>01</span><b>What goods?</b>40 cartons of cooking oil.</p><p><span>02</span><b>How much?</b>{money(amount)}.</p><p><span>03</span><b>Who agreed?</b>The customer accepted.</p><p><span>04</span><b>Did goods arrive?</b>Both sides confirmed.</p><p><span>05</span><b>What was paid?</b>{money(payment)}.</p><p><span>06</span><b>What is left?</b>{money(balance)}.</p></div>
+		<div>
+			<p class="eyebrow"><span></span> What just happened?</p>
+			<h2>Six details both sides can check.</h2>
+		</div>
+		<div class="answers">
+			<p><span>01</span><b>What goods?</b>40 cartons of cooking oil.</p>
+			<p><span>02</span><b>How much?</b>{money(amount)}.</p>
+			<p><span>03</span><b>Who agreed?</b>The customer accepted.</p>
+			<p><span>04</span><b>Did goods arrive?</b>Both sides confirmed.</p>
+			<p><span>05</span><b>What was paid?</b>{money(payment)}.</p>
+			<p><span>06</span><b>What is left?</b>{money(balance)}.</p>
+		</div>
 		<a class="final-cta" href="/signin">Start with one customer — free <span aria-hidden="true">↗</span></a>
 	</section>
 </main>
 
 <style>
- .demo-type{display:flex;gap:1rem;flex-wrap:wrap;padding-block:1rem}.demo-type a{padding:.75rem 1rem;border:1px solid var(--color-border);border-radius:.5rem;text-decoration:none}.demo-type a[aria-current=page]{background:var(--color-primary);color:var(--color-on-primary);--color-muted:var(--color-on-primary);}
+	.demo-type {
+		display: flex;
+		gap: 1rem;
+		flex-wrap: wrap;
+		padding-block: 1rem;
+	}
+	.demo-type a {
+		padding: 0.75rem 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 0.5rem;
+		text-decoration: none;
+	}
+	.demo-type a[aria-current='page'] {
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		--color-muted: var(--color-on-primary);
+	}
 
-	:global(body){background:var(--color-surface)}.demo-page{overflow:hidden;color:var(--color-foreground);background:var(--color-surface)}.demo-intro{display:grid;grid-template-columns:1.2fr .7fr;gap:clamp(3rem,8vw,8rem);align-items:end;padding-top:clamp(4rem,9vw,8rem);padding-bottom:clamp(3rem,6vw,5rem)}.eyebrow{display:flex;align-items:center;gap:.65rem;margin:0 0 1.4rem;color:var(--color-foreground);font-size:.7rem;font-weight:850;letter-spacing:.13em;text-transform:uppercase}.eyebrow span{width:1.8rem;height:2px;background:var(--color-accent-ink)}.demo-intro h1{max-width:12ch;margin:0;font-family:var(--font-serif);font-size:clamp(3.5rem,7vw,6.8rem);font-weight:500;line-height:.9;letter-spacing:-.06em}.demo-intro h1 em{color:var(--color-accent-ink);font-weight:500}.intro-copy>p{margin:0;color:var(--color-foreground);font-size:1.1rem;line-height:1.7}.demo-promise{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.4rem}.demo-promise b{padding:.4rem .6rem;border:1px solid var(--color-border);font-size:.68rem}
-	.experience{padding:clamp(1rem,3vw,2rem) 0 clamp(5rem,9vw,9rem);background:#f4f1ea;color:#14161b;--color-foreground:#14161b;--color-muted:#56544f;--color-border:#dad6cc;--color-border-strong:#c3beb2;}.experience-shell{display:grid;grid-template-columns:minmax(16rem,.55fr) minmax(0,1.45fr);gap:clamp(2rem,5vw,5rem);padding-top:clamp(2rem,5vw,4.5rem)}.journey{color:var(--color-foreground)}.journey-top{display:flex;align-items:center;justify-content:space-between;color:var(--color-muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em}.journey-top strong{color:var(--color-on-primary)}.progress{height:3px;margin:1rem 0 2rem;background:var(--color-border-strong);}.progress span{display:block;height:100%;background:var(--color-accent-ink);transition:width .35s ease}.journey ol{display:grid;margin:0;padding:0;list-style:none}.journey li{display:grid;grid-template-columns:2rem 1fr;gap:.8rem;min-height:4.6rem;color:var(--color-foreground)}.journey li>span{display:grid;place-items:center;width:1.6rem;height:1.6rem;border:1px solid var(--color-border);border-radius:50%;font-size:.68rem}.journey li div{display:grid;align-content:start;gap:.22rem;padding-bottom:1rem;border-bottom:1px solid var(--color-border)}.journey li small{font-size:.6rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.journey li strong{font-family:var(--font-serif);font-size:.94rem;font-weight:500}.journey li.done{color:var(--color-muted)}.journey li.done>span{border-color:var(--color-primary);background:var(--color-primary);color:var(--color-on-primary);--color-muted:var(--color-on-primary);}.journey li.active{color:var(--color-on-primary)}.journey li.active>span{border-color:var(--color-accent-ink);background:var(--color-accent-ink);color:var(--color-on-primary);font-weight:900}.sample-note{max-width:22rem;margin:1.5rem 0 0;color:var(--color-muted);font-size:.7rem;line-height:1.6}
-	.demo-stage{min-width:0}.demo-stage>header{display:flex;align-items:center;justify-content:space-between;color:var(--color-on-primary)}.demo-stage>header div{display:flex;align-items:baseline;gap:.5rem}.demo-stage>header p{margin:0;color:var(--color-muted);font-size:.72rem}.demo-stage>header strong{font-family:var(--font-serif);font-size:1.2rem}.live-mark{display:flex;align-items:center;gap:.45rem;color:var(--color-muted);font-size:.65rem;font-weight:750;letter-spacing:.08em;text-transform:uppercase}.live-mark i{width:.5rem;height:.5rem;border-radius:50%;background:var(--color-accent-ink);box-shadow:0 0 0 .3rem rgba(255,104,72,.12)}.stage-copy{display:grid;grid-template-columns:.3fr 1fr 1.2fr;gap:1.5rem;align-items:start;margin:2.2rem 0;color:var(--color-on-primary)}.stage-number{margin:.4rem 0;color:var(--color-muted);font-size:.65rem;font-weight:850;letter-spacing:.12em}.stage-copy h2{margin:0;font-family:var(--font-serif);font-size:clamp(2rem,4vw,3.5rem);font-weight:500;line-height:.95}.stage-copy>p:last-child{max-width:28rem;margin:.2rem 0 0;color:var(--color-muted);line-height:1.65}
-	.product-frame{position:relative;min-height:32rem;padding:1.2rem;background:#13161e;color:#f4f1ea;--color-background:#0b0d12;--color-surface:#13161e;--color-surface-muted:#1a1e28;--color-foreground:#f4f1ea;--color-muted:#a9a69e;--color-border:#272c38;--color-border-strong:#39404f;box-shadow:15px 15px 0 var(--color-primary);animation:frame-in .35s cubic-bezier(.2,.8,.2,1)}.product-frame.complete{box-shadow:15px 15px 0 var(--color-accent-ink)}.product-bar{display:flex;align-items:center;justify-content:space-between;padding-bottom:1rem;border-bottom:1px solid var(--color-border)}.product-bar a{display:flex;align-items:center;gap:.55rem;color:var(--color-foreground);font-family:var(--font-serif);font-weight:700;text-decoration:none}.product-bar a span{display:grid;place-items:center;width:1.8rem;height:1.8rem;background:var(--color-primary);color:var(--color-on-primary);--color-muted:var(--color-on-primary);}.product-bar>b{color:var(--color-foreground);font-size:.65rem;letter-spacing:.1em;text-transform:uppercase}.amount-choice{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 0;border-bottom:1px solid var(--color-border)}.amount-choice p{margin:0;font-size:.74rem;font-weight:800}.amount-choice div{display:flex;flex-wrap:wrap;gap:.35rem}.amount-choice button{min-height:2.25rem;padding:.35rem .55rem;border:1px solid var(--color-border);background:transparent;color:var(--color-muted);font:inherit;font-size:.68rem;font-weight:750;cursor:pointer}.amount-choice button.chosen{border-color:var(--color-primary);background:var(--color-primary);color:var(--color-on-primary);--color-muted:var(--color-on-primary);}.deal-head{display:flex;align-items:start;justify-content:space-between;gap:1rem;padding:1.25rem 0}.deal-head small,.deal-facts small,.balance-card small{display:block;color:var(--color-muted);font-size:.62rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.deal-head h3{margin:.28rem 0 0;font-family:var(--font-serif);font-size:1.35rem}.deal-head>span{padding:.38rem .55rem;background:var(--color-surface-muted);color:var(--color-foreground);font-size:.65rem;font-weight:800}.deal-head>span.accepted{background:var(--color-surface-muted);color:var(--color-primary)}.plain-notice{display:grid;gap:.2rem;margin-bottom:1rem;padding:.8rem 1rem;border-left:4px solid var(--color-accent-ink);background:var(--color-surface-muted)}.plain-notice b{font-size:.76rem}.plain-notice span{color:var(--color-foreground);font-size:.68rem}.deal-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--color-border);border-left:1px solid var(--color-border)}.deal-facts>div{display:grid;gap:.35rem;padding:.8rem;border-right:1px solid var(--color-border);border-bottom:1px solid var(--color-border)}.deal-facts strong{font-size:.8rem}.record-line{display:grid;grid-template-columns:1.8rem 1fr;gap:.65rem;align-items:start;padding:.75rem 0;border-bottom:1px solid var(--color-border)}.record-line>span{display:grid;place-items:center;width:1.4rem;height:1.4rem;border-radius:50%;background:var(--color-primary);color:var(--color-on-primary);font-size:.66rem;--color-muted:var(--color-on-primary);}.record-line div{display:grid;gap:.15rem}.record-line b{font-size:.75rem}.record-line small{color:var(--color-foreground);font-size:.64rem}.balance-card{display:flex;align-items:end;justify-content:space-between;gap:1rem;margin-top:1rem;padding:1rem;background:#f4f1ea;color:#14161b;--color-foreground:#14161b;--color-muted:#56544f;--color-border:#dad6cc;}.balance-card strong{display:block;margin-top:.25rem;font-family:var(--font-serif);font-size:1.7rem;font-weight:500}.balance-card>span{color:var(--color-muted);font-size:.66rem}.next-action{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:3.4rem;margin-top:1rem;padding:.7rem 1rem;border:0;background:var(--color-primary);color:var(--color-on-primary);font:inherit;font-size:.8rem;font-weight:850;cursor:pointer;--color-muted:var(--color-on-primary);}.next-action:disabled{opacity:1;background:var(--color-primary);color:var(--color-on-primary);cursor:not-allowed;--color-muted:var(--color-on-primary);}.finish-panel{display:grid;grid-template-columns:4rem 1fr;gap:1rem;align-items:center;margin-top:1.2rem;padding:1.2rem;background:#f4f1ea;color:#14161b;--color-foreground:#14161b;--color-muted:#56544f;--color-border:#dad6cc;--color-accent-ink:#be4227;}.finish-check{display:grid;place-items:center;width:3.5rem;height:3.5rem;border-radius:50%;background:var(--color-accent-ink);color:var(--color-on-primary);font-size:1.7rem;font-weight:900;animation:check-in .45s cubic-bezier(.2,.9,.3,1.2)}.finish-panel small{color:var(--color-accent-ink);font-size:.6rem;font-weight:850;letter-spacing:.12em}.finish-panel h3{margin:.3rem 0;font-family:var(--font-serif);font-size:1.5rem;font-weight:500}.finish-panel p{margin:0;color:var(--color-muted);font-size:.72rem}.stage-footer{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:4rem;padding-top:1rem;color:var(--color-muted);font-size:.68rem}.stage-footer button{border:0;border-bottom:1px solid var(--color-muted);background:transparent;color:var(--color-muted);font:inherit;cursor:pointer}.start-real{display:inline-flex;align-items:center;gap:1.5rem;min-height:2.8rem;padding:.4rem .8rem;background:var(--color-accent-ink);color:var(--color-on-primary);font-weight:850;text-decoration:none}
-	.after-demo{padding-top:clamp(6rem,10vw,10rem);padding-bottom:clamp(6rem,10vw,10rem)}.after-demo>div:first-child{display:grid;grid-template-columns:.5fr 1.3fr;gap:3rem;align-items:start}.after-demo h2{max-width:16ch;margin:0;font-family:var(--font-serif);font-size:clamp(2.8rem,6vw,5.6rem);font-weight:500;line-height:.95;letter-spacing:-.05em}.answers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:4rem;border-top:1px solid var(--color-border);border-left:1px solid var(--color-border)}.answers p{display:grid;gap:.35rem;min-height:8rem;margin:0;padding:1rem;border-right:1px solid var(--color-border);border-bottom:1px solid var(--color-border);color:var(--color-foreground)}.answers span{color:var(--color-foreground);font-size:.65rem;font-weight:850}.answers b{color:var(--color-foreground);font-family:var(--font-serif);font-size:1.1rem}.final-cta{display:inline-flex;align-items:center;gap:2rem;min-height:3.5rem;margin-top:2.5rem;padding:0 1.2rem;background:var(--color-primary);color:var(--color-on-primary);font-weight:850;text-decoration:none;box-shadow:8px 8px 0 var(--color-foreground);--color-muted:var(--color-on-primary);}@keyframes frame-in{from{transform:translateY(8px)}to{transform:none}}@keyframes check-in{from{transform:scale(.4) rotate(-18deg);opacity:0}to{transform:none;opacity:1}}
-	@media(max-width:850px){.demo-intro{grid-template-columns:1fr;gap:2rem}.experience-shell{grid-template-columns:1fr}.journey ol{grid-template-columns:repeat(7,minmax(0,1fr));gap:.25rem}.journey li{display:block;min-height:auto}.journey li>span{margin-bottom:.45rem}.journey li div{display:none}.stage-copy{grid-template-columns:auto 1fr}.stage-copy>p:last-child{grid-column:2}.after-demo>div:first-child{grid-template-columns:1fr}.answers{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.demo-intro{padding-top:4rem}.demo-intro h1{font-size:clamp(3rem,16vw,4.4rem)}.experience{padding-top:.5rem}.experience-shell{padding-inline:1rem}.demo-stage>header{align-items:flex-start}.demo-stage>header div{align-items:flex-start;flex-direction:column;gap:.15rem}.stage-copy{grid-template-columns:1fr;gap:.6rem;margin:1.5rem 0}.stage-copy>p:last-child{grid-column:auto}.product-frame{min-height:31rem;padding:.9rem;box-shadow:8px 8px 0 var(--color-primary)}.product-frame.complete{box-shadow:8px 8px 0 var(--color-accent-ink)}.amount-choice{align-items:flex-start;flex-direction:column}.deal-facts{grid-template-columns:1fr}.balance-card{align-items:flex-start;flex-direction:column}.finish-panel{grid-template-columns:1fr}.stage-footer{align-items:flex-start;flex-direction:column;padding-top:1.3rem}.answers{grid-template-columns:1fr}.answers p{min-height:auto}.after-demo h2{font-size:clamp(2.7rem,14vw,4rem)}}@media(prefers-reduced-motion:reduce){.product-frame,.finish-check,.progress span{animation:none;transition:none}}
+	:global(body) {
+		background: var(--color-surface);
+	}
+	.demo-page {
+		overflow: hidden;
+		color: var(--color-foreground);
+		background: var(--color-surface);
+	}
+	.demo-intro {
+		display: grid;
+		grid-template-columns: 1.2fr 0.7fr;
+		gap: clamp(3rem, 8vw, 8rem);
+		align-items: end;
+		padding-top: clamp(4rem, 9vw, 8rem);
+		padding-bottom: clamp(3rem, 6vw, 5rem);
+	}
+	.eyebrow {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		margin: 0 0 1.4rem;
+		color: var(--color-foreground);
+		font-size: 0.7rem;
+		font-weight: 850;
+		letter-spacing: 0.13em;
+		text-transform: uppercase;
+	}
+	.eyebrow span {
+		width: 1.8rem;
+		height: 2px;
+		background: var(--color-accent-ink);
+	}
+	.demo-intro h1 {
+		max-width: 12ch;
+		margin: 0;
+		font-family: var(--font-serif);
+		font-size: clamp(3.5rem, 7vw, 6.8rem);
+		font-weight: 500;
+		line-height: 0.9;
+		letter-spacing: -0.06em;
+	}
+	.demo-intro h1 em {
+		color: var(--color-accent-ink);
+		font-weight: 500;
+	}
+	.intro-copy > p {
+		margin: 0;
+		color: var(--color-foreground);
+		font-size: 1.1rem;
+		line-height: 1.7;
+	}
+	.demo-promise {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 1.4rem;
+	}
+	.demo-promise b {
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--color-border);
+		font-size: 0.68rem;
+	}
+	.experience {
+		padding: clamp(1rem, 3vw, 2rem) 0 clamp(5rem, 9vw, 9rem);
+		background: #f4f1ea;
+		color: #14161b;
+		--color-foreground: #14161b;
+		--color-muted: #56544f;
+		--color-border: #dad6cc;
+		--color-border-strong: #c3beb2;
+	}
+	.experience-shell {
+		display: grid;
+		grid-template-columns: minmax(16rem, 0.55fr) minmax(0, 1.45fr);
+		gap: clamp(2rem, 5vw, 5rem);
+		padding-top: clamp(2rem, 5vw, 4.5rem);
+	}
+	.journey {
+		color: var(--color-foreground);
+	}
+	.journey-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		color: var(--color-muted);
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+	}
+	.journey-top strong {
+		color: var(--color-on-primary);
+	}
+	.progress {
+		height: 3px;
+		margin: 1rem 0 2rem;
+		background: var(--color-border-strong);
+	}
+	.progress span {
+		display: block;
+		height: 100%;
+		background: var(--color-accent-ink);
+		transition: width 0.35s ease;
+	}
+	.journey ol {
+		display: grid;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.journey li {
+		display: grid;
+		grid-template-columns: 2rem 1fr;
+		gap: 0.8rem;
+		min-height: 4.6rem;
+		color: var(--color-foreground);
+	}
+	.journey li > span {
+		display: grid;
+		place-items: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		border: 1px solid var(--color-border);
+		border-radius: 50%;
+		font-size: 0.68rem;
+	}
+	.journey li div {
+		display: grid;
+		align-content: start;
+		gap: 0.22rem;
+		padding-bottom: 1rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.journey li small {
+		font-size: 0.6rem;
+		font-weight: 800;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+	.journey li strong {
+		font-family: var(--font-serif);
+		font-size: 0.94rem;
+		font-weight: 500;
+	}
+	.journey li.done {
+		color: var(--color-muted);
+	}
+	.journey li.done > span {
+		border-color: var(--color-primary);
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		--color-muted: var(--color-on-primary);
+	}
+	.journey li.active {
+		color: var(--color-on-primary);
+	}
+	.journey li.active > span {
+		border-color: var(--color-accent-ink);
+		background: var(--color-accent-ink);
+		color: var(--color-on-primary);
+		font-weight: 900;
+	}
+	.sample-note {
+		max-width: 22rem;
+		margin: 1.5rem 0 0;
+		color: var(--color-muted);
+		font-size: 0.7rem;
+		line-height: 1.6;
+	}
+	.demo-stage {
+		min-width: 0;
+	}
+	.demo-stage > header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		color: var(--color-on-primary);
+	}
+	.demo-stage > header div {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+	}
+	.demo-stage > header p {
+		margin: 0;
+		color: var(--color-muted);
+		font-size: 0.72rem;
+	}
+	.demo-stage > header strong {
+		font-family: var(--font-serif);
+		font-size: 1.2rem;
+	}
+	.live-mark {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		color: var(--color-muted);
+		font-size: 0.65rem;
+		font-weight: 750;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	.live-mark i {
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 50%;
+		background: var(--color-accent-ink);
+		box-shadow: 0 0 0 0.3rem rgba(255, 104, 72, 0.12);
+	}
+	.stage-copy {
+		display: grid;
+		grid-template-columns: 0.3fr 1fr 1.2fr;
+		gap: 1.5rem;
+		align-items: start;
+		margin: 2.2rem 0;
+		color: var(--color-on-primary);
+	}
+	.stage-number {
+		margin: 0.4rem 0;
+		color: var(--color-muted);
+		font-size: 0.65rem;
+		font-weight: 850;
+		letter-spacing: 0.12em;
+	}
+	.stage-copy h2 {
+		margin: 0;
+		font-family: var(--font-serif);
+		font-size: clamp(2rem, 4vw, 3.5rem);
+		font-weight: 500;
+		line-height: 0.95;
+	}
+	.stage-copy > p:last-child {
+		max-width: 28rem;
+		margin: 0.2rem 0 0;
+		color: var(--color-muted);
+		line-height: 1.65;
+	}
+	.product-frame {
+		position: relative;
+		min-height: 32rem;
+		padding: 1.2rem;
+		background: #13161e;
+		color: #f4f1ea;
+		--color-background: #0b0d12;
+		--color-surface: #13161e;
+		--color-surface-muted: #1a1e28;
+		--color-foreground: #f4f1ea;
+		--color-muted: #a9a69e;
+		--color-border: #272c38;
+		--color-border-strong: #39404f;
+		box-shadow: 15px 15px 0 var(--color-primary);
+		animation: frame-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+	.product-frame.complete {
+		box-shadow: 15px 15px 0 var(--color-accent-ink);
+	}
+	.product-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding-bottom: 1rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.product-bar a {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		color: var(--color-foreground);
+		font-family: var(--font-serif);
+		font-weight: 700;
+		text-decoration: none;
+	}
+	.product-bar a span {
+		display: grid;
+		place-items: center;
+		width: 1.8rem;
+		height: 1.8rem;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		--color-muted: var(--color-on-primary);
+	}
+	.product-bar > b {
+		color: var(--color-foreground);
+		font-size: 0.65rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+	.amount-choice {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1rem 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.amount-choice p {
+		margin: 0;
+		font-size: 0.74rem;
+		font-weight: 800;
+	}
+	.amount-choice div {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+	}
+	.amount-choice button {
+		min-height: 2.25rem;
+		padding: 0.35rem 0.55rem;
+		border: 1px solid var(--color-border);
+		background: transparent;
+		color: var(--color-muted);
+		font: inherit;
+		font-size: 0.68rem;
+		font-weight: 750;
+		cursor: pointer;
+	}
+	.amount-choice button.chosen {
+		border-color: var(--color-primary);
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		--color-muted: var(--color-on-primary);
+	}
+	.deal-head {
+		display: flex;
+		align-items: start;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1.25rem 0;
+	}
+	.deal-head small,
+	.deal-facts small,
+	.balance-card small {
+		display: block;
+		color: var(--color-muted);
+		font-size: 0.62rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	.deal-head h3 {
+		margin: 0.28rem 0 0;
+		font-family: var(--font-serif);
+		font-size: 1.35rem;
+	}
+	.deal-head > span {
+		padding: 0.38rem 0.55rem;
+		background: var(--color-surface-muted);
+		color: var(--color-foreground);
+		font-size: 0.65rem;
+		font-weight: 800;
+	}
+	.deal-head > span.accepted {
+		background: var(--color-surface-muted);
+		color: var(--color-primary);
+	}
+	.plain-notice {
+		display: grid;
+		gap: 0.2rem;
+		margin-bottom: 1rem;
+		padding: 0.8rem 1rem;
+		border-left: 4px solid var(--color-accent-ink);
+		background: var(--color-surface-muted);
+	}
+	.plain-notice b {
+		font-size: 0.76rem;
+	}
+	.plain-notice span {
+		color: var(--color-foreground);
+		font-size: 0.68rem;
+	}
+	.deal-facts {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		border-top: 1px solid var(--color-border);
+		border-left: 1px solid var(--color-border);
+	}
+	.deal-facts > div {
+		display: grid;
+		gap: 0.35rem;
+		padding: 0.8rem;
+		border-right: 1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-border);
+	}
+	.deal-facts strong {
+		font-size: 0.8rem;
+	}
+	.record-line {
+		display: grid;
+		grid-template-columns: 1.8rem 1fr;
+		gap: 0.65rem;
+		align-items: start;
+		padding: 0.75rem 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.record-line > span {
+		display: grid;
+		place-items: center;
+		width: 1.4rem;
+		height: 1.4rem;
+		border-radius: 50%;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		font-size: 0.66rem;
+		--color-muted: var(--color-on-primary);
+	}
+	.record-line div {
+		display: grid;
+		gap: 0.15rem;
+	}
+	.record-line b {
+		font-size: 0.75rem;
+	}
+	.record-line small {
+		color: var(--color-foreground);
+		font-size: 0.64rem;
+	}
+	.balance-card {
+		display: flex;
+		align-items: end;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 1rem;
+		padding: 1rem;
+		background: #f4f1ea;
+		color: #14161b;
+		--color-foreground: #14161b;
+		--color-muted: #56544f;
+		--color-border: #dad6cc;
+	}
+	.balance-card strong {
+		display: block;
+		margin-top: 0.25rem;
+		font-family: var(--font-serif);
+		font-size: 1.7rem;
+		font-weight: 500;
+	}
+	.balance-card > span {
+		color: var(--color-muted);
+		font-size: 0.66rem;
+	}
+	.next-action {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		min-height: 3.4rem;
+		margin-top: 1rem;
+		padding: 0.7rem 1rem;
+		border: 0;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		font: inherit;
+		font-size: 0.8rem;
+		font-weight: 850;
+		cursor: pointer;
+		--color-muted: var(--color-on-primary);
+	}
+	.next-action:disabled {
+		opacity: 1;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		cursor: not-allowed;
+		--color-muted: var(--color-on-primary);
+	}
+	.finish-panel {
+		display: grid;
+		grid-template-columns: 4rem 1fr;
+		gap: 1rem;
+		align-items: center;
+		margin-top: 1.2rem;
+		padding: 1.2rem;
+		background: #f4f1ea;
+		color: #14161b;
+		--color-foreground: #14161b;
+		--color-muted: #56544f;
+		--color-border: #dad6cc;
+		--color-accent-ink: #be4227;
+	}
+	.finish-check {
+		display: grid;
+		place-items: center;
+		width: 3.5rem;
+		height: 3.5rem;
+		border-radius: 50%;
+		background: var(--color-accent-ink);
+		color: var(--color-on-primary);
+		font-size: 1.7rem;
+		font-weight: 900;
+		animation: check-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+	}
+	.finish-panel small {
+		color: var(--color-accent-ink);
+		font-size: 0.6rem;
+		font-weight: 850;
+		letter-spacing: 0.12em;
+	}
+	.finish-panel h3 {
+		margin: 0.3rem 0;
+		font-family: var(--font-serif);
+		font-size: 1.5rem;
+		font-weight: 500;
+	}
+	.finish-panel p {
+		margin: 0;
+		color: var(--color-muted);
+		font-size: 0.72rem;
+	}
+	.stage-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		min-height: 4rem;
+		padding-top: 1rem;
+		color: var(--color-muted);
+		font-size: 0.68rem;
+	}
+	.stage-footer button {
+		border: 0;
+		border-bottom: 1px solid var(--color-muted);
+		background: transparent;
+		color: var(--color-muted);
+		font: inherit;
+		cursor: pointer;
+	}
+	.start-real {
+		display: inline-flex;
+		align-items: center;
+		gap: 1.5rem;
+		min-height: 2.8rem;
+		padding: 0.4rem 0.8rem;
+		background: var(--color-accent-ink);
+		color: var(--color-on-primary);
+		font-weight: 850;
+		text-decoration: none;
+	}
+	.after-demo {
+		padding-top: clamp(6rem, 10vw, 10rem);
+		padding-bottom: clamp(6rem, 10vw, 10rem);
+	}
+	.after-demo > div:first-child {
+		display: grid;
+		grid-template-columns: 0.5fr 1.3fr;
+		gap: 3rem;
+		align-items: start;
+	}
+	.after-demo h2 {
+		max-width: 16ch;
+		margin: 0;
+		font-family: var(--font-serif);
+		font-size: clamp(2.8rem, 6vw, 5.6rem);
+		font-weight: 500;
+		line-height: 0.95;
+		letter-spacing: -0.05em;
+	}
+	.answers {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		margin-top: 4rem;
+		border-top: 1px solid var(--color-border);
+		border-left: 1px solid var(--color-border);
+	}
+	.answers p {
+		display: grid;
+		gap: 0.35rem;
+		min-height: 8rem;
+		margin: 0;
+		padding: 1rem;
+		border-right: 1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-border);
+		color: var(--color-foreground);
+	}
+	.answers span {
+		color: var(--color-foreground);
+		font-size: 0.65rem;
+		font-weight: 850;
+	}
+	.answers b {
+		color: var(--color-foreground);
+		font-family: var(--font-serif);
+		font-size: 1.1rem;
+	}
+	.final-cta {
+		display: inline-flex;
+		align-items: center;
+		gap: 2rem;
+		min-height: 3.5rem;
+		margin-top: 2.5rem;
+		padding: 0 1.2rem;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		font-weight: 850;
+		text-decoration: none;
+		box-shadow: 8px 8px 0 var(--color-foreground);
+		--color-muted: var(--color-on-primary);
+	}
+	@keyframes frame-in {
+		from {
+			transform: translateY(8px);
+		}
+		to {
+			transform: none;
+		}
+	}
+	@keyframes check-in {
+		from {
+			transform: scale(0.4) rotate(-18deg);
+			opacity: 0;
+		}
+		to {
+			transform: none;
+			opacity: 1;
+		}
+	}
+	@media (max-width: 850px) {
+		.demo-intro {
+			grid-template-columns: 1fr;
+			gap: 2rem;
+		}
+		.experience-shell {
+			grid-template-columns: 1fr;
+		}
+		.journey ol {
+			grid-template-columns: repeat(7, minmax(0, 1fr));
+			gap: 0.25rem;
+		}
+		.journey li {
+			display: block;
+			min-height: auto;
+		}
+		.journey li > span {
+			margin-bottom: 0.45rem;
+		}
+		.journey li div {
+			display: none;
+		}
+		.stage-copy {
+			grid-template-columns: auto 1fr;
+		}
+		.stage-copy > p:last-child {
+			grid-column: 2;
+		}
+		.after-demo > div:first-child {
+			grid-template-columns: 1fr;
+		}
+		.answers {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	@media (max-width: 600px) {
+		.demo-intro {
+			padding-top: 4rem;
+		}
+		.demo-intro h1 {
+			font-size: clamp(3rem, 16vw, 4.4rem);
+		}
+		.experience {
+			padding-top: 0.5rem;
+		}
+		.experience-shell {
+			padding-inline: 1rem;
+		}
+		.demo-stage > header {
+			align-items: flex-start;
+		}
+		.demo-stage > header div {
+			align-items: flex-start;
+			flex-direction: column;
+			gap: 0.15rem;
+		}
+		.stage-copy {
+			grid-template-columns: 1fr;
+			gap: 0.6rem;
+			margin: 1.5rem 0;
+		}
+		.stage-copy > p:last-child {
+			grid-column: auto;
+		}
+		.product-frame {
+			min-height: 31rem;
+			padding: 0.9rem;
+			box-shadow: 8px 8px 0 var(--color-primary);
+		}
+		.product-frame.complete {
+			box-shadow: 8px 8px 0 var(--color-accent-ink);
+		}
+		.amount-choice {
+			align-items: flex-start;
+			flex-direction: column;
+		}
+		.deal-facts {
+			grid-template-columns: 1fr;
+		}
+		.balance-card {
+			align-items: flex-start;
+			flex-direction: column;
+		}
+		.finish-panel {
+			grid-template-columns: 1fr;
+		}
+		.stage-footer {
+			align-items: flex-start;
+			flex-direction: column;
+			padding-top: 1.3rem;
+		}
+		.answers {
+			grid-template-columns: 1fr;
+		}
+		.answers p {
+			min-height: auto;
+		}
+		.after-demo h2 {
+			font-size: clamp(2.7rem, 14vw, 4rem);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.product-frame,
+		.finish-check,
+		.progress span {
+			animation: none;
+			transition: none;
+		}
+	}
 </style>

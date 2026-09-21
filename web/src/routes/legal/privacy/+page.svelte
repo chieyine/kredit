@@ -1,41 +1,362 @@
 <script lang="ts">
- import PublishedLegalDocument from '$lib/components/PublishedLegalDocument.svelte';
- import DocumentLayout from '$lib/components/DocumentLayout.svelte';
- let { data } = $props();
- const sections = [{"id": "who", "title": "Who is responsible for your information?"}, {"id": "information", "title": "What we keep about you"}, {"id": "source", "title": "Where it comes from"}, {"id": "use", "title": "Why we use your information"}, {"id": "decisions", "title": "There is no secret score"}, {"id": "sharing", "title": "Who may receive your information"}, {"id": "transfers", "title": "If information leaves Nigeria"}, {"id": "retention", "title": "How long we keep information"}, {"id": "rights", "title": "Your rights and choices"}, {"id": "cookies", "title": "What we keep on your phone"}, {"id": "safety", "title": "How we protect information"}, {"id": "children", "title": "Children"}, {"id": "changes", "title": "If we change this notice"}, {"id": "contact", "title": "Questions and complaints"}];
- const effectiveDate = $derived(new Date(`${data.legal.effectiveDate}T12:00:00Z`).toLocaleDateString('en-NG', {day:'numeric', month:'long', year:'numeric', timeZone:'UTC'}));
+	import PublishedLegalDocument from '$lib/components/PublishedLegalDocument.svelte';
+	import DocumentLayout from '$lib/components/DocumentLayout.svelte';
+	let { data } = $props();
+	const sections = [
+		{ id: 'who', title: 'Who is responsible for your information?' },
+		{ id: 'information', title: 'What we keep about you' },
+		{ id: 'source', title: 'Where it comes from' },
+		{ id: 'use', title: 'Why we use your information' },
+		{ id: 'decisions', title: 'There is no secret score' },
+		{ id: 'sharing', title: 'Who may receive your information' },
+		{ id: 'transfers', title: 'If information leaves Nigeria' },
+		{ id: 'retention', title: 'How long we keep information' },
+		{ id: 'rights', title: 'Your rights and choices' },
+		{ id: 'cookies', title: 'What we keep on your phone' },
+		{ id: 'safety', title: 'How we protect information' },
+		{ id: 'children', title: 'Children' },
+		{ id: 'changes', title: 'If we change this notice' },
+		{ id: 'contact', title: 'Questions and complaints' }
+	];
+	const effectiveDate = $derived(
+		new Date(`${data.legal.effectiveDate}T12:00:00Z`).toLocaleDateString('en-NG', {
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric',
+			timeZone: 'UTC'
+		})
+	);
 </script>
-{#if data.publication}<PublishedLegalDocument publication={data.publication}/>{:else}
-<DocumentLayout title="Privacy notice" description="How we collect, use and protect personal information, and how to exercise your rights." version={data.legal.privacyVersion} {effectiveDate} {sections}>
-	<section id="who"><h2>Who is responsible for your information?</h2><p>Kredit is the service described in this notice. {data.legal.active ? data.legal.entityName : 'The company operating Kredit'} is the data controller for account, product, support and platform records. A seller remains responsible for the customer information the seller puts into Kredit for their own business purposes.{''}</p><p>This notice covers the Kredit website, seller account, customer account, private links, support service and messages sent by Kredit. It does not cover a seller's own records outside Kredit or the separate privacy practices of a bank, identity-check company, payment company or mobile network.</p>{#if data.legal.active}<p><strong>Service address:</strong> {data.legal.serviceAddress}</p>{/if}</section>
 
-	<section id="information"><h2>What we keep about you</h2><p>We collect only information needed to run the account, record a sale, protect people and meet legal duties.</p><div class="detail-grid"><article><h3>Account details</h3><ul><li>Your name, phone number or email.</li><li>Sign-in, device, verification and account-recovery records.</li><li>Your message choices and security settings.</li></ul></article><article><h3>Business details</h3><ul><li>Business or shop name, address, industry and business type.</li><li>Registration information when the business is registered.</li><li>The authorised person and documents used to check the business.</li></ul></article><article><h3>Sale and payment records</h3><ul><li>The seller and customer, goods, amount, dates and agreed payment plan.</li><li>Acceptance, delivery, receipt, payment, bank-debit and reversal records.</li><li>Disputes, corrections, receipts and supporting documents.</li></ul></article><article><h3>Service information</h3><ul><li>Pages and product steps used, errors and service-performance records.</li><li>Privacy-safe product events with hashed user or business references.</li><li>Support cases, complaints and messages Kredit sends.</li></ul></article></div><p>A private note saved by a seller about a customer stays on that seller's phone when the page says so. Kredit does not receive that note. We do not ask you to put a password, OTP, bank PIN or full card number in a support message.</p></section>
+{#if data.publication}<PublishedLegalDocument publication={data.publication} />{:else}
+	<DocumentLayout
+		title="Privacy notice"
+		description="How we collect, use and protect personal information, and how to exercise your rights."
+		version={data.legal.privacyVersion}
+		{effectiveDate}
+		{sections}
+	>
+		<section id="who">
+			<h2>Who is responsible for your information?</h2>
+			<p>
+				Kredit is the service described in this notice. {data.legal.active
+					? data.legal.entityName
+					: 'The company operating Kredit'} is the data controller for account, product, support and platform records. A seller
+				remains responsible for the customer information the seller puts into Kredit for their own business purposes.
+			</p>
+			<p>
+				This notice covers the Kredit website, seller account, customer account, private links, support service and
+				messages sent by Kredit. It does not cover a seller's own records outside Kredit or the separate privacy
+				practices of a bank, identity-check company, payment company or mobile network.
+			</p>
+			{#if data.legal.active}<p><strong>Service address:</strong> {data.legal.serviceAddress}</p>{/if}
+		</section>
 
-	<section id="source"><h2>Where it comes from</h2><ul><li><strong>From you:</strong> when you sign in, add a business, accept a sale, report a payment, change a setting or ask for help.</li><li><strong>From the other side of a sale:</strong> a seller may add a customer's proposed business details, while a customer may report delivery, payment or a problem.</li><li><strong>From approved service companies:</strong> identity-check results, bank-debit status, payment confirmations and message-delivery results.</li><li><strong>From the service:</strong> security logs, audit history, device information and records created when a product step is completed.</li></ul><p>We do not buy lists of people for Kredit accounts. We do not secretly collect another seller's private customer notes.</p></section>
+		<section id="information">
+			<h2>What we keep about you</h2>
+			<p>We collect only information needed to run the account, record a sale, protect people and meet legal duties.</p>
+			<div class="detail-grid">
+				<article>
+					<h3>Account details</h3>
+					<ul>
+						<li>Your name, phone number or email.</li>
+						<li>Sign-in, device, verification and account-recovery records.</li>
+						<li>Your message choices and security settings.</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Business details</h3>
+					<ul>
+						<li>Business or shop name, address, industry and business type.</li>
+						<li>Registration information when the business is registered.</li>
+						<li>The authorised person and documents used to check the business.</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Sale and payment records</h3>
+					<ul>
+						<li>The seller and customer, goods, amount, dates and agreed payment plan.</li>
+						<li>Acceptance, delivery, receipt, payment, bank-debit and reversal records.</li>
+						<li>Disputes, corrections, receipts and supporting documents.</li>
+					</ul>
+				</article>
+				<article>
+					<h3>Service information</h3>
+					<ul>
+						<li>Pages and product steps used, errors and service-performance records.</li>
+						<li>Privacy-safe product events with hashed user or business references.</li>
+						<li>Support cases, complaints and messages Kredit sends.</li>
+					</ul>
+				</article>
+			</div>
+			<p>
+				A private note saved by a seller about a customer stays on that seller's phone when the page says so. Kredit
+				does not receive that note. We do not ask you to put a password, OTP, bank PIN or full card number in a support
+				message.
+			</p>
+		</section>
 
-	<section id="use"><h2>Why we use your information</h2><div class="purpose-list"><div><h3>To provide Kredit</h3><p>Create and protect accounts, show the same sale to both sides, save acceptance and delivery, calculate money left, record payments and provide receipts.</p></div><div><h3>To protect people and money</h3><p>Check identity or business details, prevent duplicate collection, investigate suspicious activity, block unsafe actions and keep an audit record.</p></div><div><h3>To communicate</h3><p>Send required account, sale, payment, recovery and security messages. Optional product messages are sent only when your choice allows them.</p></div><div><h3>To provide support and settle problems</h3><p>Find the correct record, review evidence, answer complaints, correct mistakes and explain a decision.</p></div><div><h3>To improve the product</h3><p>Measure whether people complete important steps and whether pages are easy to understand. This measurement is limited and does not include raw phone numbers, names, bank details or the description of goods.</p></div><div><h3>To meet legal duties</h3><p>Keep records, respond to lawful requests, protect consumer and privacy rights, and support accounting, tax, dispute or regulatory work.</p></div></div><p>Depending on the activity, we rely on the need to perform a contract, take a step you asked for, meet a legal duty, protect a legitimate interest, establish or defend a legal claim, or use consent. Where consent is the reason, you may withdraw it. Withdrawing consent does not make earlier lawful use invalid.</p></section>
+		<section id="source">
+			<h2>Where it comes from</h2>
+			<ul>
+				<li>
+					<strong>From you:</strong> when you sign in, add a business, accept a sale, report a payment, change a setting or
+					ask for help.
+				</li>
+				<li>
+					<strong>From the other side of a sale:</strong> a seller may add a customer's proposed business details, while a
+					customer may report delivery, payment or a problem.
+				</li>
+				<li>
+					<strong>From approved service companies:</strong> identity-check results, bank-debit status, payment confirmations
+					and message-delivery results.
+				</li>
+				<li>
+					<strong>From the service:</strong> security logs, audit history, device information and records created when a product
+					step is completed.
+				</li>
+			</ul>
+			<p>
+				We do not buy lists of people for Kredit accounts. We do not secretly collect another seller's private customer
+				notes.
+			</p>
+		</section>
 
-	<section id="decisions"><h2>There is no secret score</h2><p>Kredit does not use a hidden score to decide whether a seller should trust a customer. The seller chooses the customer and decides whether to give goods on credit. Kredit may apply clear safety limits or hold an action when an account, payment or provider result needs review. A person can ask for an explanation and use the complaint process.</p></section>
+		<section id="use">
+			<h2>Why we use your information</h2>
+			<div class="purpose-list">
+				<div>
+					<h3>To provide Kredit</h3>
+					<p>
+						Create and protect accounts, show the same sale to both sides, save acceptance and delivery, calculate money
+						left, record payments and provide receipts.
+					</p>
+				</div>
+				<div>
+					<h3>To protect people and money</h3>
+					<p>
+						Check identity or business details, prevent duplicate collection, investigate suspicious activity, block
+						unsafe actions and keep an audit record.
+					</p>
+				</div>
+				<div>
+					<h3>To communicate</h3>
+					<p>
+						Send required account, sale, payment, recovery and security messages. Optional product messages are sent
+						only when your choice allows them.
+					</p>
+				</div>
+				<div>
+					<h3>To provide support and settle problems</h3>
+					<p>Find the correct record, review evidence, answer complaints, correct mistakes and explain a decision.</p>
+				</div>
+				<div>
+					<h3>To improve the product</h3>
+					<p>
+						Measure whether people complete important steps and whether pages are easy to understand. This measurement
+						is limited and does not include raw phone numbers, names, bank details or the description of goods.
+					</p>
+				</div>
+				<div>
+					<h3>To meet legal duties</h3>
+					<p>
+						Keep records, respond to lawful requests, protect consumer and privacy rights, and support accounting, tax,
+						dispute or regulatory work.
+					</p>
+				</div>
+			</div>
+			<p>
+				Depending on the activity, we rely on the need to perform a contract, take a step you asked for, meet a legal
+				duty, protect a legitimate interest, establish or defend a legal claim, or use consent. Where consent is the
+				reason, you may withdraw it. Withdrawing consent does not make earlier lawful use invalid.
+			</p>
+		</section>
 
-	<section id="sharing"><h2>Who may receive your information</h2><p>We share only what is needed for a clear purpose.</p><ul><li><strong>The seller and customer:</strong> each side sees the sale, agreed dates, delivery, payments and problems they are allowed to see.</li><li><strong>Authorised business staff:</strong> a business owner may give staff limited roles. Staff see only the pages needed for that role.</li><li><strong>Identity and business-check companies:</strong> to confirm a person or business when required.</li><li><strong>Banks and licensed payment companies:</strong> to set up an authorised mandate, process a payment or bank debit, reconcile a result and handle a reversal.</li><li><strong>Messaging, hosting, document and security companies:</strong> to deliver messages, store protected files, run the service and detect abuse.</li><li><strong>Professional advisers, auditors and insurers:</strong> when they need the information for a lawful professional duty and are required to protect it.</li><li><strong>Courts, regulators and public authorities:</strong> when the law requires it or when needed to protect a right, investigate fraud or answer a lawful request.</li><li><strong>A new owner of the business:</strong> if Kredit is involved in a genuine investment, sale or reorganisation, subject to confidentiality and applicable law.</li></ul><p>Kredit does not sell personal information. We do not give one seller another seller's customer list. We do not publish private sale or payment records.</p></section>
+		<section id="decisions">
+			<h2>There is no secret score</h2>
+			<p>
+				Kredit does not use a hidden score to decide whether a seller should trust a customer. The seller chooses the
+				customer and decides whether to give goods on credit. Kredit may apply clear safety limits or hold an action
+				when an account, payment or provider result needs review. A person can ask for an explanation and use the
+				complaint process.
+			</p>
+		</section>
 
-	<section id="transfers"><h2>If information leaves Nigeria</h2><p>Some approved service companies may store or process information outside Nigeria. Before that happens, Kredit must check the destination and provider, limit the information sent, use an approved transfer safeguard and record the assessment required by Nigerian data-protection law. Contact hello@kredit.ng for information about relevant processors and transfer safeguards.</p></section>
+		<section id="sharing">
+			<h2>Who may receive your information</h2>
+			<p>We share only what is needed for a clear purpose.</p>
+			<ul>
+				<li>
+					<strong>The seller and customer:</strong> each side sees the sale, agreed dates, delivery, payments and problems
+					they are allowed to see.
+				</li>
+				<li>
+					<strong>Authorised business staff:</strong> a business owner may give staff limited roles. Staff see only the pages
+					needed for that role.
+				</li>
+				<li><strong>Identity and business-check companies:</strong> to confirm a person or business when required.</li>
+				<li>
+					<strong>Banks and licensed payment companies:</strong> to set up an authorised mandate, process a payment or bank
+					debit, reconcile a result and handle a reversal.
+				</li>
+				<li>
+					<strong>Messaging, hosting, document and security companies:</strong> to deliver messages, store protected files,
+					run the service and detect abuse.
+				</li>
+				<li>
+					<strong>Professional advisers, auditors and insurers:</strong> when they need the information for a lawful professional
+					duty and are required to protect it.
+				</li>
+				<li>
+					<strong>Courts, regulators and public authorities:</strong> when the law requires it or when needed to protect a
+					right, investigate fraud or answer a lawful request.
+				</li>
+				<li>
+					<strong>A new owner of the business:</strong> if Kredit is involved in a genuine investment, sale or reorganisation,
+					subject to confidentiality and applicable law.
+				</li>
+			</ul>
+			<p>
+				Kredit does not sell personal information. We do not give one seller another seller's customer list. We do not
+				publish private sale or payment records.
+			</p>
+		</section>
 
-	<section id="retention"><h2>How long we keep information</h2><p>We do not keep every record forever. The period depends on why the information exists and whether a law, dispute, investigation or financial record requires it to be kept.</p><ul><li><strong>Account and business details:</strong> while the account is open and for the approved period needed for support, fraud prevention and legal claims after it closes.</li><li><strong>Agreements, delivery, payments, fees and ledger records:</strong> for the statutory and legal-claim period that applies to financial and commercial records.</li><li><strong>Identity-check documents:</strong> only for the approved compliance period. Kredit should keep a check result or reference instead of a full document where possible.</li><li><strong>OTP and security records:</strong> for a short security period, except an audit event needed to investigate abuse.</li><li><strong>Support, complaint and dispute evidence:</strong> until the matter and any review or legal period have ended.</li><li><strong>Optional marketing choices:</strong> until you withdraw the choice or the approved inactivity period ends.</li><li><strong>Product measurement:</strong> in pseudonymous form for the approved product-measurement period.</li></ul><p>When deletion is due, information is securely deleted, anonymised or made inaccessible. A legal hold may pause deletion. Backup copies are removed through the normal protected backup cycle.</p></section>
+		<section id="transfers">
+			<h2>If information leaves Nigeria</h2>
+			<p>
+				Some approved service companies may store or process information outside Nigeria. Before that happens, Kredit
+				must check the destination and provider, limit the information sent, use an approved transfer safeguard and
+				record the assessment required by Nigerian data-protection law. Contact hello@kredit.ng for information about
+				relevant processors and transfer safeguards.
+			</p>
+		</section>
 
-	<section id="rights"><h2>Your rights and choices</h2><p>Subject to the Nigeria Data Protection Act 2023 and any lawful exception, you may:</p><ul><li>ask whether Kredit uses your personal information;</li><li>ask to see it and receive a copy;</li><li>ask us to correct information that is wrong or incomplete;</li><li>ask us to remove information when there is no lawful reason to keep it;</li><li>ask us to limit a use while a concern is checked;</li><li>object to a use based on legitimate interests or direct marketing;</li><li>withdraw consent where consent is the reason for the use;</li><li>ask for portable information in a usable format where applicable;</li><li>ask for an explanation of a significant automated decision and request human review; and</li><li>complain to Kredit or the Nigeria Data Protection Commission.</li></ul><p>Open <a href="/account/privacy">Your information</a> after signing in to send a request and follow its progress. We will verify the requester before releasing or changing private information. We may keep a limited record that a request was completed. If we cannot do everything requested, we will explain the lawful reason.</p></section>
+		<section id="retention">
+			<h2>How long we keep information</h2>
+			<p>
+				We do not keep every record forever. The period depends on why the information exists and whether a law,
+				dispute, investigation or financial record requires it to be kept.
+			</p>
+			<ul>
+				<li>
+					<strong>Account and business details:</strong> while the account is open and for the approved period needed for
+					support, fraud prevention and legal claims after it closes.
+				</li>
+				<li>
+					<strong>Agreements, delivery, payments, fees and ledger records:</strong> for the statutory and legal-claim period
+					that applies to financial and commercial records.
+				</li>
+				<li>
+					<strong>Identity-check documents:</strong> only for the approved compliance period. Kredit should keep a check result
+					or reference instead of a full document where possible.
+				</li>
+				<li>
+					<strong>OTP and security records:</strong> for a short security period, except an audit event needed to investigate
+					abuse.
+				</li>
+				<li>
+					<strong>Support, complaint and dispute evidence:</strong> until the matter and any review or legal period have ended.
+				</li>
+				<li>
+					<strong>Optional marketing choices:</strong> until you withdraw the choice or the approved inactivity period ends.
+				</li>
+				<li><strong>Product measurement:</strong> in pseudonymous form for the approved product-measurement period.</li>
+			</ul>
+			<p>
+				When deletion is due, information is securely deleted, anonymised or made inaccessible. A legal hold may pause
+				deletion. Backup copies are removed through the normal protected backup cycle.
+			</p>
+		</section>
 
-	<section id="cookies"><h2>What we keep on your phone</h2><p>Kredit uses strictly necessary cookies to keep you signed in, protect forms and maintain security. The service may keep display choices, unfinished sale details and a private customer note on your own phone. You can remove local information through your browser or device settings, but doing so may sign you out or remove an unfinished draft. Kredit does not need advertising cookies to operate the first release.</p></section>
+		<section id="rights">
+			<h2>Your rights and choices</h2>
+			<p>Subject to the Nigeria Data Protection Act 2023 and any lawful exception, you may:</p>
+			<ul>
+				<li>ask whether Kredit uses your personal information;</li>
+				<li>ask to see it and receive a copy;</li>
+				<li>ask us to correct information that is wrong or incomplete;</li>
+				<li>ask us to remove information when there is no lawful reason to keep it;</li>
+				<li>ask us to limit a use while a concern is checked;</li>
+				<li>object to a use based on legitimate interests or direct marketing;</li>
+				<li>withdraw consent where consent is the reason for the use;</li>
+				<li>ask for portable information in a usable format where applicable;</li>
+				<li>ask for an explanation of a significant automated decision and request human review; and</li>
+				<li>complain to Kredit or the Nigeria Data Protection Commission.</li>
+			</ul>
+			<p>
+				Open <a href="/account/privacy">Your information</a> after signing in to send a request and follow its progress. We
+				will verify the requester before releasing or changing private information. We may keep a limited record that a request
+				was completed. If we cannot do everything requested, we will explain the lawful reason.
+			</p>
+		</section>
 
-	<section id="safety"><h2>How we protect information</h2><p>Protection includes encrypted connections, restricted staff roles, extra sign-in checks for sensitive work, expiring private links, audit history, protected storage, provider-signature checks, backups and monitoring. Bank and regulated payment work is performed through appropriately approved providers. No system can promise that a breach will never happen. Kredit must investigate suspected incidents, reduce harm and notify affected people or regulators where the law requires it.</p><p>You also help by keeping your phone, email, password, OTP and recovery codes safe. Tell Kredit quickly if you see an action you do not recognise.</p></section>
+		<section id="cookies">
+			<h2>What we keep on your phone</h2>
+			<p>
+				Kredit uses strictly necessary cookies to keep you signed in, protect forms and maintain security. The service
+				may keep display choices, unfinished sale details and a private customer note on your own phone. You can remove
+				local information through your browser or device settings, but doing so may sign you out or remove an unfinished
+				draft. Kredit does not need advertising cookies to operate the first release.
+			</p>
+		</section>
 
-	<section id="children"><h2>Children</h2><p>Kredit is for adults and authorised business representatives. It is not designed for a child to open an account or agree to a commercial credit sale. If we learn that a child's information was added without a lawful reason and proper authority, we will restrict it and take the steps required by law.</p></section>
+		<section id="safety">
+			<h2>How we protect information</h2>
+			<p>
+				Protection includes encrypted connections, restricted staff roles, extra sign-in checks for sensitive work,
+				expiring private links, audit history, protected storage, provider-signature checks, backups and monitoring.
+				Bank and regulated payment work is performed through appropriately approved providers. No system can promise
+				that a breach will never happen. Kredit must investigate suspected incidents, reduce harm and notify affected
+				people or regulators where the law requires it.
+			</p>
+			<p>
+				You also help by keeping your phone, email, password, OTP and recovery codes safe. Tell Kredit quickly if you
+				see an action you do not recognise.
+			</p>
+		</section>
 
-	<section id="changes"><h2>If we change this notice</h2><p>We may update this notice when the service, providers or law changes. A material change will have a new version and date. When the change affects an existing use or choice, Kredit will give clear notice and ask for a new acceptance or consent where required. Old versions and acceptance records are kept so there is evidence of what a person saw.</p></section>
+		<section id="children">
+			<h2>Children</h2>
+			<p>
+				Kredit is for adults and authorised business representatives. It is not designed for a child to open an account
+				or agree to a commercial credit sale. If we learn that a child's information was added without a lawful reason
+				and proper authority, we will restrict it and take the steps required by law.
+			</p>
+		</section>
 
-	<section id="contact"><h2>Questions and complaints</h2><p>Use <a href="/legal/complaints">Help and complaints</a> for a privacy concern, or use Your information after signing in. Include the Kredit reference and a short explanation, but never send your password, OTP, bank PIN or full card number.</p>{#if data.legal.active}<p>For privacy enquiries, contact <a href={`mailto:${data.legal.privacyEmail}`}>{data.legal.privacyEmail}</a> or write to {data.legal.entityName} ({data.legal.registrationNumber}), {data.legal.serviceAddress}.</p>{/if}<p>If Kredit does not resolve the concern, you may complain to the <a href="https://www.ndpc.gov.ng/" rel="noreferrer">Nigeria Data Protection Commission</a>.</p></section>
+		<section id="changes">
+			<h2>If we change this notice</h2>
+			<p>
+				We may update this notice when the service, providers or law changes. A material change will have a new version
+				and date. When the change affects an existing use or choice, Kredit will give clear notice and ask for a new
+				acceptance or consent where required. Old versions and acceptance records are kept so there is evidence of what
+				a person saw.
+			</p>
+		</section>
 
-	<div class="document-actions"><a class="primary-button" href="/account/privacy">Manage my information</a><a href="/legal/complaints">Get help</a></div>
+		<section id="contact">
+			<h2>Questions and complaints</h2>
+			<p>
+				Use <a href="/legal/complaints">Help and complaints</a> for a privacy concern, or use Your information after signing
+				in. Include the Kredit reference and a short explanation, but never send your password, OTP, bank PIN or full card
+				number.
+			</p>
+			{#if data.legal.active}<p>
+					For privacy enquiries, contact <a href={`mailto:${data.legal.privacyEmail}`}>{data.legal.privacyEmail}</a> or
+					write to {data.legal.entityName} ({data.legal.registrationNumber}), {data.legal.serviceAddress}.
+				</p>{/if}
+			<p>
+				If Kredit does not resolve the concern, you may complain to the <a
+					href="https://www.ndpc.gov.ng/"
+					rel="noreferrer">Nigeria Data Protection Commission</a
+				>.
+			</p>
+		</section>
 
-</DocumentLayout>
+		<div class="document-actions">
+			<a class="primary-button" href="/account/privacy">Manage my information</a><a href="/legal/complaints">Get help</a
+			>
+		</div>
+	</DocumentLayout>
 {/if}

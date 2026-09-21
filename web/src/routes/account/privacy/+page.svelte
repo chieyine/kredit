@@ -1,16 +1,202 @@
 <script lang="ts">
- import {onMount} from 'svelte';
- import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
- import {checkedJSON, LatestRequest, record, rows, text, publicError} from '$lib/api/reliable';
- import {MutationIntent} from '$lib/api/mutation';
- import {productLabel,privacyRequestChoices,privacyRequestLabel} from '$lib/product-language';
- let requests:any[]=$state([]),request_type=$state('ACCESS'),details=$state(''),message=$state(''),loadError=$state(''),busy=$state(false),loading=$state(true),downloading=$state('');
- const reads=new LatestRequest(), intent=new MutationIntent('privacy-self-service','/api/v1/me/privacy-requests');
- function privacyRecord(value:unknown){const row=record(value);for(const key of ['id','request_type','state','due_at'])if(!text(row[key]))throw new Error('Incomplete request');if(!Number.isFinite(Date.parse(String(row.due_at)))||!Number.isSafeInteger(row.version)||Number(row.version)<1)throw new Error('Unverified request');if(row.export_reference && (typeof row.export_expires_at!=='string'||!Number.isFinite(Date.parse(row.export_expires_at))))throw new Error('Unverified export');return row;}
- async function load(){const read=reads.begin();loading=true;loadError='';try{const result=await checkedJSON('/api/v1/me/privacy-requests',rows('requests',privacyRecord),{signal:read.signal});if(read.current())requests=result;}catch(cause){if(read.current())loadError=publicError(cause,'your privacy requests');}finally{if(read.current())loading=false;}}
- async function submit(){if(busy||loading||loadError||!details.trim())return;busy=true;message='';try{await intent.run({request_type,details},value=>{const saved=privacyRecord(record(value).request);if(saved.request_type!==request_type)throw new Error('Request not confirmed');return saved;});details='';message='We have got your request. Come back to this page to see how it is going.';await load();}catch(cause){message=cause instanceof Error?cause.message:'We could not confirm this request.';}finally{busy=false;}}
- async function download(id:string){if(downloading)return;downloading=id;message='';try{const payload=await checkedJSON(`/api/v1/me/privacy-requests/${encodeURIComponent(id)}/export`,value=>{const result=record(value);if(result.request_id!==id)throw new Error('Export identity was not confirmed');record(result.profile);return result;});const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='kredit-privacy-export.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);message='Your protected download has started.';}catch(cause){message='Your copy could not be downloaded. Confirm your identity below, then try again. If it has expired, send a new request.';}finally{downloading='';}}
- onMount(()=>{void load();return()=>reads.cancel();});
+	import { onMount } from 'svelte';
+	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
+	import { checkedJSON, LatestRequest, record, rows, text, publicError } from '$lib/api/reliable';
+	import { MutationIntent } from '$lib/api/mutation';
+	import { productLabel, privacyRequestChoices, privacyRequestLabel } from '$lib/product-language';
+	let requests: any[] = $state([]),
+		request_type = $state('ACCESS'),
+		details = $state(''),
+		message = $state(''),
+		loadError = $state(''),
+		busy = $state(false),
+		loading = $state(true),
+		downloading = $state('');
+	const reads = new LatestRequest(),
+		intent = new MutationIntent('privacy-self-service', '/api/v1/me/privacy-requests');
+	function privacyRecord(value: unknown) {
+		const row = record(value);
+		for (const key of ['id', 'request_type', 'state', 'due_at'])
+			if (!text(row[key])) throw new Error('Incomplete request');
+		if (
+			!Number.isFinite(Date.parse(String(row.due_at))) ||
+			!Number.isSafeInteger(row.version) ||
+			Number(row.version) < 1
+		)
+			throw new Error('Unverified request');
+		if (
+			row.export_reference &&
+			(typeof row.export_expires_at !== 'string' || !Number.isFinite(Date.parse(row.export_expires_at)))
+		)
+			throw new Error('Unverified export');
+		return row;
+	}
+	async function load() {
+		const read = reads.begin();
+		loading = true;
+		loadError = '';
+		try {
+			const result = await checkedJSON('/api/v1/me/privacy-requests', rows('requests', privacyRecord), {
+				signal: read.signal
+			});
+			if (read.current()) requests = result;
+		} catch (cause) {
+			if (read.current()) loadError = publicError(cause, 'your privacy requests');
+		} finally {
+			if (read.current()) loading = false;
+		}
+	}
+	async function submit() {
+		if (busy || loading || loadError || !details.trim()) return;
+		busy = true;
+		message = '';
+		try {
+			await intent.run({ request_type, details }, (value) => {
+				const saved = privacyRecord(record(value).request);
+				if (saved.request_type !== request_type) throw new Error('Request not confirmed');
+				return saved;
+			});
+			details = '';
+			message = 'We have got your request. Come back to this page to see how it is going.';
+			await load();
+		} catch (cause) {
+			message = cause instanceof Error ? cause.message : 'We could not confirm this request.';
+		} finally {
+			busy = false;
+		}
+	}
+	async function download(id: string) {
+		if (downloading) return;
+		downloading = id;
+		message = '';
+		try {
+			const payload = await checkedJSON(`/api/v1/me/privacy-requests/${encodeURIComponent(id)}/export`, (value) => {
+				const result = record(value);
+				if (result.request_id !== id) throw new Error('Export identity was not confirmed');
+				record(result.profile);
+				return result;
+			});
+			const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = 'kredit-privacy-export.json';
+			link.click();
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			message = 'Your protected download has started.';
+		} catch {
+			message =
+				'Your copy could not be downloaded. Confirm your identity below, then try again. If it has expired, send a new request.';
+		} finally {
+			downloading = '';
+		}
+	}
+	onMount(() => {
+		void load();
+		return () => reads.cancel();
+	});
 </script>
-<svelte:head><title>Your information — Kredit</title></svelte:head><main class="shell workspace privacy"><p class="eyebrow">Settings / Your information</p><h1>Your information and privacy</h1><p class="lede">Ask us to show it, correct it, give you a copy, or delete it. Some payment records we must keep, because the law says so. We will tell you which ones.</p><VerifyIdentity/>{#if message}<p class="notice" role="status">{message}</p>{/if}<section><h2>Tell us what you want</h2><label>What do you want us to do?<select disabled={loading||busy||Boolean(loadError)} bind:value={request_type}>{#each privacyRequestChoices as choice}<option value={choice.value}>{choice.label}</option>{/each}</select></label><label>Tell us more<textarea disabled={loading||busy||Boolean(loadError)} bind:value={details} maxlength="2000" rows="4" placeholder="What information is this about?"></textarea></label><button onclick={submit} disabled={loading||busy||Boolean(loadError)||!details.trim()}>{busy?'Sending…':'Send my request'}</button></section><section><h2>Requests you have sent</h2>{#if loading}<p role="status">Loading your requests…</p>{:else if loadError}<p class="error" role="alert">{loadError}</p><button onclick={load} disabled={busy}>Try again</button>{:else if requests.length===0}<p>You have not sent any request.</p>{:else}{#each requests as r}<article><strong>{privacyRequestLabel(r.request_type)}</strong><span>{productLabel(r.state)}</span><p>We aim to finish by {new Date(r.due_at).toLocaleDateString('en-NG')}</p>{#if r.completion_reason}<p><strong>Completed work:</strong> {r.completion_reason}</p>{/if}{#if r.decision_reason}<p>{r.decision_reason}</p>{/if}{#if r.retention_outcome}<p>{r.retention_outcome}</p>{/if}{#if r.export_reference}<p>Your protected copy is ready until {new Date(r.export_expires_at).toLocaleDateString('en-NG')}.</p><button disabled={Boolean(downloading)} onclick={()=>download(r.id)}>{downloading===r.id?'Opening your copy…':'Download my information'}</button>{/if}</article>{/each}{/if}</section></main>
-<style>.privacy{max-width:52rem}.privacy h1{font-size:clamp(2.4rem,6vw,4.5rem);line-height:1}.privacy section{display:grid;gap:.8rem;margin:1rem 0;padding:1.3rem;border:1px solid var(--color-border);border-radius:1rem;background:var(--color-surface)}label{display:grid;gap:.35rem;font-weight:700}select,textarea,button{padding:.75rem;border:1px solid var(--color-border);border-radius:.65rem;font:inherit}button{background:var(--color-primary);color:var(--color-on-primary);font-weight:800}.notice{padding:1rem;background:var(--color-background);border-radius:.7rem}article{display:grid;grid-template-columns:1fr auto;gap:.35rem;padding:1rem;border-top:1px solid var(--color-border)}article p{grid-column:1/-1;margin:0}</style>
+
+<svelte:head><title>Your information — Kredit</title></svelte:head>
+<main class="shell workspace privacy">
+	<p class="eyebrow">Settings / Your information</p>
+	<h1>Your information and privacy</h1>
+	<p class="lede">
+		Ask us to show it, correct it, give you a copy, or delete it. Some payment records we must keep, because the law
+		says so. We will tell you which ones.
+	</p>
+	<VerifyIdentity />{#if message}<p class="notice" role="status">{message}</p>{/if}
+	<section>
+		<h2>Tell us what you want</h2>
+		<label
+			>What do you want us to do?<select disabled={loading || busy || Boolean(loadError)} bind:value={request_type}
+				>{#each privacyRequestChoices as choice}<option value={choice.value}>{choice.label}</option>{/each}</select
+			></label
+		><label
+			>Tell us more<textarea
+				disabled={loading || busy || Boolean(loadError)}
+				bind:value={details}
+				maxlength="2000"
+				rows="4"
+				placeholder="What information is this about?"
+			></textarea></label
+		><button onclick={submit} disabled={loading || busy || Boolean(loadError) || !details.trim()}
+			>{busy ? 'Sending…' : 'Send my request'}</button
+		>
+	</section>
+	<section>
+		<h2>Requests you have sent</h2>
+		{#if loading}<p role="status">Loading your requests…</p>{:else if loadError}<p class="error" role="alert">
+				{loadError}
+			</p>
+			<button onclick={load} disabled={busy}>Try again</button>{:else if requests.length === 0}<p>
+				You have not sent any request.
+			</p>{:else}{#each requests as r}<article>
+					<strong>{privacyRequestLabel(r.request_type)}</strong><span>{productLabel(r.state)}</span>
+					<p>We aim to finish by {new Date(r.due_at).toLocaleDateString('en-NG')}</p>
+					{#if r.completion_reason}<p>
+							<strong>Completed work:</strong>
+							{r.completion_reason}
+						</p>{/if}{#if r.decision_reason}<p>{r.decision_reason}</p>{/if}{#if r.retention_outcome}<p>
+							{r.retention_outcome}
+						</p>{/if}{#if r.export_reference}<p>
+							Your protected copy is ready until {new Date(r.export_expires_at).toLocaleDateString('en-NG')}.
+						</p>
+						<button disabled={Boolean(downloading)} onclick={() => download(r.id)}
+							>{downloading === r.id ? 'Opening your copy…' : 'Download my information'}</button
+						>{/if}
+				</article>{/each}{/if}
+	</section>
+</main>
+
+<style>
+	.privacy {
+		max-width: 52rem;
+	}
+	.privacy h1 {
+		font-size: clamp(2.4rem, 6vw, 4.5rem);
+		line-height: 1;
+	}
+	.privacy section {
+		display: grid;
+		gap: 0.8rem;
+		margin: 1rem 0;
+		padding: 1.3rem;
+		border: 1px solid var(--color-border);
+		border-radius: 1rem;
+		background: var(--color-surface);
+	}
+	label {
+		display: grid;
+		gap: 0.35rem;
+		font-weight: 700;
+	}
+	select,
+	textarea,
+	button {
+		padding: 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: 0.65rem;
+		font: inherit;
+	}
+	button {
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		font-weight: 800;
+	}
+	.notice {
+		padding: 1rem;
+		background: var(--color-background);
+		border-radius: 0.7rem;
+	}
+	article {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 0.35rem;
+		padding: 1rem;
+		border-top: 1px solid var(--color-border);
+	}
+	article p {
+		grid-column: 1/-1;
+		margin: 0;
+	}
+</style>

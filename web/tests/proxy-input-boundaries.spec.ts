@@ -32,7 +32,7 @@ test('proxy accepts many small chunks without retaining per-chunk buffers', asyn
 	});
 	const result = await readProxyBody(stream, 65_536, signal());
 	expect(result.length).toBe(65_536);
-	expect(result.every(value => value === 7)).toBe(true);
+	expect(result.every((value) => value === 7)).toBe(true);
 	expect(result.buffer.byteLength).toBeLessThanOrEqual(65_536);
 	expect(stream.locked).toBe(false);
 });
@@ -40,7 +40,9 @@ test('proxy accepts many small chunks without retaining per-chunk buffers', asyn
 test('oversized body fails without waiting for a stuck cancellation hook', async () => {
 	let cancelled = false;
 	const stream = new ReadableStream<Uint8Array>({
-		start(controller) { controller.enqueue(new Uint8Array([1, 2, 3])); },
+		start(controller) {
+			controller.enqueue(new Uint8Array([1, 2, 3]));
+		},
 		cancel() {
 			cancelled = true;
 			return new Promise<void>(() => {});
@@ -53,7 +55,11 @@ test('oversized body fails without waiting for a stuck cancellation hook', async
 
 test('a stalled body is rejected by the input deadline', async () => {
 	let cancelled = false;
-	const stream = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
+	const stream = new ReadableStream<Uint8Array>({
+		cancel() {
+			cancelled = true;
+		}
+	});
 	await expect(readProxyBody(stream, 8, signal(), 20)).rejects.toMatchObject({ status: 408 });
 	expect(cancelled).toBe(true);
 	expect(stream.locked).toBe(false);
@@ -63,7 +69,11 @@ test('client cancellation interrupts an already pending read', async () => {
 	const controller = new AbortController();
 	const reason = new Error('synthetic client cancellation');
 	let cancelled = false;
-	const stream = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
+	const stream = new ReadableStream<Uint8Array>({
+		cancel() {
+			cancelled = true;
+		}
+	});
 	const operation = readProxyBody(stream, 8, controller.signal);
 	controller.abort(reason);
 	await expect(operation).rejects.toBe(reason);
@@ -82,13 +92,21 @@ test('pre-cancelled requests do not consume a body', async () => {
 
 test('body read errors remain errors rather than truncated requests', async () => {
 	const reason = new Error('synthetic read failure');
-	const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.error(reason); } });
+	const stream = new ReadableStream<Uint8Array>({
+		start(controller) {
+			controller.error(reason);
+		}
+	});
 	await expect(readProxyBody(stream, 8, signal())).rejects.toBe(reason);
 	expect(stream.locked).toBe(false);
 });
 
 test('empty chunks cannot keep a request alive without making progress', async () => {
-	const stream = new ReadableStream<Uint8Array>({ pull(controller) { controller.enqueue(new Uint8Array(0)); } });
+	const stream = new ReadableStream<Uint8Array>({
+		pull(controller) {
+			controller.enqueue(new Uint8Array(0));
+		}
+	});
 	await expect(readProxyBody(stream, 8, signal())).rejects.toMatchObject({ status: 400 });
 	expect(stream.locked).toBe(false);
 });
@@ -129,7 +147,17 @@ test('connection-specific headers are removed without changing end-to-end contro
 		'Content-Type': 'application/json'
 	});
 	const result = proxyHeaders(original);
-	for (const name of ['connection', 'x-local-only', 'keep-alive', 'proxy-connection', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']) {
+	for (const name of [
+		'connection',
+		'x-local-only',
+		'keep-alive',
+		'proxy-connection',
+		'proxy-authorization',
+		'te',
+		'trailer',
+		'transfer-encoding',
+		'upgrade'
+	]) {
 		expect(result.has(name), name).toBe(false);
 	}
 	for (const name of ['authorization', 'cookie', 'x-csrf-token', 'idempotency-key', 'content-type']) {

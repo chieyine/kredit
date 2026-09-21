@@ -3,7 +3,9 @@ import { error } from '@sveltejs/kit';
 import { legalPublication } from './legal-publication';
 
 export type LegalConfig = typeof legalPublication;
-export function loadLegalConfig(): LegalConfig { return legalPublication; }
+export function loadLegalConfig(): LegalConfig {
+	return legalPublication;
+}
 
 export function assertLaunchWebConfig() {
 	loadLegalConfig();

@@ -16,20 +16,40 @@
 	let deckRoute = $derived(/^\/deck(\/|$)/.test(page.url.pathname));
 	let publicChrome = $derived((page.url.pathname === '/signin' || !privateShell) && !deckRoute);
 
-	const normalizedPath = $derived(page.url.pathname.length > 1 ? page.url.pathname.replace(/\/$/, '') : page.url.pathname);
+	const normalizedPath = $derived(
+		page.url.pathname.length > 1 ? page.url.pathname.replace(/\/$/, '') : page.url.pathname
+	);
 	const canonical = $derived(SITE_URL + normalizedPath);
 	const routeArticle = $derived((page.data as any)?.article);
 	const routeSEO = $derived((page.data as any)?.seo);
-	const seo = $derived(routeArticle ? { title: routeArticle.title, description: routeArticle.description, type: 'article' as const, published: routeArticle.published, modified: routeArticle.modified, wordCount: routeArticle.wordCount, category: routeArticle.category } : routeSEO ?? seoForPath(normalizedPath));
+	const seo = $derived(
+		routeArticle
+			? {
+					title: routeArticle.title,
+					description: routeArticle.description,
+					type: 'article' as const,
+					published: routeArticle.published,
+					modified: routeArticle.modified,
+					wordCount: routeArticle.wordCount,
+					category: routeArticle.category
+				}
+			: (routeSEO ?? seoForPath(normalizedPath))
+	);
 	const legalApproved = $derived((page.data as any)?.legal?.active === true);
-	const indexable = $derived(!privateShell && !isUnlistedRoute(normalizedPath) && (!nonIndexablePaths.has(normalizedPath) || legalApproved) && page.status < 400);
+	const indexable = $derived(
+		!privateShell &&
+			!isUnlistedRoute(normalizedPath) &&
+			(!nonIndexablePaths.has(normalizedPath) || legalApproved) &&
+			page.status < 400
+	);
 	const organizationSchema = {
 		'@context': 'https://schema.org',
 		'@type': 'Organization',
 		name: 'Kredit',
 		url: SITE_URL,
 		logo: `${SITE_URL}/icon-512.png`,
-		description: 'Kredit helps Nigerian businesses give goods on credit, keep the record clear and follow every payment.',
+		description:
+			'Kredit helps Nigerian businesses give goods on credit, keep the record clear and follow every payment.',
 		areaServed: 'NG'
 	};
 	const websiteSchema = {
@@ -48,7 +68,10 @@
 		url: canonical,
 		inLanguage: 'en-NG',
 		isPartOf: { '@type': 'WebSite', name: 'Kredit', url: SITE_URL },
-		publisher: seo.type === 'article' ? { '@type': 'Organization', name: 'Kredit', logo: { '@type': 'ImageObject', url: `${SITE_URL}/icon-512.png` } } : undefined,
+		publisher:
+			seo.type === 'article'
+				? { '@type': 'Organization', name: 'Kredit', logo: { '@type': 'ImageObject', url: `${SITE_URL}/icon-512.png` } }
+				: undefined,
 		image: seo.type === 'article' ? `${SITE_URL}/og.png` : undefined,
 		mainEntityOfPage: seo.type === 'article' ? { '@type': 'WebPage', '@id': canonical } : undefined,
 		datePublished: seo.published,
@@ -79,11 +102,16 @@
 
 <svelte:head>
 	<title>{seo.title}</title>
-	<meta name="description" content={seo.description}/>
+	<meta name="description" content={seo.description} />
 	<link rel="canonical" href={canonical} />
 	<link rel="alternate" hreflang="en-NG" href={canonical} />
 	<link rel="alternate" hreflang="x-default" href={canonical} />
-	<link rel="alternate" type="application/rss+xml" title="Kredit helpful guides" href="https://kredit.ng/blog/rss.xml" />
+	<link
+		rel="alternate"
+		type="application/rss+xml"
+		title="Kredit helpful guides"
+		href="https://kredit.ng/blog/rss.xml"
+	/>
 	<meta property="og:site_name" content="Kredit" />
 	<meta property="og:type" content={seo.type ?? 'website'} />
 	<meta property="og:url" content={canonical} />
@@ -104,16 +132,25 @@
 	<meta name="twitter:image" content={`${SITE_URL}/og.png`} />
 	<meta name="twitter:image:alt" content="Kredit — keep track of every credit sale" />
 	{#if !privateShell}
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -- jsonLd() JSON-encodes and escapes '<', so no markup can be produced. -->
 		{@html `<script type="application/ld+json">${jsonLd(organizationSchema)}<\/script>`}
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -- jsonLd() JSON-encodes and escapes '<', so no markup can be produced. -->
 		{@html `<script type="application/ld+json">${jsonLd(websiteSchema)}<\/script>`}
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -- jsonLd() JSON-encodes and escapes '<', so no markup can be produced. -->
 		{@html `<script type="application/ld+json">${jsonLd(pageSchema)}<\/script>`}
 	{/if}
-	<meta name="robots" content={indexable ? 'index,follow,max-image-preview:large,max-snippet:-1' : 'noindex,nofollow'} />
+	<meta
+		name="robots"
+		content={indexable ? 'index,follow,max-image-preview:large,max-snippet:-1' : 'noindex,nofollow'}
+	/>
 </svelte:head>
 
 <a class="skip-link" href="#main-content">Skip to content</a>
 <MotionObserver />
-{#if offline}<SystemBanner tone="warning" message="You are offline. New money actions cannot be sent. An earlier request may still be processing." />{/if}
+{#if offline}<SystemBanner
+		tone="warning"
+		message="You are offline. New money actions cannot be sent. An earlier request may still be processing."
+	/>{/if}
 {#if publicChrome}<SiteHeader />{/if}
 {#if privateShell}
 	<div id="main-content" tabindex="-1">{@render children()}</div>

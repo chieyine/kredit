@@ -1,8 +1,8 @@
 <script lang="ts">
- import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
+	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
- import { workspaceHref } from '$lib/workspace-navigation';
+	import { workspaceHref } from '$lib/workspace-navigation';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import Money from '$lib/components/Money.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
@@ -65,8 +65,13 @@
 		keep?: (record: Row) => boolean;
 	} = $props();
 
-	let loading = $state(true), error = $state(''), records = $state<Row[]>([]);
-	let organizations = $state<Row[]>([]), organizationID = $state(''), query = $state(''), pageNumber = $state(1);
+	let loading = $state(true),
+		error = $state(''),
+		records = $state<Row[]>([]);
+	let organizations = $state<Row[]>([]),
+		organizationID = $state(''),
+		query = $state(''),
+		pageNumber = $state(1);
 	const pageSize = 20;
 	const scopedPrimaryHref = $derived.by(() => {
 		if (!primaryHref || !organizationPath || !organizationID || !primaryHref.startsWith('/')) return primaryHref;
@@ -102,9 +107,11 @@
 		if (!keepRecords) records = [];
 		pageNumber = 1;
 		async function read(url: string) {
-			try { return await checkedJSON<any>(url, value => value, { signal }); }
-			catch(cause) {
-				if(cause instanceof RequestError && cause.status === 401) location.assign(`/signin?next=${encodeURIComponent(page.url.pathname + page.url.search)}`);
+			try {
+				return await checkedJSON<any>(url, (value) => value, { signal });
+			} catch (cause) {
+				if (cause instanceof RequestError && cause.status === 401)
+					location.assign(`/signin?next=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 				throw cause;
 			}
 		}
@@ -114,14 +121,17 @@
 				if (version !== requestVersion) return;
 				if (!Array.isArray(data.organizations)) throw new Error('unavailable');
 				organizations = data.organizations.map((value: unknown) => {
-                  const item = objectRecord(value);
-                  text(item.id); text(item.legal_name);
-                  return item;
-                });
-				organizationID = requestedWorkspace(organizations as {id:string}[]);
+					const item = objectRecord(value);
+					text(item.id);
+					text(item.legal_name);
+					return item;
+				});
+				organizationID = requestedWorkspace(organizations as { id: string }[]);
 			}
 			if (organizationPath && !organizationID) return;
-			const data = await read(organizationPath ? `/api/v1/organizations/${encodeURIComponent(organizationID)}${organizationPath}` : endpoint);
+			const data = await read(
+				organizationPath ? `/api/v1/organizations/${encodeURIComponent(organizationID)}${organizationPath}` : endpoint
+			);
 			if (version !== requestVersion) return;
 			const value = collectionKey ? data[collectionKey] : data;
 			if (!Array.isArray(value)) throw new Error('unavailable');
@@ -138,7 +148,10 @@
 	onMount(() => {
 		if (endpoint || organizationPath) void refresh();
 		else loading = false;
-		return () => { requestVersion++; controller?.abort(); };
+		return () => {
+			requestVersion++;
+			controller?.abort();
+		};
 	});
 </script>
 
@@ -157,23 +170,40 @@
 	{#if endpoint || organizationPath}
 		<div class="toolbar">
 			{#if organizations.length > 1}
-				<label>Business
-					<select bind:value={organizationID} onchange={()=>chooseWorkspace(organizationID)}>
+				<label
+					>Business
+					<select bind:value={organizationID} onchange={() => chooseWorkspace(organizationID)}>
 						{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}
 					</select>
 				</label>
 			{/if}
-			<label class="search"><span>Find</span><input bind:value={query} oninput={() => (pageNumber = 1)} type="search" placeholder={searchPlaceholder} /></label>
-			<button type="button" onclick={() => refresh(true)} disabled={loading}>{loading ? 'Checking…' : 'Check again'}</button>
+			<label class="search"
+				><span>Find</span><input
+					bind:value={query}
+					oninput={() => (pageNumber = 1)}
+					type="search"
+					placeholder={searchPlaceholder}
+				/></label
+			>
+			<button type="button" onclick={() => refresh(true)} disabled={loading}
+				>{loading ? 'Checking…' : 'Check again'}</button
+			>
 		</div>
 	{/if}
 
 	{#if loading}
 		<div role="status"><span class="sr-only">Opening {title}</span><Skeleton rows={5} /></div>
 	{:else if error}
-		<div class="error" role="alert"><p>{error}</p><button type="button" onclick={() => refresh()}>Try again</button></div>
+		<div class="error" role="alert">
+			<p>{error}</p>
+			<button type="button" onclick={() => refresh()}>Try again</button>
+		</div>
 	{:else if filtered.length}
-		<p class="count">{filtered.length === mine.length ? `${mine.length} ${mine.length === 1 ? 'item' : 'items'}` : `${filtered.length} of ${mine.length}`}</p>
+		<p class="count">
+			{filtered.length === mine.length
+				? `${mine.length} ${mine.length === 1 ? 'item' : 'items'}`
+				: `${filtered.length} of ${mine.length}`}
+		</p>
 		<ul class="records">
 			<!-- Several attempts or businesses can legitimately link to the same detail page. -->
 			{#each visible as record}
@@ -186,7 +216,9 @@
 							{#if rowDetail(record)}<small>{rowDetail(record)}</small>{/if}
 						</span>
 						{#if amount !== null && amount !== undefined}
-							<span class="amount"><Money amountKobo={amount} />{#if rowAmountLabel}<small>{rowAmountLabel}</small>{/if}</span>
+							<span class="amount"
+								><Money amountKobo={amount} />{#if rowAmountLabel}<small>{rowAmountLabel}</small>{/if}</span
+							>
 						{/if}
 						{#if rowStatus(record)}<StatusPill status={rowStatus(record)} />{/if}
 					</svelte:element>
@@ -210,35 +242,175 @@
 </main>
 
 <style>
-	.page-head { display: flex; align-items: end; justify-content: space-between; gap: 2rem; padding: 1.5rem 0; border-bottom: 1px solid var(--color-border); }
-	.page-head h1 { margin: .3rem 0; font-size: 1.9rem; line-height: 1.2; }
-	.lede { max-width: 60ch; margin: .4rem 0 0; color: var(--color-muted); line-height: 1.6; }
-	.toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem; margin: 1.5rem 0; }
-	.toolbar label { display: grid; gap: .35rem; font-weight: 650; }
-	.toolbar .search { flex: 1; min-width: min(100%, 15rem); }
-	.toolbar input, .toolbar select { box-sizing: border-box; width: 100%; min-height: 3rem; padding: .7rem; border: 1px solid var(--color-border); background: var(--color-surface); color: inherit; font: inherit; }
-	.toolbar button { min-height: 3rem; padding: .7rem 1rem; border: 1px solid var(--color-border); background: var(--color-surface); color: inherit; font: inherit; }
-	.count { color: var(--color-muted); font-size: .9rem; }
-	.records { display: grid; margin: .5rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--color-border); }
-	.record { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; min-height: 4rem; padding: .9rem .25rem; border-bottom: 1px solid var(--color-border); color: inherit; text-decoration: none; }
-	a.record:hover { background: var(--color-surface-muted); }
-	.who { display: grid; gap: .25rem; min-width: 0; }
-	.who strong { overflow-wrap: anywhere; }
-	.who small, .amount small { color: var(--color-muted); }
-	.amount { display: grid; gap: .2rem; text-align: right; white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
-	.pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.5rem 0; }
-	.pagination button { min-height: 2.75rem; padding: .6rem 1rem; border: 1px solid var(--color-border); background: var(--color-surface); color: inherit; font: inherit; }
-	.empty { margin-top: 1.5rem; padding: 2rem; border: 1px dashed var(--color-border); }
-	.empty h2 { margin: 0 0 .4rem; font-size: 1.15rem; }
-	.empty p { margin: 0 0 1rem; color: var(--color-muted); line-height: 1.6; }
-	.error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; padding: 1rem; border-left: 3px solid var(--color-destructive); background:var(--color-background); }
-	.error p { margin: 0; line-height: 1.6; }
-	.error button { min-height: 2.75rem; padding: .55rem .9rem; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; }
+	.page-head {
+		display: flex;
+		align-items: end;
+		justify-content: space-between;
+		gap: 2rem;
+		padding: 1.5rem 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.page-head h1 {
+		margin: 0.3rem 0;
+		font-size: 1.9rem;
+		line-height: 1.2;
+	}
+	.lede {
+		max-width: 60ch;
+		margin: 0.4rem 0 0;
+		color: var(--color-muted);
+		line-height: 1.6;
+	}
+	.toolbar {
+		display: flex;
+		align-items: end;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin: 1.5rem 0;
+	}
+	.toolbar label {
+		display: grid;
+		gap: 0.35rem;
+		font-weight: 650;
+	}
+	.toolbar .search {
+		flex: 1;
+		min-width: min(100%, 15rem);
+	}
+	.toolbar input,
+	.toolbar select {
+		box-sizing: border-box;
+		width: 100%;
+		min-height: 3rem;
+		padding: 0.7rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		color: inherit;
+		font: inherit;
+	}
+	.toolbar button {
+		min-height: 3rem;
+		padding: 0.7rem 1rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		color: inherit;
+		font: inherit;
+	}
+	.count {
+		color: var(--color-muted);
+		font-size: 0.9rem;
+	}
+	.records {
+		display: grid;
+		margin: 0.5rem 0 0;
+		padding: 0;
+		list-style: none;
+		border-top: 1px solid var(--color-border);
+	}
+	.record {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1.25rem;
+		min-height: 4rem;
+		padding: 0.9rem 0.25rem;
+		border-bottom: 1px solid var(--color-border);
+		color: inherit;
+		text-decoration: none;
+	}
+	a.record:hover {
+		background: var(--color-surface-muted);
+	}
+	.who {
+		display: grid;
+		gap: 0.25rem;
+		min-width: 0;
+	}
+	.who strong {
+		overflow-wrap: anywhere;
+	}
+	.who small,
+	.amount small {
+		color: var(--color-muted);
+	}
+	.amount {
+		display: grid;
+		gap: 0.2rem;
+		text-align: right;
+		white-space: nowrap;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.pagination {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		margin: 1.5rem 0;
+	}
+	.pagination button {
+		min-height: 2.75rem;
+		padding: 0.6rem 1rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		color: inherit;
+		font: inherit;
+	}
+	.empty {
+		margin-top: 1.5rem;
+		padding: 2rem;
+		border: 1px dashed var(--color-border);
+	}
+	.empty h2 {
+		margin: 0 0 0.4rem;
+		font-size: 1.15rem;
+	}
+	.empty p {
+		margin: 0 0 1rem;
+		color: var(--color-muted);
+		line-height: 1.6;
+	}
+	.error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 1rem;
+		margin: 1.5rem 0;
+		padding: 1rem;
+		border-left: 3px solid var(--color-destructive);
+		background: var(--color-background);
+	}
+	.error p {
+		margin: 0;
+		line-height: 1.6;
+	}
+	.error button {
+		min-height: 2.75rem;
+		padding: 0.55rem 0.9rem;
+		border: 1px solid currentColor;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+	}
 	@media (max-width: 640px) {
-		.page-head { display: block; }
-		.page-head .primary { margin-top: 1rem; }
-		.toolbar label, .toolbar button { width: 100%; }
-		.record { align-items: start; flex-direction: column; gap: .5rem; }
-		.amount { text-align: left; }
+		.page-head {
+			display: block;
+		}
+		.page-head .primary {
+			margin-top: 1rem;
+		}
+		.toolbar label,
+		.toolbar button {
+			width: 100%;
+		}
+		.record {
+			align-items: start;
+			flex-direction: column;
+			gap: 0.5rem;
+		}
+		.amount {
+			text-align: left;
+		}
 	}
 </style>

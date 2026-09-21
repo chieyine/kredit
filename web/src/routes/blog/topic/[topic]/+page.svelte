@@ -12,30 +12,211 @@
 		mainEntity: {
 			'@type': 'ItemList',
 			numberOfItems: data.articles.length,
-			itemListElement: data.articles.map((article: any, index: number) => ({ '@type': 'ListItem', position: index + 1, name: article.title, url: `${SITE_URL}/blog/${article.slug}` }))
+			itemListElement: data.articles.map((article: any, index: number) => ({
+				'@type': 'ListItem',
+				position: index + 1,
+				name: article.title,
+				url: `${SITE_URL}/blog/${article.slug}`
+			}))
 		}
 	});
-	let breadcrumbSchema = $derived({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-		{ '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
-		{ '@type': 'ListItem', position: 2, name: 'Helpful guides', item: `${SITE_URL}/blog` },
-		{ '@type': 'ListItem', position: 3, name: data.category, item: hubURL }
-	]});
+	let breadcrumbSchema = $derived({
+		'@context': 'https://schema.org',
+		'@type': 'BreadcrumbList',
+		itemListElement: [
+			{ '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
+			{ '@type': 'ListItem', position: 2, name: 'Helpful guides', item: `${SITE_URL}/blog` },
+			{ '@type': 'ListItem', position: 3, name: data.category, item: hubURL }
+		]
+	});
 </script>
 
 <svelte:head>
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -- jsonLd() JSON-encodes and escapes '<', so no markup can be produced. -->
 	{@html `<script type="application/ld+json">${jsonLd(listSchema)}<\/script>`}
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -- jsonLd() JSON-encodes and escapes '<', so no markup can be produced. -->
 	{@html `<script type="application/ld+json">${jsonLd(breadcrumbSchema)}<\/script>`}
 </svelte:head>
 
-<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/blog">Helpful guides</a><span>/</span><span>{data.category}</span></nav>
+<nav class="crumbs" aria-label="Breadcrumb">
+	<a href="/">Home</a><span>/</span><a href="/blog">Helpful guides</a><span>/</span><span>{data.category}</span>
+</nav>
 <div class="topic-hub">
-	<header><p class="eyebrow">{data.articles.length} simple guides</p><h1>{data.details.title}</h1><p>{data.details.description}</p></header>
-	<section aria-labelledby="topic-list-title"><div class="list-head"><h2 id="topic-list-title">Start with whatever you need to know today.</h2><span>{data.category}</span></div>
-		<div class="topic-list">{#each data.articles as article, index}<a href={`/blog/${article.slug}`}><b>{String(index + 1).padStart(2, '0')}</b><div><h3>{article.title}</h3><p>{article.description}</p></div><span>{article.readingMinutes} min <i aria-hidden="true">→</i></span></a>{/each}</div>
+	<header>
+		<p class="eyebrow">{data.articles.length} simple guides</p>
+		<h1>{data.details.title}</h1>
+		<p>{data.details.description}</p>
+	</header>
+	<section aria-labelledby="topic-list-title">
+		<div class="list-head">
+			<h2 id="topic-list-title">Start with whatever you need to know today.</h2>
+			<span>{data.category}</span>
+		</div>
+		<div class="topic-list">
+			{#each data.articles as article, index}<a href={`/blog/${article.slug}`}
+					><b>{String(index + 1).padStart(2, '0')}</b>
+					<div>
+						<h3>{article.title}</h3>
+						<p>{article.description}</p>
+					</div>
+					<span>{article.readingMinutes} min <i aria-hidden="true">→</i></span></a
+				>{/each}
+		</div>
 	</section>
-	<aside><div><strong>Not sure where to start?</strong><p>Read every guide, or look up a word you do not understand.</p></div><a href="/blog">Every guide</a><a href="/glossary">What the words mean</a></aside>
+	<aside>
+		<div>
+			<strong>Not sure where to start?</strong>
+			<p>Read every guide, or look up a word you do not understand.</p>
+		</div>
+		<a href="/blog">Every guide</a><a href="/glossary">What the words mean</a>
+	</aside>
 </div>
 
 <style>
-	.crumbs{display:flex;flex-wrap:wrap;gap:.55rem;margin-bottom:2rem;color:var(--color-muted);font-size:.78rem}.crumbs a{color:inherit}.topic-hub>header{display:grid;grid-template-columns:1.25fr .75fr;gap:3rem;align-items:end;padding:3rem 0 5rem;border-bottom:3px solid var(--color-primary)}.topic-hub h1{max-width:12ch;margin:.6rem 0 0;font-family:var(--font-serif);font-size:clamp(3rem,7vw,6rem);font-weight:500;line-height:.92;letter-spacing:-.05em}.topic-hub>header>p:last-child{max-width:35rem;margin:0;color:var(--color-foreground);font-size:1.08rem;line-height:1.7}.topic-hub section{margin-top:4rem}.list-head{display:flex;justify-content:space-between;gap:2rem;align-items:end}.list-head h2{max-width:18ch;font-family:var(--font-serif);font-size:clamp(2rem,4vw,3.2rem);font-weight:500;line-height:1}.list-head span{color:var(--color-primary);font-size:.72rem;font-weight:800;text-transform:uppercase}.topic-list{border-top:1px solid var(--color-border)}.topic-list a{display:grid;grid-template-columns:3rem 1fr auto;gap:2rem;align-items:start;padding:1.6rem 0;border-bottom:1px solid var(--color-border);color:var(--color-primary);text-decoration:none}.topic-list>a>b{color:var(--color-primary);font-size:.72rem}.topic-list h3{margin:0;font-family:var(--font-serif);font-size:1.55rem;font-weight:500}.topic-list p{max-width:48rem;margin:.6rem 0 0;color:var(--color-foreground);line-height:1.6}.topic-list>a>span{color:var(--color-foreground);font-size:.72rem;white-space:nowrap}.topic-list i{margin-left:.7rem;color:var(--color-accent);font-style:normal}.topic-list a:hover h3{color:var(--color-primary)}.topic-hub>aside{display:flex;align-items:center;gap:1rem;margin-top:4rem;padding:1.4rem;background:var(--color-primary);color:var(--color-on-primary)}.topic-hub>aside div{margin-right:auto}.topic-hub>aside p{margin:.3rem 0 0;color:var(--color-muted)}.topic-hub>aside a{padding:.7rem .9rem;background:var(--color-primary);color:var(--color-on-primary);text-decoration:none;font-weight:700}@media(max-width:720px){.topic-hub>header{grid-template-columns:1fr;gap:1.5rem}.list-head{align-items:start;flex-direction:column}.topic-list a{grid-template-columns:2rem 1fr;gap:1rem}.topic-list>a>span{grid-column:2}.topic-hub>aside{align-items:stretch;flex-direction:column}.topic-hub>aside div{margin:0}}
+	.crumbs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+		margin-bottom: 2rem;
+		color: var(--color-muted);
+		font-size: 0.78rem;
+	}
+	.crumbs a {
+		color: inherit;
+	}
+	.topic-hub > header {
+		display: grid;
+		grid-template-columns: 1.25fr 0.75fr;
+		gap: 3rem;
+		align-items: end;
+		padding: 3rem 0 5rem;
+		border-bottom: 3px solid var(--color-primary);
+	}
+	.topic-hub h1 {
+		max-width: 12ch;
+		margin: 0.6rem 0 0;
+		font-family: var(--font-serif);
+		font-size: clamp(3rem, 7vw, 6rem);
+		font-weight: 500;
+		line-height: 0.92;
+		letter-spacing: -0.05em;
+	}
+	.topic-hub > header > p:last-child {
+		max-width: 35rem;
+		margin: 0;
+		color: var(--color-foreground);
+		font-size: 1.08rem;
+		line-height: 1.7;
+	}
+	.topic-hub section {
+		margin-top: 4rem;
+	}
+	.list-head {
+		display: flex;
+		justify-content: space-between;
+		gap: 2rem;
+		align-items: end;
+	}
+	.list-head h2 {
+		max-width: 18ch;
+		font-family: var(--font-serif);
+		font-size: clamp(2rem, 4vw, 3.2rem);
+		font-weight: 500;
+		line-height: 1;
+	}
+	.list-head span {
+		color: var(--color-primary);
+		font-size: 0.72rem;
+		font-weight: 800;
+		text-transform: uppercase;
+	}
+	.topic-list {
+		border-top: 1px solid var(--color-border);
+	}
+	.topic-list a {
+		display: grid;
+		grid-template-columns: 3rem 1fr auto;
+		gap: 2rem;
+		align-items: start;
+		padding: 1.6rem 0;
+		border-bottom: 1px solid var(--color-border);
+		color: var(--color-primary);
+		text-decoration: none;
+	}
+	.topic-list > a > b {
+		color: var(--color-primary);
+		font-size: 0.72rem;
+	}
+	.topic-list h3 {
+		margin: 0;
+		font-family: var(--font-serif);
+		font-size: 1.55rem;
+		font-weight: 500;
+	}
+	.topic-list p {
+		max-width: 48rem;
+		margin: 0.6rem 0 0;
+		color: var(--color-foreground);
+		line-height: 1.6;
+	}
+	.topic-list > a > span {
+		color: var(--color-foreground);
+		font-size: 0.72rem;
+		white-space: nowrap;
+	}
+	.topic-list i {
+		margin-left: 0.7rem;
+		color: var(--color-accent);
+		font-style: normal;
+	}
+	.topic-list a:hover h3 {
+		color: var(--color-primary);
+	}
+	.topic-hub > aside {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-top: 4rem;
+		padding: 1.4rem;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+	}
+	.topic-hub > aside div {
+		margin-right: auto;
+	}
+	.topic-hub > aside p {
+		margin: 0.3rem 0 0;
+		color: var(--color-muted);
+	}
+	.topic-hub > aside a {
+		padding: 0.7rem 0.9rem;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		text-decoration: none;
+		font-weight: 700;
+	}
+	@media (max-width: 720px) {
+		.topic-hub > header {
+			grid-template-columns: 1fr;
+			gap: 1.5rem;
+		}
+		.list-head {
+			align-items: start;
+			flex-direction: column;
+		}
+		.topic-list a {
+			grid-template-columns: 2rem 1fr;
+			gap: 1rem;
+		}
+		.topic-list > a > span {
+			grid-column: 2;
+		}
+		.topic-hub > aside {
+			align-items: stretch;
+			flex-direction: column;
+		}
+		.topic-hub > aside div {
+			margin: 0;
+		}
+	}
 </style>

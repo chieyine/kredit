@@ -10,7 +10,10 @@ export class ProxyBodyError extends Error {
 	}
 }
 
-function readWithSignal(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal): Promise<ReadableStreamReadResult<Uint8Array>> {
+function readWithSignal(
+	reader: ReadableStreamDefaultReader<Uint8Array>,
+	signal: AbortSignal
+): Promise<ReadableStreamReadResult<Uint8Array>> {
 	return new Promise((resolve, reject) => {
 		const cleanup = () => signal.removeEventListener('abort', aborted);
 		const aborted = () => {
@@ -25,8 +28,14 @@ function readWithSignal(reader: ReadableStreamDefaultReader<Uint8Array>, signal:
 		// One listener per pending read, removed on every settlement. Repeatedly
 		// racing a shared never-settled abort promise would retain chunk callbacks.
 		reader.read().then(
-			value => { cleanup(); resolve(value); },
-			error => { cleanup(); reject(error); }
+			(value) => {
+				cleanup();
+				resolve(value);
+			},
+			(error) => {
+				cleanup();
+				reject(error);
+			}
 		);
 	});
 }
@@ -37,7 +46,13 @@ export async function readProxyBody(
 	requestSignal: AbortSignal,
 	timeoutMs = 60_000
 ): Promise<Uint8Array<ArrayBuffer>> {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || !Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) {
+	if (
+		!Number.isSafeInteger(maxBytes) ||
+		maxBytes < 0 ||
+		!Number.isSafeInteger(timeoutMs) ||
+		timeoutMs <= 0 ||
+		timeoutMs > 2_147_483_647
+	) {
 		throw new RangeError('Invalid proxy body bounds');
 	}
 	const deadline = new AbortController();
@@ -68,7 +83,8 @@ export async function readProxyBody(
 				continue;
 			}
 			emptyChunks = 0;
-			if (value.byteLength > maxBytes - size) throw new ProxyBodyError(413, 'The request body exceeds the allowed size.');
+			if (value.byteLength > maxBytes - size)
+				throw new ProxyBodyError(413, 'The request body exceeds the allowed size.');
 			const needed = size + value.byteLength;
 			if (needed > buffer.byteLength) {
 				const capacity = Math.min(maxBytes, Math.max(needed, 16_384, buffer.byteLength * 2));
@@ -99,7 +115,17 @@ export function proxyHeaders(source: Headers): Headers {
 		const token = name.trim();
 		if (/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(token)) headers.delete(token);
 	}
-	for (const name of ['connection', 'proxy-connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']) {
+	for (const name of [
+		'connection',
+		'proxy-connection',
+		'keep-alive',
+		'proxy-authenticate',
+		'proxy-authorization',
+		'te',
+		'trailer',
+		'transfer-encoding',
+		'upgrade'
+	]) {
 		headers.delete(name);
 	}
 	return headers;

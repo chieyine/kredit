@@ -1,81 +1,271 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page, context, baseURL }) => {
-	await context.addCookies([{ name: 'kredit_session', value: 'product-test-session', url: baseURL ?? 'http://127.0.0.1:5173' }]);
-	await page.route('**/api/v1/buyer/businesses',route=>route.fulfill({json:{businesses:[{id:'business-1',workspace_id:'buyer-workspace',legal_name:'Buyer business'}]}}));
- await page.route('**/api/v1/me', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'product-user', status: 'active', created_at: '2026-01-01T00:00:00Z' }, session: { id: 'product-session', user_id: 'product-user', authentication_level: 'AAL1', created_at: '2026-01-01T00:00:00Z', expires_at: '2027-01-01T00:00:00Z' }, mfa_enrolled: false, organizations: [] }) }));
+	await context.addCookies([
+		{ name: 'kredit_session', value: 'product-test-session', url: baseURL ?? 'http://127.0.0.1:5173' }
+	]);
+	await page.route('**/api/v1/buyer/businesses', (route) =>
+		route.fulfill({
+			json: { businesses: [{ id: 'business-1', workspace_id: 'buyer-workspace', legal_name: 'Buyer business' }] }
+		})
+	);
+	await page.route('**/api/v1/me', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				user: { id: 'product-user', status: 'active', created_at: '2026-01-01T00:00:00Z' },
+				session: {
+					id: 'product-session',
+					user_id: 'product-user',
+					authentication_level: 'AAL1',
+					created_at: '2026-01-01T00:00:00Z',
+					expires_at: '2027-01-01T00:00:00Z'
+				},
+				mfa_enrolled: false,
+				organizations: []
+			})
+		})
+	);
 });
 
 async function mockOperationsCommand(page: import('@playwright/test').Page, applied: Record<string, unknown>[]) {
 	await page.route('**/api/v1/ops/commands/preview', async (route) => {
 		const input = route.request().postDataJSON();
-		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ command: { ...input, current_version: input.expected_version, impact_preview: { effect: `Safely apply ${input.command_type}`, will_notify: true, audit: 'immutable' } } }) });
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				command: {
+					...input,
+					current_version: input.expected_version,
+					impact_preview: { effect: `Safely apply ${input.command_type}`, will_notify: true, audit: 'immutable' }
+				}
+			})
+		});
 	});
 	await page.route('**/api/v1/ops/commands', async (route) => {
-		const input = route.request().postDataJSON(); applied.push(input);
-		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ command: { id: `command-${applied.length}`, ...input, state: 'APPLIED' } }) });
+		const input = route.request().postDataJSON();
+		applied.push(input);
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ command: { id: `command-${applied.length}`, ...input, state: 'APPLIED' } })
+		});
 	});
 }
 
 test('operator previews and safely retries one failed job', async ({ page }) => {
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);
-	await page.route('**/api/v1/ops/jobs',async(route)=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({jobs:[{id:41,kind:'kredit.financial',queue:'critical-financial',state:'retryable',attempt:2,max_attempts:12}]})}));
-	await page.goto('/admin/jobs');await page.getByRole('button',{name:'Preview safe retry'}).click();await page.getByLabel('Why are you doing this?').fill('Provider incident has cleared');await page.getByRole('button',{name:'Show me what will change'}).click();await expect(page.getByText('What this will change')).toBeVisible();await page.getByRole('button',{name:'Confirm safe retry'}).click();await expect(page.getByText('Job safely requeued.')).toBeVisible();expect(applied[0]).toMatchObject({command_type:'retry_job',target_id:'41',expected_version:3});
+	const applied: Record<string, unknown>[] = [];
+	await mockOperationsCommand(page, applied);
+	await page.route('**/api/v1/ops/jobs', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				jobs: [
+					{
+						id: 41,
+						kind: 'kredit.financial',
+						queue: 'critical-financial',
+						state: 'retryable',
+						attempt: 2,
+						max_attempts: 12
+					}
+				]
+			})
+		})
+	);
+	await page.goto('/admin/jobs');
+	await page.getByRole('button', { name: 'Preview safe retry' }).click();
+	await page.getByLabel('Why are you doing this?').fill('Provider incident has cleared');
+	await page.getByRole('button', { name: 'Show me what will change' }).click();
+	await expect(page.getByText('What this will change')).toBeVisible();
+	await page.getByRole('button', { name: 'Confirm safe retry' }).click();
+	await expect(page.getByText('Job safely requeued.')).toBeVisible();
+	expect(applied[0]).toMatchObject({ command_type: 'retry_job', target_id: '41', expected_version: 3 });
 });
 
-test('operator replays a failed webhook without changing its identity',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);
-	await page.route('**/api/v1/ops/provider-events',async(route)=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({events:[{provider:'certified-provider',event_id:'evt-1',event_type:'collection.updated',state:'failed',attempts:1}]})}));
-	await page.goto('/admin/provider-events');await page.getByRole('button',{name:'Preview safe replay'}).click();await page.getByLabel('Why are you doing this?').fill('Verified provider outage ended');await page.getByRole('button',{name:'Show me what will change'}).click();await expect(page.getByText('What this will change')).toBeVisible();await page.getByRole('button',{name:'Confirm safe replay'}).click();await expect(page.getByText('Webhook safely requeued.')).toBeVisible();expect(applied[0]).toMatchObject({command_type:'retry_webhook',target_id:'evt-1',expected_version:2});
+test('operator replays a failed webhook without changing its identity', async ({ page }) => {
+	const applied: Record<string, unknown>[] = [];
+	await mockOperationsCommand(page, applied);
+	await page.route('**/api/v1/ops/provider-events', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				events: [
+					{
+						provider: 'certified-provider',
+						event_id: 'evt-1',
+						event_type: 'collection.updated',
+						state: 'failed',
+						attempts: 1
+					}
+				]
+			})
+		})
+	);
+	await page.goto('/admin/provider-events');
+	await page.getByRole('button', { name: 'Preview safe replay' }).click();
+	await page.getByLabel('Why are you doing this?').fill('Verified provider outage ended');
+	await page.getByRole('button', { name: 'Show me what will change' }).click();
+	await expect(page.getByText('What this will change')).toBeVisible();
+	await page.getByRole('button', { name: 'Confirm safe replay' }).click();
+	await expect(page.getByText('Webhook safely requeued.')).toBeVisible();
+	expect(applied[0]).toMatchObject({ command_type: 'retry_webhook', target_id: 'evt-1', expected_version: 2 });
 });
 
-test('operator resolves an unknown provider submission through protected controls',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('resolve_unknown_submission');await page.getByLabel('Target type').fill('collection');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000101');await page.getByLabel('Structured reason').fill('Provider reconciliation confirms final state');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('Safely apply resolve_unknown_submission')).toBeVisible();await page.getByRole('button',{name:'Apply this change'}).click();await expect(page.getByText('Done. Reference command-1')).toBeVisible();expect(applied[0]).toMatchObject({command_type:'resolve_unknown_submission'});
+test('operator resolves an unknown provider submission through protected controls', async ({ page }) => {
+	const applied: Record<string, unknown>[] = [];
+	await mockOperationsCommand(page, applied);
+	await page.goto('/admin/controls');
+	await expect(page.locator('form[data-ready="true"]')).toBeVisible();
+	await page.getByLabel('Action').selectOption('resolve_unknown_submission');
+	await page.getByLabel('Target type').fill('collection');
+	await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000101');
+	await page.getByLabel('Structured reason').fill('Provider reconciliation confirms final state');
+	await page.getByRole('button', { name: 'Preview impact' }).click();
+	await expect(page.getByText('Safely apply resolve_unknown_submission')).toBeVisible();
+	await page.getByRole('button', { name: 'Apply this change' }).click();
+	await expect(page.getByText('Done. Reference command-1')).toBeVisible();
+	expect(applied[0]).toMatchObject({ command_type: 'resolve_unknown_submission' });
 });
 
-test('operator previews user suspension and restoration consequences',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000202');await page.getByLabel('Structured reason').fill('Confirmed account compromise investigation');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply this change'}).click();await expect(page.getByText('Done. Reference command-1')).toBeVisible();await page.getByLabel('Action').selectOption('restore_user');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000203');await page.getByLabel('Structured reason').fill('Security investigation completed safely');await page.getByRole('button',{name:'Preview impact'}).click();await page.getByRole('button',{name:'Apply this change'}).click();await expect(page.getByText('Done. Reference command-2')).toBeVisible();expect(applied.map(x=>x.command_type)).toEqual(['suspend_user','restore_user']);
+test('operator previews user suspension and restoration consequences', async ({ page }) => {
+	const applied: Record<string, unknown>[] = [];
+	await mockOperationsCommand(page, applied);
+	await page.goto('/admin/controls');
+	await expect(page.locator('form[data-ready="true"]')).toBeVisible();
+	await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000202');
+	await page.getByLabel('Structured reason').fill('Confirmed account compromise investigation');
+	await page.getByRole('button', { name: 'Preview impact' }).click();
+	await page.getByRole('button', { name: 'Apply this change' }).click();
+	await expect(page.getByText('Done. Reference command-1')).toBeVisible();
+	await page.getByLabel('Action').selectOption('restore_user');
+	await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000203');
+	await page.getByLabel('Structured reason').fill('Security investigation completed safely');
+	await page.getByRole('button', { name: 'Preview impact' }).click();
+	await page.getByRole('button', { name: 'Apply this change' }).click();
+	await expect(page.getByText('Done. Reference command-2')).toBeVisible();
+	expect(applied.map((x) => x.command_type)).toEqual(['suspend_user', 'restore_user']);
 });
 
-test('operator places an expiring scoped buyer risk hold',async({page})=>{
-	const applied:Record<string,unknown>[]=[];await mockOperationsCommand(page,applied);await page.goto('/admin/controls');await expect(page.locator('form[data-ready="true"]')).toBeVisible();await page.getByLabel('Action').selectOption('place_risk_hold');await page.getByLabel('Target type').fill('buyer');await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000301');await page.getByLabel('Scope').selectOption('collection');await page.getByLabel('Expires').fill('2026-08-30T12:00');await page.getByLabel('Structured reason').fill('Collection anomaly requires compliance review');await page.getByRole('button',{name:'Preview impact'}).click();await expect(page.getByText('User notification',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Apply this change'}).click();await expect(page.getByText('Done. Reference command-1')).toBeVisible();expect(applied[0]).toMatchObject({command_type:'place_risk_hold',target_type:'buyer',scope:'collection'});
+test('operator places an expiring scoped buyer risk hold', async ({ page }) => {
+	const applied: Record<string, unknown>[] = [];
+	await mockOperationsCommand(page, applied);
+	await page.goto('/admin/controls');
+	await expect(page.locator('form[data-ready="true"]')).toBeVisible();
+	await page.getByLabel('Action').selectOption('place_risk_hold');
+	await page.getByLabel('Target type').fill('buyer');
+	await page.getByLabel('Target ID').fill('00000000-0000-0000-0000-000000000301');
+	await page.getByLabel('Scope').selectOption('collection');
+	await page.getByLabel('Expires').fill('2026-08-30T12:00');
+	await page.getByLabel('Structured reason').fill('Collection anomaly requires compliance review');
+	await page.getByRole('button', { name: 'Preview impact' }).click();
+	await expect(page.getByText('User notification', { exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Apply this change' }).click();
+	await expect(page.getByText('Done. Reference command-1')).toBeVisible();
+	expect(applied[0]).toMatchObject({ command_type: 'place_risk_hold', target_type: 'buyer', scope: 'collection' });
 });
 
 test('supplier can create exact credit terms with a replay-safe request', async ({ page }) => {
 	let submitted: Record<string, unknown> | undefined;
 	let idempotency = '';
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({
-		status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies', trading_name: 'Adebayo' }] })
-	}));
-	await page.route('**/api/v1/organizations/org-1/onboarding', route => route.fulfill({json:{profile:{version:1}}}));
-	await page.route('**/api/v1/organizations/org-1/customers', async (route) => route.fulfill({
-		status: 200, contentType: 'application/json', body: JSON.stringify({ customers: [{ buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', legal_name: 'Kano Retail Limited', trading_name: 'Kano Retail', state: 'VERIFIED' }] })
-	}));
+	await page.route('**/api/v1/organizations', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies', trading_name: 'Adebayo' }]
+			})
+		})
+	);
+	await page.route('**/api/v1/organizations/org-1/onboarding', (route) =>
+		route.fulfill({ json: { profile: { version: 1 } } })
+	);
+	await page.route('**/api/v1/organizations/org-1/customers', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				customers: [
+					{
+						buyer_user_id: 'buyer-1',
+						buyer_business_id: 'business-1',
+						legal_name: 'Kano Retail Limited',
+						trading_name: 'Kano Retail',
+						state: 'VERIFIED'
+					}
+				]
+			})
+		})
+	);
 	await page.route('**/api/v1/organizations/org-1/credit-requests', async (route) => {
 		submitted = route.request().postDataJSON();
 		idempotency = route.request().headers()['idempotency-key'];
-		await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ request: { id: 'request-1' } }) });
+		await route.fulfill({
+			status: 201,
+			contentType: 'application/json',
+			body: JSON.stringify({ request: { id: 'request-1' } })
+		});
 	});
-	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1', async (route) => route.fulfill({ status: 404, contentType: 'application/json', body: '{}' }));
-	await page.route('**/api/v1/organizations/org-1/credit-terms/preview', route => route.fulfill({json:{due_date:'2026-09-30',grace_hours:24,collection_at:'2026-10-02T08:00:00Z',timezone:'Africa/Lagos',cutoff:'23:59',timing_mode:'lagos_explicit'}}));
+	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1', async (route) =>
+		route.fulfill({ status: 404, contentType: 'application/json', body: '{}' })
+	);
+	await page.route('**/api/v1/organizations/org-1/credit-terms/preview', (route) =>
+		route.fulfill({
+			json: {
+				due_date: '2026-09-30',
+				grace_hours: 24,
+				collection_at: '2026-10-02T08:00:00Z',
+				timezone: 'Africa/Lagos',
+				cutoff: '23:59',
+				timing_mode: 'lagos_explicit'
+			}
+		})
+	);
 	await page.goto('/workspace/sales/new?advanced=1');
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
 	await page.getByLabel('Sale amount (₦)').fill('1,200,000');
 	await page.getByLabel('What goods are they taking?').fill('Twenty cartons of verified inventory');
 	await page.getByLabel('First payment date').fill('2026-09-30');
 	await page.getByLabel('Optional later collection time (Nigerian time)').fill('2026-10-02T09:00');
-	await page.getByRole('button', { name: 'Check terms', exact:true }).click();
+	await page.getByRole('button', { name: 'Check terms', exact: true }).click();
 	expect(submitted).toBeUndefined();
-	await page.getByRole('button', { name: 'Save draft sale', exact:true }).click();
+	await page.getByRole('button', { name: 'Save draft sale', exact: true }).click();
 	await expect(page).toHaveURL(/\/workspace\/sales\/request-1\?organization=org-1/);
 	expect(idempotency.length).toBeGreaterThanOrEqual(8);
-	await expect.poll(() => submitted).toMatchObject({ buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', principal_kobo: 120000000, goods_description: 'Twenty cartons of verified inventory' });
+	await expect
+		.poll(() => submitted)
+		.toMatchObject({
+			buyer_user_id: 'buyer-1',
+			buyer_business_id: 'business-1',
+			principal_kobo: 120000000,
+			goods_description: 'Twenty cartons of verified inventory'
+		});
 });
 
 test('operations overview presents redacted health counters', async ({ page }) => {
-	await page.route('**/api/v1/ops/overview', async (route) => route.fulfill({
-		status: 200, contentType: 'application/json', body: JSON.stringify({ role: 'platform_admin', overview: { queued_jobs: 2, failed_jobs: 0, dead_letter_jobs: 0, pending_outbox: 1, failed_outbox: 0, provider_failures: 0, open_cases: 3, open_disputes: 1 } })
-	}));
+	await page.route('**/api/v1/ops/overview', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				role: 'platform_admin',
+				overview: {
+					queued_jobs: 2,
+					failed_jobs: 0,
+					dead_letter_jobs: 0,
+					pending_outbox: 1,
+					failed_outbox: 0,
+					provider_failures: 0,
+					open_cases: 3,
+					open_disputes: 1
+				}
+			})
+		})
+	);
 	await page.goto('/admin');
 	await expect(page.getByRole('heading', { name: 'Run the whole platform from one place.' })).toBeVisible();
 	await expect(page.getByText('Work in progress')).toBeVisible();
@@ -85,59 +275,159 @@ test('operations overview presents redacted health counters', async ({ page }) =
 test('application evidence shows real traction, user clarity, filters, and reconciliation', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	let requestedOrganization = '';
-	await page.route('**/api/v1/ops/analytics/scorecard**', async (route) => { requestedOrganization = new URL(route.request().url()).searchParams.get('organization_id') ?? ''; await route.fulfill({
-		status: 200, contentType: 'application/json', body: JSON.stringify({ scorecard: {
-			generated_at: '2026-08-29T12:00:00Z', from: '2026-08-22T00:00:00Z', to: '2026-08-30T00:00:00Z', refresh_mode: 'live query', reconciliation_ok: true,
-			kpis: [{ key:'gross_trade_credit_volume', label:'Gross trade credit activated', value:120000000, unit:'kobo', definition:'Sum of principal for obligations activated in the window.', source:'app.obligations' }],
-			drivers: [{ key:'sent_to_acceptance', label:'Sent-to-acceptance conversion', value:75, unit:'percent', definition:'Accepted agreements divided by sent events.', source:'transition evidence' }, { key:'repeat_sale_rate', label:'Repeat-sale rate', value:40, unit:'percent', definition:'Customers with another sale.', source:'app.obligations' }, { key:'supplier_retention', label:'Supplier retention', value:60, unit:'percent', definition:'Suppliers who returned.', source:'app.obligations' }],
-			guardrails: [{ key:'dispute_rate', label:'Dispute rate', value:1.2, unit:'percent', definition:'Obligations with a dispute divided by activated obligations.', source:'app.disputes + app.obligations' }],
-			feedback: { total: 10, yes: 8, partly: 1, no: 1, seller: 6, buyer: 4, clear_percent: 80 },
-			reconciliation: [{ event:'obligation.activated', source_count:4, event_count:4, status:'reconciled' }]
-		} })
-	}); });
+	await page.route('**/api/v1/ops/analytics/scorecard**', async (route) => {
+		requestedOrganization = new URL(route.request().url()).searchParams.get('organization_id') ?? '';
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				scorecard: {
+					generated_at: '2026-08-29T12:00:00Z',
+					from: '2026-08-22T00:00:00Z',
+					to: '2026-08-30T00:00:00Z',
+					refresh_mode: 'live query',
+					reconciliation_ok: true,
+					kpis: [
+						{
+							key: 'gross_trade_credit_volume',
+							label: 'Gross trade credit activated',
+							value: 120000000,
+							unit: 'kobo',
+							definition: 'Sum of principal for obligations activated in the window.',
+							source: 'app.obligations'
+						}
+					],
+					drivers: [
+						{
+							key: 'sent_to_acceptance',
+							label: 'Sent-to-acceptance conversion',
+							value: 75,
+							unit: 'percent',
+							definition: 'Accepted agreements divided by sent events.',
+							source: 'transition evidence'
+						},
+						{
+							key: 'repeat_sale_rate',
+							label: 'Repeat-sale rate',
+							value: 40,
+							unit: 'percent',
+							definition: 'Customers with another sale.',
+							source: 'app.obligations'
+						},
+						{
+							key: 'supplier_retention',
+							label: 'Supplier retention',
+							value: 60,
+							unit: 'percent',
+							definition: 'Suppliers who returned.',
+							source: 'app.obligations'
+						}
+					],
+					guardrails: [
+						{
+							key: 'dispute_rate',
+							label: 'Dispute rate',
+							value: 1.2,
+							unit: 'percent',
+							definition: 'Obligations with a dispute divided by activated obligations.',
+							source: 'app.disputes + app.obligations'
+						}
+					],
+					feedback: { total: 10, yes: 8, partly: 1, no: 1, seller: 6, buyer: 4, clear_percent: 80 },
+					reconciliation: [{ event: 'obligation.activated', source_count: 4, event_count: 4, status: 'reconciled' }]
+				}
+			})
+		});
+	});
 	await page.goto('/admin/analytics');
-	await expect(page.getByRole('heading', {name:'Show what Kredit has achieved.'})).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Show what Kredit has achieved.' })).toBeVisible();
 	await expect(page.getByText('Trade credit recorded')).toBeVisible();
 	await expect(page.getByLabel(/Evidence for/).getByText('₦1,200,000.00')).toBeVisible();
 	await expect(page.getByText('80.0%')).toBeVisible();
-	await expect(page.getByText('Reconciled', {exact:true})).toBeVisible();
+	await expect(page.getByText('Reconciled', { exact: true })).toBeVisible();
 	expect(await page.locator('html').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 	await page.getByText('Open the full product scorecard').click();
 	await expect(page.getByText('Dispute rate')).toBeVisible();
 	await page.getByLabel('Supplier organisation UUID (optional)').fill('00000000-0000-7000-8000-000000000001');
-	await page.getByRole('button', {name:'Apply filters'}).click();
-	await expect.poll(()=>requestedOrganization).toBe('00000000-0000-7000-8000-000000000001');
+	await page.getByRole('button', { name: 'Apply filters' }).click();
+	await expect.poll(() => requestedOrganization).toBe('00000000-0000-7000-8000-000000000001');
 });
 
 test('seller can give one simple product clarity answer', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	let submitted: Record<string, unknown> | undefined;
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies' }] }) }));
+	await page.route('**/api/v1/organizations', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies' }] })
+		})
+	);
 	for (const name of ['credit-requests', 'payments', 'overdue', 'payment-claims', 'disputes']) {
-		await page.route(`**/api/v1/organizations/org-1/${name}`, async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ requests: [], payments: [], overdue: [], payment_claims: [], disputes: [] }) }));
+		await page.route(`**/api/v1/organizations/org-1/${name}`, async (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ requests: [], payments: [], overdue: [], payment_claims: [], disputes: [] })
+			})
+		);
 	}
 	await page.route('**/api/v1/me/product-feedback', async (route) => {
 		submitted = route.request().postDataJSON();
-		await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ feedback: submitted }) });
+		await route.fulfill({
+			status: 201,
+			contentType: 'application/json',
+			body: JSON.stringify({ feedback: submitted })
+		});
 	});
 	await page.goto('/workspace/today');
 	await expect(page.getByRole('heading', { name: 'Was this page easy to understand?' })).toBeVisible();
 	expect(await page.locator('html').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 	await page.getByRole('button', { name: 'Yes', exact: true }).click();
 	await expect(page.getByText('Thank you. Your answer helps us improve Kredit.')).toBeVisible();
-	await expect.poll(() => submitted).toEqual({ area: 'seller', screen: 'overview', answer: 'yes', organization_id: 'org-1' });
+	await expect
+		.poll(() => submitted)
+		.toEqual({ area: 'seller', screen: 'overview', answer: 'yes', organization_id: 'org-1' });
 });
 
 test('supplier can amend and cancel a draft before immutable terms are sent', async ({ page }) => {
 	let amendment: Record<string, unknown> | undefined;
 	let cancelled = false;
-	const draft = { id: 'request-1', state: 'DRAFT', version: 1, buyer_legal_name: 'Kano Retail Limited', principal_kobo: 120000000, goods_description: 'Initial inventory', due_date: '2026-09-30', collection_at: '2026-10-02T08:00:00Z', grace_hours: 48 };
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies' }] }) }));
+	const draft = {
+		id: 'request-1',
+		state: 'DRAFT',
+		version: 1,
+		buyer_legal_name: 'Kano Retail Limited',
+		principal_kobo: 120000000,
+		goods_description: 'Initial inventory',
+		due_date: '2026-09-30',
+		collection_at: '2026-10-02T08:00:00Z',
+		grace_hours: 48
+	};
+	await page.route('**/api/v1/organizations', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies' }] })
+		})
+	);
 	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1', async (route) => {
-		if (route.request().method() === 'PATCH') { amendment = route.request().postDataJSON(); draft.version = 2; draft.principal_kobo = Number(amendment?.principal_kobo); }
-		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'PATCH' ? { request: draft } : { request: draft, receipts: [] }) });
+		if (route.request().method() === 'PATCH') {
+			amendment = route.request().postDataJSON();
+			draft.version = 2;
+			draft.principal_kobo = Number(amendment?.principal_kobo);
+		}
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(route.request().method() === 'PATCH' ? { request: draft } : { request: draft, receipts: [] })
+		});
 	});
-	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1/cancel', async (route) => { cancelled = true; draft.state = 'CANCELLED'; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request: draft }) }); });
+	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1/cancel', async (route) => {
+		cancelled = true;
+		draft.state = 'CANCELLED';
+		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request: draft }) });
+	});
 	await page.goto('/workspace/sales/request-1?organization=org-1');
 	await page.getByLabel('How much must they pay? (₦)').fill('1,250,000');
 	await page.getByRole('button', { name: 'Save for later' }).click();
@@ -148,54 +438,150 @@ test('supplier can amend and cancel a draft before immutable terms are sent', as
 
 test('buyer can decline exact terms without creating an obligation', async ({ page }) => {
 	let declined = false;
-	const request = { id: 'request-2', buyer_user_id:'product-user', buyer_business_id:'business-1', state: 'BUYER_REVIEWING', supplier_legal_name: 'Adebayo Supplies', buyer_legal_name: 'Kano Retail Limited', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Verified inventory', due_date: '2026-09-30' };
-	await page.route('**/api/v1/buyer/credit-requests/request-2', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request, agreement: { id:'agreement-1', document_hash: 'a'.repeat(64) } }) }));
-	await page.route('**/api/v1/buyer/credit-requests/request-2/payments', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payments: [] }) }));
-	await page.route('**/api/v1/buyer/credit-requests/request-2/decline', async (route) => { declined = true; request.state = 'DECLINED'; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request }) }); });
+	const request = {
+		id: 'request-2',
+		buyer_user_id: 'product-user',
+		buyer_business_id: 'business-1',
+		state: 'BUYER_REVIEWING',
+		supplier_legal_name: 'Adebayo Supplies',
+		buyer_legal_name: 'Kano Retail Limited',
+		principal_kobo: 50000000,
+		currency: 'NGN',
+		goods_description: 'Verified inventory',
+		due_date: '2026-09-30'
+	};
+	await page.route('**/api/v1/buyer/credit-requests/request-2', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ request, agreement: { id: 'agreement-1', document_hash: 'a'.repeat(64) } })
+		})
+	);
+	await page.route('**/api/v1/buyer/credit-requests/request-2/payments', async (route) =>
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payments: [] }) })
+	);
+	await page.route('**/api/v1/buyer/credit-requests/request-2/decline', async (route) => {
+		declined = true;
+		request.state = 'DECLINED';
+		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request }) });
+	});
 	await page.goto('/workspace/purchases/orders/request-2');
-	await page.getByRole('button', { name: 'Decline sale', exact:true }).click();
+	await page.getByRole('button', { name: 'Decline sale', exact: true }).click();
 	await expect(page.getByText('You declined this sale.')).toBeVisible();
 	await expect.poll(() => declined).toBe(true);
 });
 
 test('buyer payment claim explains and applies a bounded hold', async ({ page }) => {
 	let submitted: Record<string, unknown> | undefined;
-	const request = { id: 'request-3', buyer_user_id:'product-user', buyer_business_id:'business-1', state: 'ACTIVE', supplier_legal_name: 'Adebayo Supplies', buyer_legal_name: 'Kano Retail Limited', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Verified inventory', due_date: '2026-09-30' };
-	await page.route('**/api/v1/buyer/credit-requests/request-3', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ request, obligation: { id: 'obligation-3', outstanding_kobo: 50000000 }, agreement: { id:'agreement-1', document_hash: 'a'.repeat(64) } }) }));
-	await page.route('**/api/v1/buyer/credit-requests/request-3/payments', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payments: [] }) }));
-	await page.route('**/api/v1/buyer/credit-requests/request-3/payment-claims', async (route) => { submitted = route.request().postDataJSON(); await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ payment_claim: { id: 'claim-1', state: 'pending', amount_kobo: submitted!.amount_kobo } }) }); });
+	const request = {
+		id: 'request-3',
+		buyer_user_id: 'product-user',
+		buyer_business_id: 'business-1',
+		state: 'ACTIVE',
+		supplier_legal_name: 'Adebayo Supplies',
+		buyer_legal_name: 'Kano Retail Limited',
+		principal_kobo: 50000000,
+		currency: 'NGN',
+		goods_description: 'Verified inventory',
+		due_date: '2026-09-30'
+	};
+	await page.route('**/api/v1/buyer/credit-requests/request-3', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				request,
+				obligation: { id: 'obligation-3', outstanding_kobo: 50000000 },
+				agreement: { id: 'agreement-1', document_hash: 'a'.repeat(64) }
+			})
+		})
+	);
+	await page.route('**/api/v1/buyer/credit-requests/request-3/payments', async (route) =>
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ payments: [] }) })
+	);
+	await page.route('**/api/v1/buyer/credit-requests/request-3/payment-claims', async (route) => {
+		submitted = route.request().postDataJSON();
+		await route.fulfill({
+			status: 201,
+			contentType: 'application/json',
+			body: JSON.stringify({ payment_claim: { id: 'claim-1', state: 'pending', amount_kobo: submitted!.amount_kobo } })
+		});
+	});
 	await page.goto('/workspace/purchases/orders/request-3');
-	await page.getByText('Already paid by bank transfer?', {exact:true}).click();
+	await page.getByText('Already paid by bank transfer?', { exact: true }).click();
 	await page.getByLabel('Amount transferred (₦)').fill('125,000');
 	await page.getByLabel('Transfer reference').fill('BANK-2026-001');
 	await page.getByLabel('When did you transfer it? (Nigerian time)').fill('2026-09-01T12:00');
-	await page.getByRole('button', { name: 'Report my transfer', exact:true }).click();
-	await expect(page.getByText('Transfer reported. The seller must confirm receipt before your balance changes.')).toBeVisible();
+	await page.getByRole('button', { name: 'Report my transfer', exact: true }).click();
+	await expect(
+		page.getByText('Transfer reported. The seller must confirm receipt before your balance changes.')
+	).toBeVisible();
 	await expect.poll(() => submitted).toMatchObject({ amount_kobo: 12500000, transfer_reference: 'BANK-2026-001' });
 });
 
 test('a viewer without purchasing authority cannot report a transfer', async ({ page }) => {
- const request = { id: 'request-unowned', buyer_business_id: 'business-1', buyer_user_id: 'different-user', state: 'ACTIVE', supplier_legal_name: 'Synthetic seller', buyer_legal_name: 'Synthetic buyer', principal_kobo: 50000000, currency: 'NGN', goods_description: 'Synthetic goods', due_date: '2026-09-30' };
- await page.route('**/api/v1/buyer/credit-requests/request-unowned', route => route.fulfill({ json: { request, obligation: { id: 'obligation-unowned', outstanding_kobo: 50000000 } } }));
- await page.route('**/api/v1/buyer/credit-requests/request-unowned/payments', route => route.fulfill({ json: { payments: [] } }));
- await page.goto('/workspace/purchases/orders/request-unowned');
- await page.getByText('Already paid by bank transfer?', { exact: true }).click();
- await expect(page.getByRole('button', { name: 'Report my transfer', exact: true })).toBeDisabled();
+	const request = {
+		id: 'request-unowned',
+		buyer_business_id: 'business-1',
+		buyer_user_id: 'different-user',
+		state: 'ACTIVE',
+		supplier_legal_name: 'Synthetic seller',
+		buyer_legal_name: 'Synthetic buyer',
+		principal_kobo: 50000000,
+		currency: 'NGN',
+		goods_description: 'Synthetic goods',
+		due_date: '2026-09-30'
+	};
+	await page.route('**/api/v1/buyer/credit-requests/request-unowned', (route) =>
+		route.fulfill({ json: { request, obligation: { id: 'obligation-unowned', outstanding_kobo: 50000000 } } })
+	);
+	await page.route('**/api/v1/buyer/credit-requests/request-unowned/payments', (route) =>
+		route.fulfill({ json: { payments: [] } })
+	);
+	await page.goto('/workspace/purchases/orders/request-unowned');
+	await page.getByText('Already paid by bank transfer?', { exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Report my transfer', exact: true })).toBeDisabled();
 });
 
 test('buyer can cancel an active mandate', async ({ page }) => {
 	let cancelled = false;
-	await page.route('**/api/v1/buyer/mandates*', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mandates: [{ id: 'mandate-1', provider: 'approved-provider', status: cancelled ? 'CANCELLED' : 'ACTIVE', amount_ceiling_kobo: 50000000 }] }) }));
-	await page.route('**/api/v1/buyer/mandates/mandate-1/cancel', async (route) => { cancelled = true; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mandate: { id: 'mandate-1', provider: 'approved-provider', amount_ceiling_kobo: 50000000, status: 'CANCELLED' } }) }); });
+	await page.route('**/api/v1/buyer/mandates*', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				mandates: [
+					{
+						id: 'mandate-1',
+						provider: 'approved-provider',
+						status: cancelled ? 'CANCELLED' : 'ACTIVE',
+						amount_ceiling_kobo: 50000000
+					}
+				]
+			})
+		})
+	);
+	await page.route('**/api/v1/buyer/mandates/mandate-1/cancel', async (route) => {
+		cancelled = true;
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				mandate: { id: 'mandate-1', provider: 'approved-provider', amount_ceiling_kobo: 50000000, status: 'CANCELLED' }
+			})
+		});
+	});
 	await page.goto('/workspace/purchases/mandates');
 	await page.getByRole('button', { name: 'Stop bank debit' }).click();
-	await expect(page.getByText('Cancelled', {exact:true})).toBeVisible();
+	await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
 	await expect.poll(() => cancelled).toBe(true);
 });
 
 test('mobile customer navigation keeps important pages below and every other page in one menu', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
-	await page.route('**/api/v1/buyer/mandates*', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mandates: [] }) }));
+	await page.route('**/api/v1/buyer/mandates*', async (route) =>
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mandates: [] }) })
+	);
 	await page.goto('/workspace/purchases/mandates');
 	const account = page.getByRole('navigation', { name: 'Business workspace' });
 	await expect(account.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
@@ -213,7 +599,23 @@ test('mobile customer navigation keeps important pages below and every other pag
 });
 
 test('public receipt renders only the approved projection', async ({ page }) => {
-	await page.route('**/api/v1/public/receipts/signed-token', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ receipt: { reference: 'payment-1', amount_kobo: 12500000, currency: 'NGN', source_type: 'buyer_payment_claim', state: 'recognized', paid_at: '2026-08-21T10:00:00Z', recognized_at: '2026-08-21T10:05:00Z' } }) }));
+	await page.route('**/api/v1/public/receipts/signed-token', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				receipt: {
+					reference: 'payment-1',
+					amount_kobo: 12500000,
+					currency: 'NGN',
+					source_type: 'buyer_payment_claim',
+					state: 'recognized',
+					paid_at: '2026-08-21T10:00:00Z',
+					recognized_at: '2026-08-21T10:05:00Z'
+				}
+			})
+		})
+	);
 	await page.goto('/receipt/signed-token');
 	await expect(page.getByRole('heading', { name: 'This money was received.' })).toBeVisible();
 	await expect(page.getByText('₦125,000.00')).toBeVisible();
@@ -225,23 +627,86 @@ test('supplier reserves exact drawdown terms and releases only after buyer confi
 	await page.setViewportSize({ width: 390, height: 844 });
 	let reserved: Record<string, unknown> | undefined;
 	let released: Record<string, unknown> | undefined;
-	const line = { id: 'line-1', supplier_organization_id: 'org-1', buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', approved_limit_kobo: 100000000, current_exposure_kobo: 0, reserved_pending_kobo: 25000000, available_limit_kobo: 75000000, state: 'ACTIVE', version: 2 };
-	const confirmed = { id: 'drawdown-confirmed', trade_line_id: 'line-1', principal_kobo: 25000000, goods_description: 'Twenty bags of rice', invoice_reference: 'INV-25', due_date: '2026-09-30', collection_at: '2026-10-01T09:00:00Z', grace_hours: 24, agreement_hash: 'hash-confirmed', state: 'BUYER_CONFIRMED' };
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies' }] }) }));
+	const line = {
+		id: 'line-1',
+		supplier_organization_id: 'org-1',
+		buyer_user_id: 'buyer-1',
+		buyer_business_id: 'business-1',
+		approved_limit_kobo: 100000000,
+		current_exposure_kobo: 0,
+		reserved_pending_kobo: 25000000,
+		available_limit_kobo: 75000000,
+		state: 'ACTIVE',
+		version: 2
+	};
+	const confirmed = {
+		id: 'drawdown-confirmed',
+		trade_line_id: 'line-1',
+		principal_kobo: 25000000,
+		goods_description: 'Twenty bags of rice',
+		invoice_reference: 'INV-25',
+		due_date: '2026-09-30',
+		collection_at: '2026-10-01T09:00:00Z',
+		grace_hours: 24,
+		agreement_hash: 'hash-confirmed',
+		state: 'BUYER_CONFIRMED'
+	};
+	await page.route('**/api/v1/organizations', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ organizations: [{ id: 'org-1', legal_name: 'Adebayo Supplies' }] })
+		})
+	);
 	// Selling from a customer limit is off by default, both here and on the
 	// server. A test about that flow has to switch it on, the way the platform
 	// owner would, rather than relying on the page assuming it is available.
-	await page.route('**/api/v1/platform/capabilities', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ features: { drawdowns: true, trade_lines: true } }) }));
-	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/statement', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ line, drawdowns: [confirmed] }) }));
-	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/drawdowns', async (route) => { reserved = route.request().postDataJSON(); await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ trade_line: line, drawdown: { ...confirmed, ...reserved, id: 'new-drawdown', state: 'PENDING_BUYER_CONFIRMATION' } }) }); });
-	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/drawdowns/drawdown-confirmed/release', async (route) => { released = route.request().postDataJSON(); confirmed.state = 'GOODS_RELEASED'; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ drawdown: confirmed, trade_line: line }) }); });
+	await page.route('**/api/v1/platform/capabilities', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ features: { drawdowns: true, trade_lines: true } })
+		})
+	);
+	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/statement', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ line, drawdowns: [confirmed] })
+		})
+	);
+	await page.route('**/api/v1/organizations/org-1/trade-lines/line-1/drawdowns', async (route) => {
+		reserved = route.request().postDataJSON();
+		await route.fulfill({
+			status: 201,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				trade_line: line,
+				drawdown: { ...confirmed, ...reserved, id: 'new-drawdown', state: 'PENDING_BUYER_CONFIRMATION' }
+			})
+		});
+	});
+	await page.route(
+		'**/api/v1/organizations/org-1/trade-lines/line-1/drawdowns/drawdown-confirmed/release',
+		async (route) => {
+			released = route.request().postDataJSON();
+			confirmed.state = 'GOODS_RELEASED';
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ drawdown: confirmed, trade_line: line })
+			});
+		}
+	);
 	await page.goto('/workspace/sales/limits/line-1');
 	await page.getByLabel('Money to pay (₦)').fill('100,000');
 	await page.getByLabel('What are they buying?').fill('Ten cartons of oil');
 	await page.getByLabel('Pay before').fill('2026-10-30');
 	await page.getByLabel('If unpaid, Kredit may debit their bank after').fill('2026-10-31T09:00');
 	await page.getByRole('button', { name: 'Add ₦100,000.00 sale' }).click();
-	await expect.poll(() => reserved).toMatchObject({ principal_kobo: 10000000, goods_description: 'Ten cartons of oil', due_date: '2026-10-30' });
+	await expect
+		.poll(() => reserved)
+		.toMatchObject({ principal_kobo: 10000000, goods_description: 'Ten cartons of oil', due_date: '2026-10-30' });
 	await page.getByLabel('How will they get the goods?').fill('Courier');
 	await page.getByLabel('Delivery or receipt number').fill('TRACK-100');
 	await page.getByRole('button', { name: 'The goods have left' }).click();
@@ -251,16 +716,71 @@ test('supplier reserves exact drawdown terms and releases only after buyer confi
 test('buyer confirms the exact hash and no-issue receipt activates the drawdown once', async ({ page }) => {
 	let confirmation: Record<string, unknown> | undefined;
 	let receipt: Record<string, unknown> | undefined;
- let feesReady=false;
-	const line = { id: 'line-1', supplier_organization_id: 'org-1', buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', approved_limit_kobo: 100000000, state: 'ACTIVE', version: 2, available_limit_kobo: 75000000, current_exposure_kobo: 0, reserved_pending_kobo: 25000000 };
-	const drawdown = { id: 'drawdown-1', trade_line_id: 'line-1', fee_terms:{policy_revision:1,base_bps:50,collection_bps:50}, principal_kobo: 25000000, goods_description: 'Twenty bags of rice', invoice_reference: 'INV-25', due_date: '2026-09-30', collection_at: '2026-10-01T09:00:00Z', grace_hours: 24, agreement_hash: 'immutable-hash-1', state: 'PENDING_BUYER_CONFIRMATION', delivery_method: 'Courier', release_evidence_reference: 'TRACK-25', obligation_id: '' };
-	await page.route('**/api/v1/buyer/trade-lines*', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ trade_lines: [line] }) }));
-	await page.route('**/api/v1/buyer/trade-lines/line-1/statement', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ line, drawdowns: [{...drawdown,fee_terms:feesReady?drawdown.fee_terms:undefined}] }) }));
-	await page.route('**/api/v1/buyer/trade-lines/line-1/drawdowns/drawdown-1/confirm', async (route) => { confirmation = route.request().postDataJSON(); drawdown.state = 'GOODS_RELEASED'; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ drawdown, trade_line: line }) }); });
-	await page.route('**/api/v1/buyer/trade-lines/line-1/drawdowns/drawdown-1/receipt', async (route) => { receipt = route.request().postDataJSON(); drawdown.state = 'ACTIVATED'; drawdown.obligation_id = 'obligation-1'; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ drawdown, trade_line: line }) }); });
+	let feesReady = false;
+	const line = {
+		id: 'line-1',
+		supplier_organization_id: 'org-1',
+		buyer_user_id: 'buyer-1',
+		buyer_business_id: 'business-1',
+		approved_limit_kobo: 100000000,
+		state: 'ACTIVE',
+		version: 2,
+		available_limit_kobo: 75000000,
+		current_exposure_kobo: 0,
+		reserved_pending_kobo: 25000000
+	};
+	const drawdown = {
+		id: 'drawdown-1',
+		trade_line_id: 'line-1',
+		fee_terms: { policy_revision: 1, base_bps: 50, collection_bps: 50 },
+		principal_kobo: 25000000,
+		goods_description: 'Twenty bags of rice',
+		invoice_reference: 'INV-25',
+		due_date: '2026-09-30',
+		collection_at: '2026-10-01T09:00:00Z',
+		grace_hours: 24,
+		agreement_hash: 'immutable-hash-1',
+		state: 'PENDING_BUYER_CONFIRMATION',
+		delivery_method: 'Courier',
+		release_evidence_reference: 'TRACK-25',
+		obligation_id: ''
+	};
+	await page.route('**/api/v1/buyer/trade-lines*', async (route) =>
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ trade_lines: [line] }) })
+	);
+	await page.route('**/api/v1/buyer/trade-lines/line-1/statement', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				line,
+				drawdowns: [{ ...drawdown, fee_terms: feesReady ? drawdown.fee_terms : undefined }]
+			})
+		})
+	);
+	await page.route('**/api/v1/buyer/trade-lines/line-1/drawdowns/drawdown-1/confirm', async (route) => {
+		confirmation = route.request().postDataJSON();
+		drawdown.state = 'GOODS_RELEASED';
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ drawdown, trade_line: line })
+		});
+	});
+	await page.route('**/api/v1/buyer/trade-lines/line-1/drawdowns/drawdown-1/receipt', async (route) => {
+		receipt = route.request().postDataJSON();
+		drawdown.state = 'ACTIVATED';
+		drawdown.obligation_id = 'obligation-1';
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ drawdown, trade_line: line })
+		});
+	});
 	await page.goto('/workspace/purchases/trade-lines');
-	await expect(page.getByRole('button', {name:'Yes to this ₦250,000.00 sale'})).toBeDisabled();
- feesReady=true;await page.reload();
+	await expect(page.getByRole('button', { name: 'Yes to this ₦250,000.00 sale' })).toBeDisabled();
+	feesReady = true;
+	await page.reload();
 	await page.getByText('Agreement reference').click();
 	await expect(page.getByText('immutable-hash-1')).toBeVisible();
 	await page.getByRole('button', { name: 'Yes to this ₦250,000.00 sale' }).click();
@@ -272,11 +792,52 @@ test('buyer confirms the exact hash and no-issue receipt activates the drawdown 
 
 test('buyer receipt issue opens a case without activating an obligation', async ({ page }) => {
 	let receipt: Record<string, unknown> | undefined;
-	const line = { id: 'line-issue', supplier_organization_id: 'org-1', buyer_user_id: 'buyer-1', buyer_business_id: 'business-1', approved_limit_kobo: 60000000, state: 'ACTIVE', version: 2, available_limit_kobo: 50000000, current_exposure_kobo: 0, reserved_pending_kobo: 10000000 };
-	const drawdown = { id: 'drawdown-issue', trade_line_id: 'line-issue', principal_kobo: 10000000, goods_description: 'Damaged cartons', invoice_reference: 'INV-ISSUE', due_date: '2026-09-30', collection_at: '2026-10-01T09:00:00Z', grace_hours: 24, agreement_hash: 'issue-hash', state: 'GOODS_RELEASED', delivery_method: 'Courier', release_evidence_reference: 'TRACK-ISSUE', obligation_id: '' };
-	await page.route('**/api/v1/buyer/trade-lines*', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ trade_lines: [line] }) }));
-	await page.route('**/api/v1/buyer/trade-lines/line-issue/statement', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ line, drawdowns: [drawdown] }) }));
-	await page.route('**/api/v1/buyer/trade-lines/line-issue/drawdowns/drawdown-issue/receipt', async (route) => { receipt = route.request().postDataJSON(); drawdown.state = 'RECEIPT_ISSUE_REPORTED'; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ drawdown: { ...drawdown, receipt_dispute_id: 'dispute-1' }, trade_line: line }) }); });
+	const line = {
+		id: 'line-issue',
+		supplier_organization_id: 'org-1',
+		buyer_user_id: 'buyer-1',
+		buyer_business_id: 'business-1',
+		approved_limit_kobo: 60000000,
+		state: 'ACTIVE',
+		version: 2,
+		available_limit_kobo: 50000000,
+		current_exposure_kobo: 0,
+		reserved_pending_kobo: 10000000
+	};
+	const drawdown = {
+		id: 'drawdown-issue',
+		trade_line_id: 'line-issue',
+		principal_kobo: 10000000,
+		goods_description: 'Damaged cartons',
+		invoice_reference: 'INV-ISSUE',
+		due_date: '2026-09-30',
+		collection_at: '2026-10-01T09:00:00Z',
+		grace_hours: 24,
+		agreement_hash: 'issue-hash',
+		state: 'GOODS_RELEASED',
+		delivery_method: 'Courier',
+		release_evidence_reference: 'TRACK-ISSUE',
+		obligation_id: ''
+	};
+	await page.route('**/api/v1/buyer/trade-lines*', async (route) =>
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ trade_lines: [line] }) })
+	);
+	await page.route('**/api/v1/buyer/trade-lines/line-issue/statement', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ line, drawdowns: [drawdown] })
+		})
+	);
+	await page.route('**/api/v1/buyer/trade-lines/line-issue/drawdowns/drawdown-issue/receipt', async (route) => {
+		receipt = route.request().postDataJSON();
+		drawdown.state = 'RECEIPT_ISSUE_REPORTED';
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ drawdown: { ...drawdown, receipt_dispute_id: 'dispute-1' }, trade_line: line })
+		});
+	});
 	await page.goto('/workspace/purchases/trade-lines');
 	await page.getByLabel('What is wrong?').fill('Four cartons arrived damaged');
 	await page.getByRole('button', { name: 'Report the problem' }).click();
@@ -287,11 +848,72 @@ test('buyer receipt issue opens a case without activating an obligation', async 
 test('pilot-ready owner reviews mobile readiness and invites a sales user', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	let invited: Record<string, unknown> | undefined;
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-ready', business_type: 'limited_company', legal_name: 'Fresh Foods Ltd' }] }) }));
-	await page.route('**/api/v1/organizations/org-ready/onboarding', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ profile: { organization_id: 'org-ready', version: 12, kyb_state: 'approved', settlement_state: 'verified', billing_state: 'configured', terms_version: 'supplier-terms-v1', privacy_version: 'privacy-v1' }, readiness: { state: 'pilot_ready', ready: true, requirements: ['business_identity','email_verified','phone_verified','kyb_approved','settlement_verified','billing_configured','credit_policy','current_consents','owner_mfa','finance_mfa'].map((code) => ({ code, label: code.replaceAll('_',' '), complete: true, manage_path: '/workspace/onboarding' })), missing: [] }, permissions: { business: true, settlement: true, billing: true, credit_policy: true, consents: true }, current_terms_version: 'supplier-terms-v1', current_privacy_version: 'privacy-v1' }) }));
+	await page.route('**/api/v1/organizations', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				organizations: [{ id: 'org-ready', business_type: 'limited_company', legal_name: 'Fresh Foods Ltd' }]
+			})
+		})
+	);
+	await page.route('**/api/v1/organizations/org-ready/onboarding', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				profile: {
+					organization_id: 'org-ready',
+					version: 12,
+					kyb_state: 'approved',
+					settlement_state: 'verified',
+					billing_state: 'configured',
+					terms_version: 'supplier-terms-v1',
+					privacy_version: 'privacy-v1'
+				},
+				readiness: {
+					state: 'pilot_ready',
+					ready: true,
+					requirements: [
+						'business_identity',
+						'email_verified',
+						'phone_verified',
+						'kyb_approved',
+						'settlement_verified',
+						'billing_configured',
+						'credit_policy',
+						'current_consents',
+						'owner_mfa',
+						'finance_mfa'
+					].map((code) => ({
+						code,
+						label: code.replaceAll('_', ' '),
+						complete: true,
+						manage_path: '/workspace/onboarding'
+					})),
+					missing: []
+				},
+				permissions: { business: true, settlement: true, billing: true, credit_policy: true, consents: true },
+				current_terms_version: 'supplier-terms-v1',
+				current_privacy_version: 'privacy-v1'
+			})
+		})
+	);
 	await page.route('**/api/v1/organizations/org-ready/members', async (route) => {
-		if (route.request().method() === 'POST') { invited = route.request().postDataJSON(); await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ membership: { user_id: 'sales-user', role: 'sales', status: 'invited' } }) }); return; }
-		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ members: [{ user_id: 'owner-user', role: 'owner', status: 'active' }] }) });
+		if (route.request().method() === 'POST') {
+			invited = route.request().postDataJSON();
+			await route.fulfill({
+				status: 202,
+				contentType: 'application/json',
+				body: JSON.stringify({ membership: { user_id: 'sales-user', role: 'sales', status: 'invited' } })
+			});
+			return;
+		}
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ members: [{ user_id: 'owner-user', role: 'owner', status: 'active' }] })
+		});
 	});
 	await page.goto('/workspace/onboarding');
 	await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
@@ -300,30 +922,88 @@ test('pilot-ready owner reviews mobile readiness and invites a sales user', asyn
 	await expect(page).toHaveURL(/\/workspace\/team$/);
 	await page.getByLabel('Email or phone').fill('sales@fresh-foods.test');
 	await page.getByRole('button', { name: 'Send invite' }).click();
-	await expect(page.getByText('Invitation created. Ask your worker to sign in with the email or phone number you entered.')).toBeVisible();
+	await expect(
+		page.getByText('Invitation created. Ask your worker to sign in with the email or phone number you entered.')
+	).toBeVisible();
 	await expect.poll(() => invited).toEqual({ target: 'sales@fresh-foods.test', channel: 'email', role: 'sales' });
 });
 
 test('incomplete supplier sees precise recovery steps before financial activity', async ({ page }) => {
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-incomplete', business_type: 'limited_company', legal_name: 'Starting Supplier Ltd' }] }) }));
+	await page.route('**/api/v1/organizations', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				organizations: [{ id: 'org-incomplete', business_type: 'limited_company', legal_name: 'Starting Supplier Ltd' }]
+			})
+		})
+	);
 	const missing = [
 		{ code: 'phone_verified', label: 'Owner phone verified', complete: false, manage_path: '/workspace/onboarding' },
-		{ code: 'kyb_approved', label: 'Business verification approved', complete: false, manage_path: '/workspace/onboarding' },
-		{ code: 'settlement_verified', label: 'Settlement destination verified', complete: false, manage_path: '/workspace/settings/settlement' }
+		{
+			code: 'kyb_approved',
+			label: 'Business verification approved',
+			complete: false,
+			manage_path: '/workspace/onboarding'
+		},
+		{
+			code: 'settlement_verified',
+			label: 'Settlement destination verified',
+			complete: false,
+			manage_path: '/workspace/settings/settlement'
+		}
 	];
-	await page.route('**/api/v1/organizations/org-incomplete/onboarding', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ profile: { organization_id: 'org-incomplete', version: 2, kyb_state: 'not_started', settlement_state: 'not_started', billing_state: 'configured' }, readiness: { state: 'incomplete', ready: false, requirements: missing, missing }, permissions: { business: false, settlement: false, billing: false, credit_policy: false, consents: false }, current_terms_version: 'supplier-terms-v1', current_privacy_version: 'privacy-v1' }) }));
+	await page.route('**/api/v1/organizations/org-incomplete/onboarding', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				profile: {
+					organization_id: 'org-incomplete',
+					version: 2,
+					kyb_state: 'not_started',
+					settlement_state: 'not_started',
+					billing_state: 'configured'
+				},
+				readiness: { state: 'incomplete', ready: false, requirements: missing, missing },
+				permissions: { business: false, settlement: false, billing: false, credit_policy: false, consents: false },
+				current_terms_version: 'supplier-terms-v1',
+				current_privacy_version: 'privacy-v1'
+			})
+		})
+	);
 	await page.goto('/workspace/onboarding');
 	await expect(page.getByText('3 things still to do before selling setup is complete.')).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Setup progress' }).getByText('Where we send your money', { exact: true })).toBeVisible();
+	await expect(
+		page.getByRole('region', { name: 'Setup progress' }).getByText('Where we send your money', { exact: true })
+	).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Where we send your money →' })).toBeVisible();
 });
 
 test('user changes notification routing, quiet hours, and optional categories', async ({ page }) => {
 	let saved: Record<string, unknown> | undefined;
-	let preferences = { preferred_channel: 'whatsapp', fallback_channel: 'email', payment_reminders_enabled: true, product_updates_enabled: false, quiet_start_hour: 22, quiet_end_hour: 7, timezone: 'Africa/Lagos', version: 1 };
+	let preferences = {
+		preferred_channel: 'whatsapp',
+		fallback_channel: 'email',
+		payment_reminders_enabled: true,
+		product_updates_enabled: false,
+		quiet_start_hour: 22,
+		quiet_end_hour: 7,
+		timezone: 'Africa/Lagos',
+		version: 1
+	};
 	await page.route('**/api/v1/me/notification-preferences', async (route) => {
-		if (route.request().method() === 'PUT') { saved = route.request().postDataJSON(); preferences = { ...preferences, ...saved, version: 2 }; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preferences }) }); return; }
-		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preferences, required_groups: ['SECURITY_REQUIRED', 'TRANSACTIONAL_REQUIRED'] }) });
+		if (route.request().method() === 'PUT') {
+			saved = route.request().postDataJSON();
+			preferences = { ...preferences, ...saved, version: 2 };
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preferences }) });
+			return;
+		}
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ preferences, required_groups: ['SECURITY_REQUIRED', 'TRANSACTIONAL_REQUIRED'] })
+		});
 	});
 	await page.goto('/account/notifications');
 	await expect(page.getByText(/Messages about your account, a sale or a payment cannot be switched off/)).toBeVisible();
@@ -334,7 +1014,16 @@ test('user changes notification routing, quiet hours, and optional categories', 
 	await page.getByLabel('Do not disturb from').fill('21');
 	await page.getByRole('button', { name: 'Save my choices' }).click();
 	await expect(page.getByText('Your message choices were saved.')).toBeVisible();
-	await expect.poll(() => saved).toMatchObject({ preferred_channel: 'email', fallback_channel: 'sms', payment_reminders_enabled: false, product_updates_enabled: true, quiet_start_hour: 21, expected_version: 1 });
+	await expect
+		.poll(() => saved)
+		.toMatchObject({
+			preferred_channel: 'email',
+			fallback_channel: 'sms',
+			payment_reminders_enabled: false,
+			product_updates_enabled: true,
+			quiet_start_hour: 21,
+			expected_version: 1
+		});
 });
 
 test('user can choose a lighter display on this phone', async ({ page }) => {
@@ -342,14 +1031,27 @@ test('user can choose a lighter display on this phone', async ({ page }) => {
 	await page.getByLabel('Use less data on this phone').check();
 	await page.getByRole('button', { name: 'Save this setting' }).click();
 	await expect(page.getByText('Effects are now reduced on this device.')).toBeVisible();
-	await expect.poll(() => page.locator('html').evaluate((element) => element.classList.contains('low-data'))).toBe(true);
+	await expect
+		.poll(() => page.locator('html').evaluate((element) => element.classList.contains('low-data')))
+		.toBe(true);
 });
 
 test('identity-bound privacy request is submitted and remains trackable', async ({ page }) => {
 	let submitted: Record<string, unknown> | undefined;
 	let requests: any[] = [];
 	await page.route('**/api/v1/me/privacy-requests', async (route) => {
-		if (route.request().method() === 'POST') { submitted = route.request().postDataJSON(); requests = [{ id: 'privacy-1', version: 1, request_type: 'PORTABILITY', state: 'IN_REVIEW', due_at: '2026-09-28T00:00:00Z' }]; await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ request: requests[0] }) }); return; }
+		if (route.request().method() === 'POST') {
+			submitted = route.request().postDataJSON();
+			requests = [
+				{ id: 'privacy-1', version: 1, request_type: 'PORTABILITY', state: 'IN_REVIEW', due_at: '2026-09-28T00:00:00Z' }
+			];
+			await route.fulfill({
+				status: 201,
+				contentType: 'application/json',
+				body: JSON.stringify({ request: requests[0] })
+			});
+			return;
+		}
 		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ requests }) });
 	});
 	await page.goto('/account/privacy');
@@ -359,17 +1061,28 @@ test('identity-bound privacy request is submitted and remains trackable', async 
 	// The list must echo the words the person picked in the form. Hard-coding a
 	// phrase here let the two drift apart: the form offered one wording and the
 	// list printed the operator's. Read the option's own text instead.
-	const chosen = ((await page.getByLabel('What do you want us to do?').locator('option[value="PORTABILITY"]').textContent()) ?? '').trim();
+	const chosen = (
+		(await page.getByLabel('What do you want us to do?').locator('option[value="PORTABILITY"]').textContent()) ?? ''
+	).trim();
 	expect(chosen.length).toBeGreaterThan(0);
 	await expect(page.locator('article').getByText(chosen)).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Download my information' })).toHaveCount(0);
 	await expect(page.getByText('In review')).toBeVisible();
-	await expect.poll(() => submitted).toEqual({ request_type: 'PORTABILITY', details: 'Provide my account information in a portable format' });
+	await expect
+		.poll(() => submitted)
+		.toEqual({ request_type: 'PORTABILITY', details: 'Provide my account information in a portable format' });
 });
 
 test('recovery start is enumeration-safe and explains independent proof', async ({ page }) => {
 	let submitted: Record<string, unknown> | undefined;
-	await page.route('**/api/v1/account-recovery/requests', async (route) => { submitted = route.request().postDataJSON(); await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ message: 'If the account is eligible, recovery instructions have been sent.' }) }); });
+	await page.route('**/api/v1/account-recovery/requests', async (route) => {
+		submitted = route.request().postDataJSON();
+		await route.fulfill({
+			status: 202,
+			contentType: 'application/json',
+			body: JSON.stringify({ message: 'If the account is eligible, recovery instructions have been sent.' })
+		});
+	});
 	await page.goto('/recover');
 	await expect(page.getByText(/ask for more than your phone number/)).toBeVisible();
 	await page.getByLabel('Your email or phone').fill('someone@example.test');
@@ -381,9 +1094,26 @@ test('recovery start is enumeration-safe and explains independent proof', async 
 test('owner changes a role, suspends access, and restores it from the team interface', async ({ page }) => {
 	const changes: Record<string, unknown>[] = [];
 	let member = { user_id: 'team-user', role: 'sales', status: 'active' };
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-team', legal_name: 'Team Supplier Ltd' }] }) }));
-	await page.route('**/api/v1/organizations/org-team/members', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ members: [{ user_id: 'owner-user', role: 'owner', status: 'active' }, member] }) }));
-	await page.route('**/api/v1/organizations/org-team/members/team-user', async (route) => { const change = route.request().postDataJSON(); changes.push(change); member = { ...member, ...change }; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ membership: member }) }); });
+	await page.route('**/api/v1/organizations', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ organizations: [{ id: 'org-team', legal_name: 'Team Supplier Ltd' }] })
+		})
+	);
+	await page.route('**/api/v1/organizations/org-team/members', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ members: [{ user_id: 'owner-user', role: 'owner', status: 'active' }, member] })
+		})
+	);
+	await page.route('**/api/v1/organizations/org-team/members/team-user', async (route) => {
+		const change = route.request().postDataJSON();
+		changes.push(change);
+		member = { ...member, ...change };
+		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ membership: member }) });
+	});
 	await page.goto('/workspace/team');
 	await page.locator('.controls select').selectOption('finance');
 	await page.getByRole('button', { name: 'Save' }).click();
@@ -396,12 +1126,63 @@ test('owner changes a role, suspends access, and restores it from the team inter
 test('supplier creates a mandate-backed trade line and sees provider validation safely', async ({ page }) => {
 	let submitted: Record<string, unknown> | undefined;
 	let attempts = 0;
-	await page.route('**/api/v1/organizations', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{ id: 'org-line', legal_name: 'Line Supplier Ltd' }] }) }));
-	await page.route('**/api/v1/organizations/org-line/customers', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ customers: [{ buyer_user_id: 'buyer-line', buyer_business_id: 'business-line', legal_name: 'Repeat Buyer Ltd' }] }) }));
-	await page.route('**/api/v1/organizations/org-line/trade-lines', async (route) => { if (route.request().method() === 'GET') { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ trade_lines: [] }) }); return; } submitted = route.request().postDataJSON(); attempts++; if (attempts === 1) { await route.fulfill({ status: 422, contentType: 'application/problem+json', body: JSON.stringify({ detail: 'The mandate provider could not verify this reference.' }) }); return; } await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ trade_line: { id: 'line-created', ...submitted, supplier_organization_id: 'org-line', current_exposure_kobo: 0, reserved_pending_kobo: 0, available_limit_kobo: 100000000, state: 'ACTIVE', version: 1 } }) }); });
+	await page.route('**/api/v1/organizations', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ organizations: [{ id: 'org-line', legal_name: 'Line Supplier Ltd' }] })
+		})
+	);
+	await page.route('**/api/v1/organizations/org-line/customers', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				customers: [{ buyer_user_id: 'buyer-line', buyer_business_id: 'business-line', legal_name: 'Repeat Buyer Ltd' }]
+			})
+		})
+	);
+	await page.route('**/api/v1/organizations/org-line/trade-lines', async (route) => {
+		if (route.request().method() === 'GET') {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ trade_lines: [] }) });
+			return;
+		}
+		submitted = route.request().postDataJSON();
+		attempts++;
+		if (attempts === 1) {
+			await route.fulfill({
+				status: 422,
+				contentType: 'application/problem+json',
+				body: JSON.stringify({ detail: 'The mandate provider could not verify this reference.' })
+			});
+			return;
+		}
+		await route.fulfill({
+			status: 201,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				trade_line: {
+					id: 'line-created',
+					...submitted,
+					supplier_organization_id: 'org-line',
+					current_exposure_kobo: 0,
+					reserved_pending_kobo: 0,
+					available_limit_kobo: 100000000,
+					state: 'ACTIVE',
+					version: 1
+				}
+			})
+		});
+	});
 	// Customer limits are off by default, here and on the server. A test about
 	// that flow switches it on the way the platform owner would.
-	await page.route('**/api/v1/platform/capabilities', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ features: { trade_lines: true, drawdowns: true } }) }));
+	await page.route('**/api/v1/platform/capabilities', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ features: { trade_lines: true, drawdowns: true } })
+		})
+	);
 	await page.goto('/workspace/sales/limits');
 	await page.locator('.card form select').first().selectOption('buyer-line');
 	await page.getByLabel('Bank debit setup number').fill('mandate-approved');
@@ -412,19 +1193,54 @@ test('supplier creates a mandate-backed trade line and sees provider validation 
 	await expect(page.getByText('The request was not accepted. Check the details and try again.')).toBeVisible();
 	await page.getByRole('button', { name: 'Give a ₦1,000,000.00 limit' }).click();
 	await expect(page.getByText('Customer limit saved: ₦1,000,000.00. Status: Active.')).toBeVisible();
-	await expect.poll(() => submitted).toMatchObject({ buyer_user_id: 'buyer-line', buyer_business_id: 'business-line', mandate_id: 'mandate-approved', approved_limit_kobo: 100000000 });
+	await expect
+		.poll(() => submitted)
+		.toMatchObject({
+			buyer_user_id: 'buyer-line',
+			buyer_business_id: 'business-line',
+			mandate_id: 'mandate-approved',
+			approved_limit_kobo: 100000000
+		});
 });
 
 test('buyer attaches evidence to an existing dispute and sees the status timeline', async ({ page }) => {
 	let submitted: Record<string, unknown> | undefined;
-	const dispute = { id: 'dispute-evidence', obligation_id:'debt-evidence', total_disputed_kobo: 5000000, remaining_disputed_kobo: 5000000, reason: 'Damaged cartons', explanation: 'Five cartons were damaged.', state: 'OPEN', collection_effect: 'CONTESTED_ONLY', opened_at: '2026-08-29T08:00:00Z' };
+	const dispute = {
+		id: 'dispute-evidence',
+		obligation_id: 'debt-evidence',
+		total_disputed_kobo: 5000000,
+		remaining_disputed_kobo: 5000000,
+		reason: 'Damaged cartons',
+		explanation: 'Five cartons were damaged.',
+		state: 'OPEN',
+		collection_effect: 'CONTESTED_ONLY',
+		opened_at: '2026-08-29T08:00:00Z'
+	};
 	let evidence: any[] = [];
-	await page.route('**/api/v1/buyer/disputes/dispute-evidence', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ dispute, evidence, decisions: [] }) }));
-	await page.route('**/api/v1/buyer/disputes/dispute-evidence/evidence', async (route) => { submitted = route.request().postDataJSON(); evidence = [{ id: 'evidence-1', statement: submitted?.statement, submitted_at: '2026-08-29T09:00:00Z' }]; await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ evidence: evidence[0] }) }); });
-	await page.route('**/api/v1/buyer/obligations/debt-evidence',route=>route.fulfill({json:{view:{request:{buyer_business_id:'business-1'}}}}));
+	await page.route('**/api/v1/buyer/disputes/dispute-evidence', async (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ dispute, evidence, decisions: [] })
+		})
+	);
+	await page.route('**/api/v1/buyer/disputes/dispute-evidence/evidence', async (route) => {
+		submitted = route.request().postDataJSON();
+		evidence = [{ id: 'evidence-1', statement: submitted?.statement, submitted_at: '2026-08-29T09:00:00Z' }];
+		await route.fulfill({
+			status: 201,
+			contentType: 'application/json',
+			body: JSON.stringify({ evidence: evidence[0] })
+		});
+	});
+	await page.route('**/api/v1/buyer/obligations/debt-evidence', (route) =>
+		route.fulfill({ json: { view: { request: { buyer_business_id: 'business-1' } } } })
+	);
 	await page.goto('/workspace/purchases/disputes/dispute-evidence');
 	await page.getByLabel('What else should we know?').fill('Courier inspection confirms the damaged seals.');
 	await page.getByRole('button', { name: 'Add this information' }).click();
 	await expect(page.getByText('Courier inspection confirms the damaged seals.')).toBeVisible();
-	await expect.poll(() => submitted).toEqual({ document_id: '', statement: 'Courier inspection confirms the damaged seals.' });
+	await expect
+		.poll(() => submitted)
+		.toEqual({ document_id: '', statement: 'Courier inspection confirms the damaged seals.' });
 });

@@ -43,7 +43,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 		for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
 			response.headers.set(name, value);
 		}
-		applyPageCachePolicy(event.url.pathname, response, event.request.method, Boolean(event.cookies.get('kredit_session')));
+		applyPageCachePolicy(
+			event.url.pathname,
+			response,
+			event.request.method,
+			Boolean(event.cookies.get('kredit_session'))
+		);
 		return response;
 	}
 	const upstream = env.API_INTERNAL_URL ?? 'http://localhost:8080';
@@ -54,7 +59,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// fetch computes the length of the actual buffered bytes, not the client's claim.
 	headers.delete('content-length');
 	// Discard browser-supplied forwarding claims before signing the adapter's address.
-	for (const spoofable of ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'true-client-ip', 'forwarded', 'x-kredit-client-ip', 'x-kredit-client-timestamp', 'x-kredit-client-signature']) {
+	for (const spoofable of [
+		'x-forwarded-for',
+		'x-real-ip',
+		'cf-connecting-ip',
+		'true-client-ip',
+		'forwarded',
+		'x-kredit-client-ip',
+		'x-kredit-client-timestamp',
+		'x-kredit-client-signature'
+	]) {
 		headers.delete(spoofable);
 	}
 	const method = event.request.method;
@@ -77,7 +91,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 				const payload = [timestamp, method, target.pathname + target.search, clientAddress].join('\n');
 				headers.set('x-kredit-client-ip', clientAddress);
 				headers.set('x-kredit-client-timestamp', timestamp);
-				headers.set('x-kredit-client-signature', createHmac('sha256', env.FRONTEND_PROXY_SIGNING_KEY).update(payload).digest('hex'));
+				headers.set(
+					'x-kredit-client-signature',
+					createHmac('sha256', env.FRONTEND_PROXY_SIGNING_KEY).update(payload).digest('hex')
+				);
 			}
 		} catch {
 			// Without an observed address, the API uses its trusted ingress address.
@@ -98,15 +115,24 @@ export const handle: Handle = async ({ event, resolve }) => {
 		});
 	} catch (error) {
 		if (error instanceof ProxyBodyError) {
-			const title = error.status === 413 ? 'Request too large' : error.status === 408 ? 'Request timeout' : 'Invalid request body';
+			const title =
+				error.status === 413 ? 'Request too large' : error.status === 408 ? 'Request timeout' : 'Invalid request body';
 			return new Response(JSON.stringify({ type: 'about:blank', title, status: error.status, detail: error.message }), {
 				status: error.status,
 				headers: { ...SECURITY_HEADERS, 'content-type': 'application/problem+json', 'cache-control': 'no-store' }
 			});
 		}
-		return new Response(JSON.stringify({ type: 'about:blank', title: 'Service unavailable', status: 503, detail: 'The API is temporarily unavailable.' }), {
-			status: 503,
-			headers: { ...SECURITY_HEADERS, 'content-type': 'application/problem+json', 'cache-control': 'no-store' }
-		});
+		return new Response(
+			JSON.stringify({
+				type: 'about:blank',
+				title: 'Service unavailable',
+				status: 503,
+				detail: 'The API is temporarily unavailable.'
+			}),
+			{
+				status: 503,
+				headers: { ...SECURITY_HEADERS, 'content-type': 'application/problem+json', 'cache-control': 'no-store' }
+			}
+		);
 	}
 };

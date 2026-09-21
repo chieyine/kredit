@@ -1,5 +1,5 @@
 <script lang="ts">
- import { buyerEndpoint } from '$lib/buyer-navigation';
+	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, publicError, record, text } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
@@ -23,7 +23,13 @@
 		on_time_count?: number;
 		on_time_percentage?: number;
 		obligations: Sale[];
- corrections?: {id:string;subject_id:string;reason:string;state:string;decisions:{id:string;reason:string;outcome:string;decided_at:string}[]}[];
+		corrections?: {
+			id: string;
+			subject_id: string;
+			reason: string;
+			state: string;
+			decisions: { id: string; reason: string; outcome: string; decided_at: string }[];
+		}[];
 	};
 
 	let history = $state<History | null>(null);
@@ -47,41 +53,80 @@
 			if (!Number.isSafeInteger(result[key]) || Number(result[key]) < 0) throw new Error('Incomplete history totals');
 		}
 		if (!Array.isArray(result.obligations)) throw new Error('Incomplete sales history');
-		const obligations = result.obligations.map(value => {
+		const obligations = result.obligations.map((value) => {
 			const sale = record(value);
 			if (!text(sale.obligation_id)) throw new Error('Missing sale reference');
-			kobo(sale.principal_kobo); kobo(sale.outstanding_kobo);
+			kobo(sale.principal_kobo);
+			kobo(sale.outstanding_kobo);
 			for (const key of ['supplier_name', 'due_date', 'payment_status']) text(sale[key]);
 			return sale as Sale;
 		});
 		const corrections = result.corrections === undefined ? [] : result.corrections;
-  if(!Array.isArray(corrections))throw new Error('Incomplete correction history');
-  for(const value of corrections){const c=record(value);for(const key of ['id','subject_id','reason','state'])text(c[key]);if(!Array.isArray(c.decisions))throw new Error('Incomplete correction decision');for(const value of c.decisions){const d=record(value);for(const key of ['id','reason','outcome','decided_at'])text(d[key]);if(!Number.isFinite(Date.parse(String(d.decided_at))))throw new Error('Invalid decision date');}}
-  return { ...result, obligations,corrections } as History;
+		if (!Array.isArray(corrections)) throw new Error('Incomplete correction history');
+		for (const value of corrections) {
+			const c = record(value);
+			for (const key of ['id', 'subject_id', 'reason', 'state']) text(c[key]);
+			if (!Array.isArray(c.decisions)) throw new Error('Incomplete correction decision');
+			for (const value of c.decisions) {
+				const d = record(value);
+				for (const key of ['id', 'reason', 'outcome', 'decided_at']) text(d[key]);
+				if (!Number.isFinite(Date.parse(String(d.decided_at)))) throw new Error('Invalid decision date');
+			}
+		}
+		return { ...result, obligations, corrections } as History;
 	}
 	async function load() {
-		const read = reads.begin(); error = ''; history = null;
+		const read = reads.begin();
+		error = '';
+		history = null;
 		try {
 			const result = await checkedJSON(buyerEndpoint('/api/v1/buyer/history'), decodeHistory, { signal: read.signal });
 			if (read.current()) history = result;
-		} catch (cause) { if (read.current()) error = publicError(cause, 'your trade history'); }
+		} catch (cause) {
+			if (read.current()) error = publicError(cause, 'your trade history');
+		}
 	}
 	async function askForCorrection(event: SubmitEvent) {
 		event.preventDefault();
-		if (busy || !history?.obligations.some(sale => sale.obligation_id === selectedID) || reason.trim().length < 8) return;
-		busy = true; error = ''; notice = '';
+		if (busy || !history?.obligations.some((sale) => sale.obligation_id === selectedID) || reason.trim().length < 8)
+			return;
+		busy = true;
+		error = '';
+		notice = '';
 		try {
 			correctionIntent ??= new MutationIntent('buyer-history-correction', '/api/v1/buyer/history/corrections');
-			await correctionIntent.run({ subject_type: 'obligation', subject_id: selectedID, source_event_id: '', reason: reason.trim(), evidence: evidence.split('\n').map(item => item.trim()).filter(Boolean) }, value => {
-				const correction = record(record(value).correction);
-				if (!text(correction.id) || correction.subject_id !== selectedID || correction.state !== 'OPEN') throw new Error('Correction not confirmed');
-				return correction;
-			});
-			reason = ''; evidence = ''; notice = 'Your correction request has been saved for review.'; await load();
-		} catch (cause) { error = cause instanceof Error ? cause.message : 'We could not confirm your correction request.'; }
-		finally { busy = false; }
+			await correctionIntent.run(
+				{
+					subject_type: 'obligation',
+					subject_id: selectedID,
+					source_event_id: '',
+					reason: reason.trim(),
+					evidence: evidence
+						.split('\n')
+						.map((item) => item.trim())
+						.filter(Boolean)
+				},
+				(value) => {
+					const correction = record(record(value).correction);
+					if (!text(correction.id) || correction.subject_id !== selectedID || correction.state !== 'OPEN')
+						throw new Error('Correction not confirmed');
+					return correction;
+				}
+			);
+			reason = '';
+			evidence = '';
+			notice = 'Your correction request has been saved for review.';
+			await load();
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : 'We could not confirm your correction request.';
+		} finally {
+			busy = false;
+		}
 	}
-	onMount(() => { void load(); return () => reads.cancel(); });
+	onMount(() => {
+		void load();
+		return () => reads.cancel();
+	});
 </script>
 
 <svelte:head><title>Your trade history — Kredit</title></svelte:head>
@@ -90,14 +135,15 @@
 	<p class="eyebrow">Your history</p>
 	<h1>Supplier payment history</h1>
 	<p class="intro">
-		This page shows your real sales and real payments. There is no secret score, and no number
-		deciding your worth.
+		This page shows your real sales and real payments. There is no secret score, and no number deciding your worth.
 	</p>
 
 	{#if history}
 		<section class="grid">
 			<article><span>Sales fully paid</span><strong>{history.completed_obligations}</strong></article>
-			<article><span>Paid on time</span><strong>{history.on_time_count ?? 0} of {history.completed_obligations}</strong></article>
+			<article>
+				<span>Paid on time</span><strong>{history.on_time_count ?? 0} of {history.completed_obligations}</strong>
+			</article>
 			<article><span>Sales still open</span><strong>{history.active_obligations}</strong></article>
 			<article><span>Open problems</span><strong>{history.dispute_count}</strong></article>
 		</section>
@@ -116,7 +162,9 @@
 								<td><Money amountKobo={sale.principal_kobo ?? null} /></td>
 								<td><Money amountKobo={sale.outstanding_kobo ?? null} /></td>
 								<td>{readableDate(sale.due_date) || '—'}</td>
-								<td>{#if sale.payment_status}<StatusPill status={sale.payment_status} />{/if}</td>
+								<td
+									>{#if sale.payment_status}<StatusPill status={sale.payment_status} />{/if}</td
+								>
 							</tr>
 						{/each}
 					</tbody>
@@ -126,7 +174,23 @@
 			<p class="none">You have no sales on record yet.</p>
 		{/if}
 
-  {#if history.corrections?.length}<section class="correction"><h2>Your correction requests</h2><p>Review decisions stay alongside the original records. Any change to money owed is recorded separately through the payment or financial-change process.</p>{#each history.corrections as item}<article><h3>{item.reason}</h3><p><StatusPill status={item.state}/></p>{#each item.decisions as decision}<p><strong>{decision.outcome==='APPROVED'?'Approved correction note':'Review decision'}</strong> · {readableDate(decision.decided_at)}</p><p>{decision.reason}</p>{/each}</article>{/each}</section>{/if}
+		{#if history.corrections?.length}<section class="correction">
+				<h2>Your correction requests</h2>
+				<p>
+					Review decisions stay alongside the original records. Any change to money owed is recorded separately through
+					the payment or financial-change process.
+				</p>
+				{#each history.corrections as item}<article>
+						<h3>{item.reason}</h3>
+						<p><StatusPill status={item.state} /></p>
+						{#each item.decisions as decision}<p>
+								<strong>{decision.outcome === 'APPROVED' ? 'Approved correction note' : 'Review decision'}</strong> · {readableDate(
+									decision.decided_at
+								)}
+							</p>
+							<p>{decision.reason}</p>{/each}
+					</article>{/each}
+			</section>{/if}
 		<section class="correction">
 			<h2>Is something here wrong?</h2>
 			<p>Ask the seller to check it. Say exactly what is wrong and what it should be.</p>
@@ -163,32 +227,109 @@
 			</form>
 		</section>
 	{:else if error}
-		<p class="error" role="alert">{error}</p><button onclick={load}>Try again</button>
+		<p class="error" role="alert">{error}</p>
+		<button onclick={load}>Try again</button>
 	{:else}
 		<p>Opening your history…</p>
 	{/if}
 </main>
 
 <style>
-	h1 { font-size: clamp(2.5rem, 7vw, 5rem); line-height: 1; letter-spacing: -.055em; max-width: 10ch; }
-	.intro { max-width: 42rem; color: var(--color-muted); }
-	.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 2.5rem 0; }
-	article { display: grid; gap: .75rem; padding: 1.25rem; border: 1px solid var(--color-border); background: var(--color-surface); }
-	article span { color: var(--color-muted); }
-	article strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
-	h2 { margin-top: 2.5rem; }
-	.table-wrap { overflow-x: auto; }
-	table { width: 100%; border-collapse: collapse; background: var(--color-surface); }
-	th, td { text-align: left; padding: .9rem; border-bottom: 1px solid var(--color-border); }
-	th { color: var(--color-muted); font-size: .8rem; text-transform: uppercase; }
-	.none { color: var(--color-muted); }
-	.correction { max-width: 42rem; margin-top: 2rem; padding: 1.2rem; border: 1px solid var(--color-border); background: var(--color-surface); }
-	.correction h2 { margin-top: 0; }
-	.correction form, .correction label { display: grid; gap: .4rem; }
-	.correction form { gap: .8rem; }
-	.correction select, .correction textarea { box-sizing: border-box; width: 100%; padding: .7rem; border: 1px solid var(--color-border); font: inherit; }
-	.correction button { width: max-content; padding: .7rem .9rem; }
-	.notice { padding: .7rem; border-left: 4px solid var(--color-positive); }
-	.error { color: var(--color-destructive); }
-	@media (max-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+	h1 {
+		font-size: clamp(2.5rem, 7vw, 5rem);
+		line-height: 1;
+		letter-spacing: -0.055em;
+		max-width: 10ch;
+	}
+	.intro {
+		max-width: 42rem;
+		color: var(--color-muted);
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 1rem;
+		margin: 2.5rem 0;
+	}
+	article {
+		display: grid;
+		gap: 0.75rem;
+		padding: 1.25rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+	}
+	article span {
+		color: var(--color-muted);
+	}
+	article strong {
+		font-size: 1.35rem;
+		font-variant-numeric: tabular-nums;
+	}
+	h2 {
+		margin-top: 2.5rem;
+	}
+	.table-wrap {
+		overflow-x: auto;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		background: var(--color-surface);
+	}
+	th,
+	td {
+		text-align: left;
+		padding: 0.9rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+	th {
+		color: var(--color-muted);
+		font-size: 0.8rem;
+		text-transform: uppercase;
+	}
+	.none {
+		color: var(--color-muted);
+	}
+	.correction {
+		max-width: 42rem;
+		margin-top: 2rem;
+		padding: 1.2rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+	}
+	.correction h2 {
+		margin-top: 0;
+	}
+	.correction form,
+	.correction label {
+		display: grid;
+		gap: 0.4rem;
+	}
+	.correction form {
+		gap: 0.8rem;
+	}
+	.correction select,
+	.correction textarea {
+		box-sizing: border-box;
+		width: 100%;
+		padding: 0.7rem;
+		border: 1px solid var(--color-border);
+		font: inherit;
+	}
+	.correction button {
+		width: max-content;
+		padding: 0.7rem 0.9rem;
+	}
+	.notice {
+		padding: 0.7rem;
+		border-left: 4px solid var(--color-positive);
+	}
+	.error {
+		color: var(--color-destructive);
+	}
+	@media (max-width: 760px) {
+		.grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
 </style>

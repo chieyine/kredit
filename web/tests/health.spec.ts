@@ -21,7 +21,14 @@ test('public product routes expose clear conversion and trust content', async ({
 test('visitor can complete the sample sale without signing in', async ({ page }) => {
 	await page.goto('/demo');
 	await expect(page.getByRole('heading', { name: /One sale,/i })).toBeVisible();
-	for (const label of ['Send it to my customer', 'Yes, I agree to this', 'Complete sample bank permission', 'The goods have gone out', 'Yes, I received them', 'Enter a sample payment']) {
+	for (const label of [
+		'Send it to my customer',
+		'Yes, I agree to this',
+		'Complete sample bank permission',
+		'The goods have gone out',
+		'Yes, I received them',
+		'Enter a sample payment'
+	]) {
 		await page.getByRole('button', { name: label }).click();
 	}
 	await expect(page.getByRole('heading', { name: /Both sides see .* left/i })).toBeVisible();
@@ -33,7 +40,9 @@ test('mobile homepage remains navigable', async ({ page }) => {
 	await page.goto('/');
 	await expect(page.getByRole('heading', { name: /Goods on credit\./i })).toBeVisible();
 	await page.locator('summary', { hasText: 'Menu' }).click();
-	await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Pricing' })).toBeVisible();
+	await expect(
+		page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Pricing' })
+	).toBeVisible();
 });
 
 test('private pages are excluded from indexing', async ({ page }) => {

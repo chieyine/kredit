@@ -17,7 +17,11 @@ const VERIFY = '/api/v1/auth/otp/verify';
 
 async function stubChallenge(page: import('@playwright/test').Page, minutes = 10) {
 	await page.route(`**${CHALLENGE}`, async (route) => {
-		expect(route.request().postDataJSON()).toMatchObject({ channel: 'phone', identifier: '+2348012345678', purpose: 'login' });
+		expect(route.request().postDataJSON()).toMatchObject({
+			channel: 'phone',
+			identifier: '+2348012345678',
+			purpose: 'login'
+		});
 		await route.fulfill({
 			status: 202,
 			contentType: 'application/json',
@@ -106,7 +110,11 @@ test('a wrong code is explained in words a person can act on', async ({ page }) 
 
 test('an expired code closes the field and offers a new one', async ({ page }) => {
 	await page.route(`**${CHALLENGE}`, async (route) => {
-		expect(route.request().postDataJSON()).toMatchObject({ channel: 'phone', identifier: '+2348012345678', purpose: 'login' });
+		expect(route.request().postDataJSON()).toMatchObject({
+			channel: 'phone',
+			identifier: '+2348012345678',
+			purpose: 'login'
+		});
 		await route.fulfill({
 			status: 202,
 			contentType: 'application/json',
@@ -132,7 +140,5 @@ test('an expired code closes the field and offers a new one', async ({ page }) =
 
 test('the sign-in page says a code will never be asked for by support', async ({ page }) => {
 	await page.goto('/signin');
-	await expect(
-		page.getByText('Kredit support will never ask you to share your sign-in code.')
-	).toBeVisible();
+	await expect(page.getByText('Kredit support will never ask you to share your sign-in code.')).toBeVisible();
 });

@@ -1,5 +1,5 @@
 <script lang="ts">
- import { buyerEndpoint } from '$lib/buyer-navigation';
+	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import WorkspacePage from '$lib/components/WorkspacePage.svelte';
 
 	// /workspace/purchases/obligations/[id] reads an obligation id, not the credit request's.
@@ -18,15 +18,8 @@
 	emptyCopy="An obligation appears after the agreement’s acceptance, bank-permission and delivery conditions have been met."
 	searchPlaceholder="Seller or goods"
 	keep={(view) => Boolean(view.obligation)}
-	rowTitle={(view) =>
-		view.request?.supplier_trading_name || view.request?.supplier_legal_name || 'Seller'}
-	rowDetail={(view) =>
-		[
-			view.request?.goods_description,
-			'Open for current payment days'
-		]
-			.filter(Boolean)
-			.join(' · ')}
+	rowTitle={(view) => view.request?.supplier_trading_name || view.request?.supplier_legal_name || 'Seller'}
+	rowDetail={(view) => [view.request?.goods_description, 'Open for current payment days'].filter(Boolean).join(' · ')}
 	rowStatus={(view) => view.obligation?.payment_status ?? view.request?.state ?? ''}
 	rowAmount={(view) => view.obligation?.outstanding_kobo ?? null}
 	rowAmountLabel="Left to pay"

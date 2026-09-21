@@ -31,6 +31,11 @@ if [[ ! -d web/node_modules ]]; then
 	printf '%s\n' 'Frontend dependencies are not installed.' >&2
 	exit 1
 fi
+# The Go side has been gated by gofmt, go vet and golangci-lint from the start.
+# The frontend had only a type check, so nothing caught dead bindings, loose
+# equality or formatting drift across 10k lines of Svelte. eslint fails the
+# build on errors; its remaining warnings are a tracked backlog, not a gate.
+pnpm --dir web lint
 pnpm --dir web check
 pnpm --dir web build
 pnpm --dir web test

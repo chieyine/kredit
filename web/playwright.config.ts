@@ -26,15 +26,24 @@ export default defineConfig({
 	webServer: externalBaseURL
 		? undefined
 		: [
-			...(localPublicAPI ? [{
-				command: 'node --test test-support/public-api.test.mjs && node test-support/public-api.mjs',
-				env: { KREDIT_PUBLIC_API_FIXTURE: '1' },
-				url: `${publicFixtureURL}/healthz`, reuseExistingServer: false, timeout: 30_000
-			}] : []),
-			{
-			command: `./node_modules/.bin/vite ${ci ? 'preview' : 'dev'} --host 127.0.0.1 --port 5173 --strictPort`,
-			cwd: '.', url: 'http://127.0.0.1:5173', reuseExistingServer: !ci && !localPublicAPI, timeout: 180_000,
-			env: localPublicAPI ? { API_INTERNAL_URL: publicFixtureURL } : {}
-			}
-		]
+				...(localPublicAPI
+					? [
+							{
+								command: 'node --test test-support/public-api.test.mjs && node test-support/public-api.mjs',
+								env: { KREDIT_PUBLIC_API_FIXTURE: '1' },
+								url: `${publicFixtureURL}/healthz`,
+								reuseExistingServer: false,
+								timeout: 30_000
+							}
+						]
+					: []),
+				{
+					command: `./node_modules/.bin/vite ${ci ? 'preview' : 'dev'} --host 127.0.0.1 --port 5173 --strictPort`,
+					cwd: '.',
+					url: 'http://127.0.0.1:5173',
+					reuseExistingServer: !ci && !localPublicAPI,
+					timeout: 180_000,
+					env: localPublicAPI ? { API_INTERNAL_URL: publicFixtureURL } : {}
+				}
+			]
 });

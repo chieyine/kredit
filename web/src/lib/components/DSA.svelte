@@ -1,40 +1,435 @@
 <script lang="ts">
- import {onMount,tick} from 'svelte';
- import {read,Mutation,money,kobo} from '$lib/consumer';
- import {record,normalizeNigerianPhone} from '$lib/api/reliable';
- type Row=Record<string,any>;
- let {admin=false}:{admin?:boolean}=$props();
- let data=$state<Row|null>(null),error=$state(''),message=$state(''),busy=$state(false),agent=$state(''),name=$state(''),phone=$state(''),bank=$state(''),accountName=$state(''),account=$state(''),consent=$state(false),selected=$state<Row|null>(null),action=$state(''),reason=$state(''),reference=$state(''),status=$state('active'),limit=$state(20),blocked=$state(false);
- let onboarding=$state('1000'),activation=$state('2000'),threshold=$state('5000'),share=$state(10),months=$state(6),initial=$state(20),enabled=$state(true);
- const mutation=new Mutation();const endpoint=$derived(admin?'/api/v1/ops/dsa':'/api/v1/dsa');
- function decode(v:unknown){const d=record(v);for(const k of ['agents','referrals','earnings','payouts'])if(!Array.isArray(d[k]))throw new Error('Referral records were incomplete.');record(d.rules);record(d.wallet);return d as Row}
- async function load(){busy=true;error='';try{data=decode(await read(endpoint+(agent?'?agent='+encodeURIComponent(agent):'')));const r=data.rules;onboarding=String(r.onboarding_kobo/100);activation=String(r.activation_kobo/100);threshold=String(r.threshold_kobo/100);share=r.share_bps/100;months=r.share_months;initial=r.initial_limit;enabled=r.enabled;if(data.self){name=data.self.name;phone=data.self.phone;bank=data.self.bank_name;accountName=data.self.account_name;account=data.self.account_number;}}catch(e){error=e instanceof Error?e.message:'Could not load referrals.'}finally{busy=false}}
- async function more(key:string){busy=true;error='';try{const p=new URLSearchParams();if(agent)p.set('agent',agent);p.set(key+'_before',data?.next[key]);const next=decode(await read(endpoint+'?'+p));if(data){data[key]=[...data[key],...next[key]];data.next[key]=next.next[key]}}catch(e){error=e instanceof Error?e.message:'Could not load the next page.'}finally{busy=false}}
- async function send(body:unknown){busy=true;error='';try{await mutation.send(endpoint,body);message='Saved. Reward qualification is refreshed automatically; payouts record completed bank transfers.';selected=null;await load()}catch(e){error=e instanceof Error?e.message:'The action was not confirmed.'}finally{busy=false}}
- async function saveBank(){try{await send({action:data?.self?'bank':'enrol',version:data?.self?.version??data?.rules.version,name,phone:normalizeNigerianPhone(phone),bank_name:bank,account_name:accountName,account_number:account,consent})}catch(e){error=e instanceof Error?e.message:'Check your details.'}}
- function choose(row:Row,what:string){selected=row;action=what;reason='';reference='';status=row.status??'active';limit=row.onboarding_limit??20;blocked=row.blocked??false;void tick().then(()=>document.getElementById('dsa-review')?.focus());}
- async function confirm(){try{await send({action,id:selected?.id,version:selected?.version,reason,bank_reference:reference,status,onboarding_limit:limit,blocked,rules:{version:data?.rules.version,enabled,onboarding_kobo:kobo(onboarding),activation_kobo:kobo(activation),threshold_kobo:kobo(threshold),share_bps:Math.round(share*100),share_months:months,initial_limit:initial}})}catch(e){error=e instanceof Error?e.message:'Check the reward amounts.'}}
- async function retry(){busy=true;error='';try{await mutation.retry();message='Previous action confirmed.';selected=null;await load()}catch(e){error=e instanceof Error?e.message:'Could not confirm the action.'}finally{busy=false}}
- const date=(v:unknown)=>typeof v==='string'?new Date(v).toLocaleString('en-NG',{timeZone:'Africa/Lagos'}):'Not yet';
- onMount(()=>{void load()});
+	import { onMount, tick } from 'svelte';
+	import { read, Mutation, money, kobo } from '$lib/consumer';
+	import { record, normalizeNigerianPhone } from '$lib/api/reliable';
+	type Row = Record<string, any>;
+	let { admin = false }: { admin?: boolean } = $props();
+	let data = $state<Row | null>(null),
+		error = $state(''),
+		message = $state(''),
+		busy = $state(false),
+		agent = $state(''),
+		name = $state(''),
+		phone = $state(''),
+		bank = $state(''),
+		accountName = $state(''),
+		account = $state(''),
+		consent = $state(false),
+		selected = $state<Row | null>(null),
+		action = $state(''),
+		reason = $state(''),
+		reference = $state(''),
+		status = $state('active'),
+		limit = $state(20),
+		blocked = $state(false);
+	let onboarding = $state('1000'),
+		activation = $state('2000'),
+		threshold = $state('5000'),
+		share = $state(10),
+		months = $state(6),
+		initial = $state(20),
+		enabled = $state(true);
+	const mutation = new Mutation();
+	const endpoint = $derived(admin ? '/api/v1/ops/dsa' : '/api/v1/dsa');
+	function decode(v: unknown) {
+		const d = record(v);
+		for (const k of ['agents', 'referrals', 'earnings', 'payouts'])
+			if (!Array.isArray(d[k])) throw new Error('Referral records were incomplete.');
+		record(d.rules);
+		record(d.wallet);
+		return d as Row;
+	}
+	async function load() {
+		busy = true;
+		error = '';
+		try {
+			data = decode(await read(endpoint + (agent ? '?agent=' + encodeURIComponent(agent) : '')));
+			const r = data.rules;
+			onboarding = String(r.onboarding_kobo / 100);
+			activation = String(r.activation_kobo / 100);
+			threshold = String(r.threshold_kobo / 100);
+			share = r.share_bps / 100;
+			months = r.share_months;
+			initial = r.initial_limit;
+			enabled = r.enabled;
+			if (data.self) {
+				name = data.self.name;
+				phone = data.self.phone;
+				bank = data.self.bank_name;
+				accountName = data.self.account_name;
+				account = data.self.account_number;
+			}
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not load referrals.';
+		} finally {
+			busy = false;
+		}
+	}
+	async function more(key: string) {
+		busy = true;
+		error = '';
+		try {
+			const p = new URLSearchParams();
+			if (agent) p.set('agent', agent);
+			p.set(key + '_before', data?.next[key]);
+			const next = decode(await read(endpoint + '?' + p));
+			if (data) {
+				data[key] = [...data[key], ...next[key]];
+				data.next[key] = next.next[key];
+			}
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not load the next page.';
+		} finally {
+			busy = false;
+		}
+	}
+	async function send(body: unknown) {
+		busy = true;
+		error = '';
+		try {
+			await mutation.send(endpoint, body);
+			message = 'Saved. Reward qualification is refreshed automatically; payouts record completed bank transfers.';
+			selected = null;
+			await load();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'The action was not confirmed.';
+		} finally {
+			busy = false;
+		}
+	}
+	async function saveBank() {
+		try {
+			await send({
+				action: data?.self ? 'bank' : 'enrol',
+				version: data?.self?.version ?? data?.rules.version,
+				name,
+				phone: normalizeNigerianPhone(phone),
+				bank_name: bank,
+				account_name: accountName,
+				account_number: account,
+				consent
+			});
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Check your details.';
+		}
+	}
+	function choose(row: Row, what: string) {
+		selected = row;
+		action = what;
+		reason = '';
+		reference = '';
+		status = row.status ?? 'active';
+		limit = row.onboarding_limit ?? 20;
+		blocked = row.blocked ?? false;
+		void tick().then(() => document.getElementById('dsa-review')?.focus());
+	}
+	async function confirm() {
+		try {
+			await send({
+				action,
+				id: selected?.id,
+				version: selected?.version,
+				reason,
+				bank_reference: reference,
+				status,
+				onboarding_limit: limit,
+				blocked,
+				rules: {
+					version: data?.rules.version,
+					enabled,
+					onboarding_kobo: kobo(onboarding),
+					activation_kobo: kobo(activation),
+					threshold_kobo: kobo(threshold),
+					share_bps: Math.round(share * 100),
+					share_months: months,
+					initial_limit: initial
+				}
+			});
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Check the reward amounts.';
+		}
+	}
+	async function retry() {
+		busy = true;
+		error = '';
+		try {
+			await mutation.retry();
+			message = 'Previous action confirmed.';
+			selected = null;
+			await load();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Could not confirm the action.';
+		} finally {
+			busy = false;
+		}
+	}
+	const date = (v: unknown) =>
+		typeof v === 'string' ? new Date(v).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' }) : 'Not yet';
+	onMount(() => {
+		void load();
+	});
 </script>
-<main class="shell workspace feature-page dsa">
- <header class="feature-heading"><div><p class="eyebrow">{admin?'Super admin · Growth':'Your agent account'}</p><h1>{admin?'Field agents':'Your introductions. Your rewards.'}</h1><p class="lede">{admin?'Manage your agents, earned rewards and bank payouts.':'Introduce businesses you know. Follow their progress and your earnings here.'}</p></div><button class="secondary" disabled={busy} onclick={load}>{busy?'Refreshing…':'Refresh records'}</button></header>
- <nav class="feature-tabs" aria-label="Field agent sections"><a href="#dsa-earnings">Earnings</a><a href="#dsa-businesses">Businesses</a><a href="#dsa-payouts">Payouts</a><a href="#dsa-details">{admin?'Agent controls':'Your details'}</a></nav>
- {#if error}<p role="alert" class="error">{error}</p>{#if mutation.pending}<button disabled={busy} onclick={retry}>Retry the same unconfirmed action</button>{/if}{/if}{#if message}<p role="status">{message}</p>{/if}
-<p class="security-link"><a href="/account/security">Account safety →</a><span>Confirm your identity before changing details or payouts.</span></p>
- {#if data}
- <section id="dsa-earnings" class="reward-summary"><p class="eyebrow">Your rewards at a glance</p><h2>Earnings</h2><div class="metric-grid"><p>Earned after adjustments<br/><strong>{money(data.wallet.earned_kobo)}</strong></p><p>Paid<br/><strong>{money(data.wallet.paid_kobo)}</strong></p><p>Reserved for bank payout<br/><strong>{money(data.wallet.reserved_kobo)}</strong></p><p>Available before holds<br/><strong>{money(Math.max(0,Math.min(data.wallet.earned_kobo,data.wallet.matured_kobo)-data.wallet.paid_kobo-data.wallet.reserved_kobo))}</strong></p></div><p>Balance after paid and reserved payouts: {money(data.wallet.earned_kobo-data.wallet.paid_kobo-data.wallet.reserved_kobo)}. Next reward date: {date(data.wallet.next_available_at)}.</p></section>
- <details class="programme-terms"><summary>How rewards work<span>How onboarding, activation and the fee share work</span></summary><div class="disclosure-body"><p>{money(data.rules.onboarding_kobo)} for a new CAC-verified business whose owner confirms your introduction and completes contact and bank checks. {money(data.rules.activation_kobo)} after an accepted sale and at least {money(data.rules.threshold_kobo)} in eligible Kredit fees received. Then {data.rules.share_bps/100}% of additional eligible fees for {data.rules.share_months} months.</p><p>Fees exclude taxes, provider charges, waivers, refunds and reversals. Retailer-confirmed customer receipts alone do not qualify. Positive rewards have a seven-day hold and become due on the following Monday. Bank-detail changes also have a seven-day hold. Each referral keeps the terms recorded when its owner confirms it.</p><p>CAC registration is a requirement for this onboarding reward, not for creating a Kredit account. One reward per legal business. No self-referrals, duplicate accounts or fabricated activity. Your initial onboarding reward limit is {data.self?.onboarding_limit??data.rules.initial_limit}; verified referrals above the limit wait until it is increased. Introductions must be confirmed within 30 days of business registration on Kredit and before its first accepted sale. Reversals can reduce your balance, including after a payout.</p><p>This is a referral programme with no salary or guaranteed earnings. Use permission-based introductions, do not upload bank customer lists or claim a bank endorses Kredit. If employed elsewhere, confirm you are permitted to participate. You must not handle merchant sign-in codes or customer money.</p></div></details>
- {#if !admin}<section id="dsa-details"><p class="eyebrow">Profile & payment details</p><h2>{data.self?'Your agent details':'Join the programme'}</h2>{#if data.self}<p class="agent-code"><span class="status" class:status-active={data.self.status==='active'}>{data.self.status}</span><span>Your code <strong>{data.self.code}</strong></span></p><label>Your referral link<input readonly value={`https://kredit.ng/join?ref=${data.self.code}`} onclick={e=>e.currentTarget.select()}/></label>{/if}
- <form onsubmit={e=>{e.preventDefault();void saveBank()}}><fieldset disabled={busy}><div class="grid"><label>Full name<input bind:value={name} minlength="3" maxlength="120" required/></label><label>WhatsApp number<input bind:value={phone} type="tel" required/></label><label>Bank name<input bind:value={bank} minlength="3" maxlength="120" required/></label><label>Account name<input bind:value={accountName} minlength="3" maxlength="120" required/></label><label>Account number<input bind:value={account} pattern="[0-9]{10}" maxlength="10" required/></label></div><label><input type="checkbox" bind:checked={consent} required/>I accept these terms, confirm these are my payout details and have permission to make these introductions.</label><button class="primary">{data.self?'Update my details':'Join and get my referral link'}</button></fieldset></form></section>{/if}
 
- {#if admin}<section id="dsa-details"><p class="eyebrow">Your sales network</p><h2>Agent controls</h2><label>Filter by agent ID<input bind:value={agent} disabled={busy}/></label><button disabled={busy} onclick={load}>Apply filter</button><button disabled={busy} onclick={()=>{agent='';void load()}}>All agents</button>
- {#each data.agents as a}<article><h3>{a.name}</h3><p>{a.phone} · {a.code} · {a.status}</p><p>{a.referrals} businesses · {a.activated} activated · Onboarding reward limit: {a.onboarding_limit}</p><p class="reference">{a.id}</p><button disabled={busy} onclick={()=>choose(a,'agent')}>Status and limit</button><button disabled={busy} onclick={()=>choose(a,'prepare')}>Prepare available payout</button></article>{/each}{#if data.next.agents}<button onclick={()=>more('agents')} disabled={busy}>More agents</button>{/if}
- <details><summary>Change future referral rewards</summary><div class="grid"><label>Onboarding reward (₦)<input bind:value={onboarding}/></label><label>Activation reward (₦)<input bind:value={activation}/></label><label>Collected-fee threshold (₦)<input bind:value={threshold}/></label><label>Fee share (%)<input type="number" bind:value={share} min="0" max="50" step="0.01"/></label><label>Months<input type="number" bind:value={months} min="1" max="12"/></label><label>Initial onboarding reward limit<input type="number" bind:value={initial} min="1" max="1000"/></label></div><label><input type="checkbox" bind:checked={enabled}/>Accept new agents and referrals</label><button disabled={busy} onclick={()=>choose({},'rules')}>Review changes</button></details></section>{/if}
- <section id="dsa-businesses"><p class="eyebrow">Referral progress</p><h2>Referred businesses</h2>{#each data.referrals as r}<article><h3>{r.business_name}</h3><p>{r.progress}{r.blocked?' · Restricted':''}</p><p>Eligible fees: {money(r.fees_kobo)} · Last checked: {date(r.checked_at)}</p><p>Confirmed: {date(r.created_at)} · Share ends: {date(r.share_ends_at)}</p><details><summary>Agreed rewards</summary><p>{money(r.terms.onboarding_kobo)} onboarding; {money(r.terms.activation_kobo)} after {money(r.terms.threshold_kobo)} in eligible fees; {r.terms.share_bps/100}% for {r.terms.share_months} months.</p></details>{#if admin}<button disabled={busy} onclick={()=>choose(r,'referral')}>Review restriction</button>{/if}</article>{:else}<div class="empty-state"><h3>Your next introduction starts here.</h3><p>Businesses appear after their owner confirms your referral code.</p></div>{/each}{#if data.next.referrals}<button onclick={()=>more('referrals')} disabled={busy}>More businesses</button>{/if}</section>
- <section class="reward-history"><p class="eyebrow">Every adjustment, recorded</p><h2>Reward history</h2>{#each data.earnings as r}<article><strong>{money(r.amount_kobo)} · {r.kind}</strong><p>{r.reason} · Due: {date(r.available_at)}</p></article>{:else}<div class="empty-state"><h3>No rewards yet.</h3><p>Once a reward qualifies, whether from onboarding, activation or the fee share, it shows up here.</p></div>{/each}{#if data.next.earnings}<button onclick={()=>more('earnings')} disabled={busy}>Older rewards</button>{/if}</section>
- <section id="dsa-payouts"><p class="eyebrow">Money sent to your bank</p><h2>Payouts</h2>{#each data.payouts as p}<article><div class="record-heading"><strong>{money(p.amount_kobo)}</strong><span class="status" class:status-paid={p.state==='paid'}>{p.state}</span></div><p>{p.bank_name} · {p.account_name} · {p.account_number}</p><p class="reference">{p.id} · {p.bank_reference??'Bank reference pending'}</p>{#if admin&&p.state==='pending'}<p>Check the receiving name in your bank before sending. This page records transfers; it does not send money. Refresh the agent balance before sending if rewards have changed.</p><button disabled={busy} onclick={()=>choose(p,'paid')}>Record completed transfer</button><button disabled={busy} onclick={()=>choose(p,'cancel')}>Cancel unsent payout</button>{/if}</article>{:else}<div class="empty-state"><h3>No payouts recorded yet.</h3><p>Prepared and completed transfers will appear here with their status.</p></div>{/each}{#if data.next.payouts}<button onclick={()=>more('payouts')} disabled={busy}>Older payouts</button>{/if}</section>
- {#if admin&&selected}<section class="review" id="dsa-review" tabindex="-1"><h2>Review: {action}</h2><p>{selected.name??selected.business_name??selected.id??'Future reward settings'}</p>{#if action==='prepare'}<p>Reserve this agent’s matured balance after refreshing fee evidence. Complete the bank transfer separately, then record its reference. Cancel the reservation if no transfer was sent.</p>{/if}<form onsubmit={e=>{e.preventDefault();void confirm()}}><fieldset disabled={busy}>{#if action==='agent'}<label>Status<select bind:value={status}><option value="active">Active</option><option value="suspended">Suspended</option></select></label><label>Onboarding reward limit<input type="number" bind:value={limit} min="0" max="100000" required/></label>{/if}{#if action==='referral'}<label><input type="checkbox" bind:checked={blocked}/>Restrict this referral and reverse its rewards</label>{/if}{#if action==='paid'}<label>Completed bank reference<input bind:value={reference} minlength="3" maxlength="200" required/></label>{/if}<label>Reason or completed bank evidence<textarea bind:value={reason} minlength="20" maxlength="2000" required></textarea></label><button class="primary">Confirm</button><button type="button" onclick={()=>selected=null}>Go back</button></fieldset></form></section>{/if}
- {:else}<div class="empty-state" role="status"><h2>{busy?'Loading your referral records…':'Records unavailable'}</h2><p>{busy?'Checking your account and reward history.':'Use Refresh records to try again.'}</p></div>{/if}
+<main class="shell workspace feature-page dsa">
+	<header class="feature-heading">
+		<div>
+			<p class="eyebrow">{admin ? 'Super admin · Growth' : 'Your agent account'}</p>
+			<h1>{admin ? 'Field agents' : 'Your introductions. Your rewards.'}</h1>
+			<p class="lede">
+				{admin
+					? 'Manage your agents, earned rewards and bank payouts.'
+					: 'Introduce businesses you know. Follow their progress and your earnings here.'}
+			</p>
+		</div>
+		<button class="secondary" disabled={busy} onclick={load}>{busy ? 'Refreshing…' : 'Refresh records'}</button>
+	</header>
+	<nav class="feature-tabs" aria-label="Field agent sections">
+		<a href="#dsa-earnings">Earnings</a><a href="#dsa-businesses">Businesses</a><a href="#dsa-payouts">Payouts</a><a
+			href="#dsa-details">{admin ? 'Agent controls' : 'Your details'}</a
+		>
+	</nav>
+	{#if error}<p role="alert" class="error">{error}</p>
+		{#if mutation.pending}<button disabled={busy} onclick={retry}>Retry the same unconfirmed action</button
+			>{/if}{/if}{#if message}<p role="status">{message}</p>{/if}
+	<p class="security-link">
+		<a href="/account/security">Account safety →</a><span
+			>Confirm your identity before changing details or payouts.</span
+		>
+	</p>
+	{#if data}
+		<section id="dsa-earnings" class="reward-summary">
+			<p class="eyebrow">Your rewards at a glance</p>
+			<h2>Earnings</h2>
+			<div class="metric-grid">
+				<p>Earned after adjustments<br /><strong>{money(data.wallet.earned_kobo)}</strong></p>
+				<p>Paid<br /><strong>{money(data.wallet.paid_kobo)}</strong></p>
+				<p>Reserved for bank payout<br /><strong>{money(data.wallet.reserved_kobo)}</strong></p>
+				<p>
+					Available before holds<br /><strong
+						>{money(
+							Math.max(
+								0,
+								Math.min(data.wallet.earned_kobo, data.wallet.matured_kobo) -
+									data.wallet.paid_kobo -
+									data.wallet.reserved_kobo
+							)
+						)}</strong
+					>
+				</p>
+			</div>
+			<p>
+				Balance after paid and reserved payouts: {money(
+					data.wallet.earned_kobo - data.wallet.paid_kobo - data.wallet.reserved_kobo
+				)}. Next reward date: {date(data.wallet.next_available_at)}.
+			</p>
+		</section>
+		<details class="programme-terms">
+			<summary>How rewards work<span>How onboarding, activation and the fee share work</span></summary>
+			<div class="disclosure-body">
+				<p>
+					{money(data.rules.onboarding_kobo)} for a new CAC-verified business whose owner confirms your introduction and completes
+					contact and bank checks. {money(data.rules.activation_kobo)} after an accepted sale and at least {money(
+						data.rules.threshold_kobo
+					)} in eligible Kredit fees received. Then {data.rules.share_bps / 100}% of additional eligible fees for {data
+						.rules.share_months} months.
+				</p>
+				<p>
+					Fees exclude taxes, provider charges, waivers, refunds and reversals. Retailer-confirmed customer receipts
+					alone do not qualify. Positive rewards have a seven-day hold and become due on the following Monday.
+					Bank-detail changes also have a seven-day hold. Each referral keeps the terms recorded when its owner confirms
+					it.
+				</p>
+				<p>
+					CAC registration is a requirement for this onboarding reward, not for creating a Kredit account. One reward
+					per legal business. No self-referrals, duplicate accounts or fabricated activity. Your initial onboarding
+					reward limit is {data.self?.onboarding_limit ?? data.rules.initial_limit}; verified referrals above the limit
+					wait until it is increased. Introductions must be confirmed within 30 days of business registration on Kredit
+					and before its first accepted sale. Reversals can reduce your balance, including after a payout.
+				</p>
+				<p>
+					This is a referral programme with no salary or guaranteed earnings. Use permission-based introductions, do not
+					upload bank customer lists or claim a bank endorses Kredit. If employed elsewhere, confirm you are permitted
+					to participate. You must not handle merchant sign-in codes or customer money.
+				</p>
+			</div>
+		</details>
+		{#if !admin}<section id="dsa-details">
+				<p class="eyebrow">Profile & payment details</p>
+				<h2>{data.self ? 'Your agent details' : 'Join the programme'}</h2>
+				{#if data.self}<p class="agent-code">
+						<span class="status" class:status-active={data.self.status === 'active'}>{data.self.status}</span><span
+							>Your code <strong>{data.self.code}</strong></span
+						>
+					</p>
+					<label
+						>Your referral link<input
+							readonly
+							value={`https://kredit.ng/join?ref=${data.self.code}`}
+							onclick={(e) => e.currentTarget.select()}
+						/></label
+					>{/if}
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						void saveBank();
+					}}
+				>
+					<fieldset disabled={busy}>
+						<div class="grid">
+							<label>Full name<input bind:value={name} minlength="3" maxlength="120" required /></label><label
+								>WhatsApp number<input bind:value={phone} type="tel" required /></label
+							><label>Bank name<input bind:value={bank} minlength="3" maxlength="120" required /></label><label
+								>Account name<input bind:value={accountName} minlength="3" maxlength="120" required /></label
+							><label>Account number<input bind:value={account} pattern="[0-9]{10}" maxlength="10" required /></label>
+						</div>
+						<label
+							><input type="checkbox" bind:checked={consent} required />I accept these terms, confirm these are my
+							payout details and have permission to make these introductions.</label
+						><button class="primary">{data.self ? 'Update my details' : 'Join and get my referral link'}</button>
+					</fieldset>
+				</form>
+			</section>{/if}
+
+		{#if admin}<section id="dsa-details">
+				<p class="eyebrow">Your sales network</p>
+				<h2>Agent controls</h2>
+				<label>Filter by agent ID<input bind:value={agent} disabled={busy} /></label><button
+					disabled={busy}
+					onclick={load}>Apply filter</button
+				><button
+					disabled={busy}
+					onclick={() => {
+						agent = '';
+						void load();
+					}}>All agents</button
+				>
+				{#each data.agents as a}<article>
+						<h3>{a.name}</h3>
+						<p>{a.phone} · {a.code} · {a.status}</p>
+						<p>{a.referrals} businesses · {a.activated} activated · Onboarding reward limit: {a.onboarding_limit}</p>
+						<p class="reference">{a.id}</p>
+						<button disabled={busy} onclick={() => choose(a, 'agent')}>Status and limit</button><button
+							disabled={busy}
+							onclick={() => choose(a, 'prepare')}>Prepare available payout</button
+						>
+					</article>{/each}{#if data.next.agents}<button onclick={() => more('agents')} disabled={busy}
+						>More agents</button
+					>{/if}
+				<details>
+					<summary>Change future referral rewards</summary>
+					<div class="grid">
+						<label>Onboarding reward (₦)<input bind:value={onboarding} /></label><label
+							>Activation reward (₦)<input bind:value={activation} /></label
+						><label>Collected-fee threshold (₦)<input bind:value={threshold} /></label><label
+							>Fee share (%)<input type="number" bind:value={share} min="0" max="50" step="0.01" /></label
+						><label>Months<input type="number" bind:value={months} min="1" max="12" /></label><label
+							>Initial onboarding reward limit<input type="number" bind:value={initial} min="1" max="1000" /></label
+						>
+					</div>
+					<label><input type="checkbox" bind:checked={enabled} />Accept new agents and referrals</label><button
+						disabled={busy}
+						onclick={() => choose({}, 'rules')}>Review changes</button
+					>
+				</details>
+			</section>{/if}
+		<section id="dsa-businesses">
+			<p class="eyebrow">Referral progress</p>
+			<h2>Referred businesses</h2>
+			{#each data.referrals as r}<article>
+					<h3>{r.business_name}</h3>
+					<p>{r.progress}{r.blocked ? ' · Restricted' : ''}</p>
+					<p>Eligible fees: {money(r.fees_kobo)} · Last checked: {date(r.checked_at)}</p>
+					<p>Confirmed: {date(r.created_at)} · Share ends: {date(r.share_ends_at)}</p>
+					<details>
+						<summary>Agreed rewards</summary>
+						<p>
+							{money(r.terms.onboarding_kobo)} onboarding; {money(r.terms.activation_kobo)} after {money(
+								r.terms.threshold_kobo
+							)} in eligible fees; {r.terms.share_bps / 100}% for {r.terms.share_months} months.
+						</p>
+					</details>
+					{#if admin}<button disabled={busy} onclick={() => choose(r, 'referral')}>Review restriction</button>{/if}
+				</article>{:else}<div class="empty-state">
+					<h3>Your next introduction starts here.</h3>
+					<p>Businesses appear after their owner confirms your referral code.</p>
+				</div>{/each}{#if data.next.referrals}<button onclick={() => more('referrals')} disabled={busy}
+					>More businesses</button
+				>{/if}
+		</section>
+		<section class="reward-history">
+			<p class="eyebrow">Every adjustment, recorded</p>
+			<h2>Reward history</h2>
+			{#each data.earnings as r}<article>
+					<strong>{money(r.amount_kobo)} · {r.kind}</strong>
+					<p>{r.reason} · Due: {date(r.available_at)}</p>
+				</article>{:else}<div class="empty-state">
+					<h3>No rewards yet.</h3>
+					<p>Once a reward qualifies, whether from onboarding, activation or the fee share, it shows up here.</p>
+				</div>{/each}{#if data.next.earnings}<button onclick={() => more('earnings')} disabled={busy}
+					>Older rewards</button
+				>{/if}
+		</section>
+		<section id="dsa-payouts">
+			<p class="eyebrow">Money sent to your bank</p>
+			<h2>Payouts</h2>
+			{#each data.payouts as p}<article>
+					<div class="record-heading">
+						<strong>{money(p.amount_kobo)}</strong><span class="status" class:status-paid={p.state === 'paid'}
+							>{p.state}</span
+						>
+					</div>
+					<p>{p.bank_name} · {p.account_name} · {p.account_number}</p>
+					<p class="reference">{p.id} · {p.bank_reference ?? 'Bank reference pending'}</p>
+					{#if admin && p.state === 'pending'}<p>
+							Check the receiving name in your bank before sending. This page records transfers; it does not send money.
+							Refresh the agent balance before sending if rewards have changed.
+						</p>
+						<button disabled={busy} onclick={() => choose(p, 'paid')}>Record completed transfer</button><button
+							disabled={busy}
+							onclick={() => choose(p, 'cancel')}>Cancel unsent payout</button
+						>{/if}
+				</article>{:else}<div class="empty-state">
+					<h3>No payouts recorded yet.</h3>
+					<p>Prepared and completed transfers will appear here with their status.</p>
+				</div>{/each}{#if data.next.payouts}<button onclick={() => more('payouts')} disabled={busy}
+					>Older payouts</button
+				>{/if}
+		</section>
+		{#if admin && selected}<section class="review" id="dsa-review" tabindex="-1">
+				<h2>Review: {action}</h2>
+				<p>{selected.name ?? selected.business_name ?? selected.id ?? 'Future reward settings'}</p>
+				{#if action === 'prepare'}<p>
+						Reserve this agent’s matured balance after refreshing fee evidence. Complete the bank transfer separately,
+						then record its reference. Cancel the reservation if no transfer was sent.
+					</p>{/if}
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						void confirm();
+					}}
+				>
+					<fieldset disabled={busy}>
+						{#if action === 'agent'}<label
+								>Status<select bind:value={status}
+									><option value="active">Active</option><option value="suspended">Suspended</option></select
+								></label
+							><label
+								>Onboarding reward limit<input type="number" bind:value={limit} min="0" max="100000" required /></label
+							>{/if}{#if action === 'referral'}<label
+								><input type="checkbox" bind:checked={blocked} />Restrict this referral and reverse its rewards</label
+							>{/if}{#if action === 'paid'}<label
+								>Completed bank reference<input bind:value={reference} minlength="3" maxlength="200" required /></label
+							>{/if}<label
+							>Reason or completed bank evidence<textarea bind:value={reason} minlength="20" maxlength="2000" required
+							></textarea></label
+						><button class="primary">Confirm</button><button type="button" onclick={() => (selected = null)}
+							>Go back</button
+						>
+					</fieldset>
+				</form>
+			</section>{/if}
+	{:else}<div class="empty-state" role="status">
+			<h2>{busy ? 'Loading your referral records…' : 'Records unavailable'}</h2>
+			<p>{busy ? 'Checking your account and reward history.' : 'Use Refresh records to try again.'}</p>
+		</div>{/if}
 </main>

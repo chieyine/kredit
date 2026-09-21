@@ -9,14 +9,14 @@
 		open = $bindable(false),
 		title,
 		description = '',
-        busy = false,
+		busy = false,
 		children,
 		onclose
 	}: {
 		open?: boolean;
 		title: string;
 		description?: string;
-        busy?: boolean;
+		busy?: boolean;
 		children: Snippet;
 		onclose?: () => void;
 	} = $props();
@@ -27,7 +27,7 @@
 	const titleID = $props.id();
 
 	function close() {
-        if (busy) return;
+		if (busy) return;
 		open = false;
 		onclose?.();
 	}
@@ -38,10 +38,12 @@
 			returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 			void tick().then(() => {
 				if (!open || !dialog?.isConnected) return;
-                if (!dialog.open) dialog.showModal();
+				if (!dialog.open) dialog.showModal();
 				// Start on the first control rather than on the dialog itself, so the
 				// first Tab does not jump past the form.
-				dialog?.querySelector<HTMLElement>('input, select, textarea, button:not(.close-btn)')?.focus({ preventScroll: true });
+				dialog
+					?.querySelector<HTMLElement>('input, select, textarea, button:not(.close-btn)')
+					?.focus({ preventScroll: true });
 			});
 		} else if (!open && wasOpen) {
 			wasOpen = false;
@@ -56,8 +58,13 @@
 	<dialog
 		bind:this={dialog}
 		aria-labelledby={titleID}
-		oncancel={(event) => { event.preventDefault(); close(); }}
-		onclick={(event) => { if (event.target === dialog) close(); }}
+		oncancel={(event) => {
+			event.preventDefault();
+			close();
+		}}
+		onclick={(event) => {
+			if (event.target === dialog) close();
+		}}
 	>
 		<header>
 			<div>
@@ -72,9 +79,9 @@
 
 <style>
 	dialog {
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
 		box-sizing: border-box;
 		width: min(38rem, calc(100vw - 2rem));
 		max-height: calc(100dvh - 3rem);
@@ -83,10 +90,14 @@
 		background: var(--color-surface);
 		color: var(--color-foreground);
 	}
-	dialog:not([open]) { display: none; }
-	dialog::backdrop { background: rgb(23 24 27 / 0.55); }
+	dialog:not([open]) {
+		display: none;
+	}
+	dialog::backdrop {
+		background: rgb(23 24 27 / 0.55);
+	}
 	header {
-        flex-shrink: 0;
+		flex-shrink: 0;
 		display: flex;
 		align-items: start;
 		justify-content: space-between;
@@ -94,8 +105,16 @@
 		padding: 1.25rem 1.4rem 1rem;
 		border-bottom: 1px solid var(--color-border);
 	}
-	h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
-	header p { margin: 0.4rem 0 0; color: var(--color-muted); line-height: 1.6; }
+	h2 {
+		margin: 0;
+		font-size: 1.25rem;
+		line-height: 1.3;
+	}
+	header p {
+		margin: 0.4rem 0 0;
+		color: var(--color-muted);
+		line-height: 1.6;
+	}
 	.close-btn {
 		display: grid;
 		place-items: center;
@@ -108,5 +127,9 @@
 		font-size: 1.1rem;
 		cursor: pointer;
 	}
-	.body { min-height: 0; overflow-y: auto; padding: 1.25rem 1.4rem 1.4rem; }
+	.body {
+		min-height: 0;
+		overflow-y: auto;
+		padding: 1.25rem 1.4rem 1.4rem;
+	}
 </style>

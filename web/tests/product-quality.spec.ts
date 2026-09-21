@@ -2,8 +2,17 @@ import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 const publicRoutes = [
-	'/', '/demo', '/how-it-works', '/manufacturers', '/distributors', '/pricing', '/security',
-	'/faq', '/glossary', '/blog', '/legal/complaints'
+	'/',
+	'/demo',
+	'/how-it-works',
+	'/manufacturers',
+	'/distributors',
+	'/pricing',
+	'/security',
+	'/faq',
+	'/glossary',
+	'/blog',
+	'/legal/complaints'
 ];
 
 test('public navigation is clear, complete and closes after a mobile choice', async ({ page }) => {
@@ -21,24 +30,27 @@ test('public navigation is clear, complete and closes after a mobile choice', as
 	await expect(footer.getByRole('link', { name: 'Account safety' })).toBeVisible();
 });
 
-test('homepage explains both sides of trade and the full business-to-consumer network',async({page})=>{
- await page.goto('/');
- await expect(page.getByLabel('How your workspace is organised')).toContainText('What customers owe you');
- await expect(page.getByLabel('How your workspace is organised')).toContainText('What you owe suppliers');
- await expect(page.getByLabel('From manufacturer to consumer')).toContainText('Manufacturers');
- await expect(page.getByLabel('From manufacturer to consumer')).toContainText('Consumers');
- await expect(page.getByText('Separate balances. Clear responsibilities.')).toBeVisible();
+test('homepage explains both sides of trade and the full business-to-consumer network', async ({ page }) => {
+	await page.goto('/');
+	await expect(page.getByLabel('How your workspace is organised')).toContainText('What customers owe you');
+	await expect(page.getByLabel('How your workspace is organised')).toContainText('What you owe suppliers');
+	await expect(page.getByLabel('From manufacturer to consumer')).toContainText('Manufacturers');
+	await expect(page.getByLabel('From manufacturer to consumer')).toContainText('Consumers');
+	await expect(page.getByText('Separate balances. Clear responsibilities.')).toBeVisible();
 });
 
 test('both sale-creation entry points preserve authentication and the intended destination', async ({ request }) => {
- for (const path of ['/workspace/sales/quick?customer=u1&goods=Rice&amount=100000','/workspace/sales/new?advanced=1']) {
-  const response=await request.get(path,{maxRedirects:0});
-  expect(response.status()).toBe(303);
-  const location=new URL(response.headers().location,'http://127.0.0.1:5173');
-  expect(location.pathname).toBe('/signin');
-  expect(location.searchParams.get('next')).toBe(path);
-  expect(response.headers()['cache-control']).toContain('no-store');
- }
+	for (const path of [
+		'/workspace/sales/quick?customer=u1&goods=Rice&amount=100000',
+		'/workspace/sales/new?advanced=1'
+	]) {
+		const response = await request.get(path, { maxRedirects: 0 });
+		expect(response.status()).toBe(303);
+		const location = new URL(response.headers().location, 'http://127.0.0.1:5173');
+		expect(location.pathname).toBe('/signin');
+		expect(location.searchParams.get('next')).toBe(path);
+		expect(response.headers()['cache-control']).toContain('no-store');
+	}
 });
 
 test('every indexable page has complete, unique search and social metadata', async ({ page }) => {
@@ -55,7 +67,8 @@ test('every indexable page has complete, unique search and social metadata', asy
 		expect(description?.length ?? 0, `${path} description length`).toBeGreaterThan(70);
 		expect(titles.has(title), `${path} unique title`).toBe(false);
 		expect(descriptions.has(description ?? ''), `${path} unique description`).toBe(false);
-		titles.add(title); descriptions.add(description ?? '');
+		titles.add(title);
+		descriptions.add(description ?? '');
 		await expect(page.locator('meta[name="description"]')).toHaveCount(1);
 		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://kredit.ng${path}`);
 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /index,follow/);
@@ -74,15 +87,22 @@ test('responsive public pages avoid horizontal overflow and serious accessibilit
 	await page.setViewportSize({ width: 390, height: 844 });
 	for (const path of publicRoutes) {
 		await page.goto(path);
-		const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+		const overflow = await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		);
 		expect(overflow, `${path} horizontal overflow`).toBeLessThanOrEqual(1);
 		const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
-		const blocking = results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical');
+		const blocking = results.violations.filter(
+			(violation) => violation.impact === 'serious' || violation.impact === 'critical'
+		);
 		expect(blocking, `${path}: ${blocking.map((item) => item.id).join(', ')}`).toEqual([]);
 	}
 });
 
-test('index boundaries, error recovery, sitemap and install assets are safe and complete', async ({ page, request }) => {
+test('index boundaries, error recovery, sitemap and install assets are safe and complete', async ({
+	page,
+	request
+}) => {
 	// Account areas are never indexable, whatever else is true.
 	for (const path of ['/workspace/today', '/workspace/purchases', '/admin', '/recover']) {
 		const response = await page.goto(path);
@@ -110,7 +130,8 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 
 	const sitemap = await (await request.get('/sitemap.xml')).text();
 	for (const path of publicRoutes) expect(sitemap, `sitemap ${path}`).toContain(`<loc>https://kredit.ng${path}</loc>`);
-	for (const path of ['/signin/', '/workspace/purchases/', '/admin/', '/recover']) expect(sitemap).not.toContain(`<loc>https://kredit.ng${path}`);
+	for (const path of ['/signin/', '/workspace/purchases/', '/admin/', '/recover'])
+		expect(sitemap).not.toContain(`<loc>https://kredit.ng${path}`);
 	const robots = await (await request.get('/robots.txt')).text();
 	for (const path of ['/signin', '/workspace', '/admin', '/recover']) {
 		expect(robots).toContain(`Disallow: ${path}$`);
@@ -130,5 +151,6 @@ test('index boundaries, error recovery, sitemap and install assets are safe and 
 	expect(manifestResponse.ok()).toBe(true);
 	const manifest = await manifestResponse.json();
 	expect(manifest).toMatchObject({ id: '/', display: 'standalone', lang: 'en-NG' });
-	for (const icon of ['/icon-192.png', '/icon-512.png', '/apple-touch-icon.png']) expect((await request.get(icon)).ok(), icon).toBe(true);
+	for (const icon of ['/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'])
+		expect((await request.get(icon)).ok(), icon).toBe(true);
 });
