@@ -2,46 +2,13 @@
 	import RetainedAccounts from '$lib/components/RetainedAccounts.svelte';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import OwnerDialog from '$lib/components/OwnerDialog.svelte';
+	import PlatformSettingHistory from '$lib/components/PlatformSettingHistory.svelte';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { record, text } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
 	import { adminGet, localTime } from '$lib/admin-client';
 
-	type Setting = {
-		key: string;
-		is_secret?: boolean;
-		connection_state?: string;
-		requires_restart?: boolean;
-		applied_version?: number;
-		connection_fields?: { key: string; label: string; kind: string }[];
-		connection_values?: Record<string, string | number | boolean>;
-		category: string;
-		value: any;
-		description: string;
-		version: number;
-		updated_at: string;
-		updated_by?: string;
-		reason?: string;
-	};
-
-	type Governance = {
-		mode: 'solo_owner' | 'delegated_team';
-		updated_at: string;
-		updated_by?: string;
-		reason: string;
-	};
-
-	type SettingHistory = {
-		id: string;
-		key: string;
-		old_value?: any;
-		new_value: any;
-		version: number;
-		action: string;
-		actor_id?: string;
-		reason: string;
-		recorded_at: string;
-	};
+	import type { Setting, Governance, SettingHistory } from '$lib/admin/platform-settings';
 
 	const categories = [
 		{ id: 'all', label: 'All settings' },
@@ -920,48 +887,15 @@
 
 	<!-- History Drawer / Modal -->
 	{#if historySettingKey}
-		<OwnerDialog
-			open={true}
-			title="History"
-			description="Every change to this setting, oldest last. This record cannot be edited."
+		<PlatformSettingHistory
+			settingKey={historySettingKey}
+			entries={historyEntries}
+			loading={historyLoading}
+			error={historyError}
+			{readable}
+			onretry={openHistory}
 			onclose={() => (historySettingKey = null)}
-		>
-			{#if historyLoading}
-				<div class="loading-state">Opening history…</div>
-			{:else if historyError}<p role="alert" class="error">{historyError}</p>
-				<button type="button" onclick={() => openHistory(historySettingKey!)}>Try again</button>
-			{:else if historyEntries.length === 0}
-				<div class="empty-state">This setting has not been changed yet.</div>
-			{:else}
-				<div class="table-wrap">
-					<table class="history-table">
-						<thead>
-							<tr>
-								<th>Version</th>
-								<th>Action</th>
-								<th>Changed to</th>
-								<th>When</th>
-								<th>Reason and who</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each historyEntries as h}
-								<tr>
-									<td>v{h.version}</td>
-									<td><span class="action-tag">{h.action}</span></td>
-									<td>{readable(h.new_value)}</td>
-									<td>{localTime(h.recorded_at)}</td>
-									<td>
-										<strong>{h.reason}</strong>
-										{#if h.actor_id}<p class="actor-sub">Changed by {h.actor_id}</p>{/if}
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/if}
-		</OwnerDialog>
+		/>
 	{/if}
 
 	<!-- Ownership Transfer Modal -->
