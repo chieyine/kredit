@@ -1,0 +1,59 @@
+name: Audit closeout diagnostics
+
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-closeout-diagnostics.yml]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect:
+    if: github.repository == 'chieyine/kredit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dc096512e86c57bba779489e21b7b339cd3adb71
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Fetch only the retained synthetic schema evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 35571022032 --repo chieyine/kredit \
+            --name audit-integration-4850548a699f4b3f744162a74c3b6e54ce00793b \
+            --dir "$RUNNER_TEMP/schema-evidence"
+      - name: Print explicit missing fields without customer records
+        run: |
+          python3 - <<'PY'
+          import collections, csv, json, os, pathlib
+          with open('docs/compliance/data-inventory.tsv', newline='') as f:
+              recorded = list(csv.DictReader(f, delimiter='\t'))
+          keys = {(r['schema'], r['table'], r['field']) for r in recorded}
+          assert len(keys) == len(recorded), 'duplicate inventory keys'
+          schema = pathlib.Path(os.environ['RUNNER_TEMP']) / 'schema-evidence' / 'schema.tsv'
+          missing = collections.defaultdict(list)
+          actual = set()
+          for row in csv.reader(schema.open(), delimiter='\t'):
+              assert len(row) == 4
+              key = tuple(row[:3])
+              assert key not in actual
+              actual.add(key)
+              if key not in keys:
+                  missing['.'.join(key[:2])].append({'field':key[2], 'type':row[3]})
+          print('schema_fields=', len(actual), 'recorded_fields=', len(keys))
+          print('extra_fields=', sorted(keys-actual))
+          print(json.dumps(dict(missing), indent=2))
+          PY
+      - name: Show exact formatter changes without writing them
+        run: |
+          test "$(git rev-parse HEAD)" = dc096512e86c57bba779489e21b7b339cd3adb71
+          gofmt -d internal/db/persistence_contract.go internal/payments/postgres.go internal/purchasing/delegations.go internal/paymentclaims
+          git diff --exit-code
