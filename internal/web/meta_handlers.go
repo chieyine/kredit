@@ -29,9 +29,10 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, 400, "invalid_challenge", "Invalid challenge.")
 			return
 		}
-		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(200)
-		_, _ = w.Write([]byte(challenge))
+		_, _ = w.Write([]byte(challenge)) // #nosec G705 -- Authenticated, bounded protocol echo with explicit text/plain and nosniff; covered by TestMetaVerificationEchoIsBoundedAuthenticatedPlainText.
 		return
 	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 128<<10))
@@ -128,6 +129,31 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				for _, message := range value.Messages {
+					if message.Type != "text" && message.Type != "audio" && message.Type != "voice" {
+						continue
+					}
+					if s.runtime.WhatsApp == nil {
+						writeProblem(w, 503, "message_pending", "Incoming message tracking is unavailable.")
+						return
+					}
+					event := whatsapp.Event{ID: message.ID, From: message.From, Text: message.Text.Body}
+					if message.Type != "text" {
+						event.Text = "[voice note]"
+					}
+					event.Signature = s.runtime.WhatsApp.Sign(event)
+					_, recordErr := s.runtime.WhatsApp.Handle(r.Context(), event)
+					var syntaxErr *whatsapp.CommandSyntaxError
+					if recordErr != nil && !errors.As(recordErr, &syntaxErr) {
+						switch {
+						case errors.Is(recordErr, whatsapp.ErrInvalidEvent):
+							writeProblem(w, 400, "invalid_message", "Invalid message identity or size.")
+						case errors.Is(recordErr, whatsapp.ErrEventConflict):
+							writeProblem(w, 409, "message_conflict", "Message identity conflicts with retained evidence.")
+						default:
+							writeProblem(w, 503, "message_pending", "Incoming message evidence could not be saved.")
+						}
+						return
+					}
 					var rawText string
 					var isAudio bool
 					var audioBytes []byte
@@ -145,31 +171,26 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 						if !assistant {
 							// Without the assistant there is nothing that can read a
 							// voice note, so say so rather than downloading it.
-							_ = s.runtime.Notifications.SendWhatsAppReply(r.Context(), message.ID, message.From, "We cannot read voice notes right now. Send the goods, the amount and the payment day as a message, or record the sale in Kredit: "+strings.TrimRight(s.config.AppBaseURL, "/")+"/workspace/sales/new")
+							if !s.sendMetaReply(w, r, message.ID, message.From, "We cannot read voice notes right now. Send the goods, the amount and the payment day as a message, or record the sale in Kredit: "+strings.TrimRight(s.config.AppBaseURL, "/")+"/workspace/sales/new") {
+								return
+							}
 							continue
 						}
 						mediaID := message.Audio.ID
-						audioMime = message.Audio.MimeType
 						if mediaID == "" {
 							mediaID = message.Voice.ID
-							audioMime = message.Voice.MimeType
 						}
 						var dlErr error
 						audioBytes, audioMime, dlErr = provider.DownloadMedia(r.Context(), mediaID)
 						if dlErr != nil {
-							_ = s.runtime.Notifications.SendWhatsAppReply(r.Context(), message.ID, message.From, "Sorry, we could not retrieve that voice note. Please try sending it again.")
+							if !s.sendMetaReply(w, r, message.ID, message.From, "Sorry, we could not retrieve that voice note. Please try sending it again.") {
+								return
+							}
 							continue
 						}
 					} else {
 						continue
 					}
-
-					event := whatsapp.Event{ID: message.ID, From: message.From, Text: rawText}
-					if isAudio {
-						event.Text = "[voice note]"
-					}
-					event.Signature = s.runtime.WhatsApp.Sign(event)
-					_, _ = s.runtime.WhatsApp.Handle(r.Context(), event)
 
 					var reply string
 					appURL := strings.TrimRight(s.config.AppBaseURL, "/")
@@ -198,8 +219,7 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 
-					if e = s.runtime.Notifications.SendWhatsAppReply(r.Context(), message.ID, message.From, reply); e != nil && !errors.Is(e, notifications.ErrSubmissionUnknown) {
-						writeProblem(w, 503, "reply_pending", "The reply could not be confirmed.")
+					if !s.sendMetaReply(w, r, message.ID, message.From, reply) {
 						return
 					}
 				}
@@ -212,6 +232,22 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "accepted"})
+}
+
+// An uncertain native submission already has a durable review fence. Acknowledge
+// that case without resending; ordinary storage/configuration failures must be
+// retried rather than disappearing behind a successful webhook response.
+func (s *Server) sendMetaReply(w http.ResponseWriter, r *http.Request, event, recipient, body string) bool {
+	if s.runtime.Notifications == nil {
+		writeProblem(w, 503, "reply_pending", "The reply could not be confirmed.")
+		return false
+	}
+	err := s.runtime.Notifications.SendWhatsAppReply(r.Context(), event, recipient, body)
+	if err != nil && !errors.Is(err, notifications.ErrSubmissionUnknown) {
+		writeProblem(w, 503, "reply_pending", "The reply could not be confirmed.")
+		return false
+	}
+	return true
 }
 
 func formatKoboAmount(kobo int64) string {
@@ -256,7 +292,7 @@ func assistantReply(result whatsapp.AIResult, readErr error, appURL string) stri
 		if result.DueDate != "" {
 			dueLine = fmt.Sprintf("• *Payment day:* %s\n", result.DueDate)
 		}
-		return fmt.Sprintf("📋 *This is what we understood. Nothing is saved yet.*\n• *Customer:* %s\n• *Amount:* ₦%s\n%s%s\nOpen Kredit to check these details and send the sale to your customer: %s/app/credit/new",
+		return fmt.Sprintf("📋 *This is what we understood. Nothing is saved yet.*\n• *Customer:* %s\n• *Amount:* ₦%s\n%s%s\nOpen Kredit to check these details and send the sale to your customer: %s/workspace/sales/new",
 			result.BuyerName, formatKoboAmount(result.AmountKobo), itemsLine, dueLine, appURL)
 	case whatsapp.IntentConfirm:
 		return "A sale cannot be confirmed over WhatsApp. Open Kredit to check the goods, amount and payment day, then send it to your customer: " + appURL + "/workspace/sales/new"

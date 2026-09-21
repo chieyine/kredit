@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,26 @@ const (
 	CommandQuery         = "query"
 	CommandUnknown       = "unknown"
 )
+
+var (
+	ErrInvalidEvent  = errors.New("invalid WhatsApp webhook signature")
+	ErrEventConflict = errors.New("WhatsApp event identifier was reused for different content")
+)
+
+// CommandSyntaxError means an authenticated event was durably recorded, but
+// the optional deterministic parser did not understand the text. It must not
+// be confused with a storage, identity or replay-integrity failure.
+type CommandSyntaxError struct{ cause error }
+
+func (e *CommandSyntaxError) Error() string { return e.cause.Error() }
+func (e *CommandSyntaxError) Unwrap() error { return e.cause }
+
+func parsedCommand(command Command, err error) (Command, error) {
+	if err != nil {
+		return command, &CommandSyntaxError{cause: err}
+	}
+	return command, nil
+}
 
 type Command struct {
 	Kind                 string `json:"kind"`
@@ -70,8 +91,11 @@ func (h *Handler) Verify(event Event) bool {
 	return hmac.Equal([]byte(expected), []byte(event.Signature))
 }
 func (h *Handler) Handle(ctx context.Context, event Event) (Command, error) {
+	if err := ctx.Err(); err != nil {
+		return Command{}, err
+	}
 	if !h.Verify(event) {
-		return Command{}, errors.New("invalid WhatsApp webhook signature")
+		return Command{}, ErrInvalidEvent
 	}
 	payloadHash := sha256.Sum256([]byte(event.ID + "|" + event.From + "|" + event.Text))
 	fingerprint := hex.EncodeToString(payloadHash[:])
@@ -90,26 +114,28 @@ func (h *Handler) Handle(ctx context.Context, event Event) (Command, error) {
 				return Command{}, err
 			}
 			if original != fingerprint {
-				return Command{}, errors.New("WhatsApp event identifier was reused for different content")
+				return Command{}, ErrEventConflict
 			}
 			return Command{}, nil
 		}
 		if err != nil {
 			return Command{}, err
 		}
-		return command, parseErr
+		return parsedCommand(command, parseErr)
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if original, exists := h.seen[event.ID]; exists {
 		if original != fingerprint {
-			return Command{}, errors.New("WhatsApp event identifier was reused for different content")
+			return Command{}, ErrEventConflict
 		}
 		return Command{}, nil
 	}
 	h.seen[event.ID] = fingerprint
-	return h.parser(event.Text)
+	return parsedCommand(h.parser(event.Text))
 }
+
+var paymentDelimiter = regexp.MustCompile(`(?i) paid `)
 
 func ParseCommand(text string) (Command, error) {
 	if len(text) > 4096 {
@@ -140,10 +166,9 @@ func ParseCommand(text string) (Command, error) {
 		}
 		return Command{Kind: CommandCreateCredit, BuyerName: buyer, AmountKobo: amount, DueDate: due, RequiresConfirmation: true}, nil
 	}
-	if strings.Contains(lower, " paid ") {
-		index := strings.Index(lower, " paid ")
-		buyer := strings.TrimSpace(normalized[:index])
-		amount, err := parseAmount(normalized[index+len(" paid "):])
+	if delimiter := paymentDelimiter.FindStringIndex(normalized); delimiter != nil {
+		buyer := strings.TrimSpace(normalized[:delimiter[0]])
+		amount, err := parseAmount(normalized[delimiter[1]:])
 		if err != nil {
 			return Command{}, err
 		}
