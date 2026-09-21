@@ -493,7 +493,7 @@ func (s *PostgresStore) RebuildContext(ctx context.Context, obligationID string)
 	return expected, nil
 }
 
-const paymentSelect = `SELECT p.id::text,p.obligation_id::text,p.buyer_user_id::text,p.supplier_organization_id::text,p.source_type,p.amount_kobo,currency,COALESCE(p.provider,''),COALESCE(p.provider_reference,''),p.state,p.paid_at,p.recognized_at,p.recorded_by_reference,COALESCE(p.reversal_of::text,''),p.collection_fee_kobo FROM app.payments p`
+const paymentSelect = `SELECT p.id::text,p.obligation_id::text,p.buyer_user_id::text,p.supplier_organization_id::text,p.source_type,p.amount_kobo,p.currency,COALESCE(p.provider,''),COALESCE(p.provider_reference,''),p.state,p.paid_at,p.recognized_at,p.recorded_by_reference,COALESCE(p.reversal_of::text,''),p.collection_fee_kobo FROM app.payments p`
 
 type rowScanner interface{ Scan(...any) error }
 
