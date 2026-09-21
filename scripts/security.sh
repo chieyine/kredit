@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 export GOCACHE="${GOCACHE:-$PWD/.tmp/go-cache}"
 mkdir -p "$GOCACHE"
@@ -67,8 +68,9 @@ run_scanner gosec gosec -exclude-generated --exclude-rules="$GOSEC_PATH_EXCLUSIO
 
 run_scanner staticcheck staticcheck ./...
 run_scanner osv-scanner osv-scanner scan source -r .
-# Trivy reports findings with status 0 unless an explicit failure code is set.
-run_scanner trivy trivy fs --exit-code 1 --scanners vuln,secret,misconfig .
+# The shared wrapper excludes only the ignored build cache and rejects tracked
+# files there; it retains Trivy's explicit nonzero exit status for findings.
+run_scanner trivy bash "$root_dir/scripts/trivy-source-scan.sh"
 
 if command -v rg >/dev/null 2>&1; then
 	if rg -l --hidden --glob '!.tmp/**' --glob '!node_modules/**' --glob '!.git/**' --glob '!README.md' --glob '!IMPLEMENTATION_PLAN.md' --glob '!*.lock' '(BEGIN (RSA|OPENSSH) PRIVATE KEY|AKIA[0-9A-Z]{16}|password\s*=\s*"[^"$]+")' .; then

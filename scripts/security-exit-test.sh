@@ -15,8 +15,11 @@ exit 0
 MOCK
 cat > "$scratch/bin/trivy" <<'MOCK'
 #!/usr/bin/env bash
-# Model Trivy's documented zero-by-default finding status.
-if [[ "$MOCK_FINDING" == 1 && " $* " == *' --exit-code 1 '* ]]; then
+# Keep the release scope and fail-on-findings flags explicit.
+[[ " $* " == *' --exit-code 1 '* ]] || exit 2
+[[ " $* " == *' --scanners vuln,secret,misconfig '* ]] || exit 2
+[[ " $* " == *' --skip-dirs .tmp '* ]] || exit 2
+if [[ "$MOCK_FINDING" == 1 ]]; then
   printf '%s\n' 'Synthetic detected finding.'
   exit 1
 fi
@@ -37,4 +40,15 @@ for finding in 1 0; do
     exit 1
   fi
 done
-printf '%s\n' 'Security exit contract passed with synthetic scanners (not a real security scan).'
+# A future tracked file must not be hidden by the build-cache exclusion.
+mkdir -p "$scratch/project/scripts" "$scratch/project/.tmp"
+cp "$root/scripts/trivy-source-scan.sh" "$scratch/project/scripts/"
+git -C "$scratch/project" init --quiet
+printf 'synthetic\n' > "$scratch/project/.tmp/tracked.txt"
+git -C "$scratch/project" add --force .tmp/tracked.txt
+if PATH="$scratch/bin:$PATH" MOCK_FINDING=0 bash "$scratch/project/scripts/trivy-source-scan.sh" > "$scratch/scope.log" 2>&1; then
+  printf 'Tracked cache content was silently excluded.\n' >&2
+  exit 1
+fi
+grep -q 'Refusing cache exclusion: tracked files exist under .tmp' "$scratch/scope.log"
+printf '%s\n' 'Security exit and tracked-cache contracts passed with synthetic scanners (not a real security scan).'

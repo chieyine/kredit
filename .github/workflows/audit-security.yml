@@ -78,7 +78,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
-          trivy fs --exit-code 1 --scanners vuln,secret,misconfig . 2>&1 | tee "$RUNNER_TEMP/audit-security/trivy.log"
+          bash scripts/trivy-source-scan.sh 2>&1 | tee "$RUNNER_TEMP/audit-security/trivy.log"
       - name: Preserve actual scan results, including failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
