@@ -32,7 +32,7 @@ func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 	}
 	defer admin.Close()
 	prefix := "claim-review-" + uuid.NewString()
-	var buyer, reviewer, otherReviewer, org, request, agreement, activation, obligation string
+	var buyer, reviewer, otherReviewer, org, buyerOrg, business, request, agreement, activation, obligation string
 	for index, target := range []*string{&buyer, &reviewer, &otherReviewer} {
 		if err := admin.QueryRow(ctx, `INSERT INTO app.users(normalized_email,status) VALUES($1,'active') RETURNING id::text`, prefix+string(rune('a'+index))+"@example.test").Scan(target); err != nil {
 			t.Fatal(err)
@@ -46,7 +46,18 @@ func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := admin.QueryRow(ctx, `INSERT INTO app.credit_requests(supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,goods_description,due_date,collection_at,state,created_by) VALUES($1::uuid,$2::uuid,gen_random_uuid(),10000,'Synthetic goods',current_date+7,now()+interval '7 days','ACTIVE',$3::uuid) RETURNING id::text`, org, buyer, reviewer).Scan(&request); err != nil {
+	// A random business UUID is not a purchasing identity. Exercise the current
+	// branch/purchasing policies with a real buying workspace and active owner.
+	if err := admin.QueryRow(ctx, `INSERT INTO app.organizations(legal_name,business_type,business_address,industry) VALUES($1,'limited_company','Synthetic address','Test') RETURNING id::text`, prefix+"-buyer").Scan(&buyerOrg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, buyerOrg, buyer); err != nil {
+		t.Fatal(err)
+	}
+	if err := admin.QueryRow(ctx, `INSERT INTO app.businesses(organization_id,owner_user_id,legal_name,business_type,business_address,industry,status) VALUES($1::uuid,$2::uuid,$3,'limited_company','Synthetic address','Test','verified') RETURNING id::text`, buyerOrg, buyer, prefix+"-buyer").Scan(&business); err != nil {
+		t.Fatal(err)
+	}
+	if err := admin.QueryRow(ctx, `INSERT INTO app.credit_requests(supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,goods_description,due_date,collection_at,state,created_by) VALUES($1::uuid,$2::uuid,$4::uuid,10000,'Synthetic goods',current_date+7,now()+interval '7 days','ACTIVE',$3::uuid) RETURNING id::text`, org, buyer, reviewer, business).Scan(&request); err != nil {
 		t.Fatal(err)
 	}
 	if err := admin.QueryRow(ctx, `INSERT INTO app.agreement_versions(credit_request_id,version,canonical_json,document_hash,terms_version,privacy_version,created_by) VALUES($1::uuid,1,'{}',$2,'v1','v1',$3::uuid) RETURNING id::text`, request, prefix, reviewer).Scan(&agreement); err != nil {
@@ -76,9 +87,24 @@ func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 	defer app.Close()
 	claims := NewPostgresStore(app.Raw())
 	buyerContext := db.WithTenantContext(ctx, buyer, "")
-	claim, err := claims.Create(buyerContext, CreateInput{ObligationID: obligation, BuyerUserID: buyer, AmountKobo: 2500, PaidAt: time.Now().UTC(), TransferReference: prefix+"-bank", IdempotencyKey: prefix+"-claim"})
+	probe, err := app.Raw().Begin(buyerContext)
 	if err != nil {
 		t.Fatal(err)
+	}
+	defer func() { _ = probe.Rollback(ctx) }()
+	if err := db.SetTenantContext(buyerContext, probe); err != nil {
+		t.Fatal(err)
+	}
+	var canRead, visible bool
+	if err := probe.QueryRow(ctx, `SELECT app.can_purchase($1::uuid),EXISTS(SELECT 1 FROM app.obligations WHERE id=$2::uuid)`, business, obligation).Scan(&canRead, &visible); err != nil || !canRead || !visible {
+		t.Fatalf("buyer fixture lacks current purchasing/read authority: permission=%t visible=%t error=%v", canRead, visible, err)
+	}
+	if err := probe.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := claims.Create(buyerContext, CreateInput{ObligationID: obligation, BuyerUserID: buyer, AmountKobo: 2500, PaidAt: time.Now().UTC(), TransferReference: prefix + "-bank", IdempotencyKey: prefix + "-claim"})
+	if err != nil {
+		t.Fatalf("create claim for authorized buyer: %v", err)
 	}
 	paymentStore := payments.NewPostgresStore(app.Raw(), outbox.NewStore(app.Raw()), nil)
 	reviewContext := db.WithTenantContext(ctx, reviewer, org)

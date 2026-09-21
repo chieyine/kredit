@@ -22,35 +22,33 @@ jobs:
           POSTGRES_DB: kredit_claim_policy_audit
         ports: ['5432:5432']
         options: >-
-          --health-cmd 'pg_isready -U kredit -d kredit_claim_policy_audit'
+          --health-cmd "pg_isready -U kredit -d kredit_claim_policy_audit"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_claim_policy_audit?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: d2ff6eb4fab1fdff0475cc53833f9549e36126c7
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: .go-version
           cache: true
       - name: Prepare only the isolated schema
+        id: schema
         run: |
-          test "$(git rev-parse HEAD)" = d2ff6eb4fab1fdff0475cc53833f9549e36126c7
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           go run ./cmd/migrate
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
       - name: Verify explicit inventory records against actual schema
         run: bash scripts/data-inventory-check.sh
       - name: Inspect effective claim and obligation policies without customer data
-        if: always()
+        if: always() && steps.schema.outcome == 'success'
         run: |
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -x -c "SELECT tablename,policyname,permissive,cmd,roles,qual,with_check FROM pg_policies WHERE schemaname='app' AND tablename IN ('payment_claims','obligations','credit_requests','purchasing_delegations') ORDER BY tablename,policyname"
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -A -t -c "SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND (p.proname IN ('can_purchase','can_view_buyer_business','can_view_credit_branch','current_user_id','current_organization_id') OR p.proname LIKE '%claim%') ORDER BY p.proname"
-      - name: Show exact source and formatting at the failure boundary
-        if: always()
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -A -t -c "SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND (p.proname IN ('can_purchase','branch_customer_access','current_user_id','current_organization_id') OR p.proname LIKE '%claim%') ORDER BY p.proname"
+      - name: Show remaining formatting differences without rewriting source
         run: |
-          nl -ba internal/paymentclaims/review_replay_postgres_test.go | sed -n '62,100p'
-          for file in db/migrations/189_*.sql db/migrations/196_*.sql; do printf '\nSOURCE %s\n' "$file"; cat "$file"; done
           gofmt -d internal/payments/postgres.go internal/purchasing/delegations.go internal/paymentclaims
           git diff --exit-code
