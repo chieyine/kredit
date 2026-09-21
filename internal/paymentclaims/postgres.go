@@ -3,13 +3,13 @@ package paymentclaims
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"kredit/internal/db"
 	"kredit/internal/identifier"
 	"kredit/internal/ledger"
 	"kredit/internal/payments"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -227,6 +227,9 @@ func (s *PostgresStore) Confirm(ctx context.Context, id, actor, reason string, r
 		return Claim{}, err
 	}
 	if claim.State == Confirmed {
+		if !sameReview(claim, actor, reason) {
+			return Claim{}, ErrReviewConflict
+		}
 		return claim, tx.Commit(ctx)
 	}
 	if claim.State != Pending {
