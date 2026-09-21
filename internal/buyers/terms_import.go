@@ -191,18 +191,19 @@ func (m *MemoryTermsImportStore) ReviewTermsBatch(ctx context.Context, reviewerI
 	}
 
 	now := time.Now().UTC()
-	if decision == "approved" {
+	switch decision {
+	case "approved":
 		batch.State = "approved"
 		batch.ApprovedBy = reviewerID
 		batch.ApprovedAt = &now
 		// Review records independent approval only. Applying credit terms or
 		// an opening balance needs a separately linked, accepted obligation.
 		// A staging-row ID must never be used as an obligation/journal reference.
-	} else if decision == "cancelled" {
+	case "cancelled":
 		batch.State = "cancelled"
 		batch.CancelledBy = reviewerID
 		batch.CancelledAt = &now
-	} else {
+	default:
 		return TermsImportBatch{}, errors.New("decision must be approved or cancelled")
 	}
 
@@ -265,7 +266,7 @@ func (p *PostgresTermsImportStore) StageTermsBatch(ctx context.Context, userID, 
 	if err != nil {
 		return TermsImportBatch{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	validCount := 0
 	for _, r := range inputRows {
 		if r.CustomerName != "" {
@@ -313,7 +314,7 @@ func (p *PostgresTermsImportStore) ReviewTermsBatch(ctx context.Context, reviewe
 	if err != nil {
 		return TermsImportBatch{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	batch, err := scanTermsBatch(tx.QueryRow(ctx, `SELECT `+termsBatchColumns+`
         FROM app.partner_terms_import_batches WHERE id=$1::uuid AND organization_id=$2::uuid FOR UPDATE`, batchID, orgID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -355,7 +356,7 @@ func (p *PostgresTermsImportStore) ListTermsBatches(ctx context.Context, userID,
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `SELECT `+termsBatchColumns+` FROM app.partner_terms_import_batches
         WHERE organization_id=$1::uuid ORDER BY created_at DESC,id DESC`, orgID)
 	if err != nil {
@@ -378,7 +379,7 @@ func (p *PostgresTermsImportStore) GetTermsBatch(ctx context.Context, userID, or
 	if err != nil {
 		return TermsImportBatch{}, nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	batch, err := scanTermsBatch(tx.QueryRow(ctx, `SELECT `+termsBatchColumns+`
         FROM app.partner_terms_import_batches WHERE id=$1::uuid AND organization_id=$2::uuid`, batchID, orgID))
 	if errors.Is(err, pgx.ErrNoRows) {

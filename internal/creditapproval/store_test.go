@@ -61,7 +61,7 @@ func TestIndependentApprovalCannotBeBypassedOrReusedAfterRevision(t *testing.T) 
 		if e != nil {
 			return e
 		}
-		defer tx.Rollback(ctx)
+		defer func() { _ = tx.Rollback(ctx) }()
 		if _, e = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, actor, org); e != nil {
 			return e
 		}

@@ -4,11 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"kredit/internal/billing"
 	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/payments"
+
+	"github.com/google/uuid"
 )
 
 func TestAuditSplitReversalRetainsEvidenceAndIsReplaySafe(t *testing.T) {

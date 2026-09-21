@@ -2,12 +2,13 @@ package web
 
 import (
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"kredit/internal/access"
 	"kredit/internal/networkops"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (s *Server) networkOperations(w http.ResponseWriter, r *http.Request) {

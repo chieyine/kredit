@@ -15,19 +15,19 @@ type domainServices struct {
 }
 
 func (s *Server) initDomainServices() {
-	s.domainServices.once.Do(func() {
-		if s.domainServices.orders == nil {
+	s.once.Do(func() {
+		if s.orders == nil {
 			if s.runtime.Database != nil {
-				s.domainServices.orders = orders.NewPostgresStore(s.runtime.Database.Raw(), s.runtime.Ledger)
+				s.orders = orders.NewPostgresStore(s.runtime.Database.Raw(), s.runtime.Ledger)
 			} else {
-				s.domainServices.orders = orders.NewMemoryStore()
+				s.orders = orders.NewMemoryStore()
 			}
 		}
-		if s.domainServices.terms == nil {
+		if s.terms == nil {
 			if s.runtime.Database != nil {
-				s.domainServices.terms = buyers.NewPostgresTermsImportStore(s.runtime.Database.Raw(), s.runtime.Ledger)
+				s.terms = buyers.NewPostgresTermsImportStore(s.runtime.Database.Raw(), s.runtime.Ledger)
 			} else {
-				s.domainServices.terms = buyers.NewMemoryTermsImportStore(s.runtime.Ledger)
+				s.terms = buyers.NewMemoryTermsImportStore(s.runtime.Ledger)
 			}
 		}
 	})

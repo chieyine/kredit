@@ -4,15 +4,16 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/jackc/pgx/v5"
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/buyers"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Server) getTermsImportService() buyers.TermsImportService {
 	s.initDomainServices()
-	return s.domainServices.terms
+	return s.terms
 }
 
 func (s *Server) termsImports(w http.ResponseWriter, r *http.Request) {

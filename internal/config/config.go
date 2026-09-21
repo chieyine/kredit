@@ -381,10 +381,10 @@ func (c Config) Validate() error {
 			prefix = "sk_live_"
 		}
 		if !strings.HasPrefix(c.CollectionProviderToken, prefix) || strings.ContainsAny(c.CollectionProviderToken, "\r\n") {
-			return errors.New("Paystack key must match the deployment environment")
+			return errors.New("paystack key must match the deployment environment")
 		}
 		if c.CollectionProviderEndpoint != "" && c.CollectionProviderEndpoint != "https://api.paystack.co" {
-			return errors.New("Paystack uses https://api.paystack.co")
+			return errors.New("paystack uses https://api.paystack.co")
 		}
 	}
 	if (c.RealCollections || (c.SettlementEnabled && c.SettlementProvider == c.CollectionProvider)) && (c.CollectionAdapter == "flutterwave" || c.CollectionAdapter == "monnify") {
@@ -396,10 +396,10 @@ func (c Config) Validate() error {
 		}
 		if c.CollectionAdapter == "flutterwave" {
 			if !strings.HasPrefix(c.CollectionProviderToken, "FLWSECK") || strings.Contains(c.CollectionProviderToken, "TEST") == (c.Environment == "production") || len(c.CollectionWebhookSecret) < 32 {
-				return errors.New("Flutterwave requires a matching secret key and webhook secret")
+				return errors.New("flutterwave requires a matching secret key and webhook secret")
 			}
 		} else if c.CollectionAPIKey == "" || c.CollectionContractCode == "" {
-			return errors.New("Monnify requires its API key and contract code")
+			return errors.New("monnify requires its API key and contract code")
 		}
 		if c.CollectionProviderEndpoint != "" {
 			return errors.New("leave the native collection endpoint blank; Kredit selects the official API for the environment")

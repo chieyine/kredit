@@ -356,7 +356,7 @@ func (p *PostgresStore) CreateLineItems(ctx context.Context, orderID string, ite
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err := lockSupplierOrder(ctx, tx, orderID, []string{"owner", "administrator", "sales"}); err != nil {
 		return err
 	}
@@ -378,7 +378,7 @@ func (p *PostgresStore) ListLineItems(ctx context.Context, orderID string) ([]Li
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `
 		SELECT id::text, order_id::text, sku, description, unit_price_kobo, quantity, fulfilled_quantity, returned_quantity, total_kobo, created_at
 		FROM app.order_line_items
@@ -411,7 +411,7 @@ func (p *PostgresStore) DispatchShipment(ctx context.Context, input DispatchInpu
 	if err != nil {
 		return Shipment{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err := lockSupplierOrder(ctx, tx, input.OrderID, []string{"owner", "administrator", "sales"}); err != nil {
 		return Shipment{}, err
 	}
@@ -447,7 +447,7 @@ func (p *PostgresStore) RecordDeliveryReceipt(ctx context.Context, input Deliver
 	if err != nil {
 		return DeliveryReceipt{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var receipt DeliveryReceipt
 	const columns = `id::text,shipment_id::text,order_id::text,received_by::text,received_at,condition_notes,signed_proof_hash`
 	err = tx.QueryRow(ctx, `INSERT INTO app.order_delivery_receipts(shipment_id,order_id,received_by,condition_notes,signed_proof_hash)
@@ -477,7 +477,7 @@ func (p *PostgresStore) CreateCreditNote(ctx context.Context, input CreditNoteIn
 	if err != nil {
 		return CreditNote{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err := lockSupplierOrder(ctx, tx, input.OrderID, []string{"owner", "administrator", "sales"}); err != nil {
 		return CreditNote{}, err
 	}
@@ -531,7 +531,7 @@ func (p *PostgresStore) ApproveCreditNote(ctx context.Context, noteID, reviewerI
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var orderID, issuer, state, approvedBy string
 	err = tx.QueryRow(ctx, `SELECT order_id::text FROM app.order_credit_notes WHERE id=$1::uuid`, noteID).Scan(&orderID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -617,7 +617,7 @@ func (p *PostgresStore) ListCreditNotes(ctx context.Context, orderID string) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	rows, err := tx.Query(ctx, `
 		SELECT id::text, order_id::text, COALESCE(obligation_id::text, ''), supplier_organization_id::text, amount_kobo, reason, issued_by::text, COALESCE(approved_by::text, ''), status, created_at, approved_at
@@ -647,7 +647,7 @@ func (p *PostgresStore) ListShipments(ctx context.Context, orderID string) ([]Sh
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `SELECT s.id::text,s.order_id::text,s.supplier_organization_id::text,
         s.tracking_reference,s.carrier,s.dispatched_by::text,s.dispatched_at,s.status,
         i.line_item_id::text,i.quantity

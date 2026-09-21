@@ -48,7 +48,7 @@ func (s *Server) hasCompanyWideAccess(ctx context.Context, actor, org string) (b
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, actor, org); err != nil {
 		return false, err
 	}

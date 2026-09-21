@@ -1183,7 +1183,7 @@ func (s *PostgresStore) checkPurchasePermission(r *CreditRequest, actor, action 
 	if err != nil {
 		return false
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, actor); err != nil {
 		return false
 	}
@@ -1199,7 +1199,7 @@ func (s *PostgresStore) acceptingPerson(actor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, actor); err != nil {
 		return "", err
 	}
@@ -1223,7 +1223,7 @@ func (s *PostgresStore) readPurchaseActions(r *CreditRequest, actor string) []st
 	if err != nil {
 		return result
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, actor); err != nil {
 		return result
 	}

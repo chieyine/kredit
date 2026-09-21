@@ -143,7 +143,7 @@ func TestBranchSalesBoundariesAndCurrentAssignments(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		defer tx.Rollback(ctx)
+		defer func() { _ = tx.Rollback(ctx) }()
 		if _, e = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, staff, org); e != nil {
 			t.Fatal(e)
 		}
@@ -162,18 +162,18 @@ func TestBranchSalesBoundariesAndCurrentAssignments(t *testing.T) {
 		t.Fatal(e)
 	}
 	if _, e = locked.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, staff, org); e != nil {
-		locked.Rollback(ctx)
+		_ = locked.Rollback(ctx)
 		t.Fatal(e)
 	}
 	if _, e = locked.Exec(ctx, `UPDATE app.credit_requests SET updated_at=updated_at WHERE id=$1::uuid`, requests[0].ID); e != nil {
-		locked.Rollback(ctx)
+		_ = locked.Rollback(ctx)
 		t.Fatal(e)
 	}
 	short, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
 	_, blocked := network.Assign(short, owner, org, a)
 	cancel()
 	if !errors.Is(blocked, context.DeadlineExceeded) {
-		locked.Rollback(ctx)
+		_ = locked.Rollback(ctx)
 		t.Fatalf("assignment crossed an active financial transaction: %v", blocked)
 	}
 	if e = locked.Rollback(ctx); e != nil {
@@ -235,7 +235,7 @@ func TestBranchSalesBoundariesAndCurrentAssignments(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, e = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, buyer, org); e != nil {
 		t.Fatal(e)
 	}

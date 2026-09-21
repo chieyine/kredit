@@ -10,13 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"kredit/internal/buyers"
 	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/schedules"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // These fixtures use a privileged connection only for setup/assertions. Every
@@ -386,7 +387,7 @@ func TestAuditPostgresChildRowsRespectBranchAndRevokedMembership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback(f.ctx)
+	defer func() { _ = tx.Rollback(f.ctx) }()
 	if _, err = tx.Exec(f.ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, f.owner, f.org); err != nil {
 		t.Fatal(err)
 	}

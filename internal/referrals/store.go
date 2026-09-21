@@ -78,7 +78,7 @@ func (s *Store) Claim(ctx context.Context, actor, org, code string) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, e = tx.Exec(ctx, `SELECT app.dsa_claim($1::uuid,$2)`, org, strings.ToUpper(strings.TrimSpace(code)))
 	if e != nil {
-		return errors.New("Referral could not be confirmed. Use an active code for a new business you own, before its first accepted sale. Each business can have only one referrer.")
+		return errors.New("referral could not be confirmed; use an active code for a new business you own, before its first accepted sale; each business can have only one referrer")
 	}
 	return tx.Commit(ctx)
 }
@@ -113,10 +113,10 @@ func (s *Store) Act(ctx context.Context, actor string, admin bool, in Input) (an
 	}
 	if !admin {
 		if in.Action != "enrol" && in.Action != "bank" {
-			return nil, errors.New("This action requires Super Admin.")
+			return nil, errors.New("this action requires Super Admin")
 		}
 		if !validBank(in) || !in.Consent {
-			return nil, errors.New("Enter your name, WhatsApp number and bank details, and accept the programme terms.")
+			return nil, errors.New("enter your name, WhatsApp number and bank details, and accept the programme terms")
 		}
 		if in.Action == "enrol" {
 			if _, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('dsa-program',0))`); e != nil {
@@ -127,10 +127,10 @@ func (s *Store) Act(ctx context.Context, actor string, admin bool, in Input) (an
 				return nil, e
 			}
 			if !rules.Enabled {
-				return nil, errors.New("New agent enrolment is paused.")
+				return nil, errors.New("new agent enrolment is paused")
 			}
 			if in.Version != rules.Version {
-				return nil, errors.New("Programme terms changed. Refresh and review them before joining.")
+				return nil, errors.New("programme terms changed; refresh and review them before joining")
 			}
 			_, e = tx.Exec(ctx, `INSERT INTO app.dsa_agents(user_id,code,name,phone,bank_name,account_name,account_number,onboarding_limit,terms_version) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(user_id) DO NOTHING`, actor, "DSA-"+strings.ToUpper(strings.ReplaceAll(uuid.NewString(), "-", "")[:16]), strings.TrimSpace(in.Name), in.Phone, strings.TrimSpace(in.Bank), strings.TrimSpace(in.AccountName), in.Account, rules.InitialLimit, fmt.Sprintf("dsa-v1:rules-%d", rules.Version))
 		} else {
@@ -140,7 +140,7 @@ func (s *Store) Act(ctx context.Context, actor string, admin bool, in Input) (an
 			var tag interface{ RowsAffected() int64 }
 			tag, e = tx.Exec(ctx, `UPDATE app.dsa_agents SET name=$2,phone=$3,bank_name=$4,account_name=$5,account_number=$6,bank_updated_at=now(),version=version+1 WHERE user_id=$1::uuid AND version=$7 AND NOT EXISTS(SELECT 1 FROM app.dsa_payouts WHERE agent_id=$1::uuid AND state='pending')`, actor, strings.TrimSpace(in.Name), in.Phone, strings.TrimSpace(in.Bank), strings.TrimSpace(in.AccountName), in.Account, in.Version)
 			if e == nil && tag.RowsAffected() != 1 {
-				return nil, errors.New("Refresh your details. A pending payout must be resolved before changing its destination.")
+				return nil, errors.New("refresh your details; a pending payout must be resolved before changing its destination")
 			}
 		}
 		if e != nil {
@@ -149,7 +149,7 @@ func (s *Store) Act(ctx context.Context, actor string, admin bool, in Input) (an
 		e = audit(ctx, tx, actor, "dsa."+in.Action, actor, map[string]any{"terms_accepted": true, "account_last4": in.Account[6:]})
 	} else {
 		if len(strings.TrimSpace(in.Reason)) < 20 || len(in.Reason) > 2000 {
-			return nil, errors.New("Record a clear reason or completed bank evidence (20–2,000 characters).")
+			return nil, errors.New("record a clear reason or completed bank evidence (20–2,000 characters)")
 		}
 		switch in.Action {
 		case "rules":
@@ -158,21 +158,21 @@ func (s *Store) Act(ctx context.Context, actor string, admin bool, in Input) (an
 			}
 			r := in.Rules
 			if r.Onboarding < 0 || r.Onboarding > 1000000 || r.Activation < 0 || r.Activation > 10000000 || r.Threshold < 10000 || r.Threshold > 100000000 || r.ShareBPS < 0 || r.ShareBPS > 5000 || r.ShareMonths < 1 || r.ShareMonths > 12 || r.InitialLimit < 1 || r.InitialLimit > 1000 {
-				return nil, errors.New("Reward settings are outside the allowed limits.")
+				return nil, errors.New("reward settings are outside the allowed limits")
 			}
 			tag, err := tx.Exec(ctx, `UPDATE app.dsa_program SET enabled=$1,onboarding_kobo=$2,activation_kobo=$3,threshold_kobo=$4,share_bps=$5,share_months=$6,initial_limit=$7,version=version+1 WHERE id=1 AND version=$8`, r.Enabled, r.Onboarding, r.Activation, r.Threshold, r.ShareBPS, r.ShareMonths, r.InitialLimit, r.Version)
 			e = err
 			if e == nil && tag.RowsAffected() != 1 {
-				return nil, errors.New("Programme settings changed. Refresh before saving.")
+				return nil, errors.New("programme settings changed; refresh before saving")
 			}
 		case "agent":
 			if in.Status != "active" && in.Status != "suspended" || in.Limit < 0 || in.Limit > 100000 {
-				return nil, errors.New("Choose a valid agent status and onboarding reward limit.")
+				return nil, errors.New("choose a valid agent status and onboarding reward limit")
 			}
 			tag, err := tx.Exec(ctx, `UPDATE app.dsa_agents SET status=$2,onboarding_limit=$3,version=version+1 WHERE user_id=$1::uuid AND version=$4`, in.ID, in.Status, in.Limit, in.Version)
 			e = err
 			if e == nil && tag.RowsAffected() != 1 {
-				return nil, errors.New("Agent details changed. Refresh before saving.")
+				return nil, errors.New("agent details changed; refresh before saving")
 			}
 		case "referral":
 			// Lock the agent before the referral, matching the reward and payout engine.
@@ -183,7 +183,7 @@ func (s *Store) Act(ctx context.Context, actor string, admin bool, in Input) (an
 			tag, err := tx.Exec(ctx, `UPDATE app.dsa_referrals SET blocked=$2,reason=$3,version=version+1 WHERE organization_id=$1::uuid AND version=$4`, in.ID, in.Blocked, in.Reason, in.Version)
 			e = err
 			if e == nil && tag.RowsAffected() != 1 {
-				return nil, errors.New("Referral changed. Refresh before saving.")
+				return nil, errors.New("referral changed; refresh before saving")
 			}
 			if e == nil {
 				e = s.refreshOne(ctx, tx, in.ID)
@@ -201,7 +201,7 @@ func (s *Store) Act(ctx context.Context, actor string, admin bool, in Input) (an
 		case "paid", "cancel":
 			e = s.finishPayout(ctx, tx, actor, in)
 		default:
-			return nil, errors.New("Choose a supported DSA action.")
+			return nil, errors.New("choose a supported DSA action")
 		}
 		if e == nil {
 			e = audit(ctx, tx, actor, "dsa."+in.Action, in.ID, map[string]any{"reason": in.Reason, "status": in.Status, "limit": in.Limit, "blocked": in.Blocked, "rules": in.Rules})

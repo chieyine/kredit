@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"kredit/internal/db"
 	"kredit/internal/reports"
+
+	"github.com/google/uuid"
 )
 
 func TestAuditEnterpriseUsesVisibleBranchTerritoryAndExactBalances(t *testing.T) {

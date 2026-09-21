@@ -45,16 +45,16 @@ func TestDebitRequiresActiveTokenAndKeepsExactAmount(t *testing.T) {
 			posts := 0
 			c := setup(t, func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == "GET" {
-					json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"reference": "vendor-ref", "narration": "Kredit bank permission local", "status": status, "token": "private-token", "currency": "NGN", "amount": 1000, "start_date": time.Now().Add(-time.Hour), "end_date": time.Now().Add(time.Hour)}})
+					_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": map[string]any{"reference": "vendor-ref", "narration": "Kredit bank permission local", "status": status, "token": "private-token", "currency": "NGN", "amount": 1000, "start_date": time.Now().Add(-time.Hour), "end_date": time.Now().Add(time.Hour)}})
 					return
 				}
 				posts++
 				var body map[string]any
-				json.NewDecoder(r.Body).Decode(&body)
+				_ = json.NewDecoder(r.Body).Decode(&body)
 				if body["amount"] != 123.45 || body["tx_ref"] != "saved-ref" || body["type"] != "account" {
 					t.Errorf("incorrect debit payload: %v", body)
 				}
-				w.Write([]byte(`{"status":"success","data":{"status":"successful"}}`))
+				_, _ = w.Write([]byte(`{"status":"success","data":{"status":"successful"}}`))
 			})
 			out, e := c.Submit(context.Background(), collections.Request{ExternalReference: "saved-ref", MandateReference: "local", AmountKobo: 12345, Currency: "NGN"})
 			if status == "APPROVED" {
@@ -84,7 +84,7 @@ func TestPaymentVerificationRejectsDifferentBankAndAmounts(t *testing.T) {
 				case "currency":
 					data["currency"] = "USD"
 				}
-				json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": data})
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": data})
 			})
 			out, e := c.GetByReference(context.Background(), collections.Request{ExternalReference: "saved-ref", MandateReference: "local", AmountKobo: 12345, Currency: "NGN"})
 			if field == "valid" {

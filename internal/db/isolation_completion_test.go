@@ -3,10 +3,11 @@ package db
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"os"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Each table has a real row. An empty result cannot accidentally make the
@@ -24,7 +25,7 @@ func TestRemainingTenantTablesRejectUnrelatedRuntimeIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	exec := func(sql string, args ...any) {
 		t.Helper()
 		if _, e := tx.Exec(t.Context(), sql, args...); e != nil {

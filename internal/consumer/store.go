@@ -5,8 +5,6 @@ import (
 	"crypto/hmac"
 	"encoding/json"
 	"errors"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"kredit/internal/access"
 	"kredit/internal/auth"
 	"kredit/internal/ledger"
@@ -14,13 +12,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Store struct{ Pool *pgxpool.Pool }
 
 func (s *Store) begin(ctx context.Context, actor, org string) (pgx.Tx, error) {
 	if s == nil || s.Pool == nil {
-		return nil, errors.New("Consumer purchases require the database.")
+		return nil, errors.New("consumer purchases require the database")
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -45,7 +46,7 @@ func (s *Store) Settings(ctx context.Context, actor, org string, in *Settings) (
 	if e != nil {
 		return Settings{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if e = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionPlatformOwner); e != nil {
 		return Settings{}, e
 	}
@@ -54,7 +55,7 @@ func (s *Store) Settings(ctx context.Context, actor, org string, in *Settings) (
 	}
 	if in != nil {
 		if len(strings.TrimSpace(in.Evidence)) < 20 || len(in.Evidence) > 2000 {
-			return Settings{}, errors.New("Record the reason for restricting this retailer or removing a restriction.")
+			return Settings{}, errors.New("record the reason for restricting this retailer or removing a restriction")
 		}
 		_, e = tx.Exec(ctx, `INSERT INTO app.consumer_restrictions(organization_id,blocked,reason,updated_by) VALUES($1::uuid,$2,$3,$4::uuid) ON CONFLICT(organization_id) DO UPDATE SET blocked=EXCLUDED.blocked,reason=EXCLUDED.reason,updated_by=EXCLUDED.updated_by,updated_at=now()`, org, !in.Enabled, in.Evidence, actor)
 		if e != nil {
@@ -80,13 +81,13 @@ func (s *Store) Settings(ctx context.Context, actor, org string, in *Settings) (
 // four digits alone never authorises a different receiving account.
 func (s *Store) ConnectBank(ctx context.Context, actor, org, key, account string) error {
 	if len(key) < 32 || !regexp.MustCompile(`^[0-9]{10}$`).MatchString(account) {
-		return errors.New("Enter the ten-digit receiving account already registered for your business.")
+		return errors.New("enter the ten-digit receiving account already registered for your business")
 	}
 	tx, e := s.begin(ctx, actor, org)
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('consumer-eligibility:'||$1,0))`, org); e != nil {
 		return e
 	}
@@ -114,7 +115,7 @@ func (s *Store) ConnectBank(ctx context.Context, actor, org, key, account string
 		return e
 	}
 	if matched == "" {
-		return errors.New("That account does not match your registered business bank account. Check your settlement settings.")
+		return errors.New("that account does not match your registered business bank account; check your settlement settings")
 	}
 	_, e = tx.Exec(ctx, `INSERT INTO app.consumer_settings(organization_id,enabled,bank_name,account_name,account_number,review_evidence,updated_by,registration_id) VALUES($1::uuid,true,$2,$3,$4,'Automatically matched to the original provider bank registration',$5::uuid,$6) ON CONFLICT(organization_id) DO UPDATE SET enabled=true,bank_name=EXCLUDED.bank_name,account_name=EXCLUDED.account_name,account_number=EXCLUDED.account_number,registration_id=EXCLUDED.registration_id,review_evidence=EXCLUDED.review_evidence,updated_by=EXCLUDED.updated_by,updated_at=now()`, org, bank, name, account, actor, matched)
 	if e != nil {
@@ -132,40 +133,41 @@ func sellerPermission(ctx context.Context, tx pgx.Tx, actor, org string, p acces
 	if e == nil && access.Can(role, p) {
 		return nil
 	}
-	return errors.New("Your current business role cannot perform this action.")
+	return errors.New("your current business role cannot perform this action")
 }
 func (s *Store) Create(ctx context.Context, actor, org string, in Input) (Sale, error) {
 	tx, e := s.begin(ctx, actor, org)
 	if e != nil {
 		return Sale{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var ready bool
 	if e = tx.QueryRow(ctx, `SELECT app.consumer_retailer_ready($1::uuid)`, org).Scan(&ready); e != nil || !ready {
-		return Sale{}, errors.New("Finish business onboarding and connect your registered receiving account. Consumer sales activate automatically unless a restriction applies.")
+		return Sale{}, errors.New("finish business onboarding and connect your registered receiving account; consumer sales activate automatically unless a restriction applies")
 	}
 	if e = sellerPermission(ctx, tx, actor, org, access.PermissionCreateCredit); e != nil {
 		return Sale{}, e
 	}
 	in.Target = auth.NormalizeIdentifier(in.Target)
-	if in.TargetType == "email" {
+	switch in.TargetType {
+	case "email":
 		if !regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`).MatchString(in.Target) {
-			return Sale{}, errors.New("Enter the customer's email.")
+			return Sale{}, errors.New("enter the customer's email")
 		}
-	} else if in.TargetType == "phone" {
+	case "phone":
 		if !regexp.MustCompile(`^\+234[789][01][0-9]{8}$`).MatchString(in.Target) {
-			return Sale{}, errors.New("Use the customer's WhatsApp number in +234 format.")
+			return Sale{}, errors.New("use the customer's WhatsApp number in +234 format")
 		}
-	} else {
-		return Sale{}, errors.New("Choose email or WhatsApp.")
+	default:
+		return Sale{}, errors.New("choose email or WhatsApp")
 	}
 	if len(in.Target) > 254 {
-		return Sale{}, errors.New("Customer contact is too long.")
+		return Sale{}, errors.New("customer contact is too long")
 	}
 	var enabled bool
 	e = tx.QueryRow(ctx, `SELECT c.enabled,c.bank_name,c.account_name,c.account_number,o.legal_name,o.business_address FROM app.consumer_settings c JOIN app.organizations o ON o.id=c.organization_id JOIN app.supplier_onboarding_profiles p ON p.organization_id=o.id WHERE c.organization_id=$1::uuid AND p.readiness_state='pilot_ready' AND p.kyb_state='approved' AND (p.kyb_expires_at IS NULL OR p.kyb_expires_at>now()) AND p.settlement_state='verified' AND p.billing_state='configured' FOR SHARE OF c,p`, org).Scan(&enabled, &in.Terms.BankName, &in.Terms.AccountName, &in.Terms.AccountNumber, &in.Terms.SellerName, &in.Terms.SellerAddress)
 	if e != nil || !enabled {
-		return Sale{}, errors.New("Finish business onboarding and connect your registered receiving account.")
+		return Sale{}, errors.New("finish business onboarding and connect your registered receiving account")
 	}
 	terms, hash, e := Prepare(in.Terms, time.Now())
 	if e != nil {
@@ -219,7 +221,7 @@ func (s *Store) Get(ctx context.Context, actor, org, id string, admin bool) (Sal
 	if e != nil {
 		return Sale{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	v, e := scan(tx.QueryRow(ctx, saleSelect+` WHERE id=$1::uuid`, id))
 	if e != nil {
 		return v, ErrUnavailable
@@ -253,7 +255,7 @@ func (s *Store) List(ctx context.Context, actor, org string, admin bool, before 
 	if e != nil {
 		return nil, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	query := saleSelect + ` WHERE (buyer_user_id=$1::uuid OR (buyer_user_id IS NULL AND app.consumer_contact_matches(target_type,target_value))) AND ($2='' OR id<NULLIF($2,'')::uuid) ORDER BY id DESC LIMIT 100`
 	args := []any{actor, before}
 	if admin {
@@ -299,7 +301,7 @@ func (s *Store) Act(ctx context.Context, actor, org, id string, admin bool, in A
 	if e != nil {
 		return Sale{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if admin {
 		if e = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionPlatformOwner); e != nil {
 			return Sale{}, e
@@ -338,7 +340,7 @@ func (s *Store) Act(ctx context.Context, actor, org, id string, admin bool, in A
 		return Sale{}, e
 	}
 	if v.Version != in.Version {
-		return Sale{}, errors.New("This purchase changed. Refresh it before continuing.")
+		return Sale{}, errors.New("this purchase changed; refresh it before continuing")
 	}
 	if e = history(ctx, tx, &v); e != nil {
 		return Sale{}, e
@@ -347,7 +349,7 @@ func (s *Store) Act(ctx context.Context, actor, org, id string, admin bool, in A
 		var ready bool
 		e = tx.QueryRow(ctx, `SELECT app.consumer_retailer_ready($1::uuid)`, v.OrganizationID).Scan(&ready)
 		if e != nil || !ready {
-			return Sale{}, errors.New("This retailer must finish its current verification before you accept. Existing payments and refunds remain available.")
+			return Sale{}, errors.New("this retailer must finish its current verification before you accept; existing payments and refunds remain available")
 		}
 	}
 	before := v
@@ -358,7 +360,7 @@ func (s *Store) Act(ctx context.Context, actor, org, id string, admin bool, in A
 	var eventID string
 	e = tx.QueryRow(ctx, `INSERT INTO app.consumer_events(sale_id,actor_id,action,amount_kobo,reference,related_id,note,occurred_at) VALUES($1::uuid,$2::uuid,$3,$4,$5,NULLIF($6,'')::uuid,$7,$8) RETURNING id::text,occurred_at,created_at`, id, actor, ev.Action, ev.Amount, ev.Reference, ev.RelatedID, ev.Note, ev.At).Scan(&eventID, &ev.At, &ev.RecordedAt)
 	if e != nil {
-		return Sale{}, errors.New("This payment reference or decision is already recorded, or could not be saved. Refresh before retrying.")
+		return Sale{}, errors.New("this payment reference or decision is already recorded, or could not be saved; refresh before retrying")
 	}
 	if e = ledger.NewPostgresStore(s.Pool).PostConsumerEventTx(ctx, tx, eventID, ev.Action, ledger.Money(ev.Amount), before.ReleasedAt != nil && before.State != "cancelled", ledger.Money(before.Terms.Total-before.Reduction), ledger.Money(before.Paid-before.Refunded), ev.At); e != nil {
 		return Sale{}, e

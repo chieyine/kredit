@@ -4,10 +4,11 @@ package audit
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"kredit/internal/db"
 	"os"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestPostgresActivityAllowsMissingRequestID(t *testing.T) {

@@ -16,7 +16,7 @@ func (s *Store) Pending(ctx context.Context, actor string) ([]mandates.Authoriza
 	if e != nil {
 		return nil, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if e = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionProviderOperations); e != nil {
 		return nil, e
 	}
@@ -45,7 +45,7 @@ func (s *Store) Review(ctx context.Context, actor, provider, ref string) (Enroll
 	if e != nil {
 		return Enrollment{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if e = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionProviderOperations); e != nil {
 		return Enrollment{}, e
 	}
@@ -77,7 +77,7 @@ func (s *Store) Resolve(ctx context.Context, actor string, v Enrollment, action 
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if e = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionProviderOperations); e != nil {
 		return e
 	}

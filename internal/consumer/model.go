@@ -97,7 +97,7 @@ type Action struct {
 	At        time.Time `json:"occurred_at"`
 }
 
-var ErrUnavailable = errors.New("This purchase is unavailable for your account.")
+var ErrUnavailable = errors.New("this purchase is unavailable for your account")
 
 func Prepare(t Terms, now time.Time) (Terms, string, error) {
 	fail := func(message string) (Terms, string, error) { return Terms{}, "", errors.New(message) }

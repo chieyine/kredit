@@ -143,7 +143,7 @@ Return ONLY a valid JSON object matching this schema:
 
 func (p *AIParser) ParseText(ctx context.Context, text string) (AIResult, error) {
 	if !p.Enabled() {
-		return AIResult{Intent: IntentUnknown, RawText: text}, errors.New("Gemini AI is not configured")
+		return AIResult{Intent: IntentUnknown, RawText: text}, errors.New("gemini AI is not configured")
 	}
 
 	reqBody := map[string]any{
@@ -164,7 +164,7 @@ func (p *AIParser) ParseText(ctx context.Context, text string) (AIResult, error)
 
 func (p *AIParser) ParseAudio(ctx context.Context, audioBytes []byte, mimeType string) (AIResult, error) {
 	if !p.Enabled() {
-		return AIResult{Intent: IntentUnknown}, errors.New("Gemini AI is not configured")
+		return AIResult{Intent: IntentUnknown}, errors.New("gemini AI is not configured")
 	}
 	if len(audioBytes) == 0 {
 		return AIResult{Intent: IntentUnknown}, errors.New("audio data is empty")

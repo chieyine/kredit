@@ -2,11 +2,12 @@ package web
 
 import (
 	"errors"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"kredit/internal/credit"
 	"kredit/internal/orders"
 	"net/http"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (s *Server) writeOrderProblem(w http.ResponseWriter, r *http.Request, err error) {

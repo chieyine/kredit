@@ -1,11 +1,12 @@
 package web
 
 import (
-	"github.com/google/uuid"
 	"kredit/internal/access"
 	"kredit/internal/consumer"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 func (s *Server) consumerSales(w http.ResponseWriter, r *http.Request) {

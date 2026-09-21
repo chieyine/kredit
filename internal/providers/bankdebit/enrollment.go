@@ -110,7 +110,7 @@ func (s *Store) Create(ctx context.Context, provider string, in mandates.Authori
 	if e != nil {
 		return mandates.Mandate{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	b, _ := json.Marshal(in)
 	_, e = tx.Exec(ctx, `INSERT INTO app.bank_debit_enrollments(provider,reference,user_id,input) VALUES($1,$2,$3::uuid,$4::jsonb)`, provider, in.Reference, in.UserID, b)
 	if e != nil {
@@ -133,7 +133,7 @@ func (s *Store) Load(ctx context.Context, provider, ref string) (Enrollment, err
 	if e != nil {
 		return Enrollment{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	v, e := s.read(ctx, tx, provider, ref, false)
 	if e != nil {
 		return v, e
@@ -185,7 +185,7 @@ func (s *Store) Begin(ctx context.Context, provider, ref, user string, d Details
 	if e != nil {
 		return Enrollment{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	v, e := s.read(ctx, tx, provider, ref, true)
 	if e != nil {
 		return v, e
@@ -215,7 +215,7 @@ func (s *Store) Confirm(ctx context.Context, v Enrollment, result Result) error 
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	b, _ := json.Marshal(result)
 	tag, e := tx.Exec(ctx, `UPDATE app.bank_debit_enrollments SET state='CONFIRMED',result=$3::jsonb,version=version+1,updated_at=now() WHERE provider=$1 AND reference=$2 AND state='STARTED' AND version=$4`, v.Provider, v.Reference, b, v.Version)
 	if e != nil {
@@ -233,7 +233,7 @@ func (s *Store) CancelDraft(ctx context.Context, v Enrollment) error {
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	tag, e := tx.Exec(ctx, `UPDATE app.bank_debit_enrollments SET state='CANCELLED',version=version+1,updated_at=now() WHERE provider=$1 AND reference=$2 AND state IN ('DRAFT','CANCELLED')`, v.Provider, v.Reference)
 	if e != nil {
 		return e

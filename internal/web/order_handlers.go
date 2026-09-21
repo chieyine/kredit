@@ -5,17 +5,18 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/orders"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Server) getOrdersService() orders.Service {
 	s.initDomainServices()
-	return s.domainServices.orders
+	return s.orders
 }
 
 type lineItemInput struct {

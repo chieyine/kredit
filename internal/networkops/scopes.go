@@ -27,7 +27,7 @@ func (s Store) ReadScopes(ctx context.Context, actor, org string) (ScopeDirector
 	if err != nil {
 		return out, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.memberships WHERE organization_id=$1::uuid AND user_id=$2::uuid AND role='owner' AND status='active')`, org, actor).Scan(&out.CanManage); err != nil {
 		return out, err
 	}
@@ -62,7 +62,7 @@ func (s Store) SaveScope(ctx context.Context, actor, org string, v Scope) (Scope
 	if err != nil {
 		return Scope{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var owner bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.memberships WHERE organization_id=$1::uuid AND user_id=$2::uuid AND role='owner' AND status='active')`, org, actor).Scan(&owner); err != nil {
 		return Scope{}, err

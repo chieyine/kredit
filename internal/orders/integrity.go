@@ -3,9 +3,10 @@ package orders
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"sort"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 var (

@@ -19,7 +19,7 @@ func paystackEmailLookup(database *db.Pool) paystack.EmailLookup {
 		if err != nil {
 			return "", err
 		}
-		defer tx.Rollback(ctx)
+		defer func() { _ = tx.Rollback(ctx) }()
 		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, user); err != nil {
 			return "", err
 		}

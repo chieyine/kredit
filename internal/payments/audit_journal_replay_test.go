@@ -3,7 +3,6 @@ package payments
 import (
 	"context"
 	"errors"
-	"fmt"
 	"kredit/internal/ledger"
 	"testing"
 	"time"
@@ -161,6 +160,6 @@ func TestAuditPaymentRejectsUnrelatedExistingJournalAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	if outstanding != 10000 || allocated != 0 || payments != 0 || outboxEvents != 0 {
-		t.Fatal(fmt.Sprintf("conflicting journal left partial financial state: outstanding=%d allocated=%d payments=%d events=%d", outstanding, allocated, payments, outboxEvents))
+		t.Fatalf("conflicting journal left partial financial state: outstanding=%d allocated=%d payments=%d events=%d", outstanding, allocated, payments, outboxEvents)
 	}
 }

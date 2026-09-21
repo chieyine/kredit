@@ -75,7 +75,7 @@ func (s Store) Read(ctx context.Context, user, org string) (Workspace, error) {
 	if err != nil {
 		return out, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	out.CanManage = manage
 	rows, err := tx.Query(ctx, `SELECT id::text,name,territory,active,version FROM app.business_branches WHERE organization_id=$1::uuid ORDER BY active DESC,name,id`, org)
 	if err != nil {
@@ -135,7 +135,7 @@ func (s Store) SaveBranch(ctx context.Context, user, org string, b Branch) (Bran
 	if err != nil {
 		return Branch{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var version int64
 	if b.Version == 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO app.business_branches(id,organization_id,name,territory,active,updated_by) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6::uuid) ON CONFLICT DO NOTHING RETURNING version`, b.ID, org, b.Name, b.Territory, b.Active, user).Scan(&version)
@@ -162,7 +162,7 @@ func (s Store) Assign(ctx context.Context, user, org string, p Partner) (Partner
 	if err != nil {
 		return Partner{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var version int64
 	if p.Version == 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO app.partner_assignments(organization_id,buyer_business_id,branch_id,manager_user_id,updated_by) VALUES($1::uuid,$2::uuid,NULLIF($3,'')::uuid,NULLIF($4,'')::uuid,$5::uuid) ON CONFLICT DO NOTHING RETURNING version`, org, p.BusinessID, p.BranchID, p.ManagerID, user).Scan(&version)
