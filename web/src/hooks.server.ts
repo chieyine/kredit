@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { Handle } from '@sveltejs/kit';
 import { assertLaunchWebConfig } from '$lib/server/legal-config';
+import { applyPageCachePolicy, isAccountPage } from '$lib/server/page-cache';
 import { ProxyBodyError, proxyHeaders, readProxyBody } from '$lib/server/proxy-body';
 
 assertLaunchWebConfig();
@@ -26,26 +27,23 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	if (!event.url.pathname.startsWith('/api/')) {
-		const protectedAccountRoute = /^\/(?:account|start|workspace|personal|admin|agents)(?:\/|$)/.test(event.url.pathname);
-		if (protectedAccountRoute && !event.cookies.get('kredit_session')) {
+		if (isAccountPage(event.url.pathname) && !event.cookies.get('kredit_session')) {
 			const next = `${event.url.pathname}${event.url.search}`;
-			return new Response(null, {
+			const response = new Response(null, {
 				status: 303,
 				headers: {
 					...SECURITY_HEADERS,
-					location: `/signin?next=${encodeURIComponent(next)}`,
-					'cache-control': 'private, no-store'
+					location: `/signin?next=${encodeURIComponent(next)}`
 				}
 			});
+			applyPageCachePolicy(event.url.pathname, response, event.request.method);
+			return response;
 		}
 		const response = await resolve(event);
 		for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
 			response.headers.set(name, value);
 		}
-		const privateRoute = /^\/(account|start|signin|workspace|personal|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(event.url.pathname);
-		if (!response.headers.has('cache-control')) response.headers.set('cache-control', privateRoute
-			? 'private, no-store'
-			: 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
+		applyPageCachePolicy(event.url.pathname, response, event.request.method, Boolean(event.cookies.get('kredit_session')));
 		return response;
 	}
 	const upstream = env.API_INTERNAL_URL ?? 'http://localhost:8080';
