@@ -2,14 +2,13 @@ package web
 
 import (
 	"errors"
+	"kredit/internal/access"
+	"kredit/internal/referrals"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
-
-	"kredit/internal/access"
-	"kredit/internal/referrals"
 )
 
 func (s *Server) dsa(w http.ResponseWriter, r *http.Request) {

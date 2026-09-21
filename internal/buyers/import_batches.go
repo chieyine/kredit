@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kredit/internal/access"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"kredit/internal/access"
 )
 
 var ErrImportInvalid = errors.New("invalid import roster")

@@ -6,9 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"kredit/internal/access"
 	"kredit/internal/db"
+
+	"github.com/jackc/pgx/v5"
 )
 
 var ErrTermsAuthority = errors.New("current terms import authority required")
