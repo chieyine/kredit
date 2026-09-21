@@ -5,13 +5,15 @@ package bankdebit
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"kredit/internal/mandates"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"kredit/internal/mandates"
 )
 
 // A disposable database verifies the real RLS policy and committed send fence.
@@ -76,17 +78,19 @@ func TestEnrollmentIsolationAndLateResponseFence(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = store.Confirm(ctx, first, Result{Reference: "old-provider-reference"}); e == nil {
+	// Provider references are globally unique. Isolate repeated test runs
+	// without weakening the production uniqueness constraint or deleting evidence.
+	if e = store.Confirm(ctx, first, Result{Reference: "old-provider-reference-" + ref}); e == nil {
 		t.Fatal("stale provider response overwrote the replacement request")
 	}
-	if e = store.Confirm(ctx, second, Result{Reference: "correct-provider-reference"}); e != nil {
+	if e = store.Confirm(ctx, second, Result{Reference: "correct-provider-reference-" + ref}); e != nil {
 		t.Fatal(e)
 	}
 	tx, e := store.tx(ctx, other)
 	if e != nil {
 		t.Fatal(e)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var count int
 	if e = tx.QueryRow(ctx, `SELECT count(*) FROM app.bank_debit_enrollments WHERE reference=$1`, ref).Scan(&count); e != nil {
 		t.Fatal(e)
