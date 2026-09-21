@@ -1,3 +1,4 @@
+const ACCOUNT_PAGE = /^\/(?:account|start|workspace|personal|admin|agents)(?:\/|$)/;
 const PRIVATE_PAGE = /^\/(?:account|start|signin|workspace|personal|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(?:\/|$)/;
 const PUBLIC_CACHE = 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400';
 const TARGETED_CACHE_HEADERS = [
@@ -6,6 +7,21 @@ const TARGETED_CACHE_HEADERS = [
 	'cloudflare-cdn-cache-control',
 	'surrogate-control'
 ] as const;
+
+function decodedPath(pathname: string): string | null {
+	try {
+		return decodeURIComponent(pathname);
+	} catch {
+		return null;
+	}
+}
+
+// This is only the preliminary page-navigation gate. The API must still
+// authenticate the session and enforce current tenant and operation authority.
+export function isAccountPage(pathname: string): boolean {
+	const path = decodedPath(pathname);
+	return path !== null && ACCOUNT_PAGE.test(path);
+}
 
 // Apply after resolving the page: an individual route must not make a private
 // response cacheable. Targeted CDN directives can take precedence over the
@@ -18,7 +34,9 @@ export function applyPageCachePolicy(
 	method: string,
 	hasSessionCookie = false
 ): void {
-	const privateResponse = PRIVATE_PAGE.test(pathname)
+	const path = decodedPath(pathname);
+	const privateResponse = path === null
+		|| PRIVATE_PAGE.test(path)
 		|| hasSessionCookie
 		|| response.status >= 400
 		|| (method !== 'GET' && method !== 'HEAD')
