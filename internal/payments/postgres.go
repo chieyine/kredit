@@ -199,7 +199,7 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 		return Payment{}, Allocation{}, err
 	}
 	if payment.CollectionFeeKobo > 0 {
-		if _, err := tx.Exec(ctx, `INSERT INTO app.fees (supplier_organization_id,obligation_id,payment_id,fee_type,basis_amount_kobo,rate_basis_points,amount_kobo,currency,state,accrued_at) VALUES ($1::uuid,$2::uuid,$3::uuid,'collection',$4,$8,$5,$6,'accrued',$7) ON CONFLICT (payment_id,fee_type) DO NOTHING`, payment.SupplierOrganizationID, payment.ObligationID, payment.ID, int64(payment.AmountKobo), collectionRate(snapshot.FeeTerms), int64(payment.CollectionFeeKobo), payment.Currency, paidAt); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO app.fees (supplier_organization_id,obligation_id,payment_id,fee_type,basis_amount_kobo,rate_basis_points,amount_kobo,currency,state,accrued_at) VALUES ($1::uuid,$2::uuid,$3::uuid,'collection',$4,$8,$5,$6,'accrued',$7) ON CONFLICT (payment_id,fee_type) DO NOTHING`, payment.SupplierOrganizationID, payment.ObligationID, payment.ID, int64(payment.AmountKobo), int64(payment.CollectionFeeKobo), payment.Currency, paidAt, collectionRate(snapshot.FeeTerms)); err != nil {
 			return Payment{}, Allocation{}, fmt.Errorf("insert collection fee: %w", err)
 		}
 		if err := postLedgerTx(ctx, tx, "collection_fee_accrued", payment.ID, "collection-fee:"+input.IdempotencyKey, paidAt,
@@ -493,7 +493,7 @@ func (s *PostgresStore) RebuildContext(ctx context.Context, obligationID string)
 	return expected, nil
 }
 
-const paymentSelect = `SELECT p.id::text,p.obligation_id::text,p.buyer_user_id::text,p.supplier_organization_id::text,p.source_type,p.amount_kobo,p.currency,COALESCE(p.provider,''),COALESCE(p.provider_reference,''),p.state,p.paid_at,p.recognized_at,p.recorded_by_reference,COALESCE(p.reversal_of::text,''),p.collection_fee_kobo FROM app.payments p`
+const paymentSelect = `SELECT p.id::text,p.obligation_id::text,p.buyer_user_id::text,p.supplier_organization_id::text,p.source_type,p.amount_kobo,currency,COALESCE(p.provider,''),COALESCE(p.provider_reference,''),p.state,p.paid_at,p.recognized_at,p.recorded_by_reference,COALESCE(p.reversal_of::text,''),p.collection_fee_kobo FROM app.payments p`
 
 type rowScanner interface{ Scan(...any) error }
 
