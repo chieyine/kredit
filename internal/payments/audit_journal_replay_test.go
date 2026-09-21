@@ -102,8 +102,8 @@ func TestAuditJournalReplayPostgresMatchesAllFields(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, event, reference, debit, credit string
-		at                                   time.Time
-		amount                               ledger.Money
+		at                                    time.Time
+		amount                                ledger.Money
 	}{
 		{"event", "payment_reversed", f.obligationID, ledger.AccountVoluntarySettlement, ledger.AccountTradeReceivable, at, 2500},
 		{"reference", "payment_recognized", f.requestID, ledger.AccountVoluntarySettlement, ledger.AccountTradeReceivable, at, 2500},

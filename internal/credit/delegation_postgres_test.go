@@ -2,14 +2,15 @@ package credit
 
 import (
 	"context"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
 	"kredit/internal/purchasing"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestStaffPurchasingPreservesActorLimitsAndReceipt(t *testing.T) {

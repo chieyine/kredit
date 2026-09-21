@@ -62,8 +62,13 @@ func TestEnrollmentAbsentStorageReturnsUnavailable(t *testing.T) {
 			}{
 				{name: "create", run: func() error { _, err := tc.store.Create(ctx, "synthetic", input); return err }},
 				{name: "load", run: func() error { _, err := tc.store.Load(ctx, "synthetic", input.Reference); return err }},
-				{name: "begin", run: func() error { _, err := tc.store.Begin(ctx, "synthetic", input.Reference, input.UserID, details); return err }},
-				{name: "confirm", run: func() error { return tc.store.Confirm(ctx, enrollment, Result{Reference: "synthetic-provider-reference"}) }},
+				{name: "begin", run: func() error {
+					_, err := tc.store.Begin(ctx, "synthetic", input.Reference, input.UserID, details)
+					return err
+				}},
+				{name: "confirm", run: func() error {
+					return tc.store.Confirm(ctx, enrollment, Result{Reference: "synthetic-provider-reference"})
+				}},
 				{name: "cancel draft", run: func() error { return tc.store.CancelDraft(ctx, enrollment) }},
 			}
 			for _, check := range checks {

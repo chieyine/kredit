@@ -3,8 +3,9 @@ package networkops
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"sort"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type Scope struct {

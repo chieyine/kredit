@@ -3,8 +3,6 @@ package credit
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
@@ -12,6 +10,9 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestBranchSalesBoundariesAndCurrentAssignments(t *testing.T) {
