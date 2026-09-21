@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Test evidence validation without provider secrets
         run: python3 -m unittest discover -s scripts -p 'test_provider_evidence.py' -v
       - name: Confirm pending template cannot pass certification checks
@@ -55,8 +55,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: .go-version
           cache: true
@@ -92,8 +92,8 @@ jobs:
       DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_phase4_test?sslmode=disable
       RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_phase4_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: .go-version
           cache: true
@@ -112,7 +112,7 @@ jobs:
           go test -tags=integration -count=1 -race -timeout 180s ./internal/providers/mono -run '^TestPhase4Persisted' -v | tee "$RUNNER_TEMP/phase4-persistence.log"
       - name: Preserve synthetic acceptance evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: phase4-provider-persistence-${{ github.sha }}
           path: ${{ runner.temp }}/phase4-persistence.log

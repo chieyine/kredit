@@ -1,0 +1,11 @@
+# References still pinned by mutable tag rather than commit SHA or image
+# digest. scripts/supply-chain-pin-check.sh fails on anything not listed
+# here, so the list can only shrink. Resolve commands are in that script.
+#
+# actions/checkout, actions/setup-go, actions/upload-artifact and
+# aquasecurity/setup-trivy are already pinned repo-wide and are absent below.
+action actions/setup-node@v4
+action pnpm/action-setup@v4
+image gcr.io/distroless/static-debian12:nonroot
+image golang:1.26.8-alpine
+image node:24.20.0-alpine

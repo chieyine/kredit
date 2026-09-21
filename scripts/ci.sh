@@ -26,6 +26,8 @@ go test -race ./internal/collections ./internal/credit ./internal/payments ./int
 # is missing. Calling it here is what makes .golangci.yml enforceable.
 bash scripts/lint.sh
 bash scripts/security.sh
+# A mutable action tag or image tag is not a pin; this ratchets the list down.
+bash scripts/supply-chain-pin-check.sh
 
 if [[ ! -d web/node_modules ]]; then
 	printf '%s\n' 'Frontend dependencies are not installed.' >&2

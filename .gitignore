@@ -44,3 +44,10 @@ test-results/
 # Production TLS material stays on the deployment host.
 infra/environments/certs/
 infra/environments/db-certs/
+
+# Terraform state carries secret material and is held in the remote backend.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+infra/environments/backend.hcl
