@@ -27,7 +27,7 @@ test('an interrupted backup-code rotation releases the button and reports uncert
   await page.getByRole('button', { name: 'Make new backup codes' }).click();
   await expect(page.getByRole('status')).toContainText('We could not confirm the result');
   await expect(page.getByRole('button', { name: 'Make new backup codes' })).toBeEnabled();
-  await expect(page.getByRole('heading', { name: 'Write these backup codes down now' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Write these backup codes down' })).toHaveCount(0);
 });
 
 test('admin team list failure is recoverable without claiming no administrators exist', async ({ page }) => {
@@ -85,6 +85,11 @@ for (const path of ['billing', 'settlement', 'credit-policy']) {
     await page.route('**/api/v1/organizations/org-a/onboarding', route => route.fulfill({json:{profile:{version:1},permissions:{billing:true,settlement:true,credit_policy:true}}}));
     await page.route('**/api/v1/organizations/org-a/onboarding/settlement/banks', route => route.fulfill({json:{banks:[{code:'001',name:'Synthetic bank'}]}}));
     await page.route('**/api/v1/organizations/org-a/seller-settlements', route => route.fulfill({json:{settlements:[]}}));
+    if (path === 'billing') {
+      // Billing also mounts these independent read surfaces after onboarding recovers.
+      await page.route('**/api/v1/organizations/org-a/fee-operations', route => route.fulfill({ json: { banks: [], debits: [] } }));
+      await page.route('**/api/v1/organizations/org-a/fee-invoices', route => route.fulfill({ json: { invoices: [] } }));
+    }
     await page.goto(`/workspace/settings/${path}`);
     await expect(page.getByRole('alert')).toBeVisible();
     await expect(page.getByText(/only the owner/)).toHaveCount(0);
