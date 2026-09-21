@@ -72,7 +72,6 @@ var RequiredPersistenceObjects = []string{
 	"app.drawdown_reservations",
 	"app.collection_reservations",
 	"app.collection_attempts",
-	"app.settlement_events",
 	"app.collection_events",
 	"app.provider_customer_bindings",
 	"app.collection_aggregate_snapshots",
