@@ -3,19 +3,61 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"kredit/internal/notifications"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
+func purchaseNoticeLabel(action string) (string, error) {
+	switch action {
+	case "accept":
+		return "Purchase accepted", nil
+	case "decline":
+		return "Customer declined the purchase", nil
+	case "claim":
+		return "Payment reported; awaiting retailer confirmation", nil
+	case "payment":
+		return "Payment confirmed by the retailer", nil
+	case "reject_claim":
+		return "Payment report reviewed", nil
+	case "reverse_payment":
+		return "Payment record reversed", nil
+	case "release":
+		return "Delivery recorded; customer confirmation needed", nil
+	case "received":
+		return "Customer confirmed receipt", nil
+	case "cancel":
+		return "Purchase cancelled; check any refund due", nil
+	case "request_return":
+		return "Return or delivery issue opened", nil
+	case "approve_return":
+		return "Return approved; check the refund due", nil
+	case "reject_return":
+		return "Return request declined; review the reason or escalate", nil
+	case "escalate":
+		return "Return escalated to super admin", nil
+	case "reduce_price":
+		return "Purchase price reduced", nil
+	case "refund":
+		return "Refund recorded by the retailer", nil
+	default:
+		return "", errors.New("unsupported consumer notification action")
+	}
+}
+
 func notice(ctx context.Context, tx pgx.Tx, s Sale, eventID, action string) error {
-	labels := map[string]string{"accept": "Purchase accepted", "claim": "Payment reported; awaiting retailer confirmation", "payment": "Payment confirmed by the retailer", "reject_claim": "Payment report reviewed", "reverse_payment": "Payment record reversed", "release": "Delivery recorded; customer confirmation needed", "received": "Customer confirmed receipt", "cancel": "Purchase cancelled; check any refund due", "request_return": "Return or delivery issue opened", "approve_return": "Return approved; check the refund due", "reject_return": "Return request declined; review the reason or escalate", "escalate": "Return escalated to super admin", "reduce_price": "Purchase price reduced", "refund": "Refund recorded by the retailer"}
+	label, err := purchaseNoticeLabel(action)
+	if err != nil {
+		return err
+	}
 	for _, buyer := range []bool{true, false} {
 		if buyer && s.BuyerID == "" {
 			continue
 		}
-		event := notifications.Event{ID: fmt.Sprintf("consumer:%s:%t", eventID, buyer), Type: "ConsumerPurchaseUpdated", Priority: notifications.PriorityCritical, Reference: s.Terms.Item, NextAction: labels[action], Currency: "NGN"}
+		event := notifications.Event{ID: fmt.Sprintf("consumer:%s:%t", eventID, buyer), Type: "ConsumerPurchaseUpdated", Priority: notifications.PriorityCritical, Reference: s.Terms.Item, NextAction: label, Currency: "NGN"}
 		if buyer {
 			event.RecipientID = s.BuyerID
 			event.SecurePath = "/personal/purchases/" + s.ID
@@ -36,6 +78,9 @@ func notice(ctx context.Context, tx pgx.Tx, s Sale, eventID, action string) erro
 
 // EnqueueReminders uses the same durable notification queue as other sales.
 func (s *Store) EnqueueReminders(ctx context.Context) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("consumer notification storage is unavailable")
+	}
 	rows, err := s.Pool.Query(ctx, `SELECT sale_id::text,organization_id::text,buyer_user_id::text FROM app.consumer_reminder_work()`)
 	if err != nil {
 		return err
@@ -67,7 +112,8 @@ func (s *Store) enqueueDue(ctx context.Context, id, org, buyer string) error {
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	// Preserve the primary operation or commit error during best-effort cleanup.
+	defer func() { _ = tx.Rollback(ctx) }()
 	v, e := scan(tx.QueryRow(ctx, saleSelect+` WHERE id=$1::uuid`, id))
 	if e != nil {
 		return e
@@ -81,7 +127,10 @@ func (s *Store) enqueueDue(ctx context.Context, id, org, buyer string) error {
 		return nil
 	}
 	ev := notifications.Event{ID: "consumer-due:" + id + ":" + today, Type: "ConsumerPaymentDue", RecipientID: buyer, Priority: notifications.PriorityRoutine, AmountKobo: due, Currency: "NGN", Reference: v.Terms.Item, NextAction: "Pay the retailer or report a payment already made.", SecurePath: "/personal/purchases/" + id}
-	raw, _ := json.Marshal(map[string]any{"notification": ev})
+	raw, e := json.Marshal(map[string]any{"notification": ev})
+	if e != nil {
+		return e
+	}
 	_, e = tx.Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) VALUES('consumer_sale',$1,'notification.requested',$2::jsonb,$3) ON CONFLICT(idempotency_key) DO NOTHING`, id, raw, ev.ID)
 	if e != nil {
 		return e
