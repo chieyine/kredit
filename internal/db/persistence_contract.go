@@ -51,8 +51,8 @@ var RequiredPersistenceObjects = []string{
 	"app.credit_aggregate_snapshots",
 	"app.agreement_versions",
 	"app.agreement_acceptances",
-	"app.mandates",
 	"app.payment_mandates",
+	"app.mandates",
 	"app.mandate_events",
 	"app.goods_releases",
 	"app.receipt_confirmations",
@@ -108,9 +108,10 @@ var RequiredPersistenceObjects = []string{
 }
 
 // RequiredPersistenceFunctions are versioned SQL capabilities used by the
-// PostgreSQL authentication adapter. A complete table set without these
-// functions would still fail at runtime.
+// PostgreSQL adapters. A complete table set without these functions would still
+// fail at runtime.
 var RequiredPersistenceFunctions = []string{
+	"app.lock_buyer_payment_claim(uuid)",
 	"app.order_supplier_authorized(uuid,text[])", "app.order_evidence_visible(uuid)",
 	"app.apply_order_shipment_item()", "app.complete_order_receipt()",
 	"app.guard_order_credit_note()", "app.guard_terms_import_review()", "app.guard_terms_import_row()",
@@ -234,7 +235,7 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	// that lags lets a partially migrated database pass startup and serve
 	// traffic: at 167 it was 32 versions behind, which included the branch
 	// row-level security added in 189.
-	const requiredMigration = 202
+	const requiredMigration = 203
 	if version < requiredMigration {
 		return fmt.Errorf("database migrations are incomplete: version %d, require at least %d", version, requiredMigration)
 	}

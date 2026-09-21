@@ -18,9 +18,8 @@ import (
 	"kredit/internal/schedules"
 )
 
-// This is an actual restricted-role database regression. The fixture writer
-// uses the isolated integration database, but both claim confirmation and its
-// payment journal run as kredit_app. No bank or production service is called.
+// All claim operations use kredit_app in a disposable PostgreSQL database.
+// Only fixture creation and independent accounting assertions use the admin.
 func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 	if os.Getenv("KREDIT_INTEGRATION") != "1" || os.Getenv("DATABASE_URL") == "" {
 		t.Skip("integration database required")
@@ -46,8 +45,6 @@ func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A random business UUID is not a purchasing identity. Exercise the current
-	// branch/purchasing policies with a real buying workspace and active owner.
 	if err := admin.QueryRow(ctx, `INSERT INTO app.organizations(legal_name,business_type,business_address,industry) VALUES($1,'limited_company','Synthetic address','Test') RETURNING id::text`, prefix+"-buyer").Scan(&buyerOrg); err != nil {
 		t.Fatal(err)
 	}
@@ -99,10 +96,56 @@ func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 	if err := probe.QueryRow(ctx, `SELECT app.can_purchase($1::uuid),EXISTS(SELECT 1 FROM app.obligations WHERE id=$2::uuid)`, business, obligation).Scan(&canRead, &visible); err != nil || !canRead || !visible {
 		t.Fatalf("buyer fixture lacks current purchasing/read authority: permission=%t visible=%t error=%v", canRead, visible, err)
 	}
+	// Fixing the locking path must not let buyers directly rewrite debt.
+	if tag, err := probe.Exec(ctx, `UPDATE app.obligations SET outstanding_kobo=0 WHERE id=$1::uuid`, obligation); err != nil || tag.RowsAffected() != 0 {
+		t.Fatalf("buyer debt-update boundary changed: rows=%d error=%v", tag.RowsAffected(), err)
+	}
 	if err := probe.Rollback(ctx); err != nil {
 		t.Fatal(err)
 	}
-	claim, err := claims.Create(buyerContext, CreateInput{ObligationID: obligation, BuyerUserID: buyer, AmountKobo: 2500, PaidAt: time.Now().UTC(), TransferReference: prefix + "-bank", IdempotencyKey: prefix + "-claim"})
+	var workerAccess bool
+	if err := admin.QueryRow(ctx, `SELECT has_function_privilege('kredit_worker','app.lock_buyer_payment_claim(uuid)','EXECUTE')`).Scan(&workerAccess); err != nil || workerAccess {
+		t.Fatalf("worker can execute buyer claim capability: allowed=%t error=%v", workerAccess, err)
+	}
+	input := CreateInput{ObligationID: obligation, BuyerUserID: buyer, AmountKobo: 2500, PaidAt: time.Now().UTC(), TransferReference: prefix + "-bank", IdempotencyKey: prefix + "-claim"}
+	for _, tc := range []struct {
+		actor string
+		buyer string
+	}{
+		{otherReviewer, otherReviewer},
+		{otherReviewer, buyer},
+	} {
+		wrong := input
+		wrong.BuyerUserID = tc.buyer
+		wrong.IdempotencyKey += "-unauthorized-" + tc.buyer
+		if _, err := claims.Create(db.WithTenantContext(ctx, tc.actor, ""), wrong); err == nil {
+			t.Fatal("claim accepted for a different buyer or a spoofed actor")
+		}
+	}
+	// An already locked obligation must block creation, not merely a concurrent
+	// payment update. Cancellation must leave no claim or hold behind.
+	lock, err := admin.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Rollback(ctx) }()
+	if _, err := lock.Exec(ctx, `SELECT id FROM app.obligations WHERE id=$1::uuid FOR UPDATE`, obligation); err != nil {
+		t.Fatal(err)
+	}
+	blockedContext, cancel := context.WithTimeout(buyerContext, 150*time.Millisecond)
+	_, blockedErr := claims.Create(blockedContext, input)
+	cancel()
+	if err := lock.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(blockedErr, context.DeadlineExceeded) {
+		t.Fatalf("claim did not wait for the common obligation lock: %v", blockedErr)
+	}
+	var claimCount int
+	if err := admin.QueryRow(ctx, `SELECT count(*) FROM app.payment_claims WHERE obligation_id=$1::uuid`, obligation).Scan(&claimCount); err != nil || claimCount != 0 {
+		t.Fatalf("failed creation left a claim: count=%d error=%v", claimCount, err)
+	}
+	claim, err := claims.Create(buyerContext, input)
 	if err != nil {
 		t.Fatalf("create claim for authorized buyer: %v", err)
 	}
@@ -150,6 +193,12 @@ func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 	if outstanding != 7500 || allocated != 2500 || paymentCount != 1 || journalCount != 1 {
 		t.Fatalf("replay changed financial state: outstanding=%d allocated=%d payments=%d journals=%d", outstanding, allocated, paymentCount, journalCount)
 	}
-	// Keep append-only synthetic evidence in the disposable database. Do not
-	// disable immutable-history triggers merely to clean up a test fixture.
+	if _, err := admin.Exec(ctx, `UPDATE app.memberships SET status='removed' WHERE organization_id=$1::uuid AND user_id=$2::uuid`, buyerOrg, buyer); err != nil {
+		t.Fatal(err)
+	}
+	input.IdempotencyKey += "-revoked"
+	if _, err := claims.Create(buyerContext, input); err == nil {
+		t.Fatal("removed purchasing owner created another claim")
+	}
+	// Preserve append-only synthetic evidence in this disposable database.
 }
