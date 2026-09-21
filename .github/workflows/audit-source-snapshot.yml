@@ -13,13 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 1b21ed01cdf21004278ca5d409a669696eeb921b
+          ref: 8e2cbcc74ed813e6287cb5d80d0015c8cc946a63
           persist-credentials: false
       - name: Archive tracked source without Git credentials
         run: git archive --format=tar.gz --output="$RUNNER_TEMP/kredit-source.tar.gz" HEAD
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: audit-source-1b21ed0
+          name: audit-source-8e2cbcc
           path: ${{ runner.temp }}/kredit-source.tar.gz
           retention-days: 1
           if-no-files-found: error
