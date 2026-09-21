@@ -228,11 +228,16 @@ func (p *AIParser) callGemini(ctx context.Context, payload map[string]any) (AIRe
 	if err != nil {
 		return AIResult{Intent: IntentUnknown}, fmt.Errorf("gemini api call failed: %w", err)
 	}
-	defer resp.Body.Close()
+	// The complete body read determines the result; closing only releases the response.
+	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		return AIResult{Intent: IntentUnknown}, fmt.Errorf("read gemini response: %w", err)
+	}
+
+	if len(body) > 1<<20 {
+		return AIResult{Intent: IntentUnknown}, errors.New("gemini response exceeds the size limit")
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

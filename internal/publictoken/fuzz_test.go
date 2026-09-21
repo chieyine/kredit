@@ -1,6 +1,8 @@
 package publictoken
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -25,7 +27,18 @@ func FuzzTokenReferenceParsing(f *testing.F) {
 		}
 		issued, err := Issue("token-key", purpose, id, now.Add(time.Hour))
 		if err != nil {
-			t.Fatalf("issuing a token with a valid purpose and id failed: %v", err)
+			// Only a genuinely oversized reference may fail for these inputs.
+			body, marshalErr := json.Marshal(payload{Purpose: purpose, ID: id, Expires: now.Add(time.Hour).Unix()})
+			if marshalErr != nil {
+				t.Fatal(marshalErr)
+			}
+			if base64.RawURLEncoding.EncodedLen(len(body))+1+43 <= maxTokenBytes {
+				t.Fatalf("valid bounded reference failed issuance: %v", err)
+			}
+			if issued != "" {
+				t.Fatal("failed issuance returned a usable token")
+			}
+			return
 		}
 		resolved, err := Parse("token-key", issued, purpose, now)
 		if err != nil || resolved != id {

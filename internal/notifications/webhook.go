@@ -69,9 +69,12 @@ func (p *WebhookProvider) Send(ctx context.Context, message Message) (string, er
 		return "", errors.New("notification connector request failed")
 	}
 	defer func() { _ = response.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+	body, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
 	if err != nil {
 		return "", err
+	}
+	if len(body) > 64<<10 {
+		return "", errors.New("notification connector response exceeds the size limit")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return "", fmt.Errorf("notification connector returned status %d", response.StatusCode)
