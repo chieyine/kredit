@@ -5,10 +5,12 @@ package networkops
 import (
 	"context"
 	"errors"
+	"kredit/internal/access"
+	"kredit/internal/db"
+	"strings"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"kredit/internal/access"
-	"strings"
 )
 
 var ErrConflict = errors.New("network record changed")
@@ -51,22 +53,19 @@ func (s Store) begin(ctx context.Context, user, org string, write bool) (pgx.Tx,
 		return nil, false, err
 	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, user, org); err != nil {
-		tx.Rollback(ctx)
-		return nil, false, err
+		return nil, false, db.RollbackFailure(ctx, tx, err)
 	}
 	var role access.Role
 	err = tx.QueryRow(ctx, `SELECT m.role FROM app.memberships m JOIN app.users u ON u.id=m.user_id JOIN app.organizations o ON o.id=m.organization_id WHERE m.organization_id=$1::uuid AND m.user_id=$2::uuid AND m.status='active' AND u.status='active' AND o.status<>'suspended' FOR SHARE OF m,u,o`, org, user).Scan(&role)
 	manage := role == access.RoleOwner || role == access.RoleAdministrator
 	if err != nil {
-		tx.Rollback(ctx)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, false, ErrAuthority
+			err = ErrAuthority
 		}
-		return nil, false, err
+		return nil, false, db.RollbackFailure(ctx, tx, err)
 	}
 	if write && !manage {
-		tx.Rollback(ctx)
-		return nil, false, ErrAuthority
+		return nil, false, db.RollbackFailure(ctx, tx, ErrAuthority)
 	}
 	return tx, manage, nil
 }
