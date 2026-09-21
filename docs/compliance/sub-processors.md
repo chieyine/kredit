@@ -6,8 +6,9 @@ and the basis on which it does so.
 `docs/compliance/data-inventory.tsv` covers data **at rest**, column by column, and
 `scripts/data-inventory-check.sh` proves it matches the live schema. It cannot see
 data **in transit** to a third party, because a new outbound call adds no column.
-This register closes that gap, and `scripts/sub-processor-check.sh` fails the build
-when Go source references a production host that is not listed here.
+This register closes that gap, and `scripts/sub-processor-check.sh` checks HTTPS
+references in production Go source. Test files are excluded, host case is
+normalized, and dynamically configured destinations still need manual review.
 
 A row here records where a decision lives; it is not the decision. Adding a host to
 this file does not create a lawful basis for the transfer.
@@ -17,7 +18,7 @@ this file does not create a lawful basis for the transfer.
 | `api.withmono.com` | Mono | Bank authorisation, direct debit, identity lookup | Customer reference, BVN or NIN-linked phone for verification, mandate and debit amounts, transaction references | `FEATURE_REAL_COLLECTIONS`, `MONO_SWEEP_ENABLED`, `FEATURE_REAL_IDENTITY` | Nigerian processor; data remains in Nigeria. Contracted under the Mono agreement referenced by `PROVIDER_CERTIFICATION_REFERENCE`. |
 | `authorise.mono.co` | Mono | Hosted bank-authorisation page the buyer is redirected to | Buyer completes authorisation directly with Mono; Kredit sends only the mandate reference | `FEATURE_REAL_COLLECTIONS` | As above. The host is pinned in `internal/providers/mono/hosted_url.go`. |
 | `api.paystack.co` | Paystack | Bank authorization, tokenized recurring debits, transaction verification | Customer reference, email, account details for authorization, transaction amounts in kobo | `COLLECTION_ADAPTER=paystack` | Nigerian processor; data remains in Nigeria. Contracted under Paystack merchant terms. |
-| `link.paystack.com` | Paystack | Hosted bank authorization and mandate enrollment page | Buyer completes bank authorization directly with Paystack | `COLLECTION_ADAPTER=paystack` | As above. Pinned in Paystack authorization redirect flow. |
+| `link.paystack.com`, `link.paystack.co`, `checkout.paystack.com` | Paystack | Hosted bank authorization and mandate enrollment page | Buyer completes bank authorization directly with Paystack | `COLLECTION_ADAPTER=paystack` | Same Paystack integration. Actual processing locations and applicable contract/transfer evidence require deployment-owner verification; the redirect validation tests do not certify these arrangements. |
 | `api.flutterwave.com` | Flutterwave | Bank debit initiation, reference-based verification, webhooks | Customer reference, bank details, mandate amounts, debit references | `COLLECTION_ADAPTER=flutterwave` | Nigerian processor; data remains in Nigeria. Contracted under Flutterwave merchant terms. |
 | `api.monnify.com` | Monnify | Bank direct debit mandates and collections | Customer reference, bank account details, mandate amounts and schedules | `COLLECTION_ADAPTER=monnify` | Nigerian processor; data remains in Nigeria. Contracted under Monnify merchant terms. |
 | `sandbox.monnify.com` | Monnify | Direct debit mandate and collection sandbox testing | Test account references and test amounts | `COLLECTION_ADAPTER=monnify` | Non-production sandbox environment. |
@@ -45,6 +46,9 @@ to a general-purpose model provider, so it carries the tightest controls:
 
 ## Hosts that are not sub-processors
 
-`opentelemetry.io` and `docs.mono.co` appear in source as documentation links.
-`*.kredit.ng` are Kredit's own services. `*.example`, `*.test` and `*.invalid`
-hosts appear only in tests and fixtures. The check script ignores all of these.
+`opentelemetry.io`, `docs.mono.co`, `developer.flutterwave.com` and `paystack.com`
+appear as documentation references. `*.kredit.ng` are Kredit's own services.
+Reserved example/test/invalid domains are not production processors. Negative
+URLs in `*_test.go` are exercised by local test transports, not registered as
+real processors. The static check does not infer destinations from host suffix
+allowlists, environment settings or runtime provider responses.

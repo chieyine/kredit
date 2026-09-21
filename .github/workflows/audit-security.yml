@@ -28,6 +28,8 @@ jobs:
           printf '%s\n' "$RUNNER_TEMP/audit-security-bin" >> "$GITHUB_PATH"
           git rev-parse HEAD > "$RUNNER_TEMP/audit-security/source-commit.txt"
           bash scripts/security-exit-test.sh
+          bash scripts/sub-processor-check-test.sh
+          bash scripts/sub-processor-check.sh
       - name: Install pinned Go vulnerability scanner
         if: ${{ !cancelled() }}
         working-directory: ${{ runner.temp }}
@@ -67,6 +69,11 @@ jobs:
         with:
           version: v0.74.0
           cache: true
+      - name: Verify exact historical fixture exceptions with the real scanner
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          bash scripts/trivy-fixture-test.sh 2>&1 | tee "$RUNNER_TEMP/audit-security/trivy-fixtures.log"
       - name: Fail on detected filesystem security findings
         if: ${{ !cancelled() }}
         run: |
