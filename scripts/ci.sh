@@ -46,4 +46,5 @@ if [[ -n "${DATABASE_URL:-}" ]]; then
 	bash scripts/test-integration.sh
 	bash scripts/data-inventory-check.sh
 	bash scripts/rls-policy-shape-check.sh
+	bash scripts/db-grant-check.sh
 fi
