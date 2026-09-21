@@ -1,0 +1,25 @@
+name: Audit source snapshot (temporary)
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-source-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: github.repository == 'chieyine/kredit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: d7c780671a09592b9e8cee3fdc48e99fd965ae0d
+          persist-credentials: false
+      - name: Archive tracked source without Git credentials
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/kredit-source.tar.gz" HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: audit-source-d7c7806
+          path: ${{ runner.temp }}/kredit-source.tar.gz
+          retention-days: 1
+          if-no-files-found: error
