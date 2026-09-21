@@ -20,6 +20,7 @@ import (
 	"kredit/internal/collections"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
+	"kredit/internal/platform/httpjson"
 )
 
 type EmailLookup func(context.Context, string) (string, error)
@@ -64,7 +65,8 @@ func (c *Client) call(ctx context.Context, method, path string, in, out any) err
 	if e != nil {
 		return errors.New("Paystack request outcome could not be confirmed")
 	}
-	defer res.Body.Close()
+	// The complete response read is checked below; Close only releases it.
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return fmt.Errorf("Paystack returned HTTP %d; reconcile before retrying", res.StatusCode)
 	}
@@ -72,7 +74,7 @@ func (c *Client) call(ctx context.Context, method, path string, in, out any) err
 		Status bool            `json:"status"`
 		Data   json.RawMessage `json:"data"`
 	}
-	if e = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); e != nil {
+	if e = httpjson.Decode(res.Body, 1<<20, &envelope); e != nil {
 		return errors.New("Paystack response was invalid")
 	}
 	if !envelope.Status {
@@ -100,10 +102,21 @@ func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.Aut
 		return mandates.Mandate{}, e
 	}
 	u, e := url.Parse(data.RedirectURL)
-	if e != nil || u.Scheme != "https" || u.User != nil || (u.Hostname() != "paystack.com" && !strings.HasSuffix(u.Hostname(), ".paystack.com")) || data.Reference == "" {
+	if e != nil || !hostedAuthorizationURL(u) || data.Reference == "" {
 		return mandates.Mandate{}, errors.New("Paystack returned invalid authorization details")
 	}
 	return mandates.Mandate{ProviderAdapter: "paystack", Provider: c.name, ProviderID: data.Reference, Reference: in.Reference, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, Variable: true, AuthorizationURL: data.RedirectURL}, nil
+}
+
+// Hosted authorization URLs use .com checkout hosts and the .co link host
+// documented at https://paystack.com/docs/payments/direct-debit/.
+// Do not generalize the .co exception to arbitrary hosts or alternate ports.
+func hostedAuthorizationURL(u *url.URL) bool {
+	if u == nil || u.Scheme != "https" || u.User != nil || (u.Port() != "" && u.Port() != "443") {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "link.paystack.co" || host == "paystack.com" || strings.HasSuffix(host, ".paystack.com")
 }
 
 type authorization struct {

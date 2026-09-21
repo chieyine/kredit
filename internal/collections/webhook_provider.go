@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"kredit/internal/platform/httpjson"
 )
 
 // WebhookProvider is the certified-provider connector boundary. Vendor SDKs
@@ -104,5 +106,5 @@ func (p *WebhookProvider) request(ctx context.Context, method, path string, inpu
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		return fmt.Errorf("collection connector returned status %d", response.StatusCode)
 	}
-	return json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(output)
+	return httpjson.Decode(response.Body, 1<<20, output)
 }

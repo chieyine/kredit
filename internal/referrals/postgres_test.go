@@ -2,6 +2,7 @@ package referrals
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
@@ -105,8 +106,42 @@ func TestDSAPermissionsRewardsAndPayouts(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(view["referrals"].([]map[string]any)) != 0 {
-		t.Fatal("cross-agent disclosure")
+	// Assert the public JSON boundary, not its private representation in Go.
+	encodedView, err := json.Marshal(view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var publicView struct {
+		Referrals []json.RawMessage `json:"referrals"`
+	}
+	if err := json.Unmarshal(encodedView, &publicView); err != nil {
+		t.Fatal(err)
+	}
+	if publicView.Referrals == nil || len(publicView.Referrals) != 0 {
+		t.Fatal("cross-agent disclosure or missing referral array")
+	}
+	// PostgreSQL bigint versions must survive the complete Read -> JSON path.
+	const largeVersion = int64(9007199254740993)
+	exec(`UPDATE app.dsa_referrals SET version=$2 WHERE organization_id=$1::uuid`, org, largeVersion)
+	agentView, err := s.Read(ctx, agent, false, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedView, err = json.Marshal(agentView)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exactView struct {
+		Referrals []struct {
+			OrganizationID string `json:"organization_id"`
+			Version        int64  `json:"version"`
+		} `json:"referrals"`
+	}
+	if err := json.Unmarshal(encodedView, &exactView); err != nil {
+		t.Fatal(err)
+	}
+	if len(exactView.Referrals) != 1 || exactView.Referrals[0].OrganizationID != org || exactView.Referrals[0].Version != largeVersion {
+		t.Fatal("referral identity or exact version changed in the JSON response")
 	}
 	if _, e = s.Act(ctx, agent, true, Input{Action: "prepare", ID: agent, Reason: "Synthetic unauthorized payout"}); e == nil {
 		t.Fatal("agent created own payout")
@@ -192,7 +227,7 @@ func TestDSAPermissionsRewardsAndPayouts(t *testing.T) {
 	if _, e = tx.Exec(ctx, `UPDATE app.dsa_earnings SET amount_kobo=999999 WHERE agent_id=$1::uuid`, agent); e == nil {
 		t.Fatal("immutable reward edited")
 	}
-	tx.Rollback(ctx)
+	_ = tx.Rollback(ctx) // The deliberately rejected write already aborted this transaction.
 
 	// Provider confirmation is not bank cash; only independently received fees qualify.
 	authID := uuid.NewString()

@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"kredit/internal/platform/httpjson"
 )
 
 // WebhookProvider delegates mandate creation and lookup to the approved
@@ -125,5 +127,5 @@ func (p *WebhookProvider) request(ctx context.Context, method, path string, inpu
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		return fmt.Errorf("mandate connector returned status %d", response.StatusCode)
 	}
-	return json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(output)
+	return httpjson.Decode(response.Body, 1<<20, output)
 }

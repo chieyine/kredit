@@ -18,5 +18,29 @@ test('private and directly shared routes stay out of public discovery', () => {
 
 test('investor presentation is not indexable', async ({ page }) => {
  await page.goto('/deck/investor');
+ await expect(page.locator('meta[name="robots"]')).toHaveCount(1);
  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
+});
+
+
+test('invalid fractional slide references never hide every slide', async ({ page }) => {
+ await page.goto('/deck/investor#1.5');
+ await expect(page.locator('.slide.current')).toHaveCount(1);
+ await expect(page.locator('.slide').first()).toBeVisible();
+ await page.evaluate(() => { location.hash = '2.5'; });
+ await expect(page.locator('.slide').first()).toBeVisible();
+ await page.evaluate(() => { location.hash = '2'; });
+ await expect(page.locator('.slide').nth(1)).toBeVisible();
+});
+
+test('focused deck controls keep native keyboard activation', async ({ page }) => {
+ await page.goto('/deck/investor');
+ const next = page.getByRole('button', { name: 'Next slide', exact: true });
+ await next.focus();
+ await next.press('Space');
+ await expect(page.locator('.slide').nth(1)).toBeVisible();
+ const previous = page.getByRole('button', { name: 'Previous slide', exact: true });
+ await previous.focus();
+ await previous.press('Space');
+ await expect(page.locator('.slide').first()).toBeVisible();
 });

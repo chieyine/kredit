@@ -21,6 +21,7 @@ import (
 	"kredit/internal/collections"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
+	"kredit/internal/platform/httpjson"
 	"kredit/internal/providers/bankdebit"
 )
 
@@ -67,7 +68,8 @@ func (c *Client) request(ctx context.Context, method, path, auth string, in, out
 	if e != nil {
 		return errors.New("Monnify request outcome is unconfirmed")
 	}
-	defer res.Body.Close()
+	// The complete response read is checked below; Close only releases it.
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return fmt.Errorf("Monnify returned HTTP %d; reconcile before retrying", res.StatusCode)
 	}
@@ -76,7 +78,7 @@ func (c *Client) request(ctx context.Context, method, path, auth string, in, out
 		Code       string          `json:"responseCode"`
 		Body       json.RawMessage `json:"responseBody"`
 	}
-	if e = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); e != nil || !envelope.Successful || envelope.Code != "0" {
+	if e = httpjson.Decode(res.Body, 1<<20, &envelope); e != nil || !envelope.Successful || envelope.Code != "0" {
 		return errors.New("Monnify did not confirm the request")
 	}
 	if out != nil {

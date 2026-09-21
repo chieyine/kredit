@@ -19,6 +19,7 @@ import (
 	"kredit/internal/collections"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
+	"kredit/internal/platform/httpjson"
 	"kredit/internal/providers/bankdebit"
 )
 
@@ -57,7 +58,8 @@ func (c *Client) call(ctx context.Context, method, path string, in, out any) err
 	if e != nil {
 		return errors.New("Flutterwave request outcome is unconfirmed")
 	}
-	defer res.Body.Close()
+	// The complete response read is checked below; Close only releases it.
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return fmt.Errorf("Flutterwave returned HTTP %d; reconcile before retrying", res.StatusCode)
 	}
@@ -65,7 +67,7 @@ func (c *Client) call(ctx context.Context, method, path string, in, out any) err
 		Status string          `json:"status"`
 		Data   json.RawMessage `json:"data"`
 	}
-	if e = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); e != nil || envelope.Status != "success" {
+	if e = httpjson.Decode(res.Body, 1<<20, &envelope); e != nil || envelope.Status != "success" {
 		return errors.New("Flutterwave did not confirm the request")
 	}
 	if out != nil {

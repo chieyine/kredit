@@ -72,9 +72,10 @@ func NewAIParserWithModel(apiKey, model string) *AIParser {
 		model = defaultGeminiModel
 	}
 	return &AIParser{
-		apiKey:  apiKey,
-		model:   model,
-		client:  &http.Client{Timeout: 30 * time.Second},
+		apiKey: apiKey,
+		model:  model,
+		// A redirect must not forward the provider API key or customer content.
+		client:  &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		senders: map[string]senderWindowState{},
 		now:     func() time.Time { return time.Now() },
 	}
