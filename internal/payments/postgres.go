@@ -199,7 +199,7 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 		return Payment{}, Allocation{}, err
 	}
 	if payment.CollectionFeeKobo > 0 {
-		if _, err := tx.Exec(ctx, `INSERT INTO app.fees (supplier_organization_id,obligation_id,payment_id,fee_type,basis_amount_kobo,rate_basis_points,amount_kobo,currency,state,accrued_at) VALUES ($1::uuid,$2::uuid,$3::uuid,'collection',$4,$8,$5,$6,'accrued',$7) ON CONFLICT (payment_id,fee_type) DO NOTHING`, payment.SupplierOrganizationID, payment.ObligationID, payment.ID, int64(payment.AmountKobo), int64(payment.CollectionFeeKobo), payment.Currency, paidAt, collectionRate(snapshot.FeeTerms)); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO app.fees (supplier_organization_id,obligation_id,payment_id,fee_type,basis_amount_kobo,rate_basis_points,amount_kobo,currency,state,accrued_at) VALUES ($1::uuid,$2::uuid,$3::uuid,'collection',$4,$8,$5,$6,'accrued',$7) ON CONFLICT (payment_id,fee_type) DO NOTHING`, payment.SupplierOrganizationID, payment.ObligationID, payment.ID, int64(payment.AmountKobo), collectionRate(snapshot.FeeTerms), int64(payment.CollectionFeeKobo), payment.Currency, paidAt); err != nil {
 			return Payment{}, Allocation{}, fmt.Errorf("insert collection fee: %w", err)
 		}
 		if err := postLedgerTx(ctx, tx, "collection_fee_accrued", payment.ID, "collection-fee:"+input.IdempotencyKey, paidAt,
@@ -558,7 +558,7 @@ func postLedgerTx(ctx context.Context, tx pgx.Tx, eventType, referenceID, key st
 	var id string
 	err := tx.QueryRow(ctx, `INSERT INTO ledger.transactions(event_type,reference_type,reference_id,idempotency_key,effective_at) VALUES($1,'payment',$2,$3,$4) ON CONFLICT(idempotency_key) DO NOTHING RETURNING id::text`, eventType, referenceID, key, effectiveAt).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+		return validatePaymentJournalReplay(ctx, tx, eventType, referenceID, key, effectiveAt, debitAccount, creditAccount, amount)
 	}
 	if err != nil {
 		return err
