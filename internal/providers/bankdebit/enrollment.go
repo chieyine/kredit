@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"kredit/internal/db"
+	"kredit/internal/mandates"
+	"kredit/internal/platformsettings"
 	"net/mail"
 	"regexp"
 	"strings"
@@ -13,8 +16,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"kredit/internal/mandates"
-	"kredit/internal/platformsettings"
 )
 
 type Details struct {
@@ -70,8 +71,7 @@ func (s *Store) tx(ctx context.Context, user string) (pgx.Tx, error) {
 		return nil, e
 	}
 	if _, e = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, user); e != nil {
-		tx.Rollback(ctx)
-		return nil, e
+		return nil, db.RollbackFailure(ctx, tx, e)
 	}
 	return tx, nil
 }
