@@ -17,6 +17,7 @@
 		type Receivables
 	} from '$lib/records';
 	import { attentionItems } from '$lib/attention';
+	import type { PageData } from './$types';
 	import { exactKobo } from '$lib/money';
 	import { productLabel } from '$lib/product-language';
 	import Money from '$lib/components/Money.svelte';
@@ -25,16 +26,28 @@
 	import WorkspacePurchases from '$lib/components/WorkspacePurchases.svelte';
 	import BusinessNextSteps from '$lib/components/BusinessNextSteps.svelte';
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
+	let { data }: { data: PageData } = $props();
+	// Capturing the initial value is correct here, not an oversight: the
+	// workspace layout renders this page inside
+	// {#key page.url.pathname + page.url.search}, so switching business via
+	// chooseWorkspace() changes the query string and destroys and recreates
+	// this component. Every mount therefore sees its own load() result.
+	// svelte-ignore state_referenced_locally
+	const seeded = data.prefetched;
+	const fromServer = <T,>(value: T): Resource<T> =>
+		seeded
+			? { state: 'ready', scope: seeded.organizationID, data: value, checkedAt: seeded.checkedAt }
+			: { state: 'loading', scope: '' };
 	const pending = <T,>(scope = ''): Resource<T> => ({ state: 'loading', scope });
-	let businesses = $state<Resource<Organization[]>>(pending());
-	let organizationID = $state('');
-	let sales = $state<Resource<SaleView[]>>(pending());
-	let payments = $state<Resource<PaymentRow[]>>(pending());
-	let overdue = $state<Resource<WorkRow[]>>(pending());
-	let claims = $state<Resource<WorkRow[]>>(pending());
-	let disputes = $state<Resource<WorkRow[]>>(pending());
-	let due = $state<Resource<WorkRow[]>>(pending());
-	let summary = $state<Resource<Receivables>>(pending());
+	let businesses = $state<Resource<Organization[]>>(seeded ? fromServer(seeded.businesses) : pending());
+	let organizationID = $state(seeded?.organizationID ?? '');
+	let sales = $state<Resource<SaleView[]>>(seeded ? fromServer(seeded.sales) : pending());
+	let payments = $state<Resource<PaymentRow[]>>(seeded ? fromServer(seeded.payments) : pending());
+	let overdue = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.overdue) : pending());
+	let claims = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.claims) : pending());
+	let disputes = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.disputes) : pending());
+	let due = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.due) : pending());
+	let summary = $state<Resource<Receivables>>(seeded ? fromServer(seeded.summary) : pending());
 	let referralPending = $state(false);
 	let visibleCount = $state(5),
 		legalName = $state(''),
@@ -157,7 +170,10 @@
 	}
 	onMount(() => {
 		referralPending = Boolean(sessionStorage.getItem('kredit_dsa_referral'));
-		void load();
+		// The server load already fetched this request's data. Re-fetching on
+		// mount would discard it and reintroduce the two round trips it exists
+		// to remove; a business change still goes through load() below.
+		if (!seeded) void load();
 		return () => {
 			businessRequest.cancel();
 			dashboardRequest.cancel();
