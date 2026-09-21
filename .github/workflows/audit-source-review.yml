@@ -1,0 +1,23 @@
+name: Audit source review (temporary)
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-source-review.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 360438d033b023bee7e4065f4509a044213784bd
+          persist-credentials: false
+      - run: git archive --format=tar.gz --output="$RUNNER_TEMP/review-source.tar.gz" HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: review-source-360438d
+          path: ${{ runner.temp }}/review-source.tar.gz
+          retention-days: 1
+          if-no-files-found: error
