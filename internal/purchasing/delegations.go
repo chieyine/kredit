@@ -4,10 +4,12 @@ package purchasing
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"kredit/internal/db"
 	"sort"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrAuthority = errors.New("current owner authority required")
@@ -38,7 +40,9 @@ func (s Store) begin(ctx context.Context, actor, org string, write bool) (pgx.Tx
 	if err != nil {
 		return nil, false, err
 	}
-	fail := func(e error) (pgx.Tx, bool, error) { tx.Rollback(ctx); return nil, false, e }
+	fail := func(e error) (pgx.Tx, bool, error) {
+		return nil, false, db.RollbackFailure(ctx, tx, e)
+	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, actor, org); err != nil {
 		return fail(err)
 	}
