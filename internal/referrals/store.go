@@ -1,6 +1,7 @@
 package referrals
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"kredit/internal/access"
 )
 
@@ -45,13 +47,17 @@ type Input struct {
 }
 
 func (s *Store) begin(ctx context.Context, actor, org string) (pgx.Tx, error) {
+	if s == nil || s.Pool == nil {
+		return nil, ErrUnavailable
+	}
 	tx, e := s.Pool.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
 	_, e = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, actor, org)
 	if e != nil {
-		tx.Rollback(ctx)
+		// Preserve the original failure; pgx closes the connection if rollback fails.
+		_ = tx.Rollback(ctx)
 		return nil, e
 	}
 	return tx, nil
@@ -69,7 +75,7 @@ func (s *Store) Claim(ctx context.Context, actor, org, code string) error {
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	_, e = tx.Exec(ctx, `SELECT app.dsa_claim($1::uuid,$2)`, org, strings.ToUpper(strings.TrimSpace(code)))
 	if e != nil {
 		return errors.New("Referral could not be confirmed. Use an active code for a new business you own, before its first accepted sale. Each business can have only one referrer.")
@@ -77,12 +83,19 @@ func (s *Store) Claim(ctx context.Context, actor, org, code string) error {
 	return tx.Commit(ctx)
 }
 func (s *Store) Lookup(ctx context.Context, code string) (json.RawMessage, error) {
-	var v json.RawMessage
-	e := s.Pool.QueryRow(ctx, `SELECT app.dsa_code($1)`, strings.ToUpper(strings.TrimSpace(code))).Scan(&v)
-	if e == nil && len(v) == 0 {
-		e = errors.New("Referral code is unavailable.")
+	if s == nil || s.Pool == nil {
+		return nil, ErrUnavailable
 	}
-	return v, e
+	var v json.RawMessage
+	if err := s.Pool.QueryRow(ctx, `SELECT app.dsa_code($1)`, strings.ToUpper(strings.TrimSpace(code))).Scan(&v); err != nil {
+		return nil, err
+	}
+	// SQL NULL and JSON null both mean that no active public referral exists.
+	// A query error is different: callers must not turn an outage into a 404.
+	if len(bytes.TrimSpace(v)) == 0 || bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+		return nil, ErrCodeUnavailable
+	}
+	return v, nil
 }
 func validBank(in Input) bool {
 	return len(strings.TrimSpace(in.Name)) >= 3 && len(in.Name) <= 120 && regexp.MustCompile(`^\+234[789][01][0-9]{8}$`).MatchString(in.Phone) && len(strings.TrimSpace(in.Bank)) >= 3 && len(in.Bank) <= 120 && len(strings.TrimSpace(in.AccountName)) >= 3 && len(in.AccountName) <= 120 && regexp.MustCompile(`^[0-9]{10}$`).MatchString(in.Account)
@@ -92,7 +105,7 @@ func (s *Store) Act(ctx context.Context, actor string, admin bool, in Input) (an
 	if e != nil {
 		return nil, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if admin {
 		if e = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionPlatformOwner); e != nil {
 			return nil, e

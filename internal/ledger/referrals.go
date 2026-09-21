@@ -60,6 +60,6 @@ func dsaTransaction(id, kind string, amount int64, at time.Time) (Transaction, e
 		ReferenceID:    id,
 		IdempotencyKey: "dsa:" + kind + ":" + id,
 		EffectiveAt:    at,
-		Postings:      []Posting{{Account: debit, Debit: Money(amount)}, {Account: credit, Credit: Money(amount)}},
+		Postings:       []Posting{{Account: debit, Debit: Money(amount)}, {Account: credit, Credit: Money(amount)}},
 	}, nil
 }
