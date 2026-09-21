@@ -72,6 +72,7 @@ var RequiredPersistenceObjects = []string{
 	"app.drawdown_reservations",
 	"app.collection_reservations",
 	"app.collection_attempts",
+	"app.settlement_events",
 	"app.collection_events",
 	"app.provider_customer_bindings",
 	"app.collection_aggregate_snapshots",
@@ -234,7 +235,7 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	// that lags lets a partially migrated database pass startup and serve
 	// traffic: at 167 it was 32 versions behind, which included the branch
 	// row-level security added in 189.
-	const requiredMigration = 201
+	const requiredMigration = 202
 	if version < requiredMigration {
 		return fmt.Errorf("database migrations are incomplete: version %d, require at least %d", version, requiredMigration)
 	}
