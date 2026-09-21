@@ -37,20 +37,26 @@ export async function readProxyBody(
 	requestSignal: AbortSignal,
 	timeoutMs = 60_000
 ): Promise<Uint8Array<ArrayBuffer>> {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || !Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+	if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || !Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) {
 		throw new RangeError('Invalid proxy body bounds');
 	}
 	const deadline = new AbortController();
-	const timer = setTimeout(() => deadline.abort(new ProxyBodyError(408, 'The request body took too long to arrive.')), timeoutMs);
+	const expired = () => new ProxyBodyError(408, 'The request body took too long to arrive.');
+	const expiresAt = performance.now() + timeoutMs;
 	const signal = AbortSignal.any([requestSignal, deadline.signal]);
-	const reader = stream.getReader();
+	const timer = setTimeout(() => deadline.abort(expired()), timeoutMs);
+	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 	let complete = false;
 	let buffer: Uint8Array<ArrayBuffer> = new Uint8Array(0);
 	let size = 0;
 	let emptyChunks = 0;
 	try {
+		reader = stream.getReader();
 		while (true) {
 			signal.throwIfAborted();
+			// Also enforce elapsed time when immediately-ready chunks keep the
+			// microtask queue busy and delay the timer callback itself.
+			if (performance.now() >= expiresAt) throw expired();
 			const { value, done } = await readWithSignal(reader, signal);
 			if (done) {
 				complete = true;
@@ -75,12 +81,14 @@ export async function readProxyBody(
 		}
 	} finally {
 		clearTimeout(timer);
-		if (!complete) {
-			// A misbehaving producer may never settle cancel(). Preserve the
-			// size/deadline/read error without waiting indefinitely for cleanup.
-			void reader.cancel().catch(() => {});
+		if (reader) {
+			if (!complete) {
+				// A misbehaving producer may never settle cancel(). Preserve the
+				// size/deadline/read error without waiting indefinitely for cleanup.
+				void reader.cancel().catch(() => {});
+			}
+			reader.releaseLock();
 		}
-		reader.releaseLock();
 	}
 }
 
