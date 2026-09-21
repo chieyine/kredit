@@ -102,12 +102,13 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 	if owner != "" && owner != actor && action != "takeover" {
 		return errors.New("case is assigned to another reviewer")
 	}
-	if action == "release" {
+	switch action {
+	case "release":
 		if owner != actor {
 			return errors.New("only the assigned reviewer may release this case")
 		}
 		_, err = tx.Exec(ctx, `UPDATE app.financial_review_cases SET owner_id=NULL WHERE id=$1::uuid`, id)
-	} else if action == "resolve" {
+	case "resolve":
 		if owner != actor {
 			return errors.New("claim this case before resolving it")
 		}
@@ -119,7 +120,7 @@ func (s *Store) DecideFinancialReview(ctx context.Context, id, actor, action, re
 			return ErrFinancialDifferenceUnresolved
 		}
 		_, err = tx.Exec(ctx, `UPDATE app.financial_review_cases SET state='RESOLVED',resolved_at=now() WHERE id=$1::uuid`, id)
-	} else {
+	default:
 		_, err = tx.Exec(ctx, `UPDATE app.financial_review_cases SET owner_id=$2::uuid WHERE id=$1::uuid`, id, actor)
 	}
 	if err != nil {

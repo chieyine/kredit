@@ -810,12 +810,12 @@ func (s *PostgresStore) hydrateForTenant(requestID, userID, organizationID strin
 	var payload []byte
 	if err := tx.QueryRow(context.Background(), `SELECT app.credit_snapshot_by_id($1)`, requestID).Scan(&payload); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("credit request not found")
+			return ErrRequestNotFound
 		}
 		return fmt.Errorf("load credit aggregate: %w", err)
 	}
 	if len(payload) == 0 {
-		return errors.New("credit request not found")
+		return ErrRequestNotFound
 	}
 	var view View
 	if err := json.Unmarshal(payload, &view); err != nil {
@@ -862,7 +862,7 @@ func (s *PostgresStore) hydrateByObligationForTenant(obligationID, userID, organ
 	}
 	var payload []byte
 	if err := tx.QueryRow(context.Background(), `SELECT app.credit_snapshot_by_id($1)`, id).Scan(&payload); err != nil {
-		return errors.New("credit request not found")
+		return ErrRequestNotFound
 	}
 	var view View
 	if err := json.Unmarshal(payload, &view); err != nil {
@@ -966,7 +966,7 @@ func (s *PostgresStore) persistAs(requestID, actorID string, permission access.P
 	request := s.requests[requestID]
 	if request == nil {
 		s.mu.RUnlock()
-		return errors.New("credit request not found")
+		return ErrRequestNotFound
 	}
 	view := s.viewLocked(request)
 	version := request.Version
@@ -1090,7 +1090,7 @@ func (s *PostgresStore) persistByObligation(obligationID string) error {
 	}
 	s.mu.RUnlock()
 	if requestID == "" {
-		return errors.New("credit request not found")
+		return ErrRequestNotFound
 	}
 	return s.persist(requestID)
 }
@@ -1183,7 +1183,7 @@ func (s *PostgresStore) checkPurchasePermission(r *CreditRequest, actor, action 
 	if err != nil {
 		return false
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, actor); err != nil {
 		return false
 	}
@@ -1199,7 +1199,7 @@ func (s *PostgresStore) acceptingPerson(actor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, actor); err != nil {
 		return "", err
 	}
@@ -1223,7 +1223,7 @@ func (s *PostgresStore) readPurchaseActions(r *CreditRequest, actor string) []st
 	if err != nil {
 		return result
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, actor); err != nil {
 		return result
 	}

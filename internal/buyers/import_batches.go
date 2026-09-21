@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"kredit/internal/access"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"kredit/internal/access"
 )
 
 var ErrImportInvalid = errors.New("invalid import roster")
@@ -34,7 +34,7 @@ type ImportContact struct {
 }
 
 func (c ImportContact) invitation() CreateInvitationInput {
-	return CreateInvitationInput{SourceReference: c.SourceReference, Target: c.Target, TargetType: c.TargetType, LegalName: c.LegalName, TradingName: c.TradingName, BusinessType: c.BusinessType, BusinessAddress: c.BusinessAddress, Industry: c.Industry}
+	return CreateInvitationInput(c)
 }
 
 type ImportBatch struct {

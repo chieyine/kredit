@@ -180,6 +180,9 @@ func (s *Store) Decide(_ context.Context, id, actor, decision, reason, paymentID
 	}
 	if claim.State != Pending {
 		if claim.State == decision {
+			if !sameReview(*claim, actor, reason) || claim.PaymentID != strings.TrimSpace(paymentID) {
+				return Claim{}, ErrReviewConflict
+			}
 			return cloneClaim(*claim), nil
 		}
 		return Claim{}, errors.New("payment claim has already been decided")
@@ -229,6 +232,9 @@ func (s *Store) Confirm(ctx context.Context, id, actor, reason string, recorder 
 		return Claim{}, ErrNotFound
 	}
 	if claim.State == Confirmed {
+		if !sameReview(*claim, actor, reason) {
+			return Claim{}, ErrReviewConflict
+		}
 		return cloneClaim(*claim), nil
 	}
 	if claim.State != Pending {

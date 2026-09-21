@@ -34,6 +34,9 @@ func HashRequest(method, path string, body []byte, key string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+// Service records one result for a reservation. Complete is a one-way
+// transition, not an upsert: after it succeeds, callers must use Reserve to
+// recover the saved result rather than submitting a replacement completion.
 type Service interface {
 	Reserve(context.Context, string, string, string) (Record, bool, error)
 	Complete(context.Context, string, string, int, []byte) error
@@ -46,12 +49,15 @@ type MemoryStore struct {
 
 func NewMemoryStore() *MemoryStore { return &MemoryStore{records: make(map[string]Record)} }
 
-func (s *MemoryStore) Reserve(_ context.Context, scope, key, requestHash string) (Record, bool, error) {
+func (s *MemoryStore) Reserve(ctx context.Context, scope, key, requestHash string) (Record, bool, error) {
 	if scope == "" || key == "" || requestHash == "" {
 		return Record{}, false, errors.New("idempotency scope, key, and request hash are required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return Record{}, false, err
+	}
 	index := scope + "\x00" + key
 	if existing, ok := s.records[index]; ok {
 		if !existing.CompletedAt.IsZero() && !existing.ExpiresAt.IsZero() && !time.Now().UTC().Before(existing.ExpiresAt) {
@@ -69,19 +75,22 @@ func (s *MemoryStore) Reserve(_ context.Context, scope, key, requestHash string)
 	return record, false, nil
 }
 
-func (s *MemoryStore) Complete(_ context.Context, scope, key string, status int, body []byte) error {
+func (s *MemoryStore) Complete(ctx context.Context, scope, key string, status int, body []byte) error {
 	if scope == "" || key == "" {
 		return errors.New("idempotency scope and key are required")
 	}
-	if status < 100 || status > 599 {
+	if status < 200 || status > 599 {
 		return errors.New("idempotency response status is invalid")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	index := scope + "\x00" + key
 	record, ok := s.records[index]
-	if !ok {
-		return errors.New("idempotency reservation not found")
+	if !ok || !record.CompletedAt.IsZero() {
+		return errors.New("idempotency reservation is missing or already completed")
 	}
 	record.Status, record.ResponseBody, record.CompletedAt = status, append([]byte(nil), body...), time.Now().UTC()
 	s.records[index] = record
@@ -147,18 +156,18 @@ func (s *PostgresStore) Complete(ctx context.Context, scope, key string, status 
 	if scope == "" || key == "" {
 		return errors.New("idempotency scope and key are required")
 	}
-	if status < 100 || status > 599 {
+	if status < 200 || status > 599 {
 		return errors.New("idempotency response status is invalid")
 	}
 	if !json.Valid(body) {
 		body, _ = json.Marshal(map[string]any{"body": string(body)})
 	}
-	command, err := s.pool.Exec(ctx, `UPDATE app.idempotency_records SET response_status = $3, response_body = $4::jsonb, completed_at = NOW() WHERE scope = $1 AND idempotency_key = $2`, scope, key, status, body)
+	command, err := s.pool.Exec(ctx, `UPDATE app.idempotency_records SET response_status = $3, response_body = $4::jsonb, completed_at = NOW() WHERE scope = $1 AND idempotency_key = $2 AND completed_at IS NULL`, scope, key, status, body)
 	if err != nil {
 		return err
 	}
 	if command.RowsAffected() != 1 {
-		return errors.New("idempotency reservation not found")
+		return errors.New("idempotency reservation is missing or already completed")
 	}
 	return nil
 }

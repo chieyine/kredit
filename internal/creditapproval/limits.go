@@ -3,6 +3,7 @@ package creditapproval
 import (
 	"context"
 	"errors"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -19,7 +20,7 @@ func (s Store) Limits(ctx context.Context, user, org string) ([]ReviewerLimit, e
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	return readReviewerLimits(ctx, tx, org)
 }
 
@@ -47,7 +48,7 @@ func (s Store) SetLimit(ctx context.Context, user, org, target string, ceiling, 
 	if err != nil {
 		return ReviewerLimit{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,175))`, org); err != nil {
 		return ReviewerLimit{}, err
 	}

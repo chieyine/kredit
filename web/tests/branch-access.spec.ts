@@ -9,7 +9,7 @@ async function setup(page:Page,owner=true){
  await page.route('**/branch-access',r=>r.fulfill({json:state}));return state;
 }
 test.beforeEach(async({context,baseURL})=>{await context.addCookies([{name:'kredit_session',value:'branch-fixture',url:baseURL!}]);});
-test('owner saves an explicit branch boundary and can remove all branch access',async({page})=>{
+test('owner saves an explicit branch boundary and can remove all branch access',async({page},testInfo)=>{
  const state=await setup(page);const bodies:unknown[]=[];
  await page.route('**/branch-access/*',r=>{const body=r.request().postDataJSON();bodies.push(body);expect(r.request().method()).toBe('PUT');Object.assign(state.scopes[0],body,{version:body.version+1});return r.fulfill({json:state.scopes[0]});});
  await page.goto(`/workspace/partners/access?organization=${org}`);
@@ -19,7 +19,7 @@ test('owner saves an explicit branch boundary and can remove all branch access',
  await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
  await expect(page.getByRole('button',{name:'Save access for Ada'})).toBeEnabled();await page.evaluate(()=>window.scrollTo(0,0));
  expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
- await page.screenshot({path:'/Users/macbookpro/Documents/Kredit.com/.tmp/branch-completion/branch-access-mobile.png',fullPage:true});
+ await page.screenshot({path:testInfo.outputPath('branch-access-mobile.png'),fullPage:true});
 });
 test('staff see their scope without owner controls',async({page})=>{
  const state=await setup(page,false);state.scopes[0].mode='branches';state.scopes[0].branch_ids=[branch];

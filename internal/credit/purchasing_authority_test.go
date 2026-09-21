@@ -64,7 +64,7 @@ func TestPurchasingRevocationBlocksCachedOwnerAndSerializesWrites(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer writer.Rollback(ctx)
+	defer func() { _ = writer.Rollback(ctx) }()
 	if _, err = writer.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, buyer, supplier); err != nil {
 		t.Fatal(err)
 	}

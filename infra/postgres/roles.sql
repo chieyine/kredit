@@ -352,3 +352,17 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON app.order_line_items, app.order_shipment
 -- 199: Partner terms and opening balance import batches
 REVOKE ALL ON app.partner_terms_import_batches, app.partner_terms_import_rows FROM kredit_app, kredit_worker;
 GRANT SELECT, INSERT, UPDATE ON app.partner_terms_import_batches, app.partner_terms_import_rows TO kredit_app, kredit_worker;
+REVOKE ALL ON FUNCTION app.order_supplier_authorized(uuid,text[]),app.order_evidence_visible(uuid),app.apply_order_shipment_item(),app.complete_order_receipt(),app.guard_order_credit_note(),app.guard_terms_import_review(),app.guard_terms_import_row() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.order_supplier_authorized(uuid,text[]),app.order_evidence_visible(uuid) TO kredit_app;
+REVOKE ALL ON app.order_line_items,app.order_shipments,app.order_shipment_items,app.order_delivery_receipts,app.order_credit_notes FROM kredit_app,kredit_worker;
+GRANT SELECT,INSERT ON app.order_line_items,app.order_shipments,app.order_shipment_items,app.order_delivery_receipts,app.order_credit_notes TO kredit_app;
+GRANT UPDATE(status,approved_by,approved_at) ON app.order_credit_notes TO kredit_app;
+REVOKE ALL ON app.partner_terms_import_batches,app.partner_terms_import_rows FROM kredit_app,kredit_worker;
+GRANT SELECT,INSERT ON app.partner_terms_import_batches,app.partner_terms_import_rows TO kredit_app;
+GRANT UPDATE(state,approved_by,approved_at,cancelled_by,cancelled_at) ON app.partner_terms_import_batches TO kredit_app;
+
+-- Read-only credit-note provenance for tenant-scoped balance reconciliation.
+GRANT SELECT ON app.order_credit_notes TO kredit_worker;
+-- The reconciliation read path requires both nested invoker predicates.
+-- This read-only predicate does not confer evidence mutation authority.
+GRANT EXECUTE ON FUNCTION app.order_evidence_visible(uuid),app.order_supplier_authorized(uuid,text[]) TO kredit_worker;

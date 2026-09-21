@@ -3,10 +3,11 @@ package networkops
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestNetworkAssignmentsPreserveScopeVersionsAndAuthority(t *testing.T) {
@@ -121,7 +122,7 @@ func TestNetworkAssignmentsPreserveScopeVersionsAndAuthority(t *testing.T) {
 	if e = tx.QueryRow(ctx, `SELECT count(*) FROM app.business_branches WHERE organization_id=$1::uuid`, org).Scan(&visible); e != nil || visible != 0 {
 		t.Fatalf("revoked workspace visible: %d %v", visible, e)
 	}
-	tx.Rollback(ctx)
+	_ = tx.Rollback(ctx)
 	var count int
 	if err = admin.QueryRow(ctx, `SELECT count(*) FROM app.network_operation_history WHERE organization_id=$1::uuid`, org).Scan(&count); err != nil || count != 4 {
 		t.Fatalf("history: %d %v", count, err)

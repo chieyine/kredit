@@ -3,10 +3,11 @@ package db
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"os"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Each table has a real row. An empty result cannot accidentally make the
@@ -24,7 +25,7 @@ func TestRemainingTenantTablesRejectUnrelatedRuntimeIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback(context.Background())
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	exec := func(sql string, args ...any) {
 		t.Helper()
 		if _, e := tx.Exec(t.Context(), sql, args...); e != nil {
@@ -54,7 +55,7 @@ func TestRemainingTenantTablesRejectUnrelatedRuntimeIdentity(t *testing.T) {
 	exec(`INSERT INTO app.credit_requests(id,supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,goods_description,due_date,collection_at,state,created_by) VALUES($1::uuid,$2::uuid,$3::uuid,gen_random_uuid(),3000,'test',current_date+30,now()+interval '30 days','ACTIVE',$3::uuid)`, request, org, user)
 	exec(`INSERT INTO app.agreement_versions(id,credit_request_id,version,canonical_json,document_hash,terms_version,privacy_version,created_by) VALUES($1::uuid,$2::uuid,1,'{}',$1,'v1','v1',$3::uuid)`, agreement, request, user)
 	exec(`INSERT INTO ledger.transactions(id,event_type,reference_type,reference_id,idempotency_key,effective_at) VALUES($1::uuid,'test','credit_request',$2::uuid,$1,now())`, transaction, request)
-	exec(`INSERT INTO app.obligations(id,credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at) SELECT $1::uuid,$2::uuid,$3::uuid,$4::uuid,buyer_business_id,3000,'NGN','ACTIVE','CURRENT',3000,0,$5::uuid,now() FROM app.credit_requests WHERE id=$2::uuid`, obligation, request, agreement, org, transaction)
+	exec(`INSERT INTO app.obligations(id,credit_request_id,agreement_version_id,supplier_organization_id,buyer_business_id,principal_kobo,currency,lifecycle_status,payment_status,outstanding_kobo,base_fee_kobo,ledger_transaction_id,activated_at) SELECT $1::uuid,$2::uuid,$3::uuid,$4::uuid,buyer_business_id,3000,'NGN','ACTIVE','UNPAID',3000,0,$5::uuid,now() FROM app.credit_requests WHERE id=$2::uuid`, obligation, request, agreement, org, transaction)
 	exec(`INSERT INTO app.repayment_schedules(id,obligation_id,schedule_type,timezone,allocation_policy,cadence,grace_hours,status) VALUES($1::uuid,$2::uuid,'equal','Africa/Lagos','due_date_order','custom',0,'ACTIVE')`, schedule, obligation)
 	exec(`INSERT INTO app.schedule_items(schedule_id,sequence,principal_due_kobo,due_at,grace_hours,collection_at,state) VALUES($1::uuid,1,3000,now(),0,now(),'OPEN')`, schedule)
 	exec(`INSERT INTO app.disputes(id,obligation_id,supplier_organization_id,buyer_user_id,opened_by,total_disputed_kobo,remaining_disputed_kobo,reason,state,collection_effect) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$4::uuid,100,100,'test','OPEN','CONTESTED_ONLY')`, dispute, obligation, org, user)

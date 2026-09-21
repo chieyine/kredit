@@ -5,11 +5,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/creditapproval"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (s *Server) businessCreditApprovals(w http.ResponseWriter, r *http.Request) {

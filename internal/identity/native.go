@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kredit/internal/access"
+	"kredit/internal/platform/httpjson"
 )
 
 type actorKey struct{}
@@ -135,7 +136,7 @@ func (p *NativeLookup) request(ctx context.Context, method, path string, input, 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return fmt.Errorf("verification provider returned status %d", res.StatusCode)
 	}
-	if err = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(output); err != nil {
+	if err = httpjson.Decode(res.Body, 1<<20, output); err != nil {
 		return errors.New("verification response could not be read")
 	}
 	return nil

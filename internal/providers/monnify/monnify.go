@@ -21,6 +21,7 @@ import (
 	"kredit/internal/collections"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
+	"kredit/internal/platform/httpjson"
 	"kredit/internal/providers/bankdebit"
 )
 
@@ -36,7 +37,7 @@ type Client struct {
 func New(name, key, secret, contract, callback string, live bool, store bankdebit.RecoveryStore) (*Client, error) {
 	u, e := url.Parse(callback)
 	if name == "" || key == "" || secret == "" || contract == "" || strings.ContainsAny(key+secret, "\r\n") || store == nil || e != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
-		return nil, errors.New("Monnify requires API key, secret, contract code, HTTPS return URL and durable storage")
+		return nil, errors.New("monnify requires API key, secret, contract code, HTTPS return URL and durable storage")
 	}
 	endpoint := "https://sandbox.monnify.com"
 	if live {
@@ -65,19 +66,20 @@ func (c *Client) request(ctx context.Context, method, path, auth string, in, out
 	r.Header.Set("Content-Type", "application/json")
 	res, e := c.http.Do(r)
 	if e != nil {
-		return errors.New("Monnify request outcome is unconfirmed")
+		return errors.New("monnify request outcome is unconfirmed")
 	}
-	defer res.Body.Close()
+	// The complete response read is checked below; Close only releases it.
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("Monnify returned HTTP %d; reconcile before retrying", res.StatusCode)
+		return fmt.Errorf("monnify returned HTTP %d; reconcile before retrying", res.StatusCode)
 	}
 	var envelope struct {
 		Successful bool            `json:"requestSuccessful"`
 		Code       string          `json:"responseCode"`
 		Body       json.RawMessage `json:"responseBody"`
 	}
-	if e = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); e != nil || !envelope.Successful || envelope.Code != "0" {
-		return errors.New("Monnify did not confirm the request")
+	if e = httpjson.Decode(res.Body, 1<<20, &envelope); e != nil || !envelope.Successful || envelope.Code != "0" {
+		return errors.New("monnify did not confirm the request")
 	}
 	if out != nil {
 		return json.Unmarshal(envelope.Body, out)
@@ -99,7 +101,7 @@ func (c *Client) accessToken(ctx context.Context) (string, error) {
 		return "", e
 	}
 	if data.Token == "" || data.Expires <= 60 {
-		return "", errors.New("Monnify login returned invalid credentials")
+		return "", errors.New("monnify login returned invalid credentials")
 	}
 	c.token = data.Token
 	c.expires = time.Now().Add(time.Duration(min(data.Expires, 3600)-30) * time.Second)
@@ -140,7 +142,7 @@ func (c *Client) CompleteEnrollment(ctx context.Context, ref, user string, d ban
 		return v, e
 	}
 	if result.Reference != ref || result.Code == "" {
-		return v, errors.New("Monnify returned mismatched authorization")
+		return v, errors.New("monnify returned mismatched authorization")
 	}
 	// Save the known identity before fetching activation instructions, so a
 	// delayed GET never loses a successfully created mandate.
@@ -188,12 +190,12 @@ func (c *Client) readMandate(ctx context.Context, v bankdebit.Enrollment) (manda
 		return mandate{}, e
 	}
 	if len(result) != 1 {
-		return mandate{}, errors.New("Monnify authorization is not uniquely identified")
+		return mandate{}, errors.New("monnify authorization is not uniquely identified")
 	}
 	m := result[0]
 	amount, e := bankdebit.Kobo(m.Amount)
 	if e != nil || m.Reference != v.Result.Reference || m.Code == "" || m.Contract != c.contract || amount <= 0 || amount > v.Input.AmountCeiling || !strings.EqualFold(m.Email, v.Details.Email) || m.Account != v.Details.AccountNumber || m.Bank != v.Details.BankCode {
-		return m, errors.New("Monnify authorization does not match the saved bank permission")
+		return m, errors.New("monnify authorization does not match the saved bank permission")
 	}
 	return m, nil
 }
@@ -203,7 +205,7 @@ func date(s string) (time.Time, error) {
 			return t, nil
 		}
 	}
-	return time.Time{}, errors.New("Monnify returned an invalid authorization date")
+	return time.Time{}, errors.New("monnify returned an invalid authorization date")
 }
 func (c *Client) GetMandate(ctx context.Context, ref string) (mandates.Mandate, error) {
 	v, e := c.Enrollment(ctx, ref)
@@ -260,15 +262,16 @@ func (c *Client) CancelMandate(ctx context.Context, ref, reason string) (mandate
 	if e != nil {
 		return mandates.Mandate{}, e
 	}
-	if v.State == "DRAFT" || v.State == "CANCELLED" {
+	switch v.State {
+	case "DRAFT", "CANCELLED":
 		e = c.store.CancelDraft(ctx, v)
-	} else if v.State == "CONFIRMED" {
+	case "CONFIRMED":
 		m, err := c.readMandate(ctx, v)
 		if err != nil {
 			return mandates.Mandate{}, err
 		}
 		e = c.call(ctx, "PATCH", "/api/v1/direct-debit/mandate/cancel-mandate/"+url.PathEscape(m.Code), nil, nil)
-	} else {
+	default:
 		e = errors.New("authorization outcome must be confirmed first")
 	}
 	if e != nil {
@@ -288,7 +291,7 @@ func (c *Client) Submit(ctx context.Context, in collections.Request) (collection
 		return collections.Response{}, errors.New("original positive NGN debit required")
 	}
 	if in.SettlementRoute != nil && in.SettlementRoute.Method == "provider_split" {
-		return collections.Response{}, errors.New("Monnify seller split is not configured")
+		return collections.Response{}, errors.New("monnify seller split is not configured")
 	}
 	v, e := c.Enrollment(ctx, in.MandateReference)
 	if e != nil {
@@ -337,7 +340,7 @@ func (c *Client) GetByReference(ctx context.Context, in collections.Request) (co
 	}
 	amount, e := bankdebit.Kobo(data.Amount)
 	if e != nil || amount != int64(in.AmountKobo) || data.Reference != in.ExternalReference || data.MandateCode != m.Code {
-		return collections.Response{}, errors.New("Monnify payment does not match the reserved debit")
+		return collections.Response{}, errors.New("monnify payment does not match the reserved debit")
 	}
 	out := collections.Response{State: collections.ProviderPending, ProviderCollectionID: in.ExternalReference}
 	switch data.Status {

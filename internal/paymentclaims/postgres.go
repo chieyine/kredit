@@ -3,13 +3,13 @@ package paymentclaims
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"kredit/internal/db"
 	"kredit/internal/identifier"
 	"kredit/internal/ledger"
 	"kredit/internal/payments"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,6 +31,9 @@ func (s *PostgresStore) Create(ctx context.Context, input CreateInput) (Claim, e
 	if input.ObligationID == "" || input.BuyerUserID == "" || input.AmountKobo <= 0 || input.TransferReference == "" || input.IdempotencyKey == "" {
 		return Claim{}, errors.New("obligation, buyer, positive amount, transfer reference, and idempotency key are required")
 	}
+	if identity, ok := db.TenantFromContext(ctx); ok && identity.UserID != "" && identity.UserID != input.BuyerUserID {
+		return Claim{}, errors.New("payment claim buyer does not match the authenticated actor")
+	}
 	input.SourceAccountMasked = strings.TrimSpace(input.SourceAccountMasked)
 	input.TransferReference = strings.TrimSpace(input.TransferReference)
 	input.EvidenceDocumentID = strings.TrimSpace(input.EvidenceDocumentID)
@@ -42,9 +45,14 @@ func (s *PostgresStore) Create(ctx context.Context, input CreateInput) (Claim, e
 		return Claim{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// CreateInput's buyer is supplied by the authenticated handler. Always clear
+	// supplier scope: a claim must not borrow the seller's financial permissions.
+	if err = db.SetTenantContext(db.WithTenantContext(ctx, input.BuyerUserID, ""), tx); err != nil {
+		return Claim{}, err
+	}
 	// Serialize retries even if a reused key names another obligation. Never
 	// disclose the existing claim until its owner and full intent match.
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0)),set_config('app.current_user_id',$2,true)`, "payment-claim:"+input.IdempotencyKey, input.BuyerUserID); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "payment-claim:"+input.IdempotencyKey); err != nil {
 		return Claim{}, err
 	}
 	var existing Claim
@@ -60,7 +68,9 @@ func (s *PostgresStore) Create(ctx context.Context, input CreateInput) (Claim, e
 	}
 	var remaining ledger.Money
 	var supplier, currency string
-	err = tx.QueryRow(ctx, `SELECT o.outstanding_kobo,o.supplier_organization_id::text,o.currency FROM app.obligations o JOIN app.credit_requests c ON c.id=o.credit_request_id WHERE o.id=$1::uuid AND c.buyer_user_id=$2::uuid FOR UPDATE OF o`, input.ObligationID, input.BuyerUserID).Scan(&remaining, &supplier, &currency)
+	// The narrow capability verifies ownership/current authority and holds the
+	// common obligation lock without giving buyers UPDATE rights to the debt.
+	err = tx.QueryRow(ctx, `SELECT outstanding_kobo,supplier_organization_id::text,currency FROM app.lock_buyer_payment_claim($1::uuid)`, input.ObligationID).Scan(&remaining, &supplier, &currency)
 	if err != nil {
 		return Claim{}, err
 	}
@@ -227,6 +237,9 @@ func (s *PostgresStore) Confirm(ctx context.Context, id, actor, reason string, r
 		return Claim{}, err
 	}
 	if claim.State == Confirmed {
+		if !sameReview(claim, actor, reason) {
+			return Claim{}, ErrReviewConflict
+		}
 		return claim, tx.Commit(ctx)
 	}
 	if claim.State != Pending {

@@ -73,7 +73,7 @@ func (s Store) Read(ctx context.Context, user, org string) (Inbox, error) {
 	if err != nil {
 		return out, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	out.Role = role
 	err = tx.QueryRow(ctx, `SELECT enabled,threshold_kobo,version FROM app.business_credit_controls WHERE organization_id=$1::uuid`, org).Scan(&out.Controls.Enabled, &out.Controls.Threshold, &out.Controls.Version)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -119,7 +119,7 @@ func (s Store) SetControls(ctx context.Context, user, org string, in Controls) (
 	if err != nil {
 		return Controls{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,172))`, org); err != nil {
 		return Controls{}, err
 	}
@@ -142,7 +142,7 @@ func (s Store) Request(ctx context.Context, user, org, request string) (string, 
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var version int64
 	var state string
 	if err = tx.QueryRow(ctx, `SELECT version,state FROM app.credit_requests WHERE id=$1::uuid AND supplier_organization_id=$2::uuid FOR UPDATE`, request, org).Scan(&version, &state); err != nil {
@@ -170,7 +170,7 @@ func (s Store) Decide(ctx context.Context, user, org, id, decision, reason strin
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	// Match the request-before-approval lock order used when an offer is sent.
 	var request string
 	if err = tx.QueryRow(ctx, `SELECT credit_request_id::text FROM app.credit_offer_approvals WHERE organization_id=$1::uuid AND id=$2::uuid`, org, id).Scan(&request); err != nil {
@@ -213,7 +213,7 @@ func (s Store) RequestDrawdownApproval(ctx context.Context, user, org, drawdownI
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var state string
 	if err = tx.QueryRow(ctx, `SELECT d.state FROM app.drawdowns d JOIN app.trade_lines tl ON tl.id=d.trade_line_id WHERE d.id=$1::uuid AND tl.supplier_organization_id=$2::uuid FOR UPDATE`, drawdownID, org).Scan(&state); err != nil {
 		return "", err
@@ -241,7 +241,7 @@ func (s Store) DecideDrawdown(ctx context.Context, user, org, id, decision, reas
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var drawdownID string
 	if err = tx.QueryRow(ctx, `SELECT drawdown_id::text FROM app.tradeline_drawdown_approvals WHERE organization_id=$1::uuid AND id=$2::uuid`, org, id).Scan(&drawdownID); err != nil {
 		return err

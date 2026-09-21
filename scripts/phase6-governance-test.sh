@@ -62,8 +62,8 @@ from pathlib import Path
 import re
 frontier=max(int(path.name.split('_')[0]) for path in Path('db/migrations').glob('[0-9]*_*.sql'))
 contract=Path('internal/db/persistence_contract.go').read_text()
-match=re.search(r'if version < (\d+)',contract)
-if not match or int(match.group(1)) != frontier:
+match=re.search(r'const requiredMigration = (\d+)',contract)
+if not match or int(match.group(1)) != frontier or 'if version < requiredMigration {' not in contract:
     raise SystemExit('runtime persistence requirement does not match migration frontier')
 PYTHON
 

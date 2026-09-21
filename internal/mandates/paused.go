@@ -25,7 +25,7 @@ func (p *PausedProvider) RecoverAuthorization(ctx context.Context, in Authorizat
 	}); ok {
 		return recoverer.RecoverAuthorization(ctx, in, id)
 	}
-	m, e := p.Provider.GetMandate(ctx, id)
+	m, e := p.GetMandate(ctx, id)
 	if e != nil {
 		return m, e
 	}

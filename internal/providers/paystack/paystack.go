@@ -20,6 +20,7 @@ import (
 	"kredit/internal/collections"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
+	"kredit/internal/platform/httpjson"
 )
 
 type EmailLookup func(context.Context, string) (string, error)
@@ -37,7 +38,7 @@ func New(name, secret, callback string, live bool, email EmailLookup) (*Client, 
 		prefix = "sk_live_"
 	}
 	if name == "" || !strings.HasPrefix(secret, prefix) || strings.ContainsAny(secret, "\r\n") || e != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || email == nil {
-		return nil, errors.New("Paystack requires an account name, matching secret key, HTTPS return URL and buyer email lookup")
+		return nil, errors.New("paystack requires an account name, matching secret key, HTTPS return URL and buyer email lookup")
 	}
 	return &Client{name: name, secret: secret, callback: callback, live: live, email: email, endpoint: "https://api.paystack.co", http: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
@@ -62,21 +63,22 @@ func (c *Client) call(ctx context.Context, method, path string, in, out any) err
 	req.Header.Set("Content-Type", "application/json")
 	res, e := c.http.Do(req)
 	if e != nil {
-		return errors.New("Paystack request outcome could not be confirmed")
+		return errors.New("paystack request outcome could not be confirmed")
 	}
-	defer res.Body.Close()
+	// The complete response read is checked below; Close only releases it.
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("Paystack returned HTTP %d; reconcile before retrying", res.StatusCode)
+		return fmt.Errorf("paystack returned HTTP %d; reconcile before retrying", res.StatusCode)
 	}
 	var envelope struct {
 		Status bool            `json:"status"`
 		Data   json.RawMessage `json:"data"`
 	}
-	if e = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); e != nil {
-		return errors.New("Paystack response was invalid")
+	if e = httpjson.Decode(res.Body, 1<<20, &envelope); e != nil {
+		return errors.New("paystack response was invalid")
 	}
 	if !envelope.Status {
-		return errors.New("Paystack did not confirm the request")
+		return errors.New("paystack did not confirm the request")
 	}
 	if out != nil {
 		return json.Unmarshal(envelope.Data, out)
@@ -100,10 +102,21 @@ func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.Aut
 		return mandates.Mandate{}, e
 	}
 	u, e := url.Parse(data.RedirectURL)
-	if e != nil || u.Scheme != "https" || u.User != nil || (u.Hostname() != "paystack.com" && !strings.HasSuffix(u.Hostname(), ".paystack.com")) || data.Reference == "" {
-		return mandates.Mandate{}, errors.New("Paystack returned invalid authorization details")
+	if e != nil || !hostedAuthorizationURL(u) || data.Reference == "" {
+		return mandates.Mandate{}, errors.New("paystack returned invalid authorization details")
 	}
 	return mandates.Mandate{ProviderAdapter: "paystack", Provider: c.name, ProviderID: data.Reference, Reference: in.Reference, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, Variable: true, AuthorizationURL: data.RedirectURL}, nil
+}
+
+// Hosted authorization URLs use .com checkout hosts and the .co link host
+// documented at https://paystack.com/docs/payments/direct-debit/.
+// Do not generalize the .co exception to arbitrary hosts or alternate ports.
+func hostedAuthorizationURL(u *url.URL) bool {
+	if u == nil || u.Scheme != "https" || u.User != nil || (u.Port() != "" && u.Port() != "443") {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "link.paystack.co" || host == "paystack.com" || strings.HasSuffix(host, ".paystack.com")
 }
 
 type authorization struct {
@@ -122,7 +135,7 @@ func (c *Client) authorization(ctx context.Context, id string) (authorization, e
 	}
 	e := c.call(ctx, "GET", "/customer/authorization/verify/"+url.PathEscape(id), nil, &a)
 	if e == nil && (a.Channel != "direct_debit" || a.Code == "" || a.Customer.Email == "") {
-		e = errors.New("Paystack did not return a bank authorization")
+		e = errors.New("paystack did not return a bank authorization")
 	}
 	return a, e
 }
@@ -155,7 +168,7 @@ func (c *Client) Submit(ctx context.Context, in collections.Request) (collection
 		return collections.Response{}, errors.New("positive NGN amount and a stable reference required")
 	}
 	if in.SettlementRoute != nil && in.SettlementRoute.Method == "provider_split" {
-		return collections.Response{}, errors.New("Paystack automatic seller split is not configured")
+		return collections.Response{}, errors.New("paystack automatic seller split is not configured")
 	}
 	a, e := c.authorization(ctx, in.MandateReference)
 	if e != nil {
@@ -206,7 +219,7 @@ func (c *Client) GetByReference(ctx context.Context, in collections.Request) (co
 		domain = "live"
 	}
 	if t.Reference != in.ExternalReference || t.Domain != domain || t.Currency != "NGN" || in.Currency != "NGN" || t.Amount != int64(in.AmountKobo) || t.Authorization.Code != a.Code || t.Authorization.Channel != "direct_debit" || !strings.EqualFold(t.Customer.Email, a.Customer.Email) {
-		return collections.Response{}, errors.New("Paystack payment does not match the reserved debit")
+		return collections.Response{}, errors.New("paystack payment does not match the reserved debit")
 	}
 	out := collections.Response{State: collections.ProviderPending, ProviderCollectionID: in.ExternalReference}
 	switch t.Status {
@@ -220,7 +233,7 @@ func (c *Client) GetByReference(ctx context.Context, in collections.Request) (co
 	// A reversed transaction needs the controlled reversal flow; it must not be
 	// mistaken for a failed debit and retried against the buyer.
 	case "reversed":
-		return collections.Response{}, errors.New("Paystack reversal requires financial review")
+		return collections.Response{}, errors.New("paystack reversal requires financial review")
 	}
 	return out, nil
 }
@@ -271,7 +284,7 @@ func (c *Client) ParseWebhook(signature string, raw []byte) (Notice, error) {
 		domain = "live"
 	}
 	if event.Data.Domain != domain || event.Data.Reference == "" {
-		return Notice{}, errors.New("Paystack event mode or reference mismatch")
+		return Notice{}, errors.New("paystack event mode or reference mismatch")
 	}
 	return Notice{EventID: hex.EncodeToString(m.Sum(nil)), Type: event.Event, Reference: event.Data.Reference}, nil
 }
@@ -299,7 +312,7 @@ func (c *Client) RecoverAuthorization(ctx context.Context, in mandates.Authoriza
 	}
 	email, e := c.email(ctx, in.UserID)
 	if e != nil || email == "" || !a.Active || !strings.EqualFold(email, a.Customer.Email) || in.AmountCeiling <= 0 {
-		return mandates.Mandate{}, errors.New("Paystack permission is not active for the original buyer")
+		return mandates.Mandate{}, errors.New("paystack permission is not active for the original buyer")
 	}
 	m := mandates.Mandate{Provider: c.name, ProviderAdapter: "paystack", ProviderID: id, Reference: in.Reference, Status: mandates.Active, Variable: true, AmountCeiling: in.AmountCeiling}
 	if !in.RequiredUntil.IsZero() {

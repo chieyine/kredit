@@ -44,6 +44,10 @@ jobs:
       APP_ENV: development
       DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
       DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+      # Fixture creation uses the owner; runtime adapters must use these
+      # separately provisioned non-privileged logins, never the owner via SET ROLE.
+      APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
       KREDIT_INTEGRATION: '1'
     steps:
       - uses: actions/checkout@v4

@@ -41,7 +41,7 @@ func setup(t *testing.T, handler http.HandlerFunc) *Client {
 	return c
 }
 func mandateJSON(w http.ResponseWriter) {
-	json.NewEncoder(w).Encode(map[string]any{"requestSuccessful": true, "responseCode": "0", "responseBody": []any{map[string]any{"mandateReference": "local", "mandateCode": "CODE", "mandateStatus": "ACTIVATED", "mandateAmount": 1000, "contractCode": "contract", "customerEmailAddress": "buyer@example.test", "customerAccountNumber": "0123456789", "customerAccountBankCode": "058", "startDate": time.Now().Add(-time.Hour).Format(time.RFC3339), "endDate": time.Now().Add(time.Hour).Format(time.RFC3339)}}})
+	_ = json.NewEncoder(w).Encode(map[string]any{"requestSuccessful": true, "responseCode": "0", "responseBody": []any{map[string]any{"mandateReference": "local", "mandateCode": "CODE", "mandateStatus": "ACTIVATED", "mandateAmount": 1000, "contractCode": "contract", "customerEmailAddress": "buyer@example.test", "customerAccountNumber": "0123456789", "customerAccountBankCode": "058", "startDate": time.Now().Add(-time.Hour).Format(time.RFC3339), "endDate": time.Now().Add(time.Hour).Format(time.RFC3339)}}})
 }
 func TestDebitUsesPublishedSchemaAndExactNaira(t *testing.T) {
 	posts := 0
@@ -55,11 +55,11 @@ func TestDebitUsesPublishedSchemaAndExactNaira(t *testing.T) {
 			t.Fatal("wrong endpoint")
 		}
 		var body map[string]any
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["debitAmount"] != 123.45 || body["mandateCode"] != "CODE" || body["customerEmail"] != "buyer@example.test" || body["paymentReference"] != "saved-ref" || body["amount"] != nil {
 			t.Fatalf("incorrect debit contract: %v", body)
 		}
-		w.Write([]byte(`{"requestSuccessful":true,"responseCode":"0","responseBody":{"transactionStatus":"PENDING"}}`))
+		_, _ = w.Write([]byte(`{"requestSuccessful":true,"responseCode":"0","responseBody":{"transactionStatus":"PENDING"}}`))
 	})
 	out, e := c.Submit(context.Background(), collections.Request{MandateReference: "local", ExternalReference: "saved-ref", AmountKobo: 12345, Currency: "NGN"})
 	if e != nil || posts != 1 || out.State != collections.ProviderPending || out.SucceededAmountKobo != 0 {
@@ -86,7 +86,7 @@ func TestStatusLookupBindsOriginalMandate(t *testing.T) {
 				case "mandate":
 					data["mandateCode"] = "other"
 				}
-				json.NewEncoder(w).Encode(map[string]any{"requestSuccessful": true, "responseCode": "0", "responseBody": data})
+				_ = json.NewEncoder(w).Encode(map[string]any{"requestSuccessful": true, "responseCode": "0", "responseBody": data})
 			})
 			out, e := c.GetByReference(context.Background(), collections.Request{MandateReference: "local", ExternalReference: "saved-ref", AmountKobo: 12345, Currency: "NGN"})
 			if field == "valid" {

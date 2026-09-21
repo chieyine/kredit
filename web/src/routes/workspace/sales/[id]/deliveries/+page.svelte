@@ -102,7 +102,7 @@
           shipments: rows('shipments', decodeShipment)(r),
           credit_notes: rows('credit_notes', decodeCreditNote)(r),
         };
-      }, { signal: req.signal }).catch(() => ({ items: [], shipments: [], credit_notes: [] }));
+      }, { signal: req.signal });
 
       if (!req.current()) return;
       lineItems = res.items;

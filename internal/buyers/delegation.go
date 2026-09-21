@@ -3,9 +3,10 @@ package buyers
 import (
 	"context"
 	"errors"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"strings"
 )
 
 // EnrollPurchasingStaff records the staff member's own notices and establishes
@@ -18,7 +19,7 @@ func (s *PostgresStore) EnrollPurchasingStaff(ctx context.Context, user, profile
 	if err != nil {
 		return Portal{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT app.lock_purchase_permission($1::uuid,'read',0)`, profile); err != nil {
 		return Portal{}, err
 	}

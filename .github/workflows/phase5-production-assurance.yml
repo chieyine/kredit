@@ -71,6 +71,8 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       APP_ENV: development
+      PUBLIC_BASE_URL: http://127.0.0.1:8080
+      APP_BASE_URL: http://127.0.0.1:8080
       DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_phase5_test?sslmode=disable
       DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_phase5_test?sslmode=disable
       PHASE5_APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_phase5_test?sslmode=disable

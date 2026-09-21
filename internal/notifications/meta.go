@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"kredit/internal/platformsettings"
 	"net/http"
@@ -127,58 +126,12 @@ func (p *MetaProvider) Send(ctx context.Context, m Message) (string, error) {
 	return result.Messages[0].ID, nil
 }
 
-// DownloadMedia fetches an audio or media file from Meta Graph API using the media ID.
+// DownloadMedia retrieves bounded, identity-checked audio for the voice-note
+// assistant. Credentials are sent only to the configured Graph version and
+// the explicitly allowed Meta media origin; redirects are never followed.
 func (p *MetaProvider) DownloadMedia(ctx context.Context, mediaID string) ([]byte, string, error) {
-	if strings.TrimSpace(mediaID) == "" {
-		return nil, "", errors.New("media ID is required")
+	if p == nil {
+		return nil, "", errors.New("media provider is unavailable")
 	}
-	metaURL := fmt.Sprintf("https://graph.facebook.com/v20.0/%s", mediaID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metaURL, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+p.config.Token)
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, "", fmt.Errorf("query media failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("query media returned status %d", resp.StatusCode)
-	}
-
-	var metaInfo struct {
-		URL      string `json:"url"`
-		MimeType string `json:"mime_type"`
-		FileSize int64  `json:"file_size"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&metaInfo); err != nil {
-		return nil, "", fmt.Errorf("decode media info: %w", err)
-	}
-	if metaInfo.URL == "" {
-		return nil, "", errors.New("media URL not found in metadata")
-	}
-
-	dlReq, err := http.NewRequestWithContext(ctx, http.MethodGet, metaInfo.URL, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	dlReq.Header.Set("Authorization", "Bearer "+p.config.Token)
-	dlResp, err := p.client.Do(dlReq)
-	if err != nil {
-		return nil, "", fmt.Errorf("download media failed: %w", err)
-	}
-	defer dlResp.Body.Close()
-
-	if dlResp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("download media returned status %d", dlResp.StatusCode)
-	}
-
-	data, err := io.ReadAll(io.LimitReader(dlResp.Body, 16<<20))
-	if err != nil {
-		return nil, "", fmt.Errorf("read media body: %w", err)
-	}
-
-	return data, metaInfo.MimeType, nil
+	return downloadMetaVoice(ctx, p.client, p.config.Endpoint, p.phoneID, p.config.Token, mediaID)
 }

@@ -34,21 +34,21 @@ func TestHostedAuthorizationAndExactKoboCharge(t *testing.T) {
 		switch r.URL.Path {
 		case "/customer/authorization/initialize":
 			var body map[string]string
-			json.NewDecoder(r.Body).Decode(&body)
+			_ = json.NewDecoder(r.Body).Decode(&body)
 			if body["channel"] != "direct_debit" || body["email"] != "buyer@example.test" || body["callback_url"] != "https://kredit.ng/buyer/mandates" {
 				t.Error("incorrect authorization payload")
 			}
-			w.Write([]byte(`{"status":true,"data":{"reference":"original-auth","redirect_url":"https://link.paystack.com/example"}}`))
+			_, _ = w.Write([]byte(`{"status":true,"data":{"reference":"original-auth","redirect_url":"https://link.paystack.com/example"}}`))
 		case "/customer/authorization/verify/original-auth":
-			w.Write([]byte(`{"status":true,"data":{"authorization_code":"AUTH_secret","channel":"direct_debit","active":true,"customer":{"email":"buyer@example.test"}}}`))
+			_, _ = w.Write([]byte(`{"status":true,"data":{"authorization_code":"AUTH_secret","channel":"direct_debit","active":true,"customer":{"email":"buyer@example.test"}}}`))
 		case "/transaction/charge_authorization":
 			chargeCount++
 			var body map[string]any
-			json.NewDecoder(r.Body).Decode(&body)
+			_ = json.NewDecoder(r.Body).Decode(&body)
 			if body["amount"] != float64(12345) || body["reference"] != "reserved-ref" || body["authorization_code"] != "AUTH_secret" {
 				t.Error("amount/reference/permission changed")
 			}
-			w.Write([]byte(`{"status":true,"data":{"status":"success"}}`))
+			_, _ = w.Write([]byte(`{"status":true,"data":{"status":"success"}}`))
 		default:
 			t.Errorf("unexpected endpoint %s", r.URL.Path)
 			w.WriteHeader(400)
@@ -72,7 +72,7 @@ func TestVerificationBindsEveryPaymentFact(t *testing.T) {
 		t.Run(field, func(t *testing.T) {
 			c := fixture(t, func(w http.ResponseWriter, r *http.Request) {
 				if strings.HasPrefix(r.URL.Path, "/customer/") {
-					w.Write([]byte(`{"status":true,"data":{"authorization_code":"AUTH_secret","channel":"direct_debit","active":false,"customer":{"email":"buyer@example.test"}}}`))
+					_, _ = w.Write([]byte(`{"status":true,"data":{"authorization_code":"AUTH_secret","channel":"direct_debit","active":false,"customer":{"email":"buyer@example.test"}}}`))
 					return
 				}
 				data := map[string]any{"reference": "reserved-ref", "amount": 12345, "currency": "NGN", "domain": "test", "status": "success", "authorization": map[string]string{"authorization_code": "AUTH_secret", "channel": "direct_debit"}, "customer": map[string]string{"email": "buyer@example.test"}}
@@ -90,7 +90,7 @@ func TestVerificationBindsEveryPaymentFact(t *testing.T) {
 				case "email":
 					data["customer"] = map[string]string{"email": "other@example.test"}
 				}
-				json.NewEncoder(w).Encode(map[string]any{"status": true, "data": data})
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": true, "data": data})
 			})
 			out, err := c.GetByReference(context.Background(), collections.Request{MandateReference: "original-auth", ExternalReference: "reserved-ref", AmountKobo: 12345, Currency: "NGN"})
 			if field == "valid" {
@@ -141,7 +141,7 @@ func (h handlerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 func TestRecoveryRequiresOriginalBuyer(t *testing.T) {
 	for _, email := range []string{"buyer@example.test", "someone-else@example.test"} {
 		c := fixture(t, func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(map[string]any{"status": true, "data": map[string]any{"authorization_code": "AUTH_secret", "channel": "direct_debit", "active": true, "customer": map[string]string{"email": email}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": true, "data": map[string]any{"authorization_code": "AUTH_secret", "channel": "direct_debit", "active": true, "customer": map[string]string{"email": email}}})
 		})
 		m, e := c.RecoverAuthorization(context.Background(), mandates.AuthorizationInput{UserID: "buyer", Reference: "saved-local-ref", AmountCeiling: 12345}, "provider-ref")
 		if email == "buyer@example.test" {

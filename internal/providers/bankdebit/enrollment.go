@@ -13,9 +13,34 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"kredit/internal/db"
 	"kredit/internal/mandates"
 	"kredit/internal/platformsettings"
 )
+
+var ErrEnrollmentNotFound = errors.New("bank authorization not found")
+var ErrEnrollmentUnavailable = errors.New("encrypted durable bank authorization is unavailable")
+
+// Preserve diagnostic causes for errors.Is/errors.As without exposing database
+// details through a provider-facing error string.
+type enrollmentLookupError struct{ cause error }
+
+func (e *enrollmentLookupError) Error() string { return ErrEnrollmentUnavailable.Error() }
+func (e *enrollmentLookupError) Unwrap() error { return e.cause }
+func (e *enrollmentLookupError) Is(target error) bool {
+	return target == ErrEnrollmentUnavailable
+}
+
+func classifyEnrollmentLookupError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEnrollmentNotFound
+	}
+	return &enrollmentLookupError{cause: err}
+}
 
 type Details struct {
 	Name          string `json:"name"`
@@ -65,25 +90,27 @@ func NewStore(pool *pgxpool.Pool, key string) *Store {
 	return &Store{pool: pool, crypto: platformsettings.NewEncryptor(key)}
 }
 func (s *Store) tx(ctx context.Context, user string) (pgx.Tx, error) {
+	if s == nil || s.pool == nil {
+		return nil, ErrEnrollmentUnavailable
+	}
 	tx, e := s.pool.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
 	if _, e = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, user); e != nil {
-		tx.Rollback(ctx)
-		return nil, e
+		return nil, db.RollbackFailure(ctx, tx, e)
 	}
 	return tx, nil
 }
 func (s *Store) Create(ctx context.Context, provider string, in mandates.AuthorizationInput) (mandates.Mandate, error) {
-	if !s.crypto.Ready() || in.Reference == "" || in.UserID == "" || in.AmountCeiling <= 0 {
-		return mandates.Mandate{}, errors.New("encrypted durable bank authorization is unavailable")
+	if s == nil || s.pool == nil || s.crypto == nil || !s.crypto.Ready() || in.Reference == "" || in.UserID == "" || in.AmountCeiling <= 0 {
+		return mandates.Mandate{}, ErrEnrollmentUnavailable
 	}
 	tx, e := s.tx(ctx, in.UserID)
 	if e != nil {
 		return mandates.Mandate{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	b, _ := json.Marshal(in)
 	_, e = tx.Exec(ctx, `INSERT INTO app.bank_debit_enrollments(provider,reference,user_id,input) VALUES($1,$2,$3::uuid,$4::jsonb)`, provider, in.Reference, in.UserID, b)
 	if e != nil {
@@ -95,15 +122,18 @@ func (s *Store) Create(ctx context.Context, provider string, in mandates.Authori
 	return mandates.Mandate{Provider: provider, ProviderID: in.Reference, Reference: in.Reference, Status: mandates.Pending, AmountCeiling: in.AmountCeiling, Variable: true, AuthorizationURL: "/workspace/purchases/bank-authorization/" + in.Reference}, nil
 }
 func (s *Store) Load(ctx context.Context, provider, ref string) (Enrollment, error) {
+	if s == nil || s.pool == nil {
+		return Enrollment{}, ErrEnrollmentUnavailable
+	}
 	var owner string
 	if e := s.pool.QueryRow(ctx, `SELECT buyer_user_id FROM app.payment_mandate_by_provider($1,$2)`, provider, ref).Scan(&owner); e != nil {
-		return Enrollment{}, errors.New("bank authorization not found")
+		return Enrollment{}, classifyEnrollmentLookupError(e)
 	}
 	tx, e := s.tx(ctx, owner)
 	if e != nil {
 		return Enrollment{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	v, e := s.read(ctx, tx, provider, ref, false)
 	if e != nil {
 		return v, e
@@ -128,6 +158,9 @@ func (s *Store) read(ctx context.Context, tx pgx.Tx, provider, ref string, lock 
 		return v, e
 	}
 	if cipher != "" {
+		if s.crypto == nil {
+			return v, ErrEnrollmentUnavailable
+		}
 		plain, e := s.crypto.Decrypt("bank-debit:"+provider+":"+ref, cipher)
 		if e != nil {
 			return v, e
@@ -145,11 +178,14 @@ func (s *Store) Begin(ctx context.Context, provider, ref, user string, d Details
 	if e := d.Validate(); e != nil {
 		return Enrollment{}, e
 	}
+	if s == nil || s.pool == nil || s.crypto == nil || !s.crypto.Ready() {
+		return Enrollment{}, ErrEnrollmentUnavailable
+	}
 	tx, e := s.tx(ctx, user)
 	if e != nil {
 		return Enrollment{}, e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	v, e := s.read(ctx, tx, provider, ref, true)
 	if e != nil {
 		return v, e
@@ -179,7 +215,7 @@ func (s *Store) Confirm(ctx context.Context, v Enrollment, result Result) error 
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	b, _ := json.Marshal(result)
 	tag, e := tx.Exec(ctx, `UPDATE app.bank_debit_enrollments SET state='CONFIRMED',result=$3::jsonb,version=version+1,updated_at=now() WHERE provider=$1 AND reference=$2 AND state='STARTED' AND version=$4`, v.Provider, v.Reference, b, v.Version)
 	if e != nil {
@@ -197,7 +233,7 @@ func (s *Store) CancelDraft(ctx context.Context, v Enrollment) error {
 	if e != nil {
 		return e
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	tag, e := tx.Exec(ctx, `UPDATE app.bank_debit_enrollments SET state='CANCELLED',version=version+1,updated_at=now() WHERE provider=$1 AND reference=$2 AND state IN ('DRAFT','CANCELLED')`, v.Provider, v.Reference)
 	if e != nil {
 		return e

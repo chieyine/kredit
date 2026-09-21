@@ -3,14 +3,15 @@ package buyers
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"kredit/internal/identity"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func importContacts() []ImportContact {

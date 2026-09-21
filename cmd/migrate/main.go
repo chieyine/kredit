@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,9 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 )
+
+//go:embed runtime_roles.sql
+var runtimeRoleBootstrap string
 
 func main() {
 	databaseURL := os.Getenv("DATABASE_DIRECT_URL")
@@ -52,6 +56,13 @@ func main() {
 		}
 		fmt.Println("one application migration rolled back")
 		return
+	}
+	// Migrations 195 onward grant functions to runtime roles. Provision only
+	// their non-login identities here; schema/table privileges are installed
+	// separately after migrations. Never run the full roles.sql before schema
+	// creation, and never grant runtime roles migration privileges.
+	if _, err := db.ExecContext(context.Background(), runtimeRoleBootstrap); err != nil {
+		panic(fmt.Errorf("bootstrap runtime roles (ask the database administrator to pre-create kredit_app and kredit_worker when using a restricted migrator): %w", err))
 	}
 	if err := goose.Up(db, migrationsDir); err != nil {
 		panic(err)

@@ -72,7 +72,7 @@ func (s unavailableObjectStore) SignedURL(context.Context, string, time.Duration
 }
 
 type UploadSigner interface {
-	SignedUploadURL(context.Context, string, time.Duration, string) (string, error)
+	SignedUploadURL(context.Context, string, time.Duration, string, int64) (string, error)
 }
 
 // UploadHeaders mirrors the requirements of the configured URL signer.
@@ -213,7 +213,7 @@ func (s *Store) CreateUpload(ctx context.Context, organizationID, actorID, purpo
 		keyOwner = "identity/" + actorID
 	}
 	key := fmt.Sprintf("%s/%s/%s", keyOwner, purpose, newID())
-	url, err := signer.SignedUploadURL(ctx, key, ttl, contentType)
+	url, err := signer.SignedUploadURL(ctx, key, ttl, contentType, size)
 	if err != nil {
 		return Document{}, "", err
 	}
@@ -579,7 +579,7 @@ func (s *MemoryObjectStore) SignedURL(_ context.Context, key string, ttl time.Du
 	return fmt.Sprintf("memory://%s?expires_in=%d", key, int(ttl.Seconds())), nil
 }
 
-func (s *MemoryObjectStore) SignedUploadURL(_ context.Context, key string, ttl time.Duration, _ string) (string, error) {
+func (s *MemoryObjectStore) SignedUploadURL(_ context.Context, key string, ttl time.Duration, _ string, _ int64) (string, error) {
 	if ttl <= 0 {
 		return "", errors.New("positive URL TTL is required")
 	}

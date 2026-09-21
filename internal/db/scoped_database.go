@@ -35,7 +35,7 @@ func (p *ScopedDatabase) Exec(ctx context.Context, sql string, args ...any) (pgc
 	if err != nil {
 		return pgconn.CommandTag{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	tag, err := tx.Exec(ctx, sql, args...)
 	if err != nil {
 		return tag, err
@@ -62,7 +62,7 @@ func (r *scopedRow) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
 	}
-	defer r.tx.Rollback(r.ctx)
+	defer func() { _ = r.tx.Rollback(r.ctx) }()
 	if err := r.row.Scan(dest...); err != nil {
 		return err
 	}

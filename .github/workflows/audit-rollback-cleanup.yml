@@ -1,0 +1,71 @@
+name: Audit boundary regressions
+
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-rollback-cleanup.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  rollback-cleanup:
+    if: github.repository == 'chieyine/kredit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dee827a690b9f60a1b0d56bc9a649ecf9a4a27de
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Verify source and module integrity
+        run: |
+          test "$(git rev-parse HEAD)" = dee827a690b9f60a1b0d56bc9a649ecf9a4a27de
+          go mod download
+          go mod verify
+      - name: Run explicit cleanup regression tests
+        run: go test -count=1 -race -v ./internal/db -run '^TestRollbackFailure'
+      - name: Run affected package unit and race tests
+        run: go test -count=1 -race ./internal/db ./internal/networkops ./internal/purchasing ./internal/referrals ./internal/providers/bankdebit
+  page-cache:
+    if: github.repository == 'chieyine/kredit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dee827a690b9f60a1b0d56bc9a649ecf9a4a27de
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install locked frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck and build frontend
+        run: |
+          pnpm --dir web check
+          pnpm --dir web build
+      - name: Exercise cache policy and actual server responses
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/cache-policy.json
+        run: pnpm --dir web exec playwright test tests/audit-page-cache.spec.ts --workers=1 --reporter=list,json
+      - name: Bind test evidence to source
+        if: always()
+        run: |
+          mkdir -p web/test-results
+          git rev-parse HEAD > web/test-results/source-commit.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: boundary-cache-dee827a
+          path: web/test-results/
+          retention-days: 7
+          if-no-files-found: error

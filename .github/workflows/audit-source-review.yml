@@ -1,0 +1,40 @@
+name: Audit source review (temporary)
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-source-review.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: f9301f729d179de65a78f6d2fba5d0081002cece
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+          cache: false
+      - name: Export tracked source and reproducible offline build dependencies
+        env:
+          GOPATH: ${{ runner.temp }}/audit-gopath
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/audit-export"
+          git archive --format=tar.gz --output="$RUNNER_TEMP/audit-export/review-source.tar.gz" HEAD
+          go mod download
+          go mod verify
+          tar -czf "$RUNNER_TEMP/audit-export/go-toolchain.tar.gz" -C "$(go env GOROOT)" .
+          tar -czf "$RUNNER_TEMP/audit-export/go-modules.tar.gz" -C "$GOPATH/pkg/mod" .
+          git rev-parse HEAD > "$RUNNER_TEMP/audit-export/source-commit.txt"
+          cd "$RUNNER_TEMP/audit-export"
+          sha256sum *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: review-source-f9301f7
+          path: ${{ runner.temp }}/audit-export/
+          retention-days: 1
+          if-no-files-found: error

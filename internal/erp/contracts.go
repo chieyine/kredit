@@ -79,17 +79,34 @@ func (pkg *ERPPackageV2) ComputeIntegrityHash() string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (pkg *ERPPackageV2) ToCSV() ([]byte, error) {
+// ToCSV produces a spreadsheet-oriented export. Machine consumers must opt in
+// to ToMachineCSV to retain exact text without presentation escaping.
+func (pkg *ERPPackageV2) ToCSV() ([]byte, error) { return pkg.ToSpreadsheetCSV() }
+
+func (pkg *ERPPackageV2) ToSpreadsheetCSV() ([]byte, error) { return pkg.toCSV(true) }
+
+// ToMachineCSV is lossless interchange data, not safe to open as a spreadsheet.
+func (pkg *ERPPackageV2) ToMachineCSV() ([]byte, error) { return pkg.toCSV(false) }
+
+func (pkg *ERPPackageV2) toCSV(spreadsheet bool) ([]byte, error) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
+	write := func(row []string) error {
+		if spreadsheet {
+			for _, index := range []int{0, 1, 2, 5, 6} {
+				row[index] = spreadsheetText(row[index])
+			}
+		}
+		return w.Write(row)
+	}
 
 	// Header row
-	if err := w.Write([]string{"record_type", "reference", "account_or_customer", "debit_kobo", "credit_kobo", "date", "notes"}); err != nil {
+	if err := write([]string{"record_type", "reference", "account_or_customer", "debit_kobo", "credit_kobo", "date", "notes"}); err != nil {
 		return nil, err
 	}
 
 	for _, inv := range pkg.Invoices {
-		if err := w.Write([]string{
+		if err := write([]string{
 			"INVOICE",
 			inv.Reference,
 			inv.CustomerName,
@@ -103,7 +120,7 @@ func (pkg *ERPPackageV2) ToCSV() ([]byte, error) {
 	}
 
 	for _, p := range pkg.Payments {
-		if err := w.Write([]string{
+		if err := write([]string{
 			"PAYMENT",
 			p.Reference,
 			p.InvoiceReference,
@@ -117,7 +134,7 @@ func (pkg *ERPPackageV2) ToCSV() ([]byte, error) {
 	}
 
 	for _, cn := range pkg.CreditNotes {
-		if err := w.Write([]string{
+		if err := write([]string{
 			"CREDIT_NOTE",
 			cn.Reference,
 			cn.InvoiceReference,
@@ -131,7 +148,7 @@ func (pkg *ERPPackageV2) ToCSV() ([]byte, error) {
 	}
 
 	for _, j := range pkg.JournalEntries {
-		if err := w.Write([]string{
+		if err := write([]string{
 			"JOURNAL",
 			j.TransactionID,
 			fmt.Sprintf("%s (%s)", j.AccountCode, j.AccountName),

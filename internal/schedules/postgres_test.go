@@ -16,6 +16,15 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 	if url == "" || os.Getenv("KREDIT_INTEGRATION") != "1" {
 		t.Skip("KREDIT_INTEGRATION=1 and DATABASE_URL are required")
 	}
+	// The owner connection creates fixtures only. Exercise the repository as
+	// an actual restricted login, never a privileged owner using SET ROLE.
+	runtimeURL := os.Getenv("KREDIT_TEST_APP_DATABASE_URL")
+	if runtimeURL == "" {
+		runtimeURL = os.Getenv("APP_DATABASE_URL")
+	}
+	if runtimeURL == "" {
+		t.Fatal("APP_DATABASE_URL or KREDIT_TEST_APP_DATABASE_URL must identify a restricted application login")
+	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
@@ -29,6 +38,9 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO app.organizations (legal_name, business_type, business_address, industry) VALUES ('Schedule Test', 'limited_company', 'test', 'test') RETURNING id::text`).Scan(&organizationID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := pool.Exec(ctx, `INSERT INTO app.memberships (organization_id, user_id, role, status) VALUES ($1::uuid, $2::uuid, 'owner', 'active')`, organizationID, userID); err != nil {
+		t.Fatal(err)
+	}
 	if err := pool.QueryRow(ctx, `INSERT INTO app.credit_requests (supplier_organization_id, buyer_user_id, buyer_business_id, principal_kobo, goods_description, due_date, collection_at, state, created_by) VALUES ($1::uuid, $2::uuid, gen_random_uuid(), 3000, 'test', current_date + 30, now() + interval '30 days', 'ACTIVE', $2::uuid) RETURNING id::text`, organizationID, userID).Scan(&requestID); err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +50,7 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO ledger.transactions (event_type, reference_type, reference_id, idempotency_key, effective_at) VALUES ('test', 'credit_request', $1::uuid, $2, now()) RETURNING id::text`, requestID, "schedule-test-"+requestID).Scan(&transactionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(ctx, `INSERT INTO app.obligations (credit_request_id, agreement_version_id, supplier_organization_id, buyer_business_id, principal_kobo, currency, lifecycle_status, payment_status, outstanding_kobo, base_fee_kobo, ledger_transaction_id, activated_at) SELECT $1::uuid, $2::uuid, $3::uuid, buyer_business_id, principal_kobo, 'NGN', 'ACTIVE', 'CURRENT', principal_kobo, 0, $4::uuid, now() FROM app.credit_requests WHERE id = $1::uuid RETURNING id::text`, requestID, agreementID, organizationID, transactionID).Scan(&obligationID); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO app.obligations (credit_request_id, agreement_version_id, supplier_organization_id, buyer_business_id, principal_kobo, currency, lifecycle_status, payment_status, outstanding_kobo, base_fee_kobo, ledger_transaction_id, activated_at) SELECT $1::uuid, $2::uuid, $3::uuid, buyer_business_id, principal_kobo, 'NGN', 'ACTIVE', 'UNPAID', principal_kobo, 0, $4::uuid, now() FROM app.credit_requests WHERE id = $1::uuid RETURNING id::text`, requestID, agreementID, organizationID, transactionID).Scan(&obligationID); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
@@ -48,14 +60,11 @@ func TestPostgresStoreRoundTrip(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM app.agreement_versions WHERE id = $1::uuid`, agreementID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.credit_requests WHERE id = $1::uuid`, requestID)
 		_, _ = pool.Exec(ctx, `DELETE FROM ledger.transactions WHERE id = $1::uuid`, transactionID)
+		_, _ = pool.Exec(ctx, `DELETE FROM app.memberships WHERE organization_id = $1::uuid AND user_id = $2::uuid`, organizationID, userID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.organizations WHERE id = $1::uuid`, organizationID)
 		_, _ = pool.Exec(ctx, `DELETE FROM app.users WHERE id = $1::uuid`, userID)
 	}()
 
-	runtimeURL := os.Getenv("KREDIT_TEST_APP_DATABASE_URL")
-	if runtimeURL == "" {
-		runtimeURL = url
-	}
 	runtimePool, err := db.OpenAsRole(ctx, runtimeURL, "kredit_app")
 	if err != nil {
 		t.Fatal(err)

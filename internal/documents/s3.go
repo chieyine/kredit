@@ -70,14 +70,20 @@ func (s *S3ObjectStore) SignedURL(ctx context.Context, key string, ttl time.Dura
 	return request.URL, nil
 }
 
-func (s *S3ObjectStore) SignedUploadURL(ctx context.Context, key string, ttl time.Duration, contentType string) (string, error) {
+func (s *S3ObjectStore) SignedUploadURL(ctx context.Context, key string, ttl time.Duration, contentType string, size int64) (string, error) {
 	if s == nil || s.presign == nil {
 		return "", errors.New("object storage is not configured")
 	}
 	if ttl <= 0 || ttl > 24*time.Hour {
 		return "", errors.New("signed URL TTL must be between 1 second and 24 hours")
 	}
-	request, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key), IfNoneMatch: aws.String("*"), ContentType: aws.String(contentType), ServerSideEncryption: s.encryption}, func(options *s3.PresignOptions) { options.Expires = ttl })
+	if size <= 0 || size > 25<<20 {
+		return "", errors.New("signed upload size must be between 1 byte and 25 MiB")
+	}
+	// Sign Content-Length as part of the request. Completion still verifies the
+	// stored size and SHA-256, but the presigned PUT must not permit a caller to
+	// turn a small declared upload into an arbitrarily large orphaned object.
+	request, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key), IfNoneMatch: aws.String("*"), ContentLength: aws.Int64(size), ContentType: aws.String(contentType), ServerSideEncryption: s.encryption}, func(options *s3.PresignOptions) { options.Expires = ttl })
 	if err != nil {
 		return "", err
 	}

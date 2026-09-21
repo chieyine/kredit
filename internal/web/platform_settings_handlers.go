@@ -100,20 +100,14 @@ func (s *Server) listPlatformSettings(w http.ResponseWriter, r *http.Request) {
 				all[i].ConnectionState = "unavailable"
 				continue
 			}
-			values, decodeErr := platformsettings.DecodeRuntimeConnection(all[i].Key, saved.Value)
+			values, decodeErr := config.PublicStoredConnectionValues(all[i].Key, saved.Value)
 			if decodeErr != nil {
 				all[i].ConnectionState = "unavailable"
 				continue
 			}
-			for _, field := range definition.Fields {
-				if field.Kind == "password" {
-					continue
-				}
-				var value any
-				if json.Unmarshal(values[field.Key], &value) == nil {
-					all[i].ConnectionValues[field.Key] = value
-				}
-			}
+			// Saved retained accounts include credentials inside their JSON string.
+			// Never overlay decrypted fields onto an already-redacted projection.
+			all[i].ConnectionValues = values
 			all[i].ConnectionState = "restart_required"
 			if all[i].AppliedVersion == all[i].Version {
 				all[i].ConnectionState = "applied_unverified"

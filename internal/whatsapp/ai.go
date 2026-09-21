@@ -72,9 +72,10 @@ func NewAIParserWithModel(apiKey, model string) *AIParser {
 		model = defaultGeminiModel
 	}
 	return &AIParser{
-		apiKey:  apiKey,
-		model:   model,
-		client:  &http.Client{Timeout: 30 * time.Second},
+		apiKey: apiKey,
+		model:  model,
+		// A redirect must not forward the provider API key or customer content.
+		client:  &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		senders: map[string]senderWindowState{},
 		now:     func() time.Time { return time.Now() },
 	}
@@ -142,7 +143,7 @@ Return ONLY a valid JSON object matching this schema:
 
 func (p *AIParser) ParseText(ctx context.Context, text string) (AIResult, error) {
 	if !p.Enabled() {
-		return AIResult{Intent: IntentUnknown, RawText: text}, errors.New("Gemini AI is not configured")
+		return AIResult{Intent: IntentUnknown, RawText: text}, errors.New("gemini AI is not configured")
 	}
 
 	reqBody := map[string]any{
@@ -163,7 +164,7 @@ func (p *AIParser) ParseText(ctx context.Context, text string) (AIResult, error)
 
 func (p *AIParser) ParseAudio(ctx context.Context, audioBytes []byte, mimeType string) (AIResult, error) {
 	if !p.Enabled() {
-		return AIResult{Intent: IntentUnknown}, errors.New("Gemini AI is not configured")
+		return AIResult{Intent: IntentUnknown}, errors.New("gemini AI is not configured")
 	}
 	if len(audioBytes) == 0 {
 		return AIResult{Intent: IntentUnknown}, errors.New("audio data is empty")
@@ -228,11 +229,16 @@ func (p *AIParser) callGemini(ctx context.Context, payload map[string]any) (AIRe
 	if err != nil {
 		return AIResult{Intent: IntentUnknown}, fmt.Errorf("gemini api call failed: %w", err)
 	}
-	defer resp.Body.Close()
+	// The complete body read determines the result; closing only releases the response.
+	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		return AIResult{Intent: IntentUnknown}, fmt.Errorf("read gemini response: %w", err)
+	}
+
+	if len(body) > 1<<20 {
+		return AIResult{Intent: IntentUnknown}, errors.New("gemini response exceeds the size limit")
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

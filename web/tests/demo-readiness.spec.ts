@@ -12,6 +12,6 @@ test('sample sale waits for its controls to become interactive', async ({ page }
     release();
     await expect(send).toBeEnabled();
     await send.click();
-    await expect(page.getByRole('button', { name: 'Yes, I accept this sale' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Yes, I agree to this' })).toBeVisible();
   } finally { release(); }
 });

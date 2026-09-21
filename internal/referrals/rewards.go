@@ -3,11 +3,12 @@ package referrals
 import (
 	"context"
 	"errors"
+	"kredit/internal/db"
+	"kredit/internal/ledger"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"kredit/internal/ledger"
 )
 
 type facts struct {
@@ -50,9 +51,8 @@ func (s *Store) Refresh(ctx context.Context) error {
 			if e == nil {
 				e = tx.Commit(ctx)
 			}
-			tx.Rollback(ctx)
 			if e != nil {
-				return e
+				return db.RollbackFailure(ctx, tx, e)
 			}
 			cursor = id
 		}
@@ -215,18 +215,18 @@ func (s *Store) prepare(ctx context.Context, tx pgx.Tx, actor, agent string) (st
 		return "", e
 	}
 	if status != "active" || time.Since(updated) < 7*24*time.Hour {
-		return "", errors.New("Payouts require an active agent and bank details unchanged for seven days.")
+		return "", errors.New("payouts require an active agent and bank details unchanged for seven days")
 	}
 	var active bool
 	if e := tx.QueryRow(ctx, `SELECT app.dsa_agent_active($1::uuid)`, agent).Scan(&active); e != nil || !active {
-		return "", errors.New("Agent account is unavailable.")
+		return "", errors.New("agent account is unavailable")
 	}
 	var available int64
 	if e := tx.QueryRow(ctx, `SELECT LEAST(COALESCE(sum(amount_kobo),0),COALESCE(sum(amount_kobo) FILTER(WHERE available_at<=now()),0))-COALESCE((SELECT sum(amount_kobo) FROM app.dsa_payouts WHERE agent_id=$1::uuid AND state IN ('pending','paid')),0) FROM app.dsa_earnings WHERE agent_id=$1::uuid`, agent).Scan(&available); e != nil {
 		return "", e
 	}
 	if available <= 0 {
-		return "", errors.New("No matured, unpaid rewards are available.")
+		return "", errors.New("no matured, unpaid rewards are available")
 	}
 	var id string
 	e := tx.QueryRow(ctx, `INSERT INTO app.dsa_payouts(agent_id,amount_kobo,bank_name,account_name,account_number,bank_updated_at,created_by) SELECT user_id,$2,bank_name,account_name,account_number,bank_updated_at,$3::uuid FROM app.dsa_agents WHERE user_id=$1::uuid RETURNING id::text`, agent, available, actor).Scan(&id)
@@ -246,7 +246,7 @@ func (s *Store) finishPayout(ctx context.Context, tx pgx.Tx, actor string, in In
 		return e
 	}
 	if version != in.Version || state != "pending" {
-		return errors.New("Payout changed. Refresh before acting.")
+		return errors.New("payout changed; refresh before acting")
 	}
 	next := "cancelled"
 	var ref any
@@ -254,7 +254,7 @@ func (s *Store) finishPayout(ctx context.Context, tx pgx.Tx, actor string, in In
 		next = "paid"
 		r := strings.TrimSpace(in.Reference)
 		if len(r) < 3 || len(r) > 200 {
-			return errors.New("Enter the unique bank reference for the completed transfer.")
+			return errors.New("enter the unique bank reference for the completed transfer")
 		}
 		ref = r
 	}

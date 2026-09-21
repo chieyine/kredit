@@ -19,6 +19,7 @@ import (
 	"kredit/internal/collections"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
+	"kredit/internal/platform/httpjson"
 	"kredit/internal/providers/bankdebit"
 )
 
@@ -30,7 +31,7 @@ type Client struct {
 
 func New(name, secret, webhook string, live bool, store bankdebit.RecoveryStore) (*Client, error) {
 	if name == "" || !strings.HasPrefix(secret, "FLWSECK") || strings.ContainsAny(secret+webhook, "\r\n") || len(webhook) < 32 || store == nil || strings.Contains(secret, "TEST") == live {
-		return nil, errors.New("Flutterwave account, matching secret key, webhook secret and durable storage are required")
+		return nil, errors.New("flutterwave account, matching secret key, webhook secret and durable storage are required")
 	}
 	return &Client{name: name, secret: secret, webhookSecret: webhook, store: store, endpoint: "https://api.flutterwave.com/v3", http: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
@@ -55,18 +56,19 @@ func (c *Client) call(ctx context.Context, method, path string, in, out any) err
 	r.Header.Set("Content-Type", "application/json")
 	res, e := c.http.Do(r)
 	if e != nil {
-		return errors.New("Flutterwave request outcome is unconfirmed")
+		return errors.New("flutterwave request outcome is unconfirmed")
 	}
-	defer res.Body.Close()
+	// The complete response read is checked below; Close only releases it.
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("Flutterwave returned HTTP %d; reconcile before retrying", res.StatusCode)
+		return fmt.Errorf("flutterwave returned HTTP %d; reconcile before retrying", res.StatusCode)
 	}
 	var envelope struct {
 		Status string          `json:"status"`
 		Data   json.RawMessage `json:"data"`
 	}
-	if e = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); e != nil || envelope.Status != "success" {
-		return errors.New("Flutterwave did not confirm the request")
+	if e = httpjson.Decode(res.Body, 1<<20, &envelope); e != nil || envelope.Status != "success" {
+		return errors.New("flutterwave did not confirm the request")
 	}
 	if out != nil {
 		return json.Unmarshal(envelope.Data, out)
@@ -75,7 +77,7 @@ func (c *Client) call(ctx context.Context, method, path string, in, out any) err
 }
 func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.AuthorizationInput) (mandates.Mandate, error) {
 	if in.RequiredUntil.After(time.Now().Add(364 * 24 * time.Hour)) {
-		return mandates.Mandate{}, errors.New("Flutterwave bank permission cannot cover this sale's repayment period")
+		return mandates.Mandate{}, errors.New("flutterwave bank permission cannot cover this sale's repayment period")
 	}
 	m, e := c.store.Create(ctx, c.name, in)
 	m.ProviderAdapter = "flutterwave"
@@ -122,7 +124,7 @@ func (c *Client) CompleteEnrollment(ctx context.Context, ref, user string, d ban
 	amount, e := bankdebit.Kobo(data.Amount)
 	fee, feeErr := bankdebit.Kobo(data.Consent.Amount)
 	if e != nil || feeErr != nil || amount != v.Input.AmountCeiling || data.Currency != "NGN" || data.Reference == "" || fee <= 0 || data.Consent.BankName == "" || len(data.Consent.AccountNumber) != 10 {
-		return v, errors.New("Flutterwave returned incomplete activation instructions")
+		return v, errors.New("flutterwave returned incomplete activation instructions")
 	}
 	result := bankdebit.Result{Reference: data.Reference, Transfer: &bankdebit.ConsentTransfer{BankName: data.Consent.BankName, AccountName: data.Consent.AccountName, AccountNumber: data.Consent.AccountNumber, AmountKobo: fee, ExpiresAt: time.Now().Add(10 * time.Minute)}}
 	if e = c.store.Confirm(ctx, v, result); e != nil {
@@ -156,7 +158,7 @@ func (c *Client) readToken(ctx context.Context, v bankdebit.Enrollment) (token, 
 	}
 	amount, e := bankdebit.Kobo(t.Amount)
 	if e != nil || t.Reference != v.Result.Reference || t.Narration != "Kredit bank permission "+v.Reference || t.Currency != "NGN" || amount <= 0 || amount > v.Input.AmountCeiling {
-		return t, errors.New("Flutterwave authorization does not match the saved permission")
+		return t, errors.New("flutterwave authorization does not match the saved permission")
 	}
 	return t, nil
 }
@@ -198,11 +200,12 @@ func (c *Client) CancelMandate(ctx context.Context, ref, reason string) (mandate
 	if e != nil {
 		return mandates.Mandate{}, e
 	}
-	if v.State == "DRAFT" || v.State == "CANCELLED" {
+	switch v.State {
+	case "DRAFT", "CANCELLED":
 		e = c.store.CancelDraft(ctx, v)
-	} else if v.State == "CONFIRMED" {
+	case "CONFIRMED":
 		e = c.call(ctx, "PUT", "/accounts/token/"+url.PathEscape(v.Result.Reference), map[string]string{"status": "DELETED"}, nil)
-	} else {
+	default:
 		e = errors.New("authorization outcome must be confirmed before cancellation")
 	}
 	if e != nil {
@@ -222,7 +225,7 @@ func (c *Client) Submit(ctx context.Context, in collections.Request) (collection
 		return collections.Response{}, errors.New("positive NGN amount and original reference required")
 	}
 	if in.SettlementRoute != nil && in.SettlementRoute.Method == "provider_split" {
-		return collections.Response{}, errors.New("Flutterwave seller split is not configured")
+		return collections.Response{}, errors.New("flutterwave seller split is not configured")
 	}
 	v, e := c.Enrollment(ctx, in.MandateReference)
 	if e != nil {
@@ -274,7 +277,7 @@ func (c *Client) GetByReference(ctx context.Context, in collections.Request) (co
 	}
 	amount, e := bankdebit.Kobo(data.Amount)
 	if e != nil || amount != int64(in.AmountKobo) || data.Reference != in.ExternalReference || data.Currency != "NGN" || data.PaymentType != "account" || data.AuthModel != "EMANDATE" || !strings.EqualFold(data.Customer.Email, v.Details.Email) || data.Account.Number != v.Details.AccountNumber || data.Account.Bank != v.Details.BankCode {
-		return collections.Response{}, errors.New("Flutterwave transaction does not match the reserved debit")
+		return collections.Response{}, errors.New("flutterwave transaction does not match the reserved debit")
 	}
 	out := collections.Response{State: collections.ProviderPending, ProviderCollectionID: in.ExternalReference}
 	switch data.Status {
@@ -365,7 +368,7 @@ func (c *Client) Recover(ctx context.Context, actor, ref, action, providerRef, r
 
 func (c *Client) ValidateAuthorization(_ context.Context, in mandates.AuthorizationInput) error {
 	if in.RequiredUntil.After(time.Now().Add(364 * 24 * time.Hour)) {
-		return errors.New("Flutterwave bank permission cannot cover this repayment period; choose another collector")
+		return errors.New("flutterwave bank permission cannot cover this repayment period; choose another collector")
 	}
 	return nil
 }

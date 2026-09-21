@@ -84,7 +84,7 @@ func (p *ResilientProvider) Unwrap() Provider {
 }
 
 func (p *ResilientProvider) Submit(ctx context.Context, request Request) (Response, error) {
-	generation, err := p.allow()
+	generation, err := p.allow(ctx)
 	if err != nil {
 		return Response{}, err
 	}
@@ -101,7 +101,7 @@ func (p *ResilientProvider) Submit(ctx context.Context, request Request) (Respon
 }
 
 func (p *ResilientProvider) Get(ctx context.Context, providerID string) (Response, error) {
-	generation, err := p.allow()
+	generation, err := p.allow(ctx)
 	if err != nil {
 		return Response{}, err
 	}
@@ -123,7 +123,7 @@ func (p *ResilientProvider) Cancel(ctx context.Context, providerID string) (Resp
 	if !ok {
 		return Response{}, errors.New("collection provider does not permit cancellation")
 	}
-	generation, err := p.allow()
+	generation, err := p.allow(ctx)
 	if err != nil {
 		return Response{}, err
 	}
@@ -166,9 +166,14 @@ func (p *ResilientProvider) Health() HealthStatus {
 	return HealthStatus{State: state, Healthy: p.inner != nil && state == CircuitClosed, ConsecutiveFailures: p.failures, LastError: p.lastError, LastFailureAt: p.lastFailureAt, OpenUntil: p.openUntil}
 }
 
-func (p *ResilientProvider) allow() (uint64, error) {
+func (p *ResilientProvider) allow(ctx context.Context) (uint64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// A request cancelled before dispatch has not tested provider health and
+	// must not reserve the only half-open recovery probe.
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	if p.inner == nil {
 		return 0, errors.New("collection provider is unavailable")
 	}
@@ -217,17 +222,21 @@ func (p *ResilientProvider) success(generation uint64) {
 }
 
 func (p *ResilientProvider) GetByReference(ctx context.Context, request Request) (Response, error) {
-	generation, err := p.allow()
+	lookup, supportsReference := p.inner.(ReferenceLookupProvider)
+	// Missing local capabilities are not failed network requests. Validate
+	// before the breaker so unsupported recovery cannot reopen the circuit.
+	if !supportsReference && request.CollectionReference == "" {
+		return Response{}, errors.New("provider reference lookup is unavailable")
+	}
+	generation, err := p.allow(ctx)
 	if err != nil {
 		return Response{}, err
 	}
 	var response Response
-	if provider, ok := p.inner.(ReferenceLookupProvider); ok {
-		response, err = provider.GetByReference(ctx, request)
-	} else if request.CollectionReference != "" {
-		response, err = p.inner.Get(ctx, request.CollectionReference)
+	if supportsReference {
+		response, err = lookup.GetByReference(ctx, request)
 	} else {
-		err = errors.New("provider reference lookup is unavailable")
+		response, err = p.inner.Get(ctx, request.CollectionReference)
 	}
 	if err != nil {
 		p.failure(generation, err)

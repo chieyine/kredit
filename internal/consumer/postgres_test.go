@@ -3,13 +3,14 @@ package consumer
 import (
 	"context"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"kredit/internal/settlement"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestConsumerPostgresPermissionsMoneyAndReplay(t *testing.T) {

@@ -97,16 +97,11 @@ func PublicConnectionValues(c Config, key string) map[string]any {
 			if err != nil {
 				continue
 			}
-			if entries == nil {
-				entries = []RetainedCollectionConnection{}
+			encoded, err := publicRetainedAccounts(entries)
+			if err != nil {
+				continue
 			}
-			for i := range entries {
-				entries[i].APIKey = ""
-				entries[i].Token = ""
-				entries[i].WebhookSecret = ""
-			}
-			raw, _ := json.Marshal(entries)
-			values[field.Key] = string(raw)
+			values[field.Key] = encoded
 			continue
 		}
 		if field.Key == "DocumentScannerEnabled" {
@@ -178,8 +173,16 @@ func PrepareConnectionUpdate(ctx context.Context, base Config, settings platform
 				}
 			}
 		}
-		merged, _ := json.Marshal(entries)
-		values[retainedField], _ = json.Marshal(string(merged))
+		// #nosec G117 -- This write-only value is encrypted by UpdateValidated.
+		// The settings HTTP response uses PublicStoredConnectionValues instead.
+		merged, marshalErr := json.Marshal(entries)
+		if marshalErr != nil {
+			return nil, errors.New("saved account configuration could not be encoded")
+		}
+		values[retainedField], marshalErr = json.Marshal(string(merged))
+		if marshalErr != nil {
+			return nil, errors.New("saved account configuration could not be encoded")
+		}
 	}
 	source := reflect.ValueOf(base)
 	// A different recipient must not receive an existing credential implicitly.

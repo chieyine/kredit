@@ -41,8 +41,8 @@ func (c *Connector) Banks(ctx context.Context) ([]Bank, error) {
 		return nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if err != nil || res.StatusCode != 200 {
+	raw, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
+	if err != nil || len(raw) > 1<<20 || res.StatusCode != 200 {
 		return nil, errors.New("bank list is unavailable")
 	}
 	var out struct {

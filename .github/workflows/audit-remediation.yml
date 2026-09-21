@@ -1,0 +1,61 @@
+name: Audit remediation regression
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-remediation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_audit_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_audit_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_audit_test?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_audit_test?sslmode=disable
+      APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_audit_test?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_audit_test?sslmode=disable
+      CI_REQUIRE_DATABASE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Fresh migration and runtime grants
+        run: |
+          set -euo pipefail
+          go run ./cmd/migrate
+          go run ./cmd/migrate
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false -f infra/postgres/development-logins.sql
+      - name: Domain and handler tests
+        run: go test -count=1 ./internal/buyers ./internal/orders ./internal/erp ./internal/web ./internal/credit ./cmd/migrate
+      - name: Restricted-role integration tests
+        run: |
+          set -euo pipefail
+          go run ./cmd/seed
+          KREDIT_INTEGRATION=1 go test -count=1 -p 1 -tags=integration ./internal/buyers ./internal/orders ./internal/erp ./internal/web
+      - name: Audit concurrency regressions
+        run: KREDIT_INTEGRATION=1 go test -race -count=1 -run '^TestAudit' ./internal/orders ./internal/buyers ./internal/erp ./internal/web

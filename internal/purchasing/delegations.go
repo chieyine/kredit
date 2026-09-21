@@ -4,10 +4,12 @@ package purchasing
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"kredit/internal/db"
 	"sort"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrAuthority = errors.New("current owner authority required")
@@ -38,7 +40,9 @@ func (s Store) begin(ctx context.Context, actor, org string, write bool) (pgx.Tx
 	if err != nil {
 		return nil, false, err
 	}
-	fail := func(e error) (pgx.Tx, bool, error) { tx.Rollback(ctx); return nil, false, e }
+	fail := func(e error) (pgx.Tx, bool, error) {
+		return nil, false, db.RollbackFailure(ctx, tx, e)
+	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, actor, org); err != nil {
 		return fail(err)
 	}
@@ -61,7 +65,7 @@ func (s Store) Read(ctx context.Context, actor, org string) (Directory, error) {
 	if err != nil {
 		return out, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	out.CanManage = owner
 	rows, err := tx.Query(ctx, `SELECT m.user_id::text,COALESCE(NULLIF(u.display_name,''),m.user_id::text),COALESCE(d.actions,'{}'),COALESCE(d.ceiling_kobo,0),COALESCE(d.drawdown_ceiling_kobo,0),COALESCE(d.expires_at,'epoch'::timestamptz),COALESCE(d.version,0),COALESCE(NOT EXISTS(SELECT 1 FROM app.businesses b WHERE b.organization_id=m.organization_id AND b.owner_user_id=m.user_id AND m.role<>'owner') AND d.membership_id=m.id AND d.membership_authority_version=m.purchasing_authority_version AND d.expires_at>statement_timestamp() AND 'read'=ANY(d.actions),false) FROM app.memberships m JOIN app.users u ON u.id=m.user_id LEFT JOIN app.purchasing_delegations d ON d.organization_id=m.organization_id AND d.user_id=m.user_id WHERE m.organization_id=$1::uuid AND m.status='active' AND u.status='active' AND ($2 OR m.user_id=$3::uuid) ORDER BY u.display_name,m.user_id`, org, owner, actor)
 	if err != nil {
@@ -112,7 +116,7 @@ func (s Store) Save(ctx context.Context, actor, org string, g Grant) (Grant, err
 	if err != nil {
 		return Grant{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var version int64
 	if g.Version == 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO app.purchasing_delegations(organization_id,user_id,actions,ceiling_kobo,drawdown_ceiling_kobo,expires_at,updated_by) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid) ON CONFLICT DO NOTHING RETURNING version`, org, g.UserID, g.Actions, g.CeilingKobo, g.DrawdownCeilingKobo, g.ExpiresAt, actor).Scan(&version)

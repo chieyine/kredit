@@ -6,10 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/buyers"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Batch commands use the same step-up and CSRF boundary as individual invites.

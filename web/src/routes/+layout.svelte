@@ -5,13 +5,13 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import MotionObserver from '$lib/components/MotionObserver.svelte';
-	import { jsonLd, nonIndexablePaths, seoForPath, SITE_URL } from '$lib/seo';
+	import { isPrivateRoute, isUnlistedRoute, jsonLd, nonIndexablePaths, seoForPath, SITE_URL } from '$lib/seo';
 	import { page } from '$app/state';
 	import { applySavedDisplayChoice } from '$lib/product-tools';
 
 	let { children } = $props();
 	let offline = $state(false);
-	let privateShell = $derived(/^\/(account|start|signin|workspace|personal|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(page.url.pathname));
+	let privateShell = $derived(isPrivateRoute(page.url.pathname));
 	// The deck is presented full-screen, so the site chrome stays out of the room.
 	let deckRoute = $derived(/^\/deck(\/|$)/.test(page.url.pathname));
 	let publicChrome = $derived((page.url.pathname === '/signin' || !privateShell) && !deckRoute);
@@ -22,7 +22,7 @@
 	const routeSEO = $derived((page.data as any)?.seo);
 	const seo = $derived(routeArticle ? { title: routeArticle.title, description: routeArticle.description, type: 'article' as const, published: routeArticle.published, modified: routeArticle.modified, wordCount: routeArticle.wordCount, category: routeArticle.category } : routeSEO ?? seoForPath(normalizedPath));
 	const legalApproved = $derived((page.data as any)?.legal?.active === true);
-	const indexable = $derived(!privateShell && (!nonIndexablePaths.has(normalizedPath) || legalApproved) && page.status < 400);
+	const indexable = $derived(!privateShell && !isUnlistedRoute(normalizedPath) && (!nonIndexablePaths.has(normalizedPath) || legalApproved) && page.status < 400);
 	const organizationSchema = {
 		'@context': 'https://schema.org',
 		'@type': 'Organization',

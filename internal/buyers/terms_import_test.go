@@ -35,7 +35,7 @@ func TestTermsImportLifecycle(t *testing.T) {
 	}
 
 	// 1. Stage batch
-	batch, err := store.StageTermsBatch(ctx, uploader, orgID, "hash-batch-9901", rows)
+	batch, err := store.StageTermsBatch(ctx, uploader, orgID, "", rows)
 	if err != nil {
 		t.Fatalf("stage terms batch: %v", err)
 	}

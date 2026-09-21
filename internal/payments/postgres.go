@@ -558,7 +558,7 @@ func postLedgerTx(ctx context.Context, tx pgx.Tx, eventType, referenceID, key st
 	var id string
 	err := tx.QueryRow(ctx, `INSERT INTO ledger.transactions(event_type,reference_type,reference_id,idempotency_key,effective_at) VALUES($1,'payment',$2,$3,$4) ON CONFLICT(idempotency_key) DO NOTHING RETURNING id::text`, eventType, referenceID, key, effectiveAt).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+		return validatePaymentJournalReplay(ctx, tx, eventType, referenceID, key, effectiveAt, debitAccount, creditAccount, amount)
 	}
 	if err != nil {
 		return err

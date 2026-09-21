@@ -8,7 +8,12 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
+
+const maxTokenBytes = 8192
+
+var tokenEncoding = base64.RawURLEncoding.Strict()
 
 type payload struct {
 	Purpose string `json:"p"`
@@ -20,25 +25,34 @@ func Issue(key, purpose, id string, expires time.Time) (string, error) {
 	if key == "" || purpose == "" || id == "" || expires.IsZero() {
 		return "", errors.New("token key, purpose, id, and expiry are required")
 	}
+	// Reject lossy JSON string conversion and bound allocation before encoding.
+	if !utf8.ValidString(purpose) || !utf8.ValidString(id) || len(purpose) > maxTokenBytes || len(id) > maxTokenBytes {
+		return "", errors.New("invalid token reference")
+	}
 	body, err := json.Marshal(payload{Purpose: purpose, ID: id, Expires: expires.Unix()})
 	if err != nil {
 		return "", err
 	}
-	encoded := base64.RawURLEncoding.EncodeToString(body)
+	if tokenEncoding.EncodedLen(len(body))+1+tokenEncoding.EncodedLen(sha256.Size) > maxTokenBytes {
+		return "", errors.New("token reference exceeds the size limit")
+	}
+	encoded := tokenEncoding.EncodeToString(body)
 	mac := hmac.New(sha256.New, []byte(key))
 	_, _ = mac.Write([]byte(encoded))
-	return encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+	return encoded + "." + tokenEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
 func Parse(key, token, purpose string, now time.Time) (string, error) {
-	if key == "" || purpose == "" || len(token) > 8192 {
+	if key == "" || purpose == "" || len(token) > maxTokenBytes {
 		return "", errors.New("invalid token configuration")
 	}
 	parts := strings.Split(token, ".")
-	if len(parts) != 2 {
+	// Strict base64 still ignores CR/LF, so reject those explicitly. A public
+	// reference must have one textual representation, including its signature.
+	if len(parts) != 2 || strings.ContainsAny(token, "\r\n") || len(parts[1]) != tokenEncoding.EncodedLen(sha256.Size) {
 		return "", errors.New("invalid token")
 	}
-	signature, err := base64.RawURLEncoding.DecodeString(parts[1])
+	signature, err := tokenEncoding.DecodeString(parts[1])
 	if err != nil {
 		return "", errors.New("invalid token")
 	}
@@ -47,7 +61,7 @@ func Parse(key, token, purpose string, now time.Time) (string, error) {
 	if !hmac.Equal(signature, mac.Sum(nil)) {
 		return "", errors.New("invalid token")
 	}
-	body, err := base64.RawURLEncoding.DecodeString(parts[0])
+	body, err := tokenEncoding.DecodeString(parts[0])
 	if err != nil {
 		return "", errors.New("invalid token")
 	}

@@ -1,22 +1,19 @@
 package web
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"net/http"
 
-	"github.com/jackc/pgx/v5"
 	"kredit/internal/access"
 	"kredit/internal/audit"
 	"kredit/internal/buyers"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Server) getTermsImportService() buyers.TermsImportService {
-	if s.runtime.Database != nil {
-		return buyers.NewPostgresTermsImportStore(s.runtime.Database.Raw(), s.runtime.Ledger)
-	}
-	return buyers.NewMemoryTermsImportStore(s.runtime.Ledger)
+	s.initDomainServices()
+	return s.terms
 }
 
 func (s *Server) termsImports(w http.ResponseWriter, r *http.Request) {
@@ -25,12 +22,13 @@ func (s *Server) termsImports(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_business", err.Error())
 		return
 	}
-	permission := access.PermissionInviteBuyers
-	if r.Method != "GET" && r.PathValue("decision") != "" {
-		permission = access.PermissionApproveBusinessCredit
-	}
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, permission)
+	permission := termsImportPermission(r)
+	_, user, membership, ok := s.requireOrganizationAccess(w, r, orgID, permission)
 	if !ok {
+		return
+	}
+	if !access.Can(membership.Role, access.PermissionInviteBuyers) && !access.Can(membership.Role, access.PermissionApproveBusinessCredit) {
+		writeProblem(w, 403, "terms_import_forbidden", "You do not have access to terms imports.")
 		return
 	}
 	if r.Method != "GET" && !s.requireCSRF(w, r) {
@@ -40,6 +38,8 @@ func (s *Server) termsImports(w http.ResponseWriter, r *http.Request) {
 	svc := s.getTermsImportService()
 	fail := func(err error) {
 		switch {
+		case errors.Is(err, buyers.ErrTermsAuthority):
+			writeProblem(w, 403, "terms_import_forbidden", "Current business authority is required.")
 		case errors.Is(err, buyers.ErrTermsDualControl):
 			writeProblem(w, 403, "dual_control_required", "Maker-checker separation required: the person who uploaded this batch cannot approve it.")
 		case errors.Is(err, buyers.ErrTermsAlreadyClosed):
@@ -49,11 +49,18 @@ func (s *Server) termsImports(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, buyers.ErrTermsInvalidRow):
 			writeProblem(w, 422, "invalid_row", err.Error())
 		default:
-			writeProblem(w, 500, "terms_import_failed", err.Error())
+			s.logger.ErrorContext(r.Context(), "terms import failed", "request_id", requestIDFromContext(r.Context()))
+			writeProblem(w, 503, "terms_import_failed", "Terms imports are temporarily unavailable. Please retry.")
 		}
 	}
 
 	batchID := r.PathValue("batchID")
+	if batchID != "" {
+		if _, err := pathID(r, "batchID"); err != nil {
+			writeProblem(w, 400, "invalid_batch", "A valid batch identifier is required.")
+			return
+		}
+	}
 	if r.Method == "GET" {
 		if batchID != "" {
 			batch, rows, err := svc.GetTermsBatch(r.Context(), user.ID, orgID, batchID)
@@ -117,8 +124,11 @@ func (s *Server) termsImports(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		hash := sha256.Sum256([]byte(r.Header.Get("Idempotency-Key") + string(rune(len(in.Rows)))))
-		sourceHash := hex.EncodeToString(hash[:])
+		sourceHash, err := buyers.TermsSourceHash(in.Rows)
+		if err != nil {
+			fail(err)
+			return
+		}
 
 		batch, err := svc.StageTermsBatch(r.Context(), user.ID, orgID, sourceHash, in.Rows)
 		if err != nil {
@@ -137,4 +147,15 @@ func (s *Server) termsImports(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 201, batch)
 		return
 	}
+}
+
+// A batch path identifies review. The decision is in JSON, not a route variable.
+func termsImportPermission(r *http.Request) access.Permission {
+	if r.Method == http.MethodGet {
+		return access.PermissionReadOrganization
+	}
+	if r.PathValue("batchID") != "" {
+		return access.PermissionApproveBusinessCredit
+	}
+	return access.PermissionInviteBuyers
 }

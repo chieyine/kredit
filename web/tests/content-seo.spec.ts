@@ -79,7 +79,7 @@ test('detailed legal content stays readable on a small phone', async ({ page }) 
 	}
 });
 
-test('approved production details activate both legal documents', async ({ page }) => {
+test('bundled legal details render consistently without a published override', async ({ page }) => {
 	for (const path of ['/legal/privacy', '/legal/terms']) {
 		await page.goto(path);
 		await expect(page.getByText('KREDIT TECHNOLOGIES LIMITED').first()).toBeVisible();
@@ -97,7 +97,7 @@ test('approved production details activate both legal documents', async ({ page 
 
 test('FAQ matches activation fees and conditional collections', async ({ page }) => {
  await page.goto('/faq');
- await expect(page.getByText(/seller owes the agreed base fee when the accepted sale becomes active/)).toBeVisible();
- await expect(page.getByText(/A debit can fail; repayment is not guaranteed/)).toBeVisible();
+ await expect(page.getByText(/seller owes the agreed base fee once the accepted sale becomes active/)).toBeVisible();
+ await expect(page.getByText(/A debit can still fail, and repayment is not guaranteed/)).toBeVisible();
  await expect(page.getByRole('link', { name: 'what it costs', exact: true })).toHaveAttribute('href', '/pricing');
 });

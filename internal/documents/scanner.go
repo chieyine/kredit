@@ -62,9 +62,12 @@ func (s *WebhookScanner) Scan(ctx context.Context, document Document, downloadUR
 		return "", err
 	}
 	defer func() { _ = response.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+	body, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
 	if err != nil {
 		return "", err
+	}
+	if len(body) > 64<<10 {
+		return "", errors.New("document scanner response exceeds the size limit")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return "", fmt.Errorf("document scanner returned status %d", response.StatusCode)

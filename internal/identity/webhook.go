@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"kredit/internal/platform/httpjson"
 )
 
 // WebhookProvider delegates vendor-specific identity work to an approved
@@ -119,7 +121,7 @@ func (p *WebhookProvider) request(ctx context.Context, method, path string, inpu
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		return fmt.Errorf("identity connector returned status %d", response.StatusCode)
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(output); err != nil {
+	if err := httpjson.Decode(response.Body, 1<<20, output); err != nil {
 		return fmt.Errorf("decode identity connector response: %w", err)
 	}
 	return nil

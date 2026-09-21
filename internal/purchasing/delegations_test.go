@@ -3,11 +3,12 @@ package purchasing
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestDelegationsRequireCurrentOwnerAndExpire(t *testing.T) {
@@ -71,7 +72,7 @@ func TestDelegationsRequireCurrentOwnerAndExpire(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		defer tx.Rollback(ctx)
+		defer func() { _ = tx.Rollback(ctx) }()
 		if _, e = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, staff); e != nil {
 			t.Fatal(e)
 		}
@@ -119,7 +120,7 @@ func TestDelegationsRequireCurrentOwnerAndExpire(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, e = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true)`, owner); e != nil {
 		t.Fatal(e)
 	}

@@ -361,17 +361,18 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		if cfg.CollectionProvider != cfg.MonoAccount() && (cfg.RealCollections || nativeAccounts[cfg.CollectionProvider] != nil || paystackAccounts[cfg.CollectionProvider] != nil || (cfg.CollectionProviderToken != "" && cfg.CollectionProviderEndpoint != "")) {
 			var remote mandates.Provider
 			var err error
-			if cfg.CollectionAdapter == "flutterwave" || cfg.CollectionAdapter == "monnify" {
+			switch cfg.CollectionAdapter {
+			case "flutterwave", "monnify":
 				remote = nativeAccounts[cfg.CollectionProvider]
 				if remote == nil {
 					err = errors.New("native bank collector unavailable")
 				}
-			} else if cfg.CollectionAdapter == "paystack" {
+			case "paystack":
 				remote = paystackAccounts[cfg.CollectionProvider]
 				if paystackAccounts[cfg.CollectionProvider] == nil {
-					err = errors.New("Paystack account unavailable")
+					err = errors.New("paystack account unavailable")
 				}
-			} else {
+			default:
 				remote, err = mandates.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken)
 			}
 			if err != nil {
@@ -412,24 +413,25 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			}
 			var remote mandates.Provider
 			var err error
-			if account.Adapter == "flutterwave" || account.Adapter == "monnify" {
+			switch account.Adapter {
+			case "flutterwave", "monnify":
 				remote = nativeAccounts[account.Name]
 				if remote == nil {
 					err = errors.New("saved native collector unavailable")
 				}
-			} else if account.Adapter == "paystack" {
+			case "paystack":
 				remote = paystackAccounts[account.Name]
 				if paystackAccounts[account.Name] == nil {
-					err = errors.New("saved Paystack account unavailable")
+					err = errors.New("saved paystack account unavailable")
 				}
-			} else if account.Adapter == "mono" {
+			case "mono":
 				client := monoAccounts[account.Name]
 				if client == nil {
-					err = errors.New("saved Mono mandate account unavailable")
+					err = errors.New("saved mono mandate account unavailable")
 				} else {
 					remote = client
 				}
-			} else {
+			default:
 				remote, err = mandates.NewWebhookProvider(account.Name, account.Endpoint, account.Token)
 			}
 			if err != nil {
@@ -827,17 +829,18 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 	if cfg.RealCollections && cfg.CollectionProvider != cfg.MonoAccount() {
 		var connector collections.Provider
 		var err error
-		if cfg.CollectionAdapter == "flutterwave" || cfg.CollectionAdapter == "monnify" {
+		switch cfg.CollectionAdapter {
+		case "flutterwave", "monnify":
 			connector = nativeAccounts[cfg.CollectionProvider]
 			if connector == nil {
 				err = errors.New("native bank collector unavailable")
 			}
-		} else if cfg.CollectionAdapter == "paystack" {
+		case "paystack":
 			connector = paystackAccounts[cfg.CollectionProvider]
 			if paystackAccounts[cfg.CollectionProvider] == nil {
-				err = errors.New("Paystack account unavailable")
+				err = errors.New("paystack account unavailable")
 			}
-		} else {
+		default:
 			connector, err = collections.NewWebhookProvider(cfg.CollectionProvider, cfg.CollectionProviderEndpoint, cfg.CollectionProviderToken, cfg.CollectionWebhookSecret)
 		}
 		if err == nil {
@@ -941,24 +944,25 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		}
 		var retained collections.Provider
 		var err error
-		if connection.Adapter == "flutterwave" || connection.Adapter == "monnify" {
+		switch connection.Adapter {
+		case "flutterwave", "monnify":
 			retained = nativeAccounts[connection.Name]
 			if retained == nil {
 				err = errors.New("saved native collector unavailable")
 			}
-		} else if connection.Adapter == "paystack" {
+		case "paystack":
 			retained = paystackAccounts[connection.Name]
 			if paystackAccounts[connection.Name] == nil {
-				err = errors.New("saved Paystack account unavailable")
+				err = errors.New("saved paystack account unavailable")
 			}
-		} else if connection.Adapter == "mono" {
+		case "mono":
 			client := monoAccounts[connection.Name]
 			if client == nil {
-				err = errors.New("saved Mono collection account unavailable")
+				err = errors.New("saved mono collection account unavailable")
 			} else {
 				retained = client
 			}
-		} else {
+		default:
 			retained, err = collections.NewWebhookProvider(connection.Name, connection.Endpoint, connection.Token, connection.WebhookSecret)
 		}
 		if err == nil {

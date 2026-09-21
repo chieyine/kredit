@@ -13,7 +13,10 @@
     if (typeof history !== 'undefined') history.replaceState(null, '', `#${index + 1}`);
   }
   function key(event: KeyboardEvent) {
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+    // Preserve native keyboard activation of links, buttons and editing controls.
+    const target = event.target;
+    if (target instanceof Element && target.closest('a, button, input, textarea, select, [contenteditable]')) return;
     const k = event.key;
     if (k === 'ArrowRight' || k === 'PageDown' || k === ' ') { event.preventDefault(); go(index + 1); }
     else if (k === 'ArrowLeft' || k === 'PageUp') { event.preventDefault(); go(index - 1); }
@@ -22,11 +25,11 @@
   }
   onMount(() => {
     const fromHash = Number((location.hash || '').replace('#', ''));
-    if (Number.isFinite(fromHash) && fromHash >= 1 && fromHash <= total) index = fromHash - 1;
+    if (Number.isInteger(fromHash) && fromHash >= 1 && fromHash <= total) index = fromHash - 1;
     // someone deep-linking to #7 while the deck is already open should land there
     const hash = () => {
       const n = Number((location.hash || '').replace('#', ''));
-      if (Number.isFinite(n) && n >= 1 && n <= total) index = n - 1;
+      if (Number.isInteger(n) && n >= 1 && n <= total) index = n - 1;
     };
     window.addEventListener('hashchange', hash);
     const before = () => (printing = true);
@@ -38,7 +41,8 @@
 </script>
 
 <svelte:window onkeydown={key} />
-<svelte:head><title>{title}</title><meta name="robots" content="noindex,nofollow" /></svelte:head>
+<!-- Route-level discovery policy is emitted once by the shared layout. -->
+<svelte:head><title>{title}</title></svelte:head>
 
 <div class="deck" class:printing>
   {#each slides as slide, i}

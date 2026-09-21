@@ -135,17 +135,22 @@ func NewMemoryStore() *MemoryStore {
 }
 
 func (m *MemoryStore) CreateLineItems(ctx context.Context, orderID string, items []LineItem) error {
+	if err := validateLineItems(orderID, items); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for i := range items {
-		if items[i].ID == "" {
-			items[i].ID = identifier.New()
-		}
-		items[i].OrderID = orderID
-		items[i].TotalKobo = items[i].UnitPriceKobo * ledger.Money(items[i].Quantity)
-		items[i].CreatedAt = time.Now().UTC()
+	stored := append([]LineItem(nil), items...)
+	for i := range stored {
+		stored[i].ID = identifier.New()
+		stored[i].OrderID = orderID
+		stored[i].TotalKobo = stored[i].UnitPriceKobo * ledger.Money(stored[i].Quantity)
+		stored[i].CreatedAt = time.Now().UTC()
 	}
-	m.lineItems[orderID] = append(m.lineItems[orderID], items...)
+	m.lineItems[orderID] = append(m.lineItems[orderID], stored...)
 	return nil
 }
 
@@ -162,81 +167,89 @@ func (m *MemoryStore) ListLineItems(ctx context.Context, orderID string) ([]Line
 }
 
 func (m *MemoryStore) DispatchShipment(ctx context.Context, input DispatchInput) (Shipment, error) {
-	if input.OrderID == "" || input.SupplierOrganizationID == "" || input.DispatchedBy == "" || len(input.Items) == 0 {
-		return Shipment{}, ErrInvalidInput
+	if err := validateDispatch(input); err != nil {
+		return Shipment{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return Shipment{}, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	shipmentID := identifier.New()
-	items := make([]ShipmentItem, len(input.Items))
+	// Validate the whole batch before changing any line. A bad later item
+	// must not leave an earlier line partially fulfilled.
+	positions := make(map[string]int, len(m.lineItems[input.OrderID]))
+	for i, it := range m.lineItems[input.OrderID] {
+		positions[it.ID] = i
+	}
+	for _, it := range input.Items {
+		index, ok := positions[it.LineItemID]
+		if !ok {
+			return Shipment{}, ErrInvalidInput
+		}
+		line := m.lineItems[input.OrderID][index]
+		if it.Quantity > line.Quantity-line.FulfilledQuantity {
+			return Shipment{}, ErrInvalidInput
+		}
+	}
+	shipment := Shipment{ID: identifier.New(), OrderID: input.OrderID, SupplierOrganizationID: input.SupplierOrganizationID,
+		TrackingReference: input.TrackingReference, Carrier: input.Carrier, DispatchedBy: input.DispatchedBy,
+		DispatchedAt: time.Now().UTC(), Status: "in_transit", Items: make([]ShipmentItem, len(input.Items))}
 	for i, it := range input.Items {
-		items[i] = ShipmentItem{
-			ShipmentID: shipmentID,
-			LineItemID: it.LineItemID,
-			Quantity:   it.Quantity,
-		}
-		// Update fulfilled quantity on line item
-		for li := range m.lineItems[input.OrderID] {
-			if m.lineItems[input.OrderID][li].ID == it.LineItemID {
-				m.lineItems[input.OrderID][li].FulfilledQuantity += it.Quantity
-			}
-		}
+		m.lineItems[input.OrderID][positions[it.LineItemID]].FulfilledQuantity += it.Quantity
+		shipment.Items[i] = ShipmentItem{ShipmentID: shipment.ID, LineItemID: it.LineItemID, Quantity: it.Quantity}
 	}
-	s := &Shipment{
-		ID:                     shipmentID,
-		OrderID:                input.OrderID,
-		SupplierOrganizationID: input.SupplierOrganizationID,
-		TrackingReference:      input.TrackingReference,
-		Carrier:                input.Carrier,
-		DispatchedBy:           input.DispatchedBy,
-		DispatchedAt:           time.Now().UTC(),
-		Status:                 "in_transit",
-		Items:                  items,
-	}
-	m.shipments[shipmentID] = s
-	return *s, nil
+	m.shipments[shipment.ID] = &shipment
+	return cloneShipment(shipment), nil
 }
 
 func (m *MemoryStore) ListShipments(ctx context.Context, orderID string) ([]Shipment, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var out []Shipment
+	out := []Shipment{}
 	for _, s := range m.shipments {
 		if s.OrderID == orderID {
-			out = append(out, *s)
+			out = append(out, cloneShipment(*s))
 		}
 	}
 	return out, nil
 }
 
 func (m *MemoryStore) RecordDeliveryReceipt(ctx context.Context, input DeliveryInput) (DeliveryReceipt, error) {
-	if input.ShipmentID == "" || input.OrderID == "" || input.ReceivedBy == "" {
-		return DeliveryReceipt{}, ErrInvalidInput
+	if err := validateDelivery(input); err != nil {
+		return DeliveryReceipt{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return DeliveryReceipt{}, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	ship, ok := m.shipments[input.ShipmentID]
-	if !ok {
+	shipment, ok := m.shipments[input.ShipmentID]
+	if !ok || shipment.OrderID != input.OrderID {
 		return DeliveryReceipt{}, ErrNotFound
 	}
-	ship.Status = "delivered"
 	hash := sha256.Sum256([]byte(input.SignedProof))
-	rec := &DeliveryReceipt{
-		ID:              identifier.New(),
-		ShipmentID:      input.ShipmentID,
-		OrderID:         input.OrderID,
-		ReceivedBy:      input.ReceivedBy,
-		ReceivedAt:      time.Now().UTC(),
-		ConditionNotes:  input.ConditionNotes,
-		SignedProofHash: hex.EncodeToString(hash[:]),
+	proof := hex.EncodeToString(hash[:])
+	for _, existing := range m.receipts {
+		if existing.ShipmentID == input.ShipmentID {
+			if sameReceiptIntent(*existing, input, proof) {
+				return *existing, nil
+			}
+			return DeliveryReceipt{}, ErrConflict
+		}
 	}
-	m.receipts[rec.ID] = rec
-	return *rec, nil
+	if shipment.Status != "in_transit" {
+		return DeliveryReceipt{}, ErrConflict
+	}
+	receipt := DeliveryReceipt{ID: identifier.New(), ShipmentID: input.ShipmentID, OrderID: input.OrderID,
+		ReceivedBy: input.ReceivedBy, ReceivedAt: time.Now().UTC(), ConditionNotes: input.ConditionNotes, SignedProofHash: proof}
+	m.receipts[receipt.ID] = &receipt
+	shipment.Status = "delivered"
+	return receipt, nil
 }
 
 func (m *MemoryStore) CreateCreditNote(ctx context.Context, input CreditNoteInput) (CreditNote, error) {
-	if input.OrderID == "" || input.SupplierOrganizationID == "" || input.AmountKobo <= 0 || input.IssuedBy == "" || input.Reason == "" {
-		return CreditNote{}, ErrInvalidInput
+	if err := validateCreditNote(input); err != nil {
+		return CreditNote{}, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -252,7 +265,7 @@ func (m *MemoryStore) CreateCreditNote(ctx context.Context, input CreditNoteInpu
 		CreatedAt:              time.Now().UTC(),
 	}
 	m.creditNotes[cn.ID] = cn
-	return *cn, nil
+	return cloneCreditNote(*cn), nil
 }
 
 func (m *MemoryStore) ApproveCreditNote(ctx context.Context, noteID, reviewerID string) error {
@@ -261,6 +274,15 @@ func (m *MemoryStore) ApproveCreditNote(ctx context.Context, noteID, reviewerID 
 	cn, ok := m.creditNotes[noteID]
 	if !ok {
 		return ErrNotFound
+	}
+	if reviewerID == "" {
+		return ErrInvalidInput
+	}
+	if identity, ok := db.TenantFromContext(ctx); ok && (identity.UserID != reviewerID || identity.OrganizationID != cn.SupplierOrganizationID) {
+		return ErrAuthority
+	}
+	if cn.ObligationID != "" {
+		return ErrFinancialApplicationUnavailable
 	}
 	if cn.IssuedBy == reviewerID {
 		return ErrDualControl
@@ -278,10 +300,10 @@ func (m *MemoryStore) ApproveCreditNote(ctx context.Context, noteID, reviewerID 
 func (m *MemoryStore) ListCreditNotes(ctx context.Context, orderID string) ([]CreditNote, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var out []CreditNote
+	out := []CreditNote{}
 	for _, cn := range m.creditNotes {
 		if cn.OrderID == orderID {
-			out = append(out, *cn)
+			out = append(out, cloneCreditNote(*cn))
 		}
 	}
 	return out, nil
@@ -309,34 +331,35 @@ func (p *PostgresStore) beginTx(ctx context.Context, explicitOrg, explicitUser s
 	if p.pool == nil {
 		return nil, errors.New("database pool unavailable")
 	}
-	tx, err := p.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
 	identity, _ := db.TenantFromContext(ctx)
-	orgID := identity.OrganizationID
-	if orgID == "" {
-		orgID = explicitOrg
+	if (identity.UserID != "" && explicitUser != "" && identity.UserID != explicitUser) ||
+		(identity.OrganizationID != "" && explicitOrg != "" && identity.OrganizationID != explicitOrg) {
+		return nil, ErrAuthority
 	}
-	userID := identity.UserID
-	if userID == "" {
-		userID = explicitUser
+	if identity.UserID == "" {
+		identity.UserID = explicitUser
 	}
-	if orgID != "" || userID != "" {
-		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, userID, orgID); err != nil {
-			_ = tx.Rollback(ctx)
-			return nil, err
-		}
+	if identity.OrganizationID == "" {
+		identity.OrganizationID = explicitOrg
 	}
-	return tx, nil
+	if identity.UserID == "" {
+		return nil, ErrAuthority
+	}
+	return (&db.ScopedDatabase{Pool: p.pool}).Begin(db.WithTenantContext(ctx, identity.UserID, identity.OrganizationID))
 }
 
 func (p *PostgresStore) CreateLineItems(ctx context.Context, orderID string, items []LineItem) error {
+	if err := validateLineItems(orderID, items); err != nil {
+		return err
+	}
 	tx, err := p.beginTx(ctx, "", "")
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockSupplierOrder(ctx, tx, orderID, []string{"owner", "administrator", "sales"}); err != nil {
+		return err
+	}
 	for _, it := range items {
 		total := it.UnitPriceKobo * ledger.Money(it.Quantity)
 		_, err := tx.Exec(ctx, `
@@ -355,7 +378,7 @@ func (p *PostgresStore) ListLineItems(ctx context.Context, orderID string) ([]Li
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `
 		SELECT id::text, order_id::text, sku, description, unit_price_kobo, quantity, fulfilled_quantity, returned_quantity, total_kobo, created_at
 		FROM app.order_line_items
@@ -366,7 +389,7 @@ func (p *PostgresStore) ListLineItems(ctx context.Context, orderID string) ([]Li
 		return nil, err
 	}
 	defer rows.Close()
-	var out []LineItem
+	out := []LineItem{}
 	for rows.Next() {
 		var it LineItem
 		var up, tot int64
@@ -381,92 +404,92 @@ func (p *PostgresStore) ListLineItems(ctx context.Context, orderID string) ([]Li
 }
 
 func (p *PostgresStore) DispatchShipment(ctx context.Context, input DispatchInput) (Shipment, error) {
+	if err := validateDispatch(input); err != nil {
+		return Shipment{}, err
+	}
 	tx, err := p.beginTx(ctx, input.SupplierOrganizationID, input.DispatchedBy)
 	if err != nil {
 		return Shipment{}, err
 	}
-	defer tx.Rollback(ctx)
-
-	var s Shipment
-	err = tx.QueryRow(ctx, `
-		INSERT INTO app.order_shipments (order_id, supplier_organization_id, tracking_reference, carrier, dispatched_by, status)
-		VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid, 'in_transit')
-		RETURNING id::text, order_id::text, supplier_organization_id::text, tracking_reference, carrier, dispatched_by::text, dispatched_at, status
-	`, input.OrderID, input.SupplierOrganizationID, input.TrackingReference, input.Carrier, input.DispatchedBy).
-		Scan(&s.ID, &s.OrderID, &s.SupplierOrganizationID, &s.TrackingReference, &s.Carrier, &s.DispatchedBy, &s.DispatchedAt, &s.Status)
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockSupplierOrder(ctx, tx, input.OrderID, []string{"owner", "administrator", "sales"}); err != nil {
+		return Shipment{}, err
+	}
+	var shipment Shipment
+	err = tx.QueryRow(ctx, `INSERT INTO app.order_shipments(order_id,supplier_organization_id,tracking_reference,carrier,dispatched_by,status)
+        VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,'in_transit')
+        RETURNING id::text,order_id::text,supplier_organization_id::text,tracking_reference,carrier,dispatched_by::text,dispatched_at,status`,
+		input.OrderID, input.SupplierOrganizationID, input.TrackingReference, input.Carrier, input.DispatchedBy).
+		Scan(&shipment.ID, &shipment.OrderID, &shipment.SupplierOrganizationID, &shipment.TrackingReference, &shipment.Carrier, &shipment.DispatchedBy, &shipment.DispatchedAt, &shipment.Status)
 	if err != nil {
 		return Shipment{}, err
 	}
-
-	for _, item := range input.Items {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO app.order_shipment_items (shipment_id, line_item_id, quantity)
-			VALUES ($1::uuid, $2::uuid, $3)
-		`, s.ID, item.LineItemID, item.Quantity)
-		if err != nil {
+	for _, item := range sortedShipmentItems(input.Items) {
+		// A composite foreign key binds both parents to this order. The
+		// database trigger increments fulfillment once, with a locked,
+		// bounded update. Never increment again at the application layer.
+		if _, err = tx.Exec(ctx, `INSERT INTO app.order_shipment_items(shipment_id,line_item_id,order_id,quantity)
+            VALUES($1::uuid,$2::uuid,$3::uuid,$4)`, shipment.ID, item.LineItemID, input.OrderID, item.Quantity); err != nil {
 			return Shipment{}, err
 		}
-		_, err = tx.Exec(ctx, `
-			UPDATE app.order_line_items
-			SET fulfilled_quantity = fulfilled_quantity + $2
-			WHERE id = $1::uuid
-		`, item.LineItemID, item.Quantity)
-		if err != nil {
-			return Shipment{}, err
-		}
-		s.Items = append(s.Items, ShipmentItem{
-			ShipmentID: s.ID,
-			LineItemID: item.LineItemID,
-			Quantity:   item.Quantity,
-		})
+		shipment.Items = append(shipment.Items, ShipmentItem{ShipmentID: shipment.ID, LineItemID: item.LineItemID, Quantity: item.Quantity})
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return Shipment{}, err
-	}
-	return s, nil
+	return shipment, tx.Commit(ctx)
 }
 
 func (p *PostgresStore) RecordDeliveryReceipt(ctx context.Context, input DeliveryInput) (DeliveryReceipt, error) {
+	if err := validateDelivery(input); err != nil {
+		return DeliveryReceipt{}, err
+	}
 	hash := sha256.Sum256([]byte(input.SignedProof))
-	hashHex := hex.EncodeToString(hash[:])
-
+	proof := hex.EncodeToString(hash[:])
 	tx, err := p.beginTx(ctx, "", input.ReceivedBy)
 	if err != nil {
 		return DeliveryReceipt{}, err
 	}
-	defer tx.Rollback(ctx)
-
-	var rec DeliveryReceipt
-	err = tx.QueryRow(ctx, `
-		INSERT INTO app.order_delivery_receipts (shipment_id, order_id, received_by, condition_notes, signed_proof_hash)
-		VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)
-		RETURNING id::text, shipment_id::text, order_id::text, received_by::text, received_at, condition_notes, signed_proof_hash
-	`, input.ShipmentID, input.OrderID, input.ReceivedBy, input.ConditionNotes, hashHex).
-		Scan(&rec.ID, &rec.ShipmentID, &rec.OrderID, &rec.ReceivedBy, &rec.ReceivedAt, &rec.ConditionNotes, &rec.SignedProofHash)
+	defer func() { _ = tx.Rollback(ctx) }()
+	var receipt DeliveryReceipt
+	const columns = `id::text,shipment_id::text,order_id::text,received_by::text,received_at,condition_notes,signed_proof_hash`
+	err = tx.QueryRow(ctx, `INSERT INTO app.order_delivery_receipts(shipment_id,order_id,received_by,condition_notes,signed_proof_hash)
+        VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5) ON CONFLICT(shipment_id) DO NOTHING RETURNING `+columns,
+		input.ShipmentID, input.OrderID, input.ReceivedBy, input.ConditionNotes, proof).
+		Scan(&receipt.ID, &receipt.ShipmentID, &receipt.OrderID, &receipt.ReceivedBy, &receipt.ReceivedAt, &receipt.ConditionNotes, &receipt.SignedProofHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = tx.QueryRow(ctx, `SELECT `+columns+` FROM app.order_delivery_receipts WHERE shipment_id=$1::uuid`, input.ShipmentID).
+			Scan(&receipt.ID, &receipt.ShipmentID, &receipt.OrderID, &receipt.ReceivedBy, &receipt.ReceivedAt, &receipt.ConditionNotes, &receipt.SignedProofHash)
+		if err == nil && !sameReceiptIntent(receipt, input, proof) {
+			return DeliveryReceipt{}, ErrConflict
+		}
+	}
 	if err != nil {
 		return DeliveryReceipt{}, err
 	}
-
-	_, err = tx.Exec(ctx, `
-		UPDATE app.order_shipments SET status = 'delivered' WHERE id = $1::uuid
-	`, input.ShipmentID)
-	if err != nil {
-		return DeliveryReceipt{}, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return DeliveryReceipt{}, err
-	}
-	return rec, nil
+	// The AFTER INSERT trigger performs the narrowly authorized transition.
+	// A buyer receives no general UPDATE privilege on supplier shipments.
+	return receipt, tx.Commit(ctx)
 }
 
 func (p *PostgresStore) CreateCreditNote(ctx context.Context, input CreditNoteInput) (CreditNote, error) {
+	if err := validateCreditNote(input); err != nil {
+		return CreditNote{}, err
+	}
 	tx, err := p.beginTx(ctx, input.SupplierOrganizationID, input.IssuedBy)
 	if err != nil {
 		return CreditNote{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockSupplierOrder(ctx, tx, input.OrderID, []string{"owner", "administrator", "sales"}); err != nil {
+		return CreditNote{}, err
+	}
+	var canonical string
+	err = tx.QueryRow(ctx, `SELECT id::text FROM app.obligations WHERE credit_request_id=$1::uuid AND supplier_organization_id=$2::uuid`, input.OrderID, input.SupplierOrganizationID).Scan(&canonical)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return CreditNote{}, err
+	}
+	if input.ObligationID != "" && input.ObligationID != canonical {
+		return CreditNote{}, ErrInvalidInput
+	}
+	input.ObligationID = canonical
 
 	var cn CreditNote
 	var amount int64
@@ -508,7 +531,31 @@ func (p *PostgresStore) ApproveCreditNote(ctx context.Context, noteID, reviewerI
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
+	var orderID, issuer, state, approvedBy string
+	err = tx.QueryRow(ctx, `SELECT order_id::text FROM app.order_credit_notes WHERE id=$1::uuid`, noteID).Scan(&orderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err = lockSupplierOrder(ctx, tx, orderID, []string{"owner", "administrator", "finance"}); err != nil {
+		return err
+	}
+	err = tx.QueryRow(ctx, `SELECT issued_by::text,status,COALESCE(approved_by::text,'') FROM app.order_credit_notes WHERE id=$1::uuid FOR UPDATE`, noteID).Scan(&issuer, &state, &approvedBy)
+	if err != nil {
+		return err
+	}
+	if issuer == reviewerID {
+		return ErrDualControl
+	}
+	if state == "approved" && approvedBy == reviewerID {
+		return tx.Commit(ctx)
+	}
+	if state != "draft" {
+		return ErrAlreadyDecided
+	}
 
 	var obID *string
 	var suppOrgID string
@@ -525,11 +572,6 @@ func (p *PostgresStore) ApproveCreditNote(ctx context.Context, noteID, reviewerI
 		}
 		return err
 	}
-	if suppOrgID != "" {
-		if _, err = tx.Exec(ctx, `SELECT set_config('app.current_organization_id',$1,true)`, suppOrgID); err != nil {
-			return err
-		}
-	}
 
 	// A credit note on an order with no activated obligation forgives nothing
 	// yet. Approving it is a record, and it must not post forgiveness.
@@ -540,7 +582,7 @@ func (p *PostgresStore) ApproveCreditNote(ctx context.Context, noteID, reviewerI
 
 	var requestID string
 	var outstanding, principal ledger.Money
-	if err = tx.QueryRow(ctx, `SELECT credit_request_id::text,outstanding_kobo,principal_kobo FROM app.obligations WHERE id=$1::uuid AND supplier_organization_id=$2::uuid FOR UPDATE`, obligation, suppOrgID).Scan(&requestID, &outstanding, &principal); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT credit_request_id::text,outstanding_kobo,principal_kobo FROM app.obligations WHERE id=$1::uuid AND supplier_organization_id=$2::uuid AND credit_request_id=$3::uuid FOR UPDATE`, obligation, suppOrgID, orderID).Scan(&requestID, &outstanding, &principal); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -575,7 +617,7 @@ func (p *PostgresStore) ListCreditNotes(ctx context.Context, orderID string) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	rows, err := tx.Query(ctx, `
 		SELECT id::text, order_id::text, COALESCE(obligation_id::text, ''), supplier_organization_id::text, amount_kobo, reason, issued_by::text, COALESCE(approved_by::text, ''), status, created_at, approved_at
@@ -587,7 +629,7 @@ func (p *PostgresStore) ListCreditNotes(ctx context.Context, orderID string) ([]
 		return nil, err
 	}
 	defer rows.Close()
-	var out []CreditNote
+	out := []CreditNote{}
 	for rows.Next() {
 		var cn CreditNote
 		var amount int64
@@ -605,25 +647,34 @@ func (p *PostgresStore) ListShipments(ctx context.Context, orderID string) ([]Sh
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
-
-	rows, err := tx.Query(ctx, `
-		SELECT id::text, order_id::text, supplier_organization_id::text, tracking_reference, carrier, dispatched_by::text, dispatched_at, status
-		FROM app.order_shipments
-		WHERE order_id = $1::uuid
-		ORDER BY dispatched_at DESC
-	`, orderID)
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT s.id::text,s.order_id::text,s.supplier_organization_id::text,
+        s.tracking_reference,s.carrier,s.dispatched_by::text,s.dispatched_at,s.status,
+        i.line_item_id::text,i.quantity
+        FROM app.order_shipments s LEFT JOIN app.order_shipment_items i
+        ON i.shipment_id=s.id AND i.order_id=s.order_id
+        WHERE s.order_id=$1::uuid ORDER BY s.dispatched_at DESC,s.id DESC,i.line_item_id`, orderID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Shipment
+	out := []Shipment{}
 	for rows.Next() {
-		var s Shipment
-		if err := rows.Scan(&s.ID, &s.OrderID, &s.SupplierOrganizationID, &s.TrackingReference, &s.Carrier, &s.DispatchedBy, &s.DispatchedAt, &s.Status); err != nil {
+		var shipment Shipment
+		var lineID *string
+		var quantity *int64
+		if err := rows.Scan(&shipment.ID, &shipment.OrderID, &shipment.SupplierOrganizationID,
+			&shipment.TrackingReference, &shipment.Carrier, &shipment.DispatchedBy, &shipment.DispatchedAt,
+			&shipment.Status, &lineID, &quantity); err != nil {
 			return nil, err
 		}
-		out = append(out, s)
+		if len(out) == 0 || out[len(out)-1].ID != shipment.ID {
+			shipment.Items = []ShipmentItem{}
+			out = append(out, shipment)
+		}
+		if lineID != nil && quantity != nil {
+			out[len(out)-1].Items = append(out[len(out)-1].Items, ShipmentItem{ShipmentID: shipment.ID, LineItemID: *lineID, Quantity: *quantity})
+		}
 	}
 	return out, rows.Err()
 }

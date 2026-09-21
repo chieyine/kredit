@@ -5,10 +5,12 @@ package networkops
 import (
 	"context"
 	"errors"
+	"kredit/internal/access"
+	"kredit/internal/db"
+	"strings"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"kredit/internal/access"
-	"strings"
 )
 
 var ErrConflict = errors.New("network record changed")
@@ -51,22 +53,19 @@ func (s Store) begin(ctx context.Context, user, org string, write bool) (pgx.Tx,
 		return nil, false, err
 	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, user, org); err != nil {
-		tx.Rollback(ctx)
-		return nil, false, err
+		return nil, false, db.RollbackFailure(ctx, tx, err)
 	}
 	var role access.Role
 	err = tx.QueryRow(ctx, `SELECT m.role FROM app.memberships m JOIN app.users u ON u.id=m.user_id JOIN app.organizations o ON o.id=m.organization_id WHERE m.organization_id=$1::uuid AND m.user_id=$2::uuid AND m.status='active' AND u.status='active' AND o.status<>'suspended' FOR SHARE OF m,u,o`, org, user).Scan(&role)
 	manage := role == access.RoleOwner || role == access.RoleAdministrator
 	if err != nil {
-		tx.Rollback(ctx)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, false, ErrAuthority
+			err = ErrAuthority
 		}
-		return nil, false, err
+		return nil, false, db.RollbackFailure(ctx, tx, err)
 	}
 	if write && !manage {
-		tx.Rollback(ctx)
-		return nil, false, ErrAuthority
+		return nil, false, db.RollbackFailure(ctx, tx, ErrAuthority)
 	}
 	return tx, manage, nil
 }
@@ -76,7 +75,7 @@ func (s Store) Read(ctx context.Context, user, org string) (Workspace, error) {
 	if err != nil {
 		return out, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	out.CanManage = manage
 	rows, err := tx.Query(ctx, `SELECT id::text,name,territory,active,version FROM app.business_branches WHERE organization_id=$1::uuid ORDER BY active DESC,name,id`, org)
 	if err != nil {
@@ -136,7 +135,7 @@ func (s Store) SaveBranch(ctx context.Context, user, org string, b Branch) (Bran
 	if err != nil {
 		return Branch{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var version int64
 	if b.Version == 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO app.business_branches(id,organization_id,name,territory,active,updated_by) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6::uuid) ON CONFLICT DO NOTHING RETURNING version`, b.ID, org, b.Name, b.Territory, b.Active, user).Scan(&version)
@@ -163,7 +162,7 @@ func (s Store) Assign(ctx context.Context, user, org string, p Partner) (Partner
 	if err != nil {
 		return Partner{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var version int64
 	if p.Version == 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO app.partner_assignments(organization_id,buyer_business_id,branch_id,manager_user_id,updated_by) VALUES($1::uuid,$2::uuid,NULLIF($3,'')::uuid,NULLIF($4,'')::uuid,$5::uuid) ON CONFLICT DO NOTHING RETURNING version`, org, p.BusinessID, p.BranchID, p.ManagerID, user).Scan(&version)

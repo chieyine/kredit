@@ -26,4 +26,6 @@ COPY --from=deps-prod /src/web/node_modules ./web/node_modules
 COPY --from=build /src/web/build ./web/build
 USER node
 EXPOSE 3000
+# Liveness of this Node server, not an upstream API or cached marketing page.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||'3000')+'/healthz',{redirect:'manual',signal:AbortSignal.timeout(3000)}).then(async r=>{if(r.status!==200||(await r.text())!=='ok')process.exit(1)}).catch(()=>process.exit(1))"]
 CMD ["node", "web/build"]

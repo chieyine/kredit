@@ -2,6 +2,8 @@ import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { Handle } from '@sveltejs/kit';
 import { assertLaunchWebConfig } from '$lib/server/legal-config';
+import { applyPageCachePolicy, isAccountPage } from '$lib/server/page-cache';
+import { ProxyBodyError, proxyHeaders, readProxyBody } from '$lib/server/proxy-body';
 
 assertLaunchWebConfig();
 
@@ -25,96 +27,86 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	if (!event.url.pathname.startsWith('/api/')) {
-		const protectedAccountRoute = /^\/(?:account|start|workspace|personal|admin|agents)(?:\/|$)/.test(event.url.pathname);
-		if (protectedAccountRoute && !event.cookies.get('kredit_session')) {
+		if (isAccountPage(event.url.pathname) && !event.cookies.get('kredit_session')) {
 			const next = `${event.url.pathname}${event.url.search}`;
-			return new Response(null, {
+			const response = new Response(null, {
 				status: 303,
 				headers: {
-					location: `/signin?next=${encodeURIComponent(next)}`,
-					'cache-control': 'private, no-store'
+					...SECURITY_HEADERS,
+					location: `/signin?next=${encodeURIComponent(next)}`
 				}
 			});
+			applyPageCachePolicy(event.url.pathname, response, event.request.method);
+			return response;
 		}
 		const response = await resolve(event);
 		for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
 			response.headers.set(name, value);
 		}
-		const privateRoute = /^\/(account|start|signin|workspace|personal|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(\/|$)/.test(event.url.pathname);
-		if (!response.headers.has('cache-control')) response.headers.set('cache-control', privateRoute
-			? 'private, no-store'
-			: 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
+		applyPageCachePolicy(event.url.pathname, response, event.request.method, Boolean(event.cookies.get('kredit_session')));
 		return response;
 	}
 	const upstream = env.API_INTERNAL_URL ?? 'http://localhost:8080';
 	const target = new URL(event.url.pathname + event.url.search, upstream);
-	const headers = new Headers(event.request.headers);
+	const headers = proxyHeaders(event.request.headers);
 	headers.delete('host');
-	headers.delete('connection');
 	headers.delete('accept-encoding');
+	// fetch computes the length of the actual buffered bytes, not the client's claim.
+	headers.delete('content-length');
 	// Discard browser-supplied forwarding claims before signing the adapter's address.
 	for (const spoofable of ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'true-client-ip', 'forwarded', 'x-kredit-client-ip', 'x-kredit-client-timestamp', 'x-kredit-client-signature']) {
 		headers.delete(spoofable);
-	}
-	try {
-		const clientAddress = event.getClientAddress();
-		if (clientAddress && env.FRONTEND_PROXY_SIGNING_KEY) {
-			const timestamp = Math.floor(Date.now() / 1000).toString();
-			const payload = [timestamp, event.request.method, target.pathname + target.search, clientAddress].join('\n');
-			headers.set('x-kredit-client-ip', clientAddress);
-			headers.set('x-kredit-client-timestamp', timestamp);
-			headers.set('x-kredit-client-signature', createHmac('sha256', env.FRONTEND_PROXY_SIGNING_KEY).update(payload).digest('hex'));
-		}
-	} catch {
-		// Without an observed address, the API uses its trusted ingress address.
 	}
 	const method = event.request.method;
 	try {
 		let body: Uint8Array<ArrayBuffer> | undefined;
 		if (method !== 'GET' && method !== 'HEAD' && event.request.body) {
-			const reader = event.request.body.getReader();
-			const chunks: Uint8Array[] = [];
-			let size = 0;
-			while (true) {
-				const { value, done } = await reader.read();
-				if (done) break;
-				size += value.byteLength;
-				// Document routes carry a base64 payload, which inflates a 2 MB file
-				// to roughly 2.7 MB of JSON. Matching only the plural '/documents'
-				// left the identity route (.../{caseID}/document) on the 2 MB
-				// allowance, so a file the UI and the API both accept was rejected
-				// here with a bare 413.
-				if (size > (/\/documents?$/.test(event.url.pathname) ? 4 : 2) * 1024 * 1024) {
-					await reader.cancel();
-					return new Response(JSON.stringify({ title: 'Request too large', status: 413 }), {
-						status: 413, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' }
-					});
-				}
-				chunks.push(value);
+			// A separate input deadline covers time spent receiving the body. The
+			// upstream deadline cannot protect a request that has not been sent yet.
+			// Base64 document bodies need the existing 4 MiB allowance on both
+			// singular identity-document and plural document upload routes.
+			const maxBytes = (/\/documents?$/.test(event.url.pathname) ? 4 : 2) * 1024 * 1024;
+			body = await readProxyBody(event.request.body, maxBytes, event.request.signal);
+		}
+		try {
+			const clientAddress = event.getClientAddress();
+			if (clientAddress && env.FRONTEND_PROXY_SIGNING_KEY) {
+				// Sign immediately before sending so a valid slow upload does not
+				// consume the API's timestamp acceptance window before dispatch.
+				const timestamp = Math.floor(Date.now() / 1000).toString();
+				const payload = [timestamp, method, target.pathname + target.search, clientAddress].join('\n');
+				headers.set('x-kredit-client-ip', clientAddress);
+				headers.set('x-kredit-client-timestamp', timestamp);
+				headers.set('x-kredit-client-signature', createHmac('sha256', env.FRONTEND_PROXY_SIGNING_KEY).update(payload).digest('hex'));
 			}
-			body = new Uint8Array(size);
-			let offset = 0;
-			for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+		} catch {
+			// Without an observed address, the API uses its trusted ingress address.
 		}
 		const timeout = AbortSignal.timeout(30_000);
 		const signal = AbortSignal.any([event.request.signal, timeout]);
 		const upstreamResponse = await fetch(target, { method, headers, body, redirect: 'manual', signal });
-		const responseHeaders = new Headers(upstreamResponse.headers);
+		const responseHeaders = proxyHeaders(upstreamResponse.headers);
 		// Node.js fetch() automatically decompresses the body stream. Forwarding upstream
 		// content-encoding or content-length will cause net::ERR_CONTENT_DECODING_FAILED in the browser.
 		responseHeaders.delete('content-encoding');
 		responseHeaders.delete('content-length');
-		responseHeaders.delete('transfer-encoding');
 
 		return new Response(upstreamResponse.body, {
 			status: upstreamResponse.status,
 			statusText: upstreamResponse.statusText,
 			headers: responseHeaders
 		});
-	} catch {
+	} catch (error) {
+		if (error instanceof ProxyBodyError) {
+			const title = error.status === 413 ? 'Request too large' : error.status === 408 ? 'Request timeout' : 'Invalid request body';
+			return new Response(JSON.stringify({ type: 'about:blank', title, status: error.status, detail: error.message }), {
+				status: error.status,
+				headers: { ...SECURITY_HEADERS, 'content-type': 'application/problem+json', 'cache-control': 'no-store' }
+			});
+		}
 		return new Response(JSON.stringify({ type: 'about:blank', title: 'Service unavailable', status: 503, detail: 'The API is temporarily unavailable.' }), {
 			status: 503,
-			headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' }
+			headers: { ...SECURITY_HEADERS, 'content-type': 'application/problem+json', 'cache-control': 'no-store' }
 		});
 	}
 };

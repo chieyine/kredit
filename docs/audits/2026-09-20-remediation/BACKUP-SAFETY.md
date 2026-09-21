@@ -1,0 +1,13 @@
+# Backup path and destination audit
+
+The R2 backup command now rejects non-account R2 origins, insecure schemes, URL credentials, ports and path/query overrides before producing database bytes. It supports the documented default, EU, US and FedRAMP account endpoints. Redirects are not followed and normal TLS certificate verification remains enabled. Production deployment must continue to approve the actual account/bucket and credential permissions; a hostname match alone does not verify ownership.
+
+The output directory must be an absolute, real owner-only directory. Go's directory-root API binds operations to the opened directory. The archive and checksum companion are both exclusively created before invoking pg_dump. Preexisting files/symlinks are not overwritten. A failed or empty producer removes only its newly created incomplete pair; a completed local backup remains if offsite replication fails. Write, sync, stat and close errors are checked.
+
+The same file descriptor used for capture is rewound and uploaded, avoiding a pathname reopen after computing the checksum. Conditional R2 puts refuse replacement of an existing key. Both archive and sidecar uploads must succeed before local retention. Retention is restricted to recognized regular archive/companion pairs and cannot traverse outside the opened root.
+
+The fixed docker/pg_dump argument vector accepts only validated container/database/user identifiers, not arbitrary flags or connection strings. The command uses a cancellable 30-minute context and a bounded pipe wait. This cancels the local Docker client; a deployment should separately verify container-side dump termination on disconnect. No shell is invoked. The narrow subprocess scanner annotation describes that fixed invocation, not a general permission to execute untrusted commands.
+
+Five filesystem/validation regression tests cover destination rejection, private directory requirements, exact gzip/checksum bytes, descriptor identity after pathname replacement, create collisions, failed/empty producers and retention exclusions. These tests do not upload real backups or constitute a restore rehearsal. Successful compilation and tests must be established by the actual GitHub candidate because the local audit environment uses an older Go version without os.Root.
+
+Operators using a preexisting shared or symlinked backup directory must provision a dedicated 0700 directory before adopting this command. Existing recognized backup filename and checksum formats are retained. Restore rehearsal and independent offsite verification remain release obligations.

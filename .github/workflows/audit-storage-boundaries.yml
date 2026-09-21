@@ -1,0 +1,78 @@
+name: Audit storage boundary proof
+
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-storage-boundaries.yml]
+
+permissions:
+  contents: read
+
+# This proof is bound to one source commit. New, unrelated audit commits must
+# not cancel it halfway through and leave its regression evidence incomplete.
+concurrency:
+  group: storage-boundary-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_storage_boundary_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_storage_boundary_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_storage_boundary_test?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_storage_boundary_test?sslmode=disable
+      APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_storage_boundary_test?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_storage_boundary_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Record exact source
+        run: |
+          mkdir -p "$RUNNER_TEMP/storage-evidence"
+          git rev-parse HEAD > "$RUNNER_TEMP/storage-evidence/source-commit.txt"
+          go version > "$RUNNER_TEMP/storage-evidence/go-version.txt"
+      - name: Run complete Go package tests
+        run: |
+          set -euo pipefail
+          go test -count=1 ./... 2>&1 | tee "$RUNNER_TEMP/storage-evidence/go-packages.log"
+      - name: Prepare isolated schema and restricted roles
+        run: |
+          set -euo pipefail
+          go run ./cmd/migrate 2>&1 | tee "$RUNNER_TEMP/storage-evidence/migrations.log"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false -f infra/postgres/development-logins.sql
+      - name: Verify documents and native bank authorization under the race detector
+        env:
+          KREDIT_INTEGRATION: "1"
+        run: |
+          set -euo pipefail
+          go test -count=1 -race -v ./internal/documents ./internal/providers/bankdebit 2>&1 | tee "$RUNNER_TEMP/storage-evidence/storage-race.log"
+          go run ./cmd/migrate 2>&1 | tee "$RUNNER_TEMP/storage-evidence/migration-replay.log"
+      - name: Preserve synthetic test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: storage-boundaries-${{ github.sha }}
+          path: ${{ runner.temp }}/storage-evidence/
+          retention-days: 7
+          if-no-files-found: error

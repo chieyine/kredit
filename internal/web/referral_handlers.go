@@ -2,12 +2,13 @@ package web
 
 import (
 	"errors"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"kredit/internal/access"
 	"kredit/internal/referrals"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (s *Server) dsa(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +24,7 @@ func (s *Server) dsa(w http.ResponseWriter, r *http.Request) {
 		}
 		v, e := store.Lookup(r.Context(), code)
 		if e != nil {
-			writeProblem(w, 404, "code_unavailable", "This referral code is unavailable.")
+			writeReferralLookupProblem(w, e)
 			return
 		}
 		writeJSON(w, 200, v)
@@ -109,4 +110,13 @@ func (s *Server) dsa(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, result)
+}
+
+func writeReferralLookupProblem(w http.ResponseWriter, err error) {
+	if errors.Is(err, referrals.ErrCodeUnavailable) {
+		writeProblem(w, 404, "code_unavailable", "This referral code is unavailable.")
+		return
+	}
+	// Do not expose connection details, or reject a real code during an outage.
+	writeProblem(w, 503, "dsa_unavailable", "The referral programme is temporarily unavailable. Please try again.")
 }

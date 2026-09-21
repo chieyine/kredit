@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	"github.com/jackc/pgx/v5"
+
 	"kredit/internal/access"
 )
 
@@ -13,7 +15,8 @@ func (s *Store) Read(ctx context.Context, actor string, admin bool, agent string
 	if e != nil {
 		return nil, e
 	}
-	defer tx.Rollback(ctx)
+	// Closing an already committed transaction is expected during cleanup.
+	defer func() { _ = tx.Rollback(ctx) }()
 	if admin {
 		if e = access.LockPlatformAuthority(ctx, tx, actor, access.PermissionPlatformOwner); e != nil {
 			return nil, e
@@ -58,13 +61,12 @@ func (s *Store) Read(ctx context.Context, actor string, admin bool, agent string
 		if e = tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(v)),'[]') FROM (`+q+`) v`, agent, before).Scan(&raw); e != nil {
 			return nil, e
 		}
-		var list []map[string]any
-		if e = json.Unmarshal(raw, &list); e != nil {
-			return nil, e
+		list, cursor, err := decodeReadPage(raw)
+		if err != nil {
+			return nil, err
 		}
-		if len(list) > 100 {
-			list = list[:100]
-			next[key] = list[99]["id"].(string)
+		if cursor != "" {
+			next[key] = cursor
 		}
 		out[key] = list
 	}

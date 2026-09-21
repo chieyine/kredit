@@ -87,6 +87,7 @@ jobs:
       - name: Apply fresh database migrations and runtime roles
         env:
           DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
+          KREDIT_NATIVE_TEST_DB: postgres://kredit:kredit@127.0.0.1:5432/kredit_native_audit?sslmode=disable
         run: |
           go run ./cmd/migrate
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
@@ -96,6 +97,11 @@ jobs:
             -v backup_login_password=kredit-backup-development-only \
             -v demote_owner=false \
             -f infra/postgres/development-logins.sql
+          # Native-provider tests deliberately refuse every other database name.
+          # Provision their separate disposable database; never relax that guard.
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE kredit_native_audit'
+          DATABASE_DIRECT_URL="$KREDIT_NATIVE_TEST_DB" go run ./cmd/migrate
+          psql "$KREDIT_NATIVE_TEST_DB" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
       - name: Run repository checks
         env:
           GOCACHE: ${{ runner.temp }}/go-cache
@@ -108,6 +114,7 @@ jobs:
           DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_test?sslmode=disable
           APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
           RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_test?sslmode=disable
+          KREDIT_NATIVE_TEST_DB: postgres://kredit:kredit@127.0.0.1:5432/kredit_native_audit?sslmode=disable
         run: |
           set -euo pipefail
           export PATH="$RUNNER_TEMP/kredit-analysis-bin:$PATH"
