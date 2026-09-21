@@ -1,0 +1,24 @@
+# Tables that carry a tenant column, have row-level security enabled, and have
+# no policy referencing app.current_organization_id() or app.current_user_id().
+#
+# For these the database enforces nothing about ownership: a handler that
+# forgets its WHERE clause returns another tenant's rows. Gate 2 of
+# scripts/rls-policy-shape-check.sh fails on any table not listed here, so the
+# list can only shrink. Every entry needs a reason and an owner.
+#
+# --- Platform-operator surfaces. Reached only through requirePlatformAccess,
+#     which checks app.platform_role_assignments before the query runs. The
+#     tenant column identifies the subject of the action, not its owner, so a
+#     tenant policy would be wrong here; what these need instead is a policy
+#     keyed on has_admin_role(), in the shape migration 161 used for disputes.
+app.admin_change_requests
+app.legal_holds
+app.operations_commands
+app.platform_role_assignments
+#
+# --- Customer data. These are the ones that matter, and they are being worked
+#     down. Each needs its query paths to establish tenant context first, which
+#     is tracked with the finding.
+app.operation_actions
+app.provider_customer_bindings
+app.support_cases
