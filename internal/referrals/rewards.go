@@ -3,11 +3,12 @@ package referrals
 import (
 	"context"
 	"errors"
+	"kredit/internal/db"
+	"kredit/internal/ledger"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"kredit/internal/ledger"
 )
 
 type facts struct {
@@ -50,9 +51,8 @@ func (s *Store) Refresh(ctx context.Context) error {
 			if e == nil {
 				e = tx.Commit(ctx)
 			}
-			tx.Rollback(ctx)
 			if e != nil {
-				return e
+				return db.RollbackFailure(ctx, tx, e)
 			}
 			cursor = id
 		}
