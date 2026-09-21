@@ -20,6 +20,9 @@ import (
 // No bank is contacted and no real customer data is used.
 func TestEnrollmentIsolationAndLateResponseFence(t *testing.T) {
 	dsn := os.Getenv("KREDIT_NATIVE_TEST_DB")
+	if dsn == "" {
+		t.Skip("skipping native bank debit integration test: KREDIT_NATIVE_TEST_DB is not configured")
+	}
 	if !strings.Contains(dsn, "/kredit_native_audit?") {
 		t.Fatal("requires the disposable kredit_native_audit database")
 	}
@@ -107,6 +110,9 @@ func (p delayedCancellation) CancelMandate(context.Context, string, string) (man
 }
 func TestCancellationStaysPausedWhenBankStillReportsActive(t *testing.T) {
 	dsn := os.Getenv("KREDIT_NATIVE_TEST_DB")
+	if dsn == "" {
+		t.Skip("skipping native bank debit integration test: KREDIT_NATIVE_TEST_DB is not configured")
+	}
 	if !strings.Contains(dsn, "/kredit_native_audit?") {
 		t.Fatal("requires disposable audit database")
 	}
