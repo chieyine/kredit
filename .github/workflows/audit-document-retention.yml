@@ -1,0 +1,103 @@
+name: Audit document retention
+
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-document-retention.yml]
+  pull_request:
+    paths:
+      - internal/documents/**
+      - db/migrations/**
+      - .github/workflows/audit-document-retention.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: document-retention-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kredit
+          POSTGRES_PASSWORD: kredit
+          POSTGRES_DB: kredit_document_audit_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kredit -d kredit_document_audit_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_document_audit_test?sslmode=disable
+      DATABASE_DIRECT_URL: postgres://kredit:kredit@127.0.0.1:5432/kredit_document_audit_test?sslmode=disable
+      APP_DATABASE_URL: postgres://kredit_app_login:kredit-app-development-only@127.0.0.1:5432/kredit_document_audit_test?sslmode=disable
+      RIVER_DATABASE_URL: postgres://kredit_worker_login:kredit-worker-development-only@127.0.0.1:5432/kredit_document_audit_test?sslmode=disable
+      KREDIT_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Prepare isolated schema and restricted test roles
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/retention-evidence"
+          git rev-parse HEAD > "$RUNNER_TEMP/retention-evidence/source-commit.txt"
+          go run ./cmd/migrate
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f infra/postgres/roles.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -v app_login_password=kredit-app-development-only \
+            -v worker_login_password=kredit-worker-development-only \
+            -v backup_login_password=kredit-backup-development-only \
+            -v demote_owner=false -f infra/postgres/development-logins.sql
+      - name: Prove the original predicate fails the identity regression
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          # This changes only the isolated job database, never a production schema.
+          # Use the original applied migration's exact body; preserve its ACL.
+          python3 - <<'PY' > "$RUNNER_TEMP/original-predicate.sql"
+          import pathlib
+          source = pathlib.Path('db/migrations/113_document_orphan_recovery.sql').read_text()
+          body = source.split('-- +goose StatementBegin', 1)[1].split('-- +goose StatementEnd', 1)[0]
+          assert body.count('CREATE FUNCTION app.document_object_is_orphan') == 1
+          print(body.replace('CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION', 1))
+          PY
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/original-predicate.sql"
+          set +e
+          go test -count=1 -run '^TestCleanupIdentityReservationsPreserveEvidence$' -v ./internal/documents > "$RUNNER_TEMP/retention-evidence/before.log" 2>&1
+          result=$?
+          set -e
+          cat "$RUNNER_TEMP/retention-evidence/before.log"
+          test "$result" -ne 0
+          grep -F 'unreferenced identity object: deletions = 0, want 1' "$RUNNER_TEMP/retention-evidence/before.log"
+          grep -F 'expired incomplete identity reservation: deletions = 0, want 1' "$RUNNER_TEMP/retention-evidence/before.log"
+      - name: Restore the reviewed predicate and validate document behaviour
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/reviewed-predicate.sql"
+          import pathlib
+          source = pathlib.Path('db/migrations/202_identity_document_orphan_recovery.sql').read_text()
+          body = source.split('-- +goose StatementBegin', 1)[1].split('-- +goose StatementEnd', 1)[0]
+          assert body.count('CREATE OR REPLACE FUNCTION app.document_object_is_orphan') == 1
+          print(body)
+          PY
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/reviewed-predicate.sql"
+          go test -count=1 -race -v ./internal/documents 2>&1 | tee "$RUNNER_TEMP/retention-evidence/after.log"
+          go run ./cmd/migrate 2>&1 | tee "$RUNNER_TEMP/retention-evidence/migration-replay.log"
+      - name: Preserve synthetic regression evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: document-retention-${{ github.sha }}
+          path: ${{ runner.temp }}/retention-evidence/
+          retention-days: 7
+          if-no-files-found: error
