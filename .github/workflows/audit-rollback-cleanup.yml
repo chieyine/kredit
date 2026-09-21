@@ -1,0 +1,33 @@
+name: Audit rollback cleanup
+
+on:
+  push:
+    branches: [audit/2026-09-20-integrity-remediation]
+    paths: [.github/workflows/audit-rollback-cleanup.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  rollback-cleanup:
+    if: github.repository == 'chieyine/kredit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 4be9b92af25294757c14e7983a3d84a3e50adc22
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Verify source and module integrity
+        run: |
+          test "$(git rev-parse HEAD)" = 4be9b92af25294757c14e7983a3d84a3e50adc22
+          go mod download
+          go mod verify
+      - name: Run explicit cleanup regression tests
+        run: go test -count=1 -race -v ./internal/db -run '^TestRollbackFailure'
+      - name: Run affected package unit and race tests
+        run: go test -count=1 -race ./internal/db ./internal/networkops ./internal/purchasing ./internal/referrals ./internal/providers/bankdebit
