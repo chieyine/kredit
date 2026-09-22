@@ -36,6 +36,11 @@ type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
+func AppendTx(ctx context.Context, tx pgx.Tx, event Event) (string, error) {
+	var s Store
+	return s.AppendTx(ctx, tx, event)
+}
+
 func (s *Store) AppendTx(ctx context.Context, tx pgx.Tx, event Event) (string, error) {
 	if tx == nil {
 		return "", errors.New("outbox transaction is required")

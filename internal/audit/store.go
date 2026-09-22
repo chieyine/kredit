@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strings"
@@ -180,7 +181,10 @@ func (s *Store) ReadForOrganization(ctx context.Context, org string) ([]Event, e
 func (s *PostgresStore) ListForOrganization(org string) []Event {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	items, _ := s.ReadForOrganization(ctx, org)
+	items, err := s.ReadForOrganization(ctx, org)
+	if err != nil {
+		panic(fmt.Errorf("audit: failed to read audit events for organization %s: %w", org, err))
+	}
 	return items
 }
 func (s *PostgresStore) ReadForOrganization(ctx context.Context, org string) ([]Event, error) {

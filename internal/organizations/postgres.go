@@ -160,7 +160,10 @@ func (s *PostgresStore) Read(ctx context.Context, organizationID string) (Organi
 }
 
 func (s *PostgresStore) ListForUser(userID string) []Organization {
-	result, _ := s.ReadForUser(context.Background(), userID)
+	result, err := s.ReadForUser(context.Background(), userID)
+	if err != nil {
+		panic(fmt.Errorf("organizations: failed to read organizations for user %s: %w", userID, err))
+	}
 	return result
 }
 

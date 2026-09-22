@@ -198,29 +198,7 @@ func postOperationLedgerTx(ctx context.Context, tx pgx.Tx, kind, referenceID, ke
 	return id, nil
 }
 func updateOperationBalanceTx(ctx context.Context, tx pgx.Tx, requestID, obligationID string, outstanding, principal ledger.Money) error {
-	var status string
-	switch outstanding {
-	case 0:
-		status = "PAID"
-	case principal:
-		status = "UNPAID"
-	default:
-		status = "PARTIALLY_PAID"
-	}
-	if _, err := tx.Exec(ctx, `UPDATE app.obligations SET outstanding_kobo=$2,payment_status=$3 WHERE id=$1::uuid`, obligationID, int64(outstanding), status); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `UPDATE app.credit_requests SET version=version+1,updated_at=now() WHERE id=$1::uuid`, requestID); err != nil {
-		return err
-	}
-	tag, err := tx.Exec(ctx, `UPDATE app.credit_aggregate_snapshots SET aggregate=jsonb_set(jsonb_set(jsonb_set(aggregate,'{obligation,outstanding_kobo}',to_jsonb($2::bigint),false),'{obligation,payment_status}',to_jsonb($3::text),false),'{request,version}',to_jsonb(version+1),false),version=version+1,updated_at=now() WHERE credit_request_id=$1`, requestID, int64(outstanding), status)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() != 1 {
-		return errors.New("credit aggregate snapshot not found")
-	}
-	return nil
+	return db.UpdateObligationBalanceTx(ctx, tx, requestID, obligationID, outstanding, principal)
 }
 func loadOperationTx(ctx context.Context, tx pgx.Tx, id string) (Action, bool, error) {
 	var a Action
