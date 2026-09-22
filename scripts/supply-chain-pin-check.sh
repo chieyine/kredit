@@ -28,13 +28,13 @@ trap 'rm -f "$actual" "$expected"' EXIT
 
 {
   # GitHub Actions referenced by anything other than a 40-character commit SHA.
-  grep -rhoE '^\s*(-\s*)?uses:\s*[^ ]+' .github/workflows/*.yml 2>/dev/null \
-    | sed -E 's/^\s*(-\s*)?uses:\s*//' \
+  grep -rhoE '^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*[^ ]+' .github/workflows/*.yml 2>/dev/null \
+    | sed -E 's/^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*//' \
     | grep -vE '@[0-9a-f]{40}$' \
     | sed 's/^/action /' || true
   # Container base images referenced by tag rather than digest.
-  grep -rhoE '^FROM\s+[^ ]+' infra/containers/Dockerfile.* 2>/dev/null \
-    | sed -E 's/^FROM\s+//' \
+  grep -rhoE '^FROM[[:space:]]+[^ ]+' infra/containers/Dockerfile.* 2>/dev/null \
+    | sed -E 's/^FROM[[:space:]]+//' \
     | grep -vE '@sha256:[0-9a-f]{64}$' \
     | grep -vE '^(build|runtime-base|build-simulator)$' \
     | sed 's/^/image /' || true
