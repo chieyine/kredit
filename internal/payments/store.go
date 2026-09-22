@@ -81,9 +81,11 @@ type AllocationTarget struct {
 	AmountKobo     ledger.Money
 }
 
-// Service is the payment system of record. Implementations must make payment,
-// allocation, balance, fee, and journal changes atomically and preserve
-// idempotency across process restarts.
+// Service is the payment boundary. Durable deployments must use PostgresStore,
+// which commits payment, allocation, balance, fee and journal changes together.
+// The process-local Store is a development adapter: its arbitrary callbacks
+// cannot provide database atomicity. It fails closed after an uncertain write
+// and must never be used as a restart-safe or production system of record.
 type Service interface {
 	RecordContext(context.Context, RecordInput) (Payment, Allocation, error)
 	Record(RecordInput) (Payment, Allocation, error)
@@ -106,6 +108,8 @@ type Store struct {
 	payments        map[string]*Payment
 	allocations     map[string][]*Allocation
 	byKey           map[string]string
+	recording       map[string]*memoryOperation
+	blocked         map[string]*memoryOperation
 	now             func() time.Time
 	newID           func() string
 	allocate        AllocationFunc
@@ -119,7 +123,7 @@ func NewStore(ledgerStore ledger.Service, lookup SnapshotFunc, apply ApplyFunc) 
 }
 
 func NewStoreWithAllocator(ledgerStore ledger.Service, lookup SnapshotFunc, apply ApplyFunc, allocate AllocationFunc, reallocate ReverseAllocationFunc) *Store {
-	return &Store{ledger: ledgerStore, lookup: lookup, apply: apply, allocate: allocate, reallocate: reallocate, payments: map[string]*Payment{}, allocations: map[string][]*Allocation{}, byKey: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier}
+	return &Store{ledger: ledgerStore, lookup: lookup, apply: apply, allocate: allocate, reallocate: reallocate, payments: map[string]*Payment{}, allocations: map[string][]*Allocation{}, byKey: map[string]string{}, recording: map[string]*memoryOperation{}, blocked: map[string]*memoryOperation{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier}
 }
 
 func (s *Store) SetCollectedMarker(marker func(string, ledger.Money) error) {
@@ -133,7 +137,7 @@ func (s *Store) SetCollectedReversalMarker(marker func(string, ledger.Money) err
 	s.unmarkCollected = marker
 }
 
-func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
+func (s *Store) Record(input RecordInput) (recorded Payment, allocated Allocation, retErr error) {
 	if input.ObligationID == "" || input.AmountKobo <= 0 || input.RecordedBy == "" || input.IdempotencyKey == "" {
 		return Payment{}, Allocation{}, errors.New("obligation, amount, recorder, and idempotency key are required")
 	}
@@ -143,8 +147,20 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 	if input.SourceType == SourceCollected && !validCollectedPayment(input) {
 		return Payment{}, Allocation{}, errors.New("collected payments require collection-worker provenance, provider identity, and an attempt idempotency key")
 	}
+	input.PaidAt = input.PaidAt.UTC().Truncate(time.Microsecond)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Reserve the original identity before any collaborator can change state.
+	// Failed attempts are not converted into a new payment on a later retry.
+	if pending := s.recording[input.IdempotencyKey]; pending != nil {
+		if !samePaymentIntent(pending.payment, input) {
+			return Payment{}, Allocation{}, errors.New("idempotency key was reused for a different payment")
+		}
+		return Payment{}, Allocation{}, pending.recoveryError()
+	}
+	if err := s.memoryBlock(input.ObligationID); err != nil {
+		return Payment{}, Allocation{}, err
+	}
 	if existing := s.byKey[input.IdempotencyKey]; existing != "" {
 		stored := s.payments[existing]
 		allocations := s.allocations[existing]
@@ -169,7 +185,7 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 	if input.AmountKobo > snapshot.OutstandingKobo {
 		return Payment{}, Allocation{}, errors.New("payment exceeds authoritative outstanding amount")
 	}
-	now := s.now()
+	now := s.now().UTC().Truncate(time.Microsecond)
 	paidAt := input.PaidAt
 	if paidAt.IsZero() {
 		paidAt = now
@@ -185,48 +201,41 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 		}
 		payment.CollectionFeeKobo = fee
 	}
+	operation := &memoryOperation{payment: *payment, kind: "record", key: input.IdempotencyKey, stage: "payment journal"}
+	s.recording[input.IdempotencyKey] = operation
+	s.blocked[payment.ObligationID] = operation
+	defer s.finishMemoryOperation(operation, &retErr)
 	if _, err := s.ledger.PostPayment(payment.ID, payment.AmountKobo, payment.SourceType, paidAt, "payment:"+input.IdempotencyKey); err != nil {
 		return Payment{}, Allocation{}, err
 	}
-	if err = s.apply(input.ObligationID, -payment.AmountKobo); err != nil {
-		_, _ = s.ledger.PostPaymentReversal(payment.ID, payment.AmountKobo, payment.SourceType, now, "rollback:"+input.IdempotencyKey)
+	operation.stage = "balance application"
+	if err := s.apply(input.ObligationID, -payment.AmountKobo); err != nil {
 		return Payment{}, Allocation{}, err
 	}
 	var targets []AllocationTarget
 	if s.allocate != nil {
+		operation.stage = "schedule allocation"
 		targets, err = s.allocate(input.ObligationID, payment.AmountKobo)
 		if err != nil {
-			_ = s.apply(input.ObligationID, payment.AmountKobo)
-			_, _ = s.ledger.PostPaymentReversal(payment.ID, payment.AmountKobo, payment.SourceType, now, "rollback-allocation:"+input.IdempotencyKey)
+			return Payment{}, Allocation{}, err
+		}
+		if err := validateMemoryAllocations(targets, payment.AmountKobo); err != nil {
 			return Payment{}, Allocation{}, err
 		}
 	}
-	if payment.SourceType == SourceCollected && !paidAt.Before(snapshot.CollectionAt) {
-		fee := payment.CollectionFeeKobo
-		if fee > 0 {
-			if _, err = s.ledger.PostCollectionFee(payment.ID, fee, paidAt, "collection-fee:"+input.IdempotencyKey); err != nil {
-				if s.reallocate != nil {
-					_ = s.reallocate(targets)
-				}
-				_ = s.apply(input.ObligationID, payment.AmountKobo)
-				_, _ = s.ledger.PostPaymentReversal(payment.ID, payment.AmountKobo, payment.SourceType, now, "rollback-fee:"+input.IdempotencyKey)
-				return Payment{}, Allocation{}, err
-			}
-		}
-		if s.markCollected != nil {
-			if err = s.markCollected(input.ObligationID, payment.AmountKobo); err != nil {
-				if s.reallocate != nil {
-					_ = s.reallocate(targets)
-				}
-				_ = s.apply(input.ObligationID, payment.AmountKobo)
-				_, _ = s.ledger.PostPaymentReversal(payment.ID, payment.AmountKobo, payment.SourceType, now, "rollback-collected:"+input.IdempotencyKey)
-				if fee > 0 {
-					_, _ = s.ledger.PostCollectionFeeReversal(payment.ID, fee, paidAt, "rollback-collected-fee:"+input.IdempotencyKey)
-				}
-				return Payment{}, Allocation{}, err
-			}
+	if payment.CollectionFeeKobo > 0 {
+		operation.stage = "collection fee journal"
+		if _, err := s.ledger.PostCollectionFee(payment.ID, payment.CollectionFeeKobo, paidAt, "collection-fee:"+input.IdempotencyKey); err != nil {
+			return Payment{}, Allocation{}, err
 		}
 	}
+	if payment.SourceType == SourceCollected && !paidAt.Before(snapshot.CollectionAt) && s.markCollected != nil {
+		operation.stage = "collected allocation marker"
+		if err := s.markCollected(input.ObligationID, payment.AmountKobo); err != nil {
+			return Payment{}, Allocation{}, err
+		}
+	}
+	operation.stage = "payment publication"
 	allocations := make([]*Allocation, 0, len(targets))
 	if len(targets) == 0 {
 		allocations = append(allocations, &Allocation{PaymentID: payment.ID, ObligationID: input.ObligationID, AmountKobo: payment.AmountKobo, CreatedAt: now})
@@ -238,6 +247,7 @@ func (s *Store) Record(input RecordInput) (Payment, Allocation, error) {
 	s.payments[payment.ID] = payment
 	s.allocations[payment.ID] = allocations
 	s.byKey[input.IdempotencyKey] = payment.ID
+	operation.completed = true
 	return clonePayment(*payment), allocations[0].clone(), nil
 }
 
@@ -303,82 +313,74 @@ func validSource(source string) bool {
 	}
 }
 
-func (s *Store) Reverse(paymentID, actor, reason string) (Payment, error) {
+func (s *Store) Reverse(paymentID, actor, reason string) (reversed Payment, retErr error) {
+	if actor == "" || strings.TrimSpace(reason) == "" {
+		return Payment{}, errors.New("reversal actor and reason are required")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := s.payments[paymentID]
 	if p == nil {
 		return Payment{}, errors.New("payment not found")
 	}
+	if err := s.memoryBlock(p.ObligationID); err != nil {
+		return Payment{}, err
+	}
 	if p.State == StateReversed {
 		return clonePayment(*p), nil
-	}
-	if actor == "" || strings.TrimSpace(reason) == "" {
-		return Payment{}, errors.New("reversal actor and reason are required")
 	}
 	if s.ledger == nil || s.apply == nil {
 		return Payment{}, errors.New("payment dependencies unavailable")
 	}
-	if _, err := s.ledger.PostPaymentReversal(p.ID, p.AmountKobo, p.SourceType, s.now(), "reversal:"+p.ID); err != nil {
+	targets := make([]AllocationTarget, 0, len(s.allocations[p.ID]))
+	for _, allocation := range s.allocations[p.ID] {
+		if allocation.ScheduleItemID != "" {
+			targets = append(targets, AllocationTarget{ScheduleItemID: allocation.ScheduleItemID, AmountKobo: allocation.AmountKobo})
+		}
+	}
+	if len(targets) > 0 && s.reallocate == nil {
+		return Payment{}, errors.New("schedule reversal dependency unavailable")
+	}
+	if p.SourceType == SourceCollected && s.markCollected != nil && s.unmarkCollected == nil {
+		return Payment{}, errors.New("collected allocation reversal dependency unavailable")
+	}
+	now := s.now().UTC().Truncate(time.Microsecond)
+	reversalID := s.newID()
+	operation := &memoryOperation{payment: *p, kind: "reverse", stage: "reversal journal"}
+	s.blocked[p.ObligationID] = operation
+	defer s.finishMemoryOperation(operation, &retErr)
+	if _, err := s.ledger.PostPaymentReversal(p.ID, p.AmountKobo, p.SourceType, now, "reversal:"+p.ID); err != nil {
 		return Payment{}, err
 	}
 	if p.CollectionFeeKobo > 0 {
-		if _, err := s.ledger.PostCollectionFeeReversal(p.ID, p.CollectionFeeKobo, s.now(), "collection-fee-reversal:"+p.ID); err != nil {
-			s.compensateReversalLedger(p, false)
+		operation.stage = "collection fee reversal journal"
+		if _, err := s.ledger.PostCollectionFeeReversal(p.ID, p.CollectionFeeKobo, now, "collection-fee-reversal:"+p.ID); err != nil {
 			return Payment{}, err
 		}
 	}
-	// Release collected markers before reversing schedule allocations. The
-	// PostgreSQL schedule repository enforces collected_kobo <= allocated_kobo.
+	// Preserve collected <= allocated while removing the original allocation.
 	if p.SourceType == SourceCollected && s.unmarkCollected != nil {
+		operation.stage = "collected allocation reversal"
 		if err := s.unmarkCollected(p.ObligationID, p.AmountKobo); err != nil {
-			s.compensateReversalLedger(p, p.CollectionFeeKobo > 0)
 			return Payment{}, err
 		}
 	}
 	if s.reallocate != nil {
-		targets := make([]AllocationTarget, 0, len(s.allocations[p.ID]))
-		for _, allocation := range s.allocations[p.ID] {
-			if allocation.ScheduleItemID != "" {
-				targets = append(targets, AllocationTarget{ScheduleItemID: allocation.ScheduleItemID, AmountKobo: allocation.AmountKobo})
-			}
-		}
+		operation.stage = "schedule allocation reversal"
 		if err := s.reallocate(targets); err != nil {
-			if p.SourceType == SourceCollected && s.markCollected != nil {
-				_ = s.markCollected(p.ObligationID, p.AmountKobo)
-			}
-			s.compensateReversalLedger(p, p.CollectionFeeKobo > 0)
 			return Payment{}, err
 		}
 	}
+	operation.stage = "balance reversal"
 	if err := s.apply(p.ObligationID, p.AmountKobo); err != nil {
-		if p.SourceType == SourceCollected && s.markCollected != nil {
-			_ = s.markCollected(p.ObligationID, p.AmountKobo)
-		}
-		if s.allocate != nil {
-			_, _ = s.allocate(p.ObligationID, p.AmountKobo)
-		}
-		s.compensateReversalLedger(p, p.CollectionFeeKobo > 0)
 		return Payment{}, err
 	}
-	// Preserve the original payment as an immutable historical record and
-	// append a separate reversal event that points back to it. A self-referential
-	// reversal marker makes rebuilds and audit history ambiguous.
-	p.State = StateReversed
-	reversal := &Payment{ID: s.newID(), ObligationID: p.ObligationID, BuyerUserID: p.BuyerUserID, SupplierOrganizationID: p.SupplierOrganizationID, SourceType: p.SourceType, AmountKobo: p.AmountKobo, Currency: p.Currency, Provider: p.Provider, ProviderReference: p.ProviderReference, State: StateReversed, PaidAt: p.PaidAt, RecognizedAt: s.now(), RecordedBy: actor, ReversalOf: p.ID, CollectionFeeKobo: p.CollectionFeeKobo}
+	operation.stage = "reversal publication"
+	reversal := &Payment{ID: reversalID, ObligationID: p.ObligationID, BuyerUserID: p.BuyerUserID, SupplierOrganizationID: p.SupplierOrganizationID, SourceType: p.SourceType, AmountKobo: p.AmountKobo, Currency: p.Currency, Provider: p.Provider, ProviderReference: p.ProviderReference, State: StateReversed, PaidAt: p.PaidAt, RecognizedAt: now, RecordedBy: actor, ReversalOf: p.ID, CollectionFeeKobo: p.CollectionFeeKobo}
 	s.payments[reversal.ID] = reversal
+	p.State = StateReversed
+	operation.completed = true
 	return clonePayment(*p), nil
-}
-
-func (s *Store) compensateReversalLedger(payment *Payment, fee bool) {
-	if payment == nil || s.ledger == nil {
-		return
-	}
-	now := s.now()
-	_, _ = s.ledger.PostPayment(payment.ID, payment.AmountKobo, payment.SourceType, now, "rollback-reversal:"+payment.ID)
-	if fee && payment.CollectionFeeKobo > 0 {
-		_, _ = s.ledger.PostCollectionFee(payment.ID, payment.CollectionFeeKobo, now, "rollback-collection-fee-reversal:"+payment.ID)
-	}
 }
 
 // List returns the obligation's payments oldest first. The PostgreSQL store
@@ -387,6 +389,9 @@ func (s *Store) compensateReversalLedger(payment *Payment, fee bool) {
 func (s *Store) List(obligationID string) ([]Payment, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if err := s.memoryBlock(obligationID); err != nil {
+		return nil, err
+	}
 	out := []Payment{}
 	for _, p := range s.payments {
 		if p.ObligationID == obligationID {
@@ -405,15 +410,26 @@ func (s *Store) List(obligationID string) ([]Payment, error) {
 func (s *Store) Get(paymentID string) (Payment, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	for _, operation := range s.recording {
+		if operation.payment.ID == paymentID {
+			return Payment{}, operation.recoveryError()
+		}
+	}
 	p := s.payments[paymentID]
 	if p == nil {
 		return Payment{}, errors.New("payment not found")
+	}
+	if err := s.memoryBlock(p.ObligationID); err != nil {
+		return Payment{}, err
 	}
 	return clonePayment(*p), nil
 }
 func (s *Store) Rebuild(obligationID string) (ledger.Money, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.memoryBlock(obligationID); err != nil {
+		return 0, err
+	}
 	if s.lookup == nil || s.apply == nil {
 		return 0, errors.New("payment dependencies unavailable")
 	}

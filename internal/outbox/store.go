@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kredit/internal/platform/logging"
+	"kredit/internal/platform/txcleanup"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -67,7 +68,7 @@ func (s *Store) AppendTx(ctx context.Context, tx pgx.Tx, event Event) (string, e
 	return id, nil
 }
 
-func (s *Store) Claim(ctx context.Context, limit int) ([]Event, error) {
+func (s *Store) Claim(ctx context.Context, limit int) (claimed []Event, retErr error) {
 	if s == nil || s.pool == nil {
 		return nil, errors.New("outbox database is not configured")
 	}
@@ -78,18 +79,31 @@ func (s *Store) Claim(ctx context.Context, limit int) ([]Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	// Recover events whose publisher died after claiming them. The lease is
-	// intentionally short relative to normal provider timeouts and is safe to
-	// reprocess because consumers must honor IdempotencyKey.
-	if _, err := tx.Exec(ctx, `UPDATE app.outbox_events SET state = 'failed', available_at = now(), last_error = COALESCE(last_error, 'processing lease expired'), processing_started_at = NULL WHERE state = 'processing' AND processing_started_at < now() - interval '10 minutes'`); err != nil {
-		return nil, err
+	defer txcleanup.Finish(ctx, tx, &retErr)
+	// Recovery obeys the same batch bound and nonblocking row-lock policy as
+	// claiming. A locked expired event must not stop unrelated pending work.
+	// The existing processing_started_at partial index supports this scan.
+	if _, err := tx.Exec(ctx, `
+		WITH expired AS (
+		    SELECT id FROM app.outbox_events
+		    WHERE state='processing'
+		      AND processing_started_at < now() - interval '10 minutes'
+		    ORDER BY processing_started_at, id
+		    LIMIT $1
+		    FOR UPDATE SKIP LOCKED
+		)
+		UPDATE app.outbox_events e
+		SET state='failed', available_at=now(),
+		    last_error=COALESCE(e.last_error, 'processing lease expired'),
+		    processing_started_at=NULL
+		FROM expired WHERE e.id=expired.id`, limit); err != nil {
+		return nil, fmt.Errorf("recover expired outbox claims: %w", err)
 	}
 	rows, err := tx.Query(ctx, `
 		SELECT id::text, aggregate_type, aggregate_id, event_type, payload, idempotency_key, state, attempts, available_at, COALESCE(last_error,''), created_at, published_at, processing_started_at
 		FROM app.outbox_events
 		WHERE state IN ('pending','failed') AND available_at <= now()
-		ORDER BY created_at
+		ORDER BY created_at, id
 		FOR UPDATE SKIP LOCKED
 		LIMIT $1`, limit)
 	if err != nil {

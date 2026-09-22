@@ -76,19 +76,46 @@ func cloneCreditNote(note CreditNote) CreditNote {
 	return note
 }
 
-// Lock current membership as well as the parent so revocation and order writes
-// cannot pass each other. The authenticated context, never a child row, picks
-// the tenant. Parent RLS supplies the restrictive branch boundary.
+// Lock authority before financial records, then an existing obligation before
+// its credit request. In particular a note approval must never hold a request
+// while waiting for an obligation held by payment reversal or balance repair.
+// Every lookup retains the authenticated tenant and the parent's RLS boundary.
 func lockSupplierOrder(ctx context.Context, tx pgx.Tx, orderID string, roles []string) error {
-	var id string
-	err := tx.QueryRow(ctx, `SELECT cr.id::text FROM app.credit_requests cr
+	const authorizedOrder = `SELECT cr.id::text FROM app.credit_requests cr
         JOIN app.memberships m ON m.organization_id=cr.supplier_organization_id AND m.user_id=app.current_user_id()
         JOIN app.users u ON u.id=m.user_id JOIN app.organizations o ON o.id=m.organization_id
         WHERE cr.id=$1::uuid AND cr.supplier_organization_id=app.current_organization_id()
-        AND m.status='active' AND m.role=ANY($2::text[]) AND u.status='active' AND o.status<>'suspended'
-        FOR UPDATE OF cr FOR SHARE OF m,u,o`, orderID, roles).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
+        AND m.status='active' AND m.role=ANY($2::text[]) AND u.status='active' AND o.status<>'suspended'`
+	var id string
+	if err := tx.QueryRow(ctx, authorizedOrder+` FOR SHARE OF m,u,o`, orderID, roles).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
 	}
-	return err
+	var lockedObligation string
+	err := tx.QueryRow(ctx, `SELECT id::text FROM app.obligations
+        WHERE credit_request_id=$1::uuid AND supplier_organization_id=app.current_organization_id()
+        FOR UPDATE`, orderID).Scan(&lockedObligation)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if err := tx.QueryRow(ctx, authorizedOrder+` FOR UPDATE OF cr`, orderID, roles).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	// An activation may have committed while this transaction waited for the
+	// request. Refuse before taking a late obligation lock (which would invert
+	// the order). The caller rolls back; it must start a fresh transaction.
+	var currentObligation string
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT id::text FROM app.obligations
+        WHERE credit_request_id=$1::uuid AND supplier_organization_id=app.current_organization_id()),'')`, orderID).Scan(&currentObligation); err != nil {
+		return err
+	}
+	if currentObligation != lockedObligation {
+		return ErrConflict
+	}
+	return nil
 }
