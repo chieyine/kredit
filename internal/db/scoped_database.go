@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 
+	"kredit/internal/platform/txcleanup"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,19 +26,18 @@ func (p *ScopedDatabase) BeginTx(ctx context.Context, options pgx.TxOptions) (pg
 	}
 	identity, _ := TenantFromContext(ctx)
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, identity.UserID, identity.OrganizationID); err != nil {
-		_ = tx.Rollback(ctx)
-		return nil, err
+		return nil, RollbackFailure(ctx, tx, err)
 	}
 	return tx, nil
 }
 
-func (p *ScopedDatabase) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+func (p *ScopedDatabase) Exec(ctx context.Context, sql string, args ...any) (tag pgconn.CommandTag, err error) {
 	tx, err := p.Begin(ctx)
 	if err != nil {
 		return pgconn.CommandTag{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	tag, err := tx.Exec(ctx, sql, args...)
+	defer txcleanup.Finish(ctx, tx, &err)
+	tag, err = tx.Exec(ctx, sql, args...)
 	if err != nil {
 		return tag, err
 	}
@@ -58,11 +59,11 @@ type scopedRow struct {
 	err error
 }
 
-func (r *scopedRow) Scan(dest ...any) error {
+func (r *scopedRow) Scan(dest ...any) (err error) {
 	if r.err != nil {
 		return r.err
 	}
-	defer func() { _ = r.tx.Rollback(r.ctx) }()
+	defer txcleanup.Finish(r.ctx, r.tx, &err)
 	if err := r.row.Scan(dest...); err != nil {
 		return err
 	}
@@ -76,8 +77,7 @@ func (p *ScopedDatabase) Query(ctx context.Context, sql string, args ...any) (pg
 	}
 	rows, err := tx.Query(ctx, sql, args...)
 	if err != nil {
-		_ = tx.Rollback(ctx)
-		return nil, err
+		return nil, RollbackFailure(ctx, tx, err)
 	}
 	return &scopedRows{Rows: rows, tx: tx, ctx: ctx}, nil
 }
@@ -95,9 +95,9 @@ func (r *scopedRows) Close() {
 		return
 	}
 	r.closed = true
+	defer txcleanup.Finish(r.ctx, r.tx, &r.err)
 	r.Rows.Close()
-	if r.Rows.Err() != nil {
-		_ = r.tx.Rollback(r.ctx)
+	if r.err = r.Rows.Err(); r.err != nil {
 		return
 	}
 	r.err = r.tx.Commit(r.ctx)
@@ -110,8 +110,8 @@ func (r *scopedRows) Next() bool {
 	return false
 }
 func (r *scopedRows) Err() error {
-	if err := r.Rows.Err(); err != nil {
-		return err
+	if r.err != nil {
+		return r.err
 	}
-	return r.err
+	return r.Rows.Err()
 }

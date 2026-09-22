@@ -2,14 +2,13 @@ package db
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"time"
+
+	"kredit/internal/platform/txcleanup"
 
 	"github.com/jackc/pgx/v5"
 )
 
-const rollbackCleanupTimeout = 5 * time.Second
+const rollbackCleanupTimeout = txcleanup.Timeout
 
 // RollbackFailure releases a failed transaction without discarding its original
 // error. It is only for failure paths, not for deciding whether a commit worked.
@@ -18,12 +17,5 @@ const rollbackCleanupTimeout = 5 * time.Second
 // Cleanup retains request values but has its own bounded lifetime so a cancelled
 // request still gives PostgreSQL an opportunity to release the transaction.
 func RollbackFailure(ctx context.Context, tx pgx.Tx, cause error) error {
-	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackCleanupTimeout)
-	defer cancel()
-
-	err := tx.Rollback(cleanup)
-	if err == nil || errors.Is(err, pgx.ErrTxClosed) {
-		return cause
-	}
-	return errors.Join(cause, fmt.Errorf("rollback failed: %w", err))
+	return txcleanup.Rollback(ctx, tx, cause)
 }

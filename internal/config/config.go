@@ -136,7 +136,7 @@ type Config struct {
 	IdentityWebhookSecret              string `json:"-"`
 }
 
-func Load() (Config, error) {
+func loadEnvironment(validate func(Config) error) (Config, error) {
 	c := Config{
 		MetricsScrapeToken:                 envOr("METRICS_SCRAPE_TOKEN", ""),
 		MonoAccountName:                    envOr("MONO_ACCOUNT_NAME", "mono-sweep"),
@@ -288,7 +288,7 @@ func Load() (Config, error) {
 			return Config{}, err
 		}
 	}
-	if err := c.Validate(); err != nil {
+	if err := validate(c); err != nil {
 		return Config{}, err
 	}
 	return c, nil
