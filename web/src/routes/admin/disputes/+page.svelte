@@ -1,13 +1,172 @@
 <script lang="ts">
- import { record, text } from '$lib/api/reliable';
- import {onMount} from 'svelte';
- import {adminGet, localTime} from '$lib/admin-client';
- import Money from '$lib/components/Money.svelte';
- let items=$state<any[]>([]),stateFilter=$state(''),loading=$state(true),error=$state('');
- let generation=0;
- async function load(){const current=++generation;loading=true;error='';items=[];try{const data=await adminGet(`/api/v1/ops/disputes?state=${encodeURIComponent(stateFilter)}`);if(current!==generation)return;if(!Array.isArray(data.disputes))throw new Error('Disputes could not be verified.');items=data.disputes.map((value:unknown)=>{const item=record(value);text(item.id);text(item.state);text(item.reason);return item});}catch(e){if(current===generation)error=e instanceof Error?e.message:'Disputes could not be loaded.'}finally{if(current===generation)loading=false}}
- onMount(load);
+	import { record, text } from '$lib/api/reliable';
+	import { onMount } from 'svelte';
+	import { adminGet, localTime } from '$lib/admin-client';
+	import Money from '$lib/components/Money.svelte';
+	let items = $state<any[]>([]),
+		stateFilter = $state(''),
+		loading = $state(true),
+		error = $state('');
+	let generation = 0;
+	async function load() {
+		const current = ++generation;
+		loading = true;
+		error = '';
+		items = [];
+		try {
+			const data = await adminGet(`/api/v1/ops/disputes?state=${encodeURIComponent(stateFilter)}`);
+			if (current !== generation) return;
+			if (!Array.isArray(data.disputes)) throw new Error('Disputes could not be verified.');
+			items = data.disputes.map((value: unknown) => {
+				const item = record(value);
+				text(item.id);
+				text(item.state);
+				text(item.reason);
+				return item;
+			});
+		} catch (e) {
+			if (current === generation) error = e instanceof Error ? e.message : 'Disputes could not be loaded.';
+		} finally {
+			if (current === generation) loading = false;
+		}
+	}
+	onMount(load);
 </script>
+
 <svelte:head><title>Disputes — Kredit admin</title></svelte:head>
-<main class="shell workspace disputes"><header><div><p class="eyebrow">Admin / Disputes</p><h1>Review every money disagreement fairly.</h1><p>The amount, what evidence was attached, and what is still unanswered, before you record a decision.</p></div><label>Show<select bind:value={stateFilter} onchange={load}><option value="">All disputes</option><option value="OPEN">Open</option><option value="UNDER_REVIEW">Under review</option><option value="PARTIALLY_RESOLVED">Partly resolved</option><option value="RESOLVED">Resolved</option><option value="WITHDRAWN">Withdrawn</option></select></label></header>{#if error}<section role="alert"><p class="error">{error}</p><button onclick={load}>Try again</button></section>{:else if loading}<p>Loading disputes…</p>{:else}<section>{#each items as item}<a href={`/admin/disputes/${encodeURIComponent(item.id)}`}><div><span>{item.state.replaceAll('_',' ')}</span><h2>{item.reason}</h2><small>Opened {localTime(item.opened_at)}</small></div><dl><div><dt>Disputed</dt><dd><Money amountKobo={item.total_disputed_kobo}/></dd></div><div><dt>Still disputed</dt><dd><Money amountKobo={item.remaining_disputed_kobo}/></dd></div></dl><b>Review →</b></a>{:else}<div class="empty-state"><h2>No disputes in this view</h2><p>Choose another status or return later.</p></div>{/each}</section>{/if}</main>
-<style>.disputes>header{display:flex;align-items:end;justify-content:space-between;gap:2rem;padding:2rem 0;border-bottom:3px solid var(--color-primary)}.disputes h1{max-width:17ch;margin:.4rem 0;font-family:var(--font-serif);font-size:clamp(2.5rem,6vw,4.5rem);font-weight:500;line-height:.95}.disputes header p{max-width:42rem}.disputes label{display:grid;gap:.35rem;font-size:.75rem;font-weight:800}.disputes select{min-height:2.8rem;padding:.5rem;border:1px solid var(--color-primary);background:var(--color-surface)}.disputes section{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin-top:2rem}.disputes section>a{display:grid;gap:1.2rem;padding:1.2rem;border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-primary);text-decoration:none}.disputes span{color:var(--color-primary);font-size:.7rem;font-weight:850}.disputes h2{margin:.4rem 0;font-family:var(--font-serif);font-size:1.4rem;font-weight:500}.disputes small{color:var(--color-foreground)}.disputes dl{display:grid;grid-template-columns:1fr 1fr;margin:0}.disputes dl div{padding:.65rem;border:1px solid var(--color-border)}.disputes dt{color:var(--color-foreground);font-size:.7rem}.disputes dd{margin:.25rem 0;font-weight:800}.disputes a>b{color:var(--color-accent)}@media(max-width:700px){.disputes>header{align-items:stretch;flex-direction:column}.disputes section{grid-template-columns:1fr}}</style>
+<main class="shell workspace disputes">
+	<header>
+		<div>
+			<p class="eyebrow">Admin / Disputes</p>
+			<h1>Review every money disagreement fairly.</h1>
+			<p>The amount, what evidence was attached, and what is still unanswered, before you record a decision.</p>
+		</div>
+		<label
+			>Show<select bind:value={stateFilter} onchange={load}
+				><option value="">All disputes</option><option value="OPEN">Open</option><option value="UNDER_REVIEW"
+					>Under review</option
+				><option value="PARTIALLY_RESOLVED">Partly resolved</option><option value="RESOLVED">Resolved</option><option
+					value="WITHDRAWN">Withdrawn</option
+				></select
+			></label
+		>
+	</header>
+	{#if error}<section role="alert">
+			<p class="error">{error}</p>
+			<button onclick={load}>Try again</button>
+		</section>{:else if loading}<p>Loading disputes…</p>{:else}<section>
+			{#each items as item}<a href={`/admin/disputes/${encodeURIComponent(item.id)}`}
+					><div>
+						<span>{item.state.replaceAll('_', ' ')}</span>
+						<h2>{item.reason}</h2>
+						<small>Opened {localTime(item.opened_at)}</small>
+					</div>
+					<dl>
+						<div>
+							<dt>Disputed</dt>
+							<dd><Money amountKobo={item.total_disputed_kobo} /></dd>
+						</div>
+						<div>
+							<dt>Still disputed</dt>
+							<dd><Money amountKobo={item.remaining_disputed_kobo} /></dd>
+						</div>
+					</dl>
+					<b>Review →</b></a
+				>{:else}<div class="empty-state">
+					<h2>No disputes in this view</h2>
+					<p>Choose another status or return later.</p>
+				</div>{/each}
+		</section>{/if}
+</main>
+
+<style>
+	.disputes > header {
+		display: flex;
+		align-items: end;
+		justify-content: space-between;
+		gap: 2rem;
+		padding: 2rem 0;
+		border-bottom: 3px solid var(--color-primary);
+	}
+	.disputes h1 {
+		max-width: 17ch;
+		margin: 0.4rem 0;
+		font-family: var(--font-serif);
+		font-size: clamp(2.5rem, 6vw, 4.5rem);
+		font-weight: 500;
+		line-height: 0.95;
+	}
+	.disputes header p {
+		max-width: 42rem;
+	}
+	.disputes label {
+		display: grid;
+		gap: 0.35rem;
+		font-size: 0.75rem;
+		font-weight: 800;
+	}
+	.disputes select {
+		min-height: 2.8rem;
+		padding: 0.5rem;
+		border: 1px solid var(--color-primary);
+		background: var(--color-surface);
+	}
+	.disputes section {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1rem;
+		margin-top: 2rem;
+	}
+	.disputes section > a {
+		display: grid;
+		gap: 1.2rem;
+		padding: 1.2rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		color: var(--color-primary);
+		text-decoration: none;
+	}
+	.disputes span {
+		color: var(--color-primary);
+		font-size: 0.7rem;
+		font-weight: 850;
+	}
+	.disputes h2 {
+		margin: 0.4rem 0;
+		font-family: var(--font-serif);
+		font-size: 1.4rem;
+		font-weight: 500;
+	}
+	.disputes small {
+		color: var(--color-foreground);
+	}
+	.disputes dl {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		margin: 0;
+	}
+	.disputes dl div {
+		padding: 0.65rem;
+		border: 1px solid var(--color-border);
+	}
+	.disputes dt {
+		color: var(--color-foreground);
+		font-size: 0.7rem;
+	}
+	.disputes dd {
+		margin: 0.25rem 0;
+		font-weight: 800;
+	}
+	.disputes a > b {
+		color: var(--color-accent);
+	}
+	@media (max-width: 700px) {
+		.disputes > header {
+			align-items: stretch;
+			flex-direction: column;
+		}
+		.disputes section {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

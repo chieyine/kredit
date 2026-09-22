@@ -34,7 +34,9 @@
 {#if !online}
 	<div class="connectivity offline" role="status" aria-live="polite">
 		<strong>You are offline.</strong>
-		<span>New actions cannot be sent. An earlier request may still be processing. Check its status after reconnecting.</span>
+		<span
+			>New actions cannot be sent. An earlier request may still be processing. Check its status after reconnecting.</span
+		>
 	</div>
 {:else if restored}
 	<div class="connectivity restored" role="status" aria-live="polite">
@@ -44,5 +46,36 @@
 {/if}
 
 <style>
-	.connectivity{position:sticky;top:0;z-index:40;display:flex;justify-content:center;gap:.6rem;padding:.55rem 1rem;border-bottom:1px solid currentColor;font-size:.9rem;line-height:1.45}.connectivity strong{white-space:nowrap}.offline{background:var(--color-surface-muted);color:var(--color-warning)}.restored{background:var(--color-background);color:var(--color-positive)}@media(max-width:640px){.connectivity{display:grid;gap:.1rem}.connectivity strong{white-space:normal}}
+	.connectivity {
+		position: sticky;
+		top: 0;
+		z-index: 40;
+		display: flex;
+		justify-content: center;
+		gap: 0.6rem;
+		padding: 0.55rem 1rem;
+		border-bottom: 1px solid currentColor;
+		font-size: 0.9rem;
+		line-height: 1.45;
+	}
+	.connectivity strong {
+		white-space: nowrap;
+	}
+	.offline {
+		background: var(--color-surface-muted);
+		color: var(--color-warning);
+	}
+	.restored {
+		background: var(--color-background);
+		color: var(--color-positive);
+	}
+	@media (max-width: 640px) {
+		.connectivity {
+			display: grid;
+			gap: 0.1rem;
+		}
+		.connectivity strong {
+			white-space: normal;
+		}
+	}
 </style>

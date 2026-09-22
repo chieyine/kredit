@@ -1,12 +1,17 @@
 import { expect, test } from '@playwright/test';
 import { applyPageCachePolicy, isAccountPage } from '../src/lib/server/page-cache';
 
-const targetedHeaders = ['cdn-cache-control', 'vercel-cdn-cache-control', 'cloudflare-cdn-cache-control', 'surrogate-control'];
+const targetedHeaders = [
+	'cdn-cache-control',
+	'vercel-cdn-cache-control',
+	'cloudflare-cdn-cache-control',
+	'surrogate-control'
+];
 
 function cacheableResponse(status = 200): Response {
 	const headers = new Headers({
 		'cache-control': 'public, max-age=600, s-maxage=86400',
-		'expires': 'Thu, 01 Jan 2099 00:00:00 GMT',
+		expires: 'Thu, 01 Jan 2099 00:00:00 GMT',
 		'content-type': 'text/plain',
 		'x-content-type-options': 'nosniff'
 	});
@@ -21,8 +26,26 @@ function expectPrivate(response: Response): void {
 }
 
 test('private pages override conflicting browser and CDN cache directives', () => {
-	for (const root of ['account', 'start', 'signin', 'workspace', 'personal', 'admin', 'agents', 'c', 'pay', 'receipt', 'secure', 'recover', 'buyer-invitations']) {
-		for (const path of [`/${root}`, `/${root}/synthetic`, `/%${root.charCodeAt(0).toString(16)}${root.slice(1)}/synthetic`]) {
+	for (const root of [
+		'account',
+		'start',
+		'signin',
+		'workspace',
+		'personal',
+		'admin',
+		'agents',
+		'c',
+		'pay',
+		'receipt',
+		'secure',
+		'recover',
+		'buyer-invitations'
+	]) {
+		for (const path of [
+			`/${root}`,
+			`/${root}/synthetic`,
+			`/%${root.charCodeAt(0).toString(16)}${root.slice(1)}/synthetic`
+		]) {
 			const response = cacheableResponse();
 			applyPageCachePolicy(path, response, 'GET');
 			expectPrivate(response);
@@ -31,7 +54,13 @@ test('private pages override conflicting browser and CDN cache directives', () =
 });
 
 test('account gate recognizes encoded paths without matching public prefix lookalikes', () => {
-	for (const path of ['/workspace', '/workspace/today', '/%77orkspace/today', '/%61dmin/website', '/account/messages']) {
+	for (const path of [
+		'/workspace',
+		'/workspace/today',
+		'/%77orkspace/today',
+		'/%61dmin/website',
+		'/account/messages'
+	]) {
 		expect(isAccountPage(path), path).toBe(true);
 	}
 	for (const path of ['/workspace-guide', '/accounting', '/pricing', '/signin', '/%']) {
@@ -83,7 +112,10 @@ test('anonymous public reads retain caching and response contents are unchanged'
 });
 
 test('rendered sign-in and missing pages carry no-store directives', async ({ request }) => {
-	for (const [path, status] of [['/signin', 200], ['/audit-cache-page-does-not-exist', 404]] as const) {
+	for (const [path, status] of [
+		['/signin', 200],
+		['/audit-cache-page-does-not-exist', 404]
+	] as const) {
 		const response = await request.get(path);
 		expect(response.status()).toBe(status);
 		expect(response.headers()['cache-control']).toBe('private, no-store');

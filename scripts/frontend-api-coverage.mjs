@@ -164,15 +164,18 @@ const dynamicBindings = [
 	['web/src/routes/workspace/partners/customers/[id]/+page.svelte', ['checkedJSON(`${base}/history${query}`', 'checkedJSON(`${base}/statement${query}`']]
 ];
 for (const [file, bindings] of dynamicBindings) {
-	const source = readFileSync(resolve(root, file), 'utf8');
-	for (const binding of bindings) if (!source.includes(binding)) throw new Error(`Dynamic API controller is missing in ${file}: ${binding}`);
+	const source = readFileSync(resolve(root, file), 'utf8').replace(/\s+/g, '');
+	for (const binding of bindings) {
+		const target = binding.replace(/\s+/g, '');
+		if (!source.includes(target)) throw new Error(`Dynamic API controller is missing in ${file}: ${binding}`);
+	}
 }
 
 // Dynamic financial actions must retain their actual controller binding, not
 // merely the page filename. Browser regression tests exercise the transitions.
-const buyerController = readFileSync(resolve(root, 'web/src/routes/workspace/purchases/orders/[requestID]/+page.svelte'), 'utf8');
+const buyerController = readFileSync(resolve(root, 'web/src/routes/workspace/purchases/orders/[requestID]/+page.svelte'), 'utf8').replace(/\s+/g, '');
 for (const action of ['mandate', 'accept', 'decline', 'receipt', 'payment-claims', 'payment-link', 'disputes']) {
- if (!buyerController.includes(`perform('${action}'`)) throw new Error(`Buyer ${action} controller is missing`);
+	if (!buyerController.includes(`perform('${action}'`)) throw new Error(`Buyer ${action} controller is missing`);
 }
 const missing = routes.filter(({ method, path }) => {
 	if (directPaths.has(path)) return false;

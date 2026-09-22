@@ -618,12 +618,18 @@ func (s *PostgresStore) GetByObligationForBuyer(obligationID, buyerUserID string
 	return s.Store.GetByObligationForBuyer(obligationID, buyerUserID)
 }
 func (s *PostgresStore) ListForSupplier(organizationID string) []View {
-	loaded, _ := s.hydrateList("supplier_organization_id", organizationID)
+	loaded, err := s.hydrateList("supplier_organization_id", organizationID)
+	if err != nil {
+		panic(fmt.Errorf("credit: failed to hydrate supplier receivables for %s: %w", organizationID, err))
+	}
 	defer s.releaseListing(loaded)
 	return s.Store.ListForSupplier(organizationID)
 }
 func (s *PostgresStore) ListForBuyer(buyerUserID string) []View {
-	views, _ := s.ReadForBuyer(context.Background(), buyerUserID)
+	views, err := s.ReadForBuyer(context.Background(), buyerUserID)
+	if err != nil {
+		panic(fmt.Errorf("credit: failed to read buyer credit requests for %s: %w", buyerUserID, err))
+	}
 	return views
 }
 
@@ -787,9 +793,6 @@ func (s *PostgresStore) hydrateForTenant(requestID, userID, organizationID strin
 	if s == nil || s.pool == nil {
 		return errors.New("credit database is not configured")
 	}
-	if s.isPinned(requestID) {
-		return errors.New("credit record is being updated; retry after the current change completes")
-	}
 	s.mu.RLock()
 	_, exists := s.requests[requestID]
 	s.mu.RUnlock()
@@ -824,8 +827,10 @@ func (s *PostgresStore) hydrateForTenant(requestID, userID, organizationID strin
 	if err := tx.Commit(context.Background()); err != nil {
 		return err
 	}
-	s.installView(view)
-	s.markLoaded(requestID)
+	if !s.isPinned(requestID) {
+		s.installView(view)
+		s.markLoaded(requestID)
+	}
 	return nil
 }
 

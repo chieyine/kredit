@@ -268,31 +268,31 @@ func (s *Server) createRepaymentCustomer(w http.ResponseWriter, r *http.Request)
 	}
 	completionCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
 	defer cancel()
-	tx, err = s.runtime.Database.Raw().Begin(completionCtx)
+	completionTx, err := s.runtime.Database.Raw().Begin(completionCtx)
 	if err != nil {
 		writeProblem(w, 503, "registration_unconfirmed", "Registration needs reconciliation.")
 		return
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if _, err = tx.Exec(completionCtx, `SELECT set_config('app.current_user_id',$1,true)`, user.ID); err != nil {
+	defer func() { _ = completionTx.Rollback(context.Background()) }()
+	if _, err = completionTx.Exec(completionCtx, `SELECT set_config('app.current_user_id',$1,true)`, user.ID); err != nil {
 		writeProblem(w, 503, "registration_unconfirmed", "Registration needs reconciliation.")
 		return
 	}
 	var owner string
-	if err = tx.QueryRow(completionCtx, `SELECT owner_user_id::text FROM app.businesses WHERE id=$1 FOR SHARE`, businessID).Scan(&owner); err != nil || owner != user.ID {
+	if err = completionTx.QueryRow(completionCtx, `SELECT owner_user_id::text FROM app.businesses WHERE id=$1 FOR SHARE`, businessID).Scan(&owner); err != nil || owner != user.ID {
 		writeProblem(w, 503, "registration_unconfirmed", "Business ownership must be reconciled before registration can be attached.")
 		return
 	}
-	if _, err = tx.Exec(completionCtx, `INSERT INTO app.provider_customer_bindings(provider,buyer_user_id,buyer_business_id,provider_customer_reference,consent_version) VALUES($5,$1::uuid,$2::uuid,$3,$4)`, user.ID, businessID, reference, in.ConsentVersion, s.runtime.Mono.Name()); err != nil {
+	if _, err = completionTx.Exec(completionCtx, `INSERT INTO app.provider_customer_bindings(provider,buyer_user_id,buyer_business_id,provider_customer_reference,consent_version) VALUES($5,$1::uuid,$2::uuid,$3,$4)`, user.ID, businessID, reference, in.ConsentVersion, s.runtime.Mono.Name()); err != nil {
 		writeProblem(w, 503, "registration_unconfirmed", "customer registration needs reconciliation")
 		return
 	}
 	var completedID string
-	if err = tx.QueryRow(completionCtx, `UPDATE app.customer_registration_attempts SET state='CONFIRMED',provider_reference=$2,resolved_at=now() WHERE id=$1 AND state='PENDING' RETURNING id::text`, attemptID, reference).Scan(&completedID); err != nil {
+	if err = completionTx.QueryRow(completionCtx, `UPDATE app.customer_registration_attempts SET state='CONFIRMED',provider_reference=$2,resolved_at=now() WHERE id=$1 AND state='PENDING' RETURNING id::text`, attemptID, reference).Scan(&completedID); err != nil {
 		writeProblem(w, 503, "registration_unconfirmed", "Registration needs reconciliation.")
 		return
 	}
-	if err = tx.Commit(completionCtx); err != nil {
+	if err = completionTx.Commit(completionCtx); err != nil {
 		writeProblem(w, 503, "registration_unconfirmed", "customer registration needs reconciliation")
 		return
 	}

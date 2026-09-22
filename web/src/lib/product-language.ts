@@ -143,6 +143,9 @@ export function productLabel(value: unknown, fallback = 'Not available') {
 	const raw = String(value);
 	return (
 		labels[raw.toUpperCase()] ??
-		raw.replaceAll('_', ' ').toLowerCase().replace(/^./, (letter) => letter.toUpperCase())
+		raw
+			.replaceAll('_', ' ')
+			.toLowerCase()
+			.replace(/^./, (letter) => letter.toUpperCase())
 	);
 }

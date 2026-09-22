@@ -65,7 +65,7 @@ func (s *Server) documentDownload(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "invalid_path", err.Error())
 		return
 	}
-	_, user, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadOrganization)
+	_, user, membership, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadOrganization)
 	if !ok {
 		return
 	}
@@ -86,6 +86,12 @@ func (s *Server) documentDownload(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(doc.Purpose, "dispute_") {
 		writeProblem(w, 403, "dispute_access_required", "Open this document from its dispute so the evidence access checks can run.")
 		return
+	}
+	if doc.Purpose == "identity" || doc.Purpose == "kyb" || strings.HasPrefix(doc.Purpose, "director_") || strings.HasPrefix(doc.Purpose, "kyb_") || strings.HasPrefix(doc.Purpose, "identity_") {
+		if !access.Can(membership.Role, access.PermissionManageOrganization) && !access.Can(membership.Role, access.PermissionReadFinancial) {
+			writeProblem(w, http.StatusForbidden, "document_access_denied", "Downloading identity and KYB documents requires management or financial permissions.")
+			return
+		}
 	}
 	url, err := s.runtime.Documents.SignedDownloadForTenant(r.Context(), documentID, user.ID, organizationID, 10*time.Minute)
 	if err != nil {

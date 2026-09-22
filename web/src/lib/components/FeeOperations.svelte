@@ -1,74 +1,292 @@
 <script lang="ts">
- import {checkedJSON,record,rows,text,publicError} from '$lib/api/reliable';
- import {MutationIntent} from '$lib/api/mutation';
- import {actualPaymentTime,positiveNaira} from '$lib/financial-input';
- import {formatKobo} from '$lib/money';
- let {org,admin=false}:{org:string;admin?:boolean}=$props();
- type Bank={provider:string;allocated_kobo:number;received_kobo:number;returned_kobo:number;outstanding_kobo:number};
- type Debit={id:string;invoice_id:string;provider:string;amount_kobo:number;state:string;review_required:boolean};
- let banks=$state<Bank[]>([]),debits=$state<Debit[]>([]),busy=$state(false);
- let loading=$state(true),loaded=$state(false),loadedEndpoint=$state('');
- let readError=$state(''),actionError=$state('');
- let action=$state(''),id=$state(''),provider=$state(''),direction=$state('received'),amount=$state(''),reference=$state(''),date=$state(''),evidence=$state(''),reviewed=$state(false);
- const endpoint=$derived(admin?`/api/v1/ops/fee-operations/${encodeURIComponent(org)}`:`/api/v1/organizations/${encodeURIComponent(org)}/fee-operations`);
- const ready=$derived(loaded&&loadedEndpoint===endpoint&&!loading&&!readError);
- let mutation:MutationIntent|null=null;
- let generation=0,scopeVersion=0;
- function money(value:unknown){if(typeof value!=='number'||!Number.isSafeInteger(value))throw new Error('Invalid amount');return value}
- async function load(target:string){
-  const request=++generation;
-  loading=true;loaded=false;readError='';reviewed=false;
-  try{
-   const data=await checkedJSON(target,record);
-   const b=rows('banks',v=>{const r=record(v);return{provider:text(r.provider),allocated_kobo:money(r.allocated_kobo),received_kobo:money(r.received_kobo),returned_kobo:money(r.returned_kobo),outstanding_kobo:money(r.outstanding_kobo)}})(data);
-   const d=rows('debits',v=>{const r=record(v);if(typeof r.review_required!=='boolean')throw new Error('Invalid review status');return{id:text(r.id),invoice_id:text(r.invoice_id),provider:text(r.provider),amount_kobo:money(r.amount_kobo),state:text(r.state),review_required:r.review_required}})(data);
-   if(request===generation){banks=b;debits=d;loadedEndpoint=target;loaded=true;readError=''}
-  }catch(cause){
-   if(request===generation){banks=[];debits=[];readError=publicError(cause,'Fee movements could not be loaded.')}
-  }finally{if(request===generation)loading=false}
- }
- $effect(()=>{
-  const target=endpoint;
-  scopeVersion++;action='';actionError='';mutation=null;busy=false;
-  banks=[];debits=[];loaded=false;loadedEndpoint='';
-  if(org)void load(target);else{loading=false;readError='Choose a business before loading fee movements.'}
-  // Invalidate reads and writes when the business changes or the component unmounts.
-  return()=>{generation++;scopeVersion++};
- });
- function choose(kind:string,ref:string,account=''){
-  if(!ready||busy)return;
-  action=kind;id=ref;provider=account;amount='';reference='';date='';evidence='';reviewed=false;
-  mutation=new MutationIntent('fee-operation',endpoint);
- }
- async function save(){
-  if(!ready||!reviewed||busy||!mutation)return;
-  const target=endpoint,scope=scopeVersion,intent=mutation;
-  busy=true;actionError='';
-  try{
-   let extra:Record<string,unknown>={};
-   if(action==='bank'){const kobo=positiveNaira(amount);const when=actualPaymentTime(date);extra={provider,direction,bank_reference:reference,amount_kobo:kobo,received_at:when}}
-   await intent.run({action,id,evidence,...extra},value=>{if(record(value).saved!==true)throw new Error('Change not confirmed');return true});
-   if(scope!==scopeVersion)return;
-   action='';mutation=null;await load(target);
-  }catch(cause){if(scope===scopeVersion)actionError=publicError(cause,'The change is unconfirmed. Refresh before retrying.')}
-  finally{if(scope===scopeVersion)busy=false}
- }
+	import { checkedJSON, record, rows, text, publicError } from '$lib/api/reliable';
+	import { MutationIntent } from '$lib/api/mutation';
+	import { actualPaymentTime, positiveNaira } from '$lib/financial-input';
+	import { formatKobo } from '$lib/money';
+	let { org, admin = false }: { org: string; admin?: boolean } = $props();
+	type Bank = {
+		provider: string;
+		allocated_kobo: number;
+		received_kobo: number;
+		returned_kobo: number;
+		outstanding_kobo: number;
+	};
+	type Debit = {
+		id: string;
+		invoice_id: string;
+		provider: string;
+		amount_kobo: number;
+		state: string;
+		review_required: boolean;
+	};
+	let banks = $state<Bank[]>([]),
+		debits = $state<Debit[]>([]),
+		busy = $state(false);
+	let loading = $state(true),
+		loaded = $state(false),
+		loadedEndpoint = $state('');
+	let readError = $state(''),
+		actionError = $state('');
+	let action = $state(''),
+		id = $state(''),
+		provider = $state(''),
+		direction = $state('received'),
+		amount = $state(''),
+		reference = $state(''),
+		date = $state(''),
+		evidence = $state(''),
+		reviewed = $state(false);
+	const endpoint = $derived(
+		admin
+			? `/api/v1/ops/fee-operations/${encodeURIComponent(org)}`
+			: `/api/v1/organizations/${encodeURIComponent(org)}/fee-operations`
+	);
+	const ready = $derived(loaded && loadedEndpoint === endpoint && !loading && !readError);
+	let mutation: MutationIntent | null = null;
+	let generation = 0,
+		scopeVersion = 0;
+	function money(value: unknown) {
+		if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error('Invalid amount');
+		return value;
+	}
+	async function load(target: string) {
+		const request = ++generation;
+		loading = true;
+		loaded = false;
+		readError = '';
+		reviewed = false;
+		try {
+			const data = await checkedJSON(target, record);
+			const b = rows('banks', (v) => {
+				const r = record(v);
+				return {
+					provider: text(r.provider),
+					allocated_kobo: money(r.allocated_kobo),
+					received_kobo: money(r.received_kobo),
+					returned_kobo: money(r.returned_kobo),
+					outstanding_kobo: money(r.outstanding_kobo)
+				};
+			})(data);
+			const d = rows('debits', (v) => {
+				const r = record(v);
+				if (typeof r.review_required !== 'boolean') throw new Error('Invalid review status');
+				return {
+					id: text(r.id),
+					invoice_id: text(r.invoice_id),
+					provider: text(r.provider),
+					amount_kobo: money(r.amount_kobo),
+					state: text(r.state),
+					review_required: r.review_required
+				};
+			})(data);
+			if (request === generation) {
+				banks = b;
+				debits = d;
+				loadedEndpoint = target;
+				loaded = true;
+				readError = '';
+			}
+		} catch (cause) {
+			if (request === generation) {
+				banks = [];
+				debits = [];
+				readError = publicError(cause, 'Fee movements could not be loaded.');
+			}
+		} finally {
+			if (request === generation) loading = false;
+		}
+	}
+	$effect(() => {
+		const target = endpoint;
+		scopeVersion++;
+		action = '';
+		actionError = '';
+		mutation = null;
+		busy = false;
+		banks = [];
+		debits = [];
+		loaded = false;
+		loadedEndpoint = '';
+		if (org) void load(target);
+		else {
+			loading = false;
+			readError = 'Choose a business before loading fee movements.';
+		}
+		// Invalidate reads and writes when the business changes or the component unmounts.
+		return () => {
+			generation++;
+			scopeVersion++;
+		};
+	});
+	function choose(kind: string, ref: string, account = '') {
+		if (!ready || busy) return;
+		action = kind;
+		id = ref;
+		provider = account;
+		amount = '';
+		reference = '';
+		date = '';
+		evidence = '';
+		reviewed = false;
+		mutation = new MutationIntent('fee-operation', endpoint);
+	}
+	async function save() {
+		if (!ready || !reviewed || busy || !mutation) return;
+		const target = endpoint,
+			scope = scopeVersion,
+			intent = mutation;
+		busy = true;
+		actionError = '';
+		try {
+			let extra: Record<string, unknown> = {};
+			if (action === 'bank') {
+				const kobo = positiveNaira(amount);
+				const when = actualPaymentTime(date);
+				extra = { provider, direction, bank_reference: reference, amount_kobo: kobo, received_at: when };
+			}
+			await intent.run({ action, id, evidence, ...extra }, (value) => {
+				if (record(value).saved !== true) throw new Error('Change not confirmed');
+				return true;
+			});
+			if (scope !== scopeVersion) return;
+			action = '';
+			mutation = null;
+			await load(target);
+		} catch (cause) {
+			if (scope === scopeVersion)
+				actionError = publicError(cause, 'The change is unconfirmed. Refresh before retrying.');
+		} finally {
+			if (scope === scopeVersion) busy = false;
+		}
+	}
 </script>
+
 <section aria-labelledby="fee-movements-title">
- <h2 id="fee-movements-title">Fee collections and bank receipts</h2>
- {#if readError}<p role="alert">{readError}</p>{/if}
- {#if actionError}<p role="alert">{actionError}</p>{/if}
- <button disabled={busy||loading} onclick={()=>load(endpoint)}>Refresh fee movements</button>
- {#if loading}<p role="status">Loading fee movements…</p>{/if}
- {#if ready}
-  {#if !banks.length&&!debits.length}<p>No fee collections have been recorded.</p>{/if}
-  {#each banks as bank(bank.provider)}
-   <article><h3>{bank.provider}</h3><p>Fees collected: {formatKobo(bank.allocated_kobo)} · Bank receipts: {formatKobo(bank.received_kobo)} · Bank returns: {formatKobo(bank.returned_kobo)}</p><p>Awaiting bank reconciliation: {formatKobo(bank.outstanding_kobo)}</p>{#if admin}<button disabled={busy} onclick={()=>choose('bank','',bank.provider)}>Record completed bank movement</button>{/if}</article>
-  {/each}
-  {#each debits as debit(debit.id)}
-   <article><p>Fee debit: {debit.id} · {debit.state} · {formatKobo(debit.amount_kobo)}</p>{#if debit.review_required}<p role="alert">The provider reported a dispute or reversal. Review the original bank evidence before making another payment.</p>{/if}<p>Bill: {debit.invoice_id} · {debit.provider}</p>{#if debit.state==='failed'}<p>The debit failed. Pay the bill using its bank instructions; it will not be automatically sent again.</p>{/if}{#if admin&&debit.review_required}<button disabled={busy} onclick={()=>choose('clear_review',debit.id)}>Review provider evidence</button>{/if}{#if admin&&debit.state==='pending'}<button disabled={busy} onclick={()=>choose('reconcile',debit.id)}>Check original provider reference</button>{/if}{#if admin&&debit.state==='succeeded'}<button disabled={busy} onclick={()=>choose('reversed',debit.id)}>Record a completed bank reversal</button>{/if}</article>
-  {/each}
- {/if}
- {#if action}<form onsubmit={e=>{e.preventDefault();void save()}}><fieldset disabled={busy||!ready}><legend>Review before saving</legend>{#if action==='bank'}<p>Confirm an actual bank movement for fees from {provider}. This does not change the seller’s fee bill or buyer debt.</p><label>Direction<select bind:value={direction} onchange={()=>reviewed=false}><option value="received">Received by Kredit</option><option value="returned">Returned from Kredit</option></select></label><label>Amount (₦)<input bind:value={amount} oninput={()=>reviewed=false} required inputmode="decimal" /></label><label>Bank reference<input bind:value={reference} oninput={()=>reviewed=false} required maxlength="200" /></label><label>Completed at (Lagos time)<input type="datetime-local" bind:value={date} oninput={()=>reviewed=false} required /></label>{:else if action==='clear_review'}<p>Clear the review only after checking the bank evidence. The original provider must still confirm the recorded debit status and amount. This does not move money.</p>{:else if action==='reversed'}<p>Confirm that the bank reversed this completed fee debit. The seller’s bill becomes payable again. This records an existing reversal; it does not move money.</p>{:else}<p>Check the original provider account and saved debit reference. This does not send another debit.</p>{/if}{#if action!=='reconcile'}<label>Bank evidence reviewed<textarea bind:value={evidence} oninput={()=>reviewed=false} minlength="20" maxlength="2000" required></textarea></label>{/if}<label><input type="checkbox" bind:checked={reviewed} required />I reviewed the evidence and effect.</label><button disabled={!reviewed}>Save</button><button type="button" onclick={()=>action=''}>Cancel</button></fieldset></form>{/if}
+	<h2 id="fee-movements-title">Fee collections and bank receipts</h2>
+	{#if readError}<p role="alert">{readError}</p>{/if}
+	{#if actionError}<p role="alert">{actionError}</p>{/if}
+	<button disabled={busy || loading} onclick={() => load(endpoint)}>Refresh fee movements</button>
+	{#if loading}<p role="status">Loading fee movements…</p>{/if}
+	{#if ready}
+		{#if !banks.length && !debits.length}<p>No fee collections have been recorded.</p>{/if}
+		{#each banks as bank (bank.provider)}
+			<article>
+				<h3>{bank.provider}</h3>
+				<p>
+					Fees collected: {formatKobo(bank.allocated_kobo)} · Bank receipts: {formatKobo(bank.received_kobo)} · Bank returns:
+					{formatKobo(bank.returned_kobo)}
+				</p>
+				<p>Awaiting bank reconciliation: {formatKobo(bank.outstanding_kobo)}</p>
+				{#if admin}<button disabled={busy} onclick={() => choose('bank', '', bank.provider)}
+						>Record completed bank movement</button
+					>{/if}
+			</article>
+		{/each}
+		{#each debits as debit (debit.id)}
+			<article>
+				<p>Fee debit: {debit.id} · {debit.state} · {formatKobo(debit.amount_kobo)}</p>
+				{#if debit.review_required}<p role="alert">
+						The provider reported a dispute or reversal. Review the original bank evidence before making another
+						payment.
+					</p>{/if}
+				<p>Bill: {debit.invoice_id} · {debit.provider}</p>
+				{#if debit.state === 'failed'}<p>
+						The debit failed. Pay the bill using its bank instructions; it will not be automatically sent again.
+					</p>{/if}{#if admin && debit.review_required}<button
+						disabled={busy}
+						onclick={() => choose('clear_review', debit.id)}>Review provider evidence</button
+					>{/if}{#if admin && debit.state === 'pending'}<button
+						disabled={busy}
+						onclick={() => choose('reconcile', debit.id)}>Check original provider reference</button
+					>{/if}{#if admin && debit.state === 'succeeded'}<button
+						disabled={busy}
+						onclick={() => choose('reversed', debit.id)}>Record a completed bank reversal</button
+					>{/if}
+			</article>
+		{/each}
+	{/if}
+	{#if action}<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				void save();
+			}}
+		>
+			<fieldset disabled={busy || !ready}>
+				<legend>Review before saving</legend>{#if action === 'bank'}<p>
+						Confirm an actual bank movement for fees from {provider}. This does not change the seller’s fee bill or
+						buyer debt.
+					</p>
+					<label
+						>Direction<select bind:value={direction} onchange={() => (reviewed = false)}
+							><option value="received">Received by Kredit</option><option value="returned">Returned from Kredit</option
+							></select
+						></label
+					><label
+						>Amount (₦)<input
+							bind:value={amount}
+							oninput={() => (reviewed = false)}
+							required
+							inputmode="decimal"
+						/></label
+					><label
+						>Bank reference<input
+							bind:value={reference}
+							oninput={() => (reviewed = false)}
+							required
+							maxlength="200"
+						/></label
+					><label
+						>Completed at (Lagos time)<input
+							type="datetime-local"
+							bind:value={date}
+							oninput={() => (reviewed = false)}
+							required
+						/></label
+					>{:else if action === 'clear_review'}<p>
+						Clear the review only after checking the bank evidence. The original provider must still confirm the
+						recorded debit status and amount. This does not move money.
+					</p>{:else if action === 'reversed'}<p>
+						Confirm that the bank reversed this completed fee debit. The seller’s bill becomes payable again. This
+						records an existing reversal; it does not move money.
+					</p>{:else}<p>
+						Check the original provider account and saved debit reference. This does not send another debit.
+					</p>{/if}{#if action !== 'reconcile'}<label
+						>Bank evidence reviewed<textarea
+							bind:value={evidence}
+							oninput={() => (reviewed = false)}
+							minlength="20"
+							maxlength="2000"
+							required
+						></textarea></label
+					>{/if}<label
+					><input type="checkbox" bind:checked={reviewed} required />I reviewed the evidence and effect.</label
+				><button disabled={!reviewed}>Save</button><button type="button" onclick={() => (action = '')}>Cancel</button>
+			</fieldset>
+		</form>{/if}
 </section>
-<style>section,article{padding:1rem;margin-block:1rem;border:1px solid var(--color-border);border-radius:.8rem}fieldset{display:grid;gap:1rem;border:0}label{display:grid;gap:.4rem}input,select,textarea,button{padding:.7rem;font:inherit}</style>
+
+<style>
+	section,
+	article {
+		padding: 1rem;
+		margin-block: 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 0.8rem;
+	}
+	fieldset {
+		display: grid;
+		gap: 1rem;
+		border: 0;
+	}
+	label {
+		display: grid;
+		gap: 0.4rem;
+	}
+	input,
+	select,
+	textarea,
+	button {
+		padding: 0.7rem;
+		font: inherit;
+	}
+</style>

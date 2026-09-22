@@ -3,42 +3,72 @@
 	import { browser } from '$app/environment';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
- import { boundedFetch } from '$lib/api/reliable';
+	import { boundedFetch } from '$lib/api/reliable';
 
 	let { area, organizationID = '' } = $props<{ area: 'seller' | 'buyer'; organizationID?: string }>();
 	const account = getContext<AccountContext | undefined>(ACCOUNT_CONTEXT);
-	let visible = $state(false), busy = $state(false), completed = $state(false), message = $state('');
+	let visible = $state(false),
+		busy = $state(false),
+		completed = $state(false),
+		message = $state('');
 	let requestKey = '';
- let pendingAnswer: 'yes' | 'partly' | 'no' | null = $state(null);
+	let pendingAnswer: 'yes' | 'partly' | 'no' | null = $state(null);
 	const storageKey = $derived(`kredit-feedback-v2:${account?.userID ?? ''}:${area}:${organizationID || 'personal'}`);
 	$effect(() => {
 		const key = storageKey;
 		if (!browser) return;
 		untrack(() => {
-			busy = false; completed = false; message = ''; requestKey = ''; pendingAnswer = null; visible = true;
-			try { visible = localStorage.getItem(key) !== 'done'; } catch { /* Feedback works without browser storage. */ }
+			busy = false;
+			completed = false;
+			message = '';
+			requestKey = '';
+			pendingAnswer = null;
+			visible = true;
+			try {
+				visible = localStorage.getItem(key) !== 'done';
+			} catch {
+				/* Feedback works without browser storage. */
+			}
 		});
 	});
 	async function answer(value: 'yes' | 'partly' | 'no') {
 		if (busy || completed) return;
- if (pendingAnswer && pendingAnswer !== value) { message = 'We could not confirm your earlier answer. Retry the same answer to check its result.'; return; }
+		if (pendingAnswer && pendingAnswer !== value) {
+			message = 'We could not confirm your earlier answer. Retry the same answer to check its result.';
+			return;
+		}
 		const key = storageKey;
-		busy = true; message = '';
+		busy = true;
+		message = '';
 		try {
 			requestKey ||= idempotencyKey();
- pendingAnswer = value;
+			pendingAnswer = value;
 			const response = await boundedFetch('/api/v1/me/product-feedback', {
-				method: 'POST', credentials: 'include',
+				method: 'POST',
+				credentials: 'include',
 				headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey, ...csrfHeaders() },
-				body: JSON.stringify({ area, screen: 'overview', answer: value, ...(organizationID ? { organization_id: organizationID } : {}) })
+				body: JSON.stringify({
+					area,
+					screen: 'overview',
+					answer: value,
+					...(organizationID ? { organization_id: organizationID } : {})
+				})
 			});
 			if (storageKey !== key) return;
 			if (!response.ok) {
-				if (response.status >= 400 && response.status < 500 && response.status !== 409) { requestKey = ''; pendingAnswer = null; }
+				if (response.status >= 400 && response.status < 500 && response.status !== 409) {
+					requestKey = '';
+					pendingAnswer = null;
+				}
 				throw new Error('We could not confirm your answer was saved. Please try again.');
 			}
-			try { localStorage.setItem(key, 'done'); } catch { /* The server already accepted the answer. */ }
-			completed = true; message = 'Thank you. Your answer helps us improve Kredit.';
+			try {
+				localStorage.setItem(key, 'done');
+			} catch {
+				/* The server already accepted the answer. */
+			}
+			completed = true;
+			message = 'Thank you. Your answer helps us improve Kredit.';
 		} catch {
 			if (storageKey === key) message = 'We could not confirm your answer was saved. Please try again.';
 		} finally {
@@ -58,11 +88,79 @@
 			<button disabled={busy || completed} onclick={() => answer('yes')}>Yes</button>
 			<button disabled={busy || completed} onclick={() => answer('partly')}>Partly</button>
 			<button disabled={busy || completed} onclick={() => answer('no')}>No</button>
-			<button class="later" disabled={busy} onclick={() => { visible = false; }}>{completed ? 'Close' : 'Not now'}</button>
+			<button
+				class="later"
+				disabled={busy}
+				onclick={() => {
+					visible = false;
+				}}>{completed ? 'Close' : 'Not now'}</button
+			>
 		</div>
 	</section>
 {/if}
 
 <style>
-	.feedback{display:flex;align-items:center;justify-content:space-between;gap:2rem;margin:2.5rem 0 0;padding:1.35rem 1.5rem;border:1px solid var(--color-border);border-left:6px solid var(--color-accent);background:var(--color-surface)}.feedback h2{margin:.25rem 0;font-family:var(--font-serif);font-size:clamp(1.35rem,3vw,1.8rem);font-weight:500}.feedback p{margin:.3rem 0}.answers{display:flex;flex-wrap:wrap;gap:.55rem}.answers button{min-width:4.5rem;min-height:2.75rem;padding:.6rem .85rem;border:1px solid var(--color-primary);border-radius:0;background:var(--color-primary);color:var(--color-on-primary);font:inherit;font-weight:750;cursor:pointer}.answers button:hover,.answers button:focus-visible{background:var(--color-primary);border-color:var(--color-primary)}.answers button:disabled{cursor:wait;opacity:.6}.answers .later{color:var(--color-primary);background:transparent;border-color:var(--color-border)}.error{color:var(--color-overdue)}@media(max-width:720px){.feedback{align-items:stretch;flex-direction:column}.answers button{flex:1}}
+	.feedback {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 2rem;
+		margin: 2.5rem 0 0;
+		padding: 1.35rem 1.5rem;
+		border: 1px solid var(--color-border);
+		border-left: 6px solid var(--color-accent);
+		background: var(--color-surface);
+	}
+	.feedback h2 {
+		margin: 0.25rem 0;
+		font-family: var(--font-serif);
+		font-size: clamp(1.35rem, 3vw, 1.8rem);
+		font-weight: 500;
+	}
+	.feedback p {
+		margin: 0.3rem 0;
+	}
+	.answers {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+	}
+	.answers button {
+		min-width: 4.5rem;
+		min-height: 2.75rem;
+		padding: 0.6rem 0.85rem;
+		border: 1px solid var(--color-primary);
+		border-radius: 0;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		font: inherit;
+		font-weight: 750;
+		cursor: pointer;
+	}
+	.answers button:hover,
+	.answers button:focus-visible {
+		background: var(--color-primary);
+		border-color: var(--color-primary);
+	}
+	.answers button:disabled {
+		cursor: wait;
+		opacity: 0.6;
+	}
+	.answers .later {
+		color: var(--color-primary);
+		background: transparent;
+		border-color: var(--color-border);
+	}
+	.error {
+		color: var(--color-overdue);
+	}
+	@media (max-width: 720px) {
+		.feedback {
+			align-items: stretch;
+			flex-direction: column;
+		}
+		.answers button {
+			flex: 1;
+		}
+	}
 </style>

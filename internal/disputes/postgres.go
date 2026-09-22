@@ -2,15 +2,16 @@ package disputes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"kredit/internal/db"
-
 	"kredit/internal/identifier"
 	"kredit/internal/ledger"
+	"kredit/internal/outbox"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -185,27 +186,27 @@ func applyDisputeAdjustmentTx(ctx context.Context, tx pgx.Tx, dispute Dispute, a
 		return err
 	}
 	newOutstanding := outstanding - amount
-	var status string
-	switch newOutstanding {
-	case 0:
-		status = "PAID"
-	case principal:
-		status = "UNPAID"
-	default:
-		status = "PARTIALLY_PAID"
-	}
-	if _, err := tx.Exec(ctx, `UPDATE app.obligations SET outstanding_kobo=$2,payment_status=$3 WHERE id=$1::uuid`, dispute.ObligationID, int64(newOutstanding), status); err != nil {
+	if err := db.UpdateObligationBalanceTx(ctx, tx, requestID, dispute.ObligationID, newOutstanding, principal); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE app.credit_requests SET version=version+1,updated_at=now() WHERE id=$1::uuid`, requestID); err != nil {
-		return err
-	}
-	command, err := tx.Exec(ctx, `UPDATE app.credit_aggregate_snapshots SET aggregate=jsonb_set(jsonb_set(jsonb_set(aggregate,'{obligation,outstanding_kobo}',to_jsonb($2::bigint),false),'{obligation,payment_status}',to_jsonb($3::text),false),'{request,version}',to_jsonb(version+1),false),version=version+1,updated_at=now() WHERE credit_request_id=$1`, requestID, int64(newOutstanding), status)
+	payload, err := json.Marshal(map[string]any{
+		"dispute_id":                 dispute.ID,
+		"obligation_id":              dispute.ObligationID,
+		"credit_request_id":          requestID,
+		"adjusted_amount_kobo":       int64(amount),
+		"remaining_outstanding_kobo": int64(newOutstanding),
+	})
 	if err != nil {
 		return err
 	}
-	if command.RowsAffected() != 1 {
-		return errors.New("credit aggregate snapshot not found")
+	if _, err := outbox.AppendTx(ctx, tx, outbox.Event{
+		AggregateType:  "dispute",
+		AggregateID:    dispute.ID,
+		EventType:      "dispute.adjusted",
+		Payload:        payload,
+		IdempotencyKey: key,
+	}); err != nil {
+		return err
 	}
 	return nil
 }

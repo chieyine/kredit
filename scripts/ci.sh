@@ -26,11 +26,18 @@ go test -race ./internal/collections ./internal/credit ./internal/payments ./int
 # is missing. Calling it here is what makes .golangci.yml enforceable.
 bash scripts/lint.sh
 bash scripts/security.sh
+# A mutable action tag or image tag is not a pin; this ratchets the list down.
+bash scripts/supply-chain-pin-check.sh
 
 if [[ ! -d web/node_modules ]]; then
 	printf '%s\n' 'Frontend dependencies are not installed.' >&2
 	exit 1
 fi
+# The Go side has been gated by gofmt, go vet and golangci-lint from the start.
+# The frontend had only a type check, so nothing caught dead bindings, loose
+# equality or formatting drift across 10k lines of Svelte. eslint fails the
+# build on errors; its remaining warnings are a tracked backlog, not a gate.
+pnpm --dir web lint
 pnpm --dir web check
 pnpm --dir web build
 pnpm --dir web test
@@ -39,4 +46,5 @@ if [[ -n "${DATABASE_URL:-}" ]]; then
 	bash scripts/test-integration.sh
 	bash scripts/data-inventory-check.sh
 	bash scripts/rls-policy-shape-check.sh
+	bash scripts/db-grant-check.sh
 fi

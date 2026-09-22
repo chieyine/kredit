@@ -13,8 +13,7 @@
 	emptyCopy="A bank debit appears here only after a payment is late and the extra days have ended."
 	searchPlaceholder="Customer or result"
 	rowTitle={(attempt) => attempt.buyer_legal_name || 'Customer'}
-	rowDetail={(attempt) =>
-		[attempt.description, readableDateTime(attempt.created_at)].filter(Boolean).join(' · ')}
+	rowDetail={(attempt) => [attempt.description, readableDateTime(attempt.created_at)].filter(Boolean).join(' · ')}
 	rowStatus={(attempt) => attempt.state ?? ''}
 	rowAmount={(attempt) => attempt.amount_kobo ?? null}
 	rowAmountLabel="Asked for"

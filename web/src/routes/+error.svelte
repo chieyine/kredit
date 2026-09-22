@@ -3,9 +3,11 @@
 
 	const notFound = $derived(page.status === 404);
 	const title = $derived(notFound ? 'This page is not here' : 'Something went wrong');
-	const detail = $derived(notFound
-		? 'The link may have expired, been typed wrongly, or been removed.'
-		: 'We could not confirm what happened. An earlier request may still be processing. Check its status before trying again.');
+	const detail = $derived(
+		notFound
+			? 'The link may have expired, been typed wrongly, or been removed.'
+			: 'We could not confirm what happened. An earlier request may still be processing. Check its status before trying again.'
+	);
 </script>
 
 <svelte:head>
@@ -21,9 +23,60 @@
 		<a class="primary" href="/">Go to the home page</a>
 		<button type="button" onclick={() => history.back()}>Go back</button>
 	</div>
-	<p class="support">Still stuck? <a href="/legal/complaints">Ask for help</a>. Send us the page address, but never send your password, one-time code or bank details.</p>
+	<p class="support">
+		Still stuck? <a href="/legal/complaints">Ask for help</a>. Send us the page address, but never send your password,
+		one-time code or bank details.
+	</p>
 </main>
 
 <style>
-	.error-page{max-width:44rem;min-height:70vh;margin:0 auto;padding:clamp(4rem,12vw,9rem) 1.25rem}.mark{display:grid;place-items:center;width:4rem;height:4rem;border-radius:1.25rem;background:var(--color-surface-muted);color:var(--color-primary);font-size:1.2rem;font-weight:900}h1{margin:.6rem 0 1rem;font-size:clamp(3rem,10vw,6rem);line-height:.95;letter-spacing:-.06em}.actions{display:flex;flex-wrap:wrap;gap:.75rem;margin:2rem 0}.actions button{padding:.65rem 1rem;border:1px solid var(--color-border);border-radius:999px;background:var(--color-surface);color:var(--color-foreground);font:inherit;font-weight:700;cursor:pointer}.support{padding-top:1.5rem;border-top:1px solid var(--color-border);color:var(--color-muted);line-height:1.6}.support a{color:var(--color-primary);font-weight:700}
+	.error-page {
+		max-width: 44rem;
+		min-height: 70vh;
+		margin: 0 auto;
+		padding: clamp(4rem, 12vw, 9rem) 1.25rem;
+	}
+	.mark {
+		display: grid;
+		place-items: center;
+		width: 4rem;
+		height: 4rem;
+		border-radius: 1.25rem;
+		background: var(--color-surface-muted);
+		color: var(--color-primary);
+		font-size: 1.2rem;
+		font-weight: 900;
+	}
+	h1 {
+		margin: 0.6rem 0 1rem;
+		font-size: clamp(3rem, 10vw, 6rem);
+		line-height: 0.95;
+		letter-spacing: -0.06em;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin: 2rem 0;
+	}
+	.actions button {
+		padding: 0.65rem 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		background: var(--color-surface);
+		color: var(--color-foreground);
+		font: inherit;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.support {
+		padding-top: 1.5rem;
+		border-top: 1px solid var(--color-border);
+		color: var(--color-muted);
+		line-height: 1.6;
+	}
+	.support a {
+		color: var(--color-primary);
+		font-weight: 700;
+	}
 </style>

@@ -6,8 +6,9 @@
 	import { MutationIntent } from '$lib/api/mutation';
 
 	type Preview = {
- legal_versions: {terms_version:string;privacy_version:string};
- identity_notice:string; identity_notice_version:string;
+		legal_versions: { terms_version: string; privacy_version: string };
+		identity_notice: string;
+		identity_notice_version: string;
 		invitation: {
 			proposed_legal_name: string;
 			proposed_business_type: string;
@@ -18,15 +19,32 @@
 		supplier: { legal_name: string; trading_name: string };
 	};
 
-	let workspaceID=$state('');
- let existingBusinesses=$state<{id:string;name:string}[]>([]);
- onMount(()=>{const abort=new AbortController(); void checkedJSON('/api/v1/organizations',value=>{const items=record(value).organizations;if(!Array.isArray(items))throw new Error('Invalid businesses');return items.map(v=>{const r=record(v);return{id:text(r.id),name:text(r.trading_name)||text(r.legal_name)}})},{signal:abort.signal}).then(items=>existingBusinesses=items).catch(()=>{});return()=>abort.abort();});
- let preview = $state<Preview | null>(null);
+	let workspaceID = $state('');
+	let existingBusinesses = $state<{ id: string; name: string }[]>([]);
+	onMount(() => {
+		const abort = new AbortController();
+		void checkedJSON(
+			'/api/v1/organizations',
+			(value) => {
+				const items = record(value).organizations;
+				if (!Array.isArray(items)) throw new Error('Invalid businesses');
+				return items.map((v) => {
+					const r = record(v);
+					return { id: text(r.id), name: text(r.trading_name) || text(r.legal_name) };
+				});
+			},
+			{ signal: abort.signal }
+		)
+			.then((items) => (existingBusinesses = items))
+			.catch(() => {});
+		return () => abort.abort();
+	});
+	let preview = $state<Preview | null>(null);
 	let challengeId = $state('');
 	let developmentCode = $state('');
 	let code = $state('');
 	let fullName = $state('');
- let consentsAccepted = $state(false);
+	let consentsAccepted = $state(false);
 	let loading = $state(true);
 	let error = $state('');
 	let busy = $state(false);
@@ -36,56 +54,119 @@
 	const invitationPath = () => `/api/v1/buyer-invitations/${encodeURIComponent(activeToken)}`;
 
 	async function loadPreview() {
-		const request = reads.begin(); loading = true; error = ''; preview = null;
+		const request = reads.begin();
+		loading = true;
+		error = '';
+		preview = null;
 		try {
-			const result = await checkedJSON(invitationPath(), value => {
-				const row = record(value), invitation = record(row.invitation), supplier = record(row.supplier);
-				for (const key of ['proposed_legal_name','proposed_business_type','proposed_address','proposed_industry','expires_at']) text(invitation[key]);
-				if (!Number.isFinite(Date.parse(String(invitation.expires_at)))) throw new Error('Invalid invitation');
-				text(supplier.legal_name); text(supplier.trading_name);
- text(record(row.legal_versions).terms_version); text(record(row.legal_versions).privacy_version); text(row.identity_notice); text(row.identity_notice_version);
-				return row as unknown as Preview;
-			}, { signal: request.signal });
+			const result = await checkedJSON(
+				invitationPath(),
+				(value) => {
+					const row = record(value),
+						invitation = record(row.invitation),
+						supplier = record(row.supplier);
+					for (const key of [
+						'proposed_legal_name',
+						'proposed_business_type',
+						'proposed_address',
+						'proposed_industry',
+						'expires_at'
+					])
+						text(invitation[key]);
+					if (!Number.isFinite(Date.parse(String(invitation.expires_at)))) throw new Error('Invalid invitation');
+					text(supplier.legal_name);
+					text(supplier.trading_name);
+					text(record(row.legal_versions).terms_version);
+					text(record(row.legal_versions).privacy_version);
+					text(row.identity_notice);
+					text(row.identity_notice_version);
+					return row as unknown as Preview;
+				},
+				{ signal: request.signal }
+			);
 			if (request.current()) preview = result;
 		} catch (cause) {
-			if (request.current()) error = cause instanceof RequestError && [404,410].includes(cause.status)
-				? 'This invitation has expired, or it is no longer valid. Ask the seller to send you a new link.'
-				: publicError(cause, 'this invitation');
-		} finally { if (request.current()) loading = false; }
+			if (request.current())
+				error =
+					cause instanceof RequestError && [404, 410].includes(cause.status)
+						? 'This invitation has expired, or it is no longer valid. Ask the seller to send you a new link.'
+						: publicError(cause, 'this invitation');
+		} finally {
+			if (request.current()) loading = false;
+		}
 	}
 	async function requestCode() {
-		if (busy || acceptance?.unresolved) return; const token = activeToken; busy = true; error = '';
+		if (busy || acceptance?.unresolved) return;
+		const token = activeToken;
+		busy = true;
+		error = '';
 		try {
-			const result = await checkedJSON(invitationPath()+'/otp', value => {
-				const row=record(value); const id=text(row.challenge_id); if(!id)throw new Error('Missing challenge');
-				return { id, developmentCode: typeof row.development_code==='string'?row.development_code:'' };
-			}, {method:'POST'});
+			const result = await checkedJSON(
+				invitationPath() + '/otp',
+				(value) => {
+					const row = record(value);
+					const id = text(row.challenge_id);
+					if (!id) throw new Error('Missing challenge');
+					return { id, developmentCode: typeof row.development_code === 'string' ? row.development_code : '' };
+				},
+				{ method: 'POST' }
+			);
 			if (token !== activeToken) return;
-			challengeId=result.id; developmentCode=result.developmentCode; code='';
-		} catch(cause) { if (token === activeToken) error=publicError(cause,'code delivery'); }
-		finally { if (token === activeToken) busy=false; }
+			challengeId = result.id;
+			developmentCode = result.developmentCode;
+			code = '';
+		} catch (cause) {
+			if (token === activeToken) error = publicError(cause, 'code delivery');
+		} finally {
+			if (token === activeToken) busy = false;
+		}
 	}
 	async function accept() {
-		if(busy||!preview||!consentsAccepted||!challengeId||!/^\d{6}$/.test(code)||!fullName.trim())return;
-		const token = activeToken; busy=true;error='';
+		if (busy || !preview || !consentsAccepted || !challengeId || !/^\d{6}$/.test(code) || !fullName.trim()) return;
+		const token = activeToken;
+		busy = true;
+		error = '';
 		try {
-			acceptance ??= new MutationIntent('accept-buyer-invitation',invitationPath()+'/accept');
-			const acceptedBusiness = await acceptance.run({workspace_id:workspaceID,challenge_id:challengeId,code,full_name:fullName.trim(),consents_accepted:consentsAccepted,...preview.legal_versions,identity_notice_version:preview.identity_notice_version},value=>{
-				const row=record(value);text(record(row.user).id);text(record(row.session).id);return text(record(record(row.portal).business).id);
-			});
+			acceptance ??= new MutationIntent('accept-buyer-invitation', invitationPath() + '/accept');
+			const acceptedBusiness = await acceptance.run(
+				{
+					workspace_id: workspaceID,
+					challenge_id: challengeId,
+					code,
+					full_name: fullName.trim(),
+					consents_accepted: consentsAccepted,
+					...preview.legal_versions,
+					identity_notice_version: preview.identity_notice_version
+				},
+				(value) => {
+					const row = record(value);
+					text(record(row.user).id);
+					text(record(row.session).id);
+					return text(record(record(row.portal).business).id);
+				}
+			);
 			if (token === activeToken) await goto(`/workspace/purchases?business_id=${encodeURIComponent(acceptedBusiness)}`);
-		}catch(cause){if (token === activeToken) error=cause instanceof Error?cause.message:'We could not confirm your details.';}
-		finally{if (token === activeToken) busy=false;}
+		} catch (cause) {
+			if (token === activeToken) error = cause instanceof Error ? cause.message : 'We could not confirm your details.';
+		} finally {
+			if (token === activeToken) busy = false;
+		}
 	}
 	$effect(() => {
 		const token = page.params.token ?? '';
 		untrack(() => {
-			activeToken = token; consentsAccepted = false; acceptance = null; challengeId = ''; developmentCode = ''; code = ''; fullName = ''; busy = false;
+			activeToken = token;
+			consentsAccepted = false;
+			acceptance = null;
+			challengeId = '';
+			developmentCode = '';
+			code = '';
+			fullName = '';
+			busy = false;
 			void loadPreview();
 		});
 		return () => reads.cancel();
 	});
-
 </script>
 
 <svelte:head>
@@ -98,44 +179,156 @@
 	{:else if preview}
 		<section class="panel" aria-labelledby="invite-title">
 			<p class="eyebrow">Your private link</p>
-			<h1 id="invite-title">{preview.supplier.trading_name || preview.supplier.legal_name} wants to add you as a customer.</h1>
-			<p>Check that the details below are correct. Then we will send a six-digit code, to be sure this phone or email really belongs to you. Email codes arrive by email; phone codes arrive on WhatsApp.</p>
+			<h1 id="invite-title">
+				{preview.supplier.trading_name || preview.supplier.legal_name} wants to add you as a customer.
+			</h1>
+			<p>
+				Check that the details below are correct. Then we will send a six-digit code, to be sure this phone or email
+				really belongs to you. Email codes arrive by email; phone codes arrive on WhatsApp.
+			</p>
 			<dl>
-				<div><dt>Business name</dt><dd>{preview.invitation.proposed_legal_name}</dd></div>
-				<div><dt>Business type</dt><dd>{preview.invitation.proposed_business_type}</dd></div>
-				<div><dt>Address</dt><dd>{preview.invitation.proposed_address}</dd></div>
-				<div><dt>What you sell</dt><dd>{preview.invitation.proposed_industry}</dd></div>
+				<div>
+					<dt>Business name</dt>
+					<dd>{preview.invitation.proposed_legal_name}</dd>
+				</div>
+				<div>
+					<dt>Business type</dt>
+					<dd>{preview.invitation.proposed_business_type}</dd>
+				</div>
+				<div>
+					<dt>Address</dt>
+					<dd>{preview.invitation.proposed_address}</dd>
+				</div>
+				<div>
+					<dt>What you sell</dt>
+					<dd>{preview.invitation.proposed_industry}</dd>
+				</div>
 			</dl>
-			{#if existingBusinesses.length}<label>Business joining this supplier<select bind:value={workspaceID} disabled={busy||!!acceptance?.unresolved}><option value="">Create the business shown above</option>{#each existingBusinesses as b}<option value={b.id}>{b.name}</option>{/each}</select></label><p>Choose an existing business only if you own it. Its verified account details will be used; the supplier relationship stays separate.</p>{/if}
+			{#if existingBusinesses.length}<label
+					>Business joining this supplier<select bind:value={workspaceID} disabled={busy || !!acceptance?.unresolved}
+						><option value="">Create the business shown above</option>{#each existingBusinesses as b}<option
+								value={b.id}>{b.name}</option
+							>{/each}</select
+					></label
+				>
+				<p>
+					Choose an existing business only if you own it. Its verified account details will be used; the supplier
+					relationship stays separate.
+				</p>{/if}
 			{#if !challengeId}
 				<button class="primary" disabled={busy} onclick={requestCode}>{busy ? 'Sending…' : 'Send me my code'}</button>
 			{:else}
 				<label>Full name<input disabled={busy} bind:value={fullName} autocomplete="name" /></label>
-				<label>The six-digit code we sent you<input disabled={busy} bind:value={code} inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
+				<label
+					>The six-digit code we sent you<input
+						disabled={busy}
+						bind:value={code}
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						maxlength="6"
+					/></label
+				>
 				<button disabled={busy || !!acceptance?.unresolved} onclick={requestCode}>Send a new code</button>
 				{#if developmentCode}<p class="hint">Development code: {developmentCode}</p>{/if}
 				<p>{preview.identity_notice}</p>
-                <p><a href={`/legal/terms?version=${encodeURIComponent(preview.legal_versions.terms_version)}`} target="_blank" rel="noreferrer">Terms of service</a> · <a href={`/legal/privacy?version=${encodeURIComponent(preview.legal_versions.privacy_version)}`} target="_blank" rel="noreferrer">Privacy notice</a></p>
-                <label><input type="checkbox" bind:checked={consentsAccepted} disabled={busy} /> I accept the terms, acknowledge the privacy notice and authorise the checks described above.</label>
-                <button class="primary" disabled={busy || !consentsAccepted || !fullName.trim() || !/^\d{6}$/.test(code)} onclick={accept}>{busy ? 'Confirming…' : 'Yes, this is my business'}</button>
+				<p>
+					<a
+						href={`/legal/terms?version=${encodeURIComponent(preview.legal_versions.terms_version)}`}
+						target="_blank"
+						rel="noreferrer">Terms of service</a
+					>
+					·
+					<a
+						href={`/legal/privacy?version=${encodeURIComponent(preview.legal_versions.privacy_version)}`}
+						target="_blank"
+						rel="noreferrer">Privacy notice</a
+					>
+				</p>
+				<label
+					><input type="checkbox" bind:checked={consentsAccepted} disabled={busy} /> I accept the terms, acknowledge the privacy
+					notice and authorise the checks described above.</label
+				>
+				<button
+					class="primary"
+					disabled={busy || !consentsAccepted || !fullName.trim() || !/^\d{6}$/.test(code)}
+					onclick={accept}>{busy ? 'Confirming…' : 'Yes, this is my business'}</button
+				>
 			{/if}
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
 		</section>
 	{:else}
-		<p class="error" role="alert">{error}</p><button onclick={loadPreview}>Try again</button>
+		<p class="error" role="alert">{error}</p>
+		<button onclick={loadPreview}>Try again</button>
 	{/if}
 </main>
 
 <style>
-	.panel { max-width: 42rem; margin: 5rem auto; padding: 2rem; border: 1px solid var(--color-border); border-radius: 1.25rem; background: var(--color-surface); }
-	.eyebrow { color:var(--color-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; }
-	h1 { font-size: clamp(2rem, 6vw, 4rem); line-height: 1; letter-spacing: -0.045em; }
-	dl { display: grid; gap: 0.75rem; margin: 2rem 0; }
-	dl div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; }
-	dt { color: var(--color-muted); } dd { margin: 0; font-weight: 700; text-align: right; }
-	label { display: grid; gap: 0.35rem; margin: 1rem 0; font-weight: 700; }
-	input { border:1px solid var(--color-border); border-radius: 0.6rem; padding: 0.75rem; }
-	button { border: 0; border-radius: 999px; padding: 0.8rem 1.2rem; font-weight: 700; cursor: pointer; }
-	.primary { color: var(--color-on-primary); background:var(--color-primary); }
-	.hint { color:var(--color-primary); } .error { color:var(--color-overdue); }
+	.panel {
+		max-width: 42rem;
+		margin: 5rem auto;
+		padding: 2rem;
+		border: 1px solid var(--color-border);
+		border-radius: 1.25rem;
+		background: var(--color-surface);
+	}
+	.eyebrow {
+		color: var(--color-primary);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		font-size: 0.78rem;
+	}
+	h1 {
+		font-size: clamp(2rem, 6vw, 4rem);
+		line-height: 1;
+		letter-spacing: -0.045em;
+	}
+	dl {
+		display: grid;
+		gap: 0.75rem;
+		margin: 2rem 0;
+	}
+	dl div {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		border-bottom: 1px solid var(--color-border);
+		padding-bottom: 0.5rem;
+	}
+	dt {
+		color: var(--color-muted);
+	}
+	dd {
+		margin: 0;
+		font-weight: 700;
+		text-align: right;
+	}
+	label {
+		display: grid;
+		gap: 0.35rem;
+		margin: 1rem 0;
+		font-weight: 700;
+	}
+	input {
+		border: 1px solid var(--color-border);
+		border-radius: 0.6rem;
+		padding: 0.75rem;
+	}
+	button {
+		border: 0;
+		border-radius: 999px;
+		padding: 0.8rem 1.2rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.primary {
+		color: var(--color-on-primary);
+		background: var(--color-primary);
+	}
+	.hint {
+		color: var(--color-primary);
+	}
+	.error {
+		color: var(--color-overdue);
+	}
 </style>

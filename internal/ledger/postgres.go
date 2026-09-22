@@ -109,7 +109,8 @@ func (s *PostgresStore) post(transaction Transaction) (Transaction, error) {
 	if err := validateTransaction(transaction); err != nil {
 		return Transaction{}, err
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	if transaction.EffectiveAt.IsZero() {
 		transaction.EffectiveAt = time.Now().UTC()
 	}
@@ -228,7 +229,8 @@ func (s *PostgresStore) GetByReference(referenceID string) ([]Transaction, error
 	if s == nil || s.pool == nil || referenceID == "" {
 		return []Transaction{}, errors.New("ledger database is not configured")
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	txRows, err := s.pool.Query(ctx, `
 		SELECT id::text, event_type, reference_type, reference_id, idempotency_key, effective_at, recorded_at
 		FROM ledger.transactions

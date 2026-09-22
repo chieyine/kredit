@@ -14,12 +14,21 @@ export function readLocal<T>(key: string, fallback: T): T {
 
 export function writeLocal(key: string, value: unknown): boolean {
 	if (!browser) return false;
-	try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
+	try {
+		localStorage.setItem(key, JSON.stringify(value));
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 export function removeLocal(key: string) {
 	if (!browser) return;
-	try { localStorage.removeItem(key); } catch { /* Storage is optional. */ }
+	try {
+		localStorage.removeItem(key);
+	} catch {
+		/* Storage is optional. */
+	}
 }
 
 export function rememberSaleItem(name: string, amount: string) {
@@ -27,7 +36,10 @@ export function rememberSaleItem(name: string, amount: string) {
 	const cleanAmount = amount.trim();
 	if (!cleanName || !cleanAmount) return;
 	const current = readLocal<SavedSaleItem[]>('kredit:saved-sale-items', []);
-	const next = [{ name: cleanName, amount: cleanAmount, usedAt: new Date().toISOString() }, ...current.filter((item) => item.name.toLowerCase() !== cleanName.toLowerCase())].slice(0, 12);
+	const next = [
+		{ name: cleanName, amount: cleanAmount, usedAt: new Date().toISOString() },
+		...current.filter((item) => item.name.toLowerCase() !== cleanName.toLowerCase())
+	].slice(0, 12);
 	writeLocal('kredit:saved-sale-items', next);
 }
 

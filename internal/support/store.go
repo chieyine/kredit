@@ -263,7 +263,10 @@ func (s *Store) Read(ctx context.Context, caseID string) (Case, []Event, error) 
 }
 
 func (s *Store) ListForOrganization(organizationID string) []Case {
-	items, _ := s.ReadForOrganization(context.Background(), organizationID)
+	items, err := s.ReadForOrganization(context.Background(), organizationID)
+	if err != nil {
+		panic(fmt.Errorf("support: failed to read support cases for organization %s: %w", organizationID, err))
+	}
 	return items
 }
 

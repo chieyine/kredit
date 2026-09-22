@@ -13,21 +13,18 @@ export class ApiReadError extends Error {
 // Safe reads may retry brief network/5xx failures. Financial mutations must not
 // use this helper: writes rely on their explicit Idempotency-Key contract so a
 // timeout can never silently become a duplicate action.
-export async function readJSON<T>(
-	url: string,
-	options: { signal?: AbortSignal; attempts?: number } = {}
-): Promise<T> {
+export async function readJSON<T>(url: string, options: { signal?: AbortSignal; attempts?: number } = {}): Promise<T> {
 	const attempts = Math.max(1, Math.min(options.attempts ?? 2, 3));
 	let lastError: unknown;
 	for (let attempt = 1; attempt <= attempts; attempt += 1) {
 		try {
-            const deadline = AbortSignal.timeout(20_000);
-            const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+			const deadline = AbortSignal.timeout(20_000);
+			const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
 			const response = await fetch(url, {
 				method: 'GET',
 				credentials: 'include',
 				signal,
-                cache: 'no-store'
+				cache: 'no-store'
 			});
 			if (response.ok) return (await response.json()) as T;
 			const body = await response.json().catch(() => ({}));
@@ -73,7 +70,10 @@ export async function signOut(): Promise<void> {
 		credentials: 'include',
 		headers: csrfHeaders()
 	});
-	if (!response.ok && response.status !== 401) throw new Error('Sign-out was not confirmed. Your account may still be open. Try again before leaving this device.');
+	if (!response.ok && response.status !== 401)
+		throw new Error(
+			'Sign-out was not confirmed. Your account may still be open. Try again before leaving this device.'
+		);
 	clearPrivateBrowserData();
 	location.assign('/signin?signed_out=1');
 }

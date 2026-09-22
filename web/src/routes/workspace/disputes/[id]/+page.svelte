@@ -1,2 +1,17 @@
-<script lang="ts">import { page } from '$app/state';import DisputeDetail from '$lib/components/DisputeDetail.svelte';let organizationID=$derived(page.url.searchParams.get('organization')??'');</script>
-<svelte:head><title>Problem details — Kredit</title></svelte:head><main class="shell workspace"><p class="eyebrow">Reported problem</p><h1>Resolve this dispute</h1>{#if organizationID}<DisputeDetail endpoint={`/api/v1/organizations/${encodeURIComponent(organizationID)}/disputes/${encodeURIComponent(page.params.id ?? '')}`} backHref="/workspace/disputes" />{:else}<p class="error" role="alert">We could not find the business for this problem. Go back to the problems page and open it again.</p>{/if}</main>
+<script lang="ts">
+	import { page } from '$app/state';
+	import DisputeDetail from '$lib/components/DisputeDetail.svelte';
+	let organizationID = $derived(page.url.searchParams.get('organization') ?? '');
+</script>
+
+<svelte:head><title>Problem details — Kredit</title></svelte:head>
+<main class="shell workspace">
+	<p class="eyebrow">Reported problem</p>
+	<h1>Resolve this dispute</h1>
+	{#if organizationID}<DisputeDetail
+			endpoint={`/api/v1/organizations/${encodeURIComponent(organizationID)}/disputes/${encodeURIComponent(page.params.id ?? '')}`}
+			backHref="/workspace/disputes"
+		/>{:else}<p class="error" role="alert">
+			We could not find the business for this problem. Go back to the problems page and open it again.
+		</p>{/if}
+</main>

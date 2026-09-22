@@ -1,0 +1,25 @@
+# Cloudflare R2 (S3-compatible) holds the state. cmd/backup-r2 already uses R2,
+# so no new vendor is introduced. Any S3-compatible store with conditional-write
+# support works; DynamoDB is not required because Terraform 1.11+ uses S3 native
+# state locking via use_lockfile.
+bucket = "kredit-terraform-state"
+key    = "environments/production/terraform.tfstate"
+region = "auto"
+
+endpoints = {
+  s3 = "https://<ACCOUNT_ID>.r2.cloudflarestorage.com"
+}
+
+# R2 is not AWS: skip the AWS-specific preflight calls.
+skip_credentials_validation = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true
+use_path_style              = true
+
+# State locking. Requires Terraform >= 1.11.
+use_lockfile = true
+
+# Credentials come from the environment, never from this file:
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY

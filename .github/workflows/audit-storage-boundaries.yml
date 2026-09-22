@@ -1,9 +1,18 @@
 name: Audit storage boundary proof
 
+# Was bound to a since-merged audit branch and its own filename, so it could
+# never run again. It proves the document and bank-authorization storage
+# boundaries under the race detector, which is worth running on every change
+# that can move them.
 on:
-  push:
-    branches: [audit/2026-09-20-integrity-remediation]
-    paths: [.github/workflows/audit-storage-boundaries.yml]
+  pull_request:
+    paths:
+      - internal/documents/**
+      - internal/providers/bankdebit/**
+      - db/migrations/**
+      - infra/postgres/**
+      - .github/workflows/audit-storage-boundaries.yml
+  workflow_dispatch:
 
 permissions:
   contents: read

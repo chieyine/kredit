@@ -11,24 +11,35 @@ export function parseNaira(input: string | number): number {
 
 export type KoboValue = number | string | bigint | null | undefined;
 export function exactKobo(value: KoboValue): bigint | null {
- if (typeof value === 'bigint') return value;
- if (typeof value === 'number') return Number.isSafeInteger(value) ? BigInt(value) : null;
- if (typeof value === 'string' && /^-?\d+$/.test(value)) return BigInt(value);
- return null;
+	if (typeof value === 'bigint') return value;
+	if (typeof value === 'number') return Number.isSafeInteger(value) ? BigInt(value) : null;
+	if (typeof value === 'string' && /^-?\d+$/.test(value)) return BigInt(value);
+	return null;
 }
 export function sumKobo(values: KoboValue[]): bigint | null {
- let total = 0n;
- for (const value of values) { const amount = exactKobo(value); if (amount === null) return null; total += amount; }
- return total;
+	let total = 0n;
+	for (const value of values) {
+		const amount = exactKobo(value);
+		if (amount === null) return null;
+		total += amount;
+	}
+	return total;
 }
 export function formatKobo(value: KoboValue, currency = 'NGN'): string {
- const amount = exactKobo(value);
- if (amount === null) return 'Amount unavailable';
- const absolute = amount < 0n ? -amount : amount;
- try {
-  const whole = new Intl.NumberFormat('en-NG', { style:'currency', currency, minimumFractionDigits:0, maximumFractionDigits:0 }).format(absolute / 100n);
-  return `${amount < 0n ? '-' : ''}${whole}.${(absolute % 100n).toString().padStart(2,'0')}`;
- } catch { return 'Amount unavailable'; }
+	const amount = exactKobo(value);
+	if (amount === null) return 'Amount unavailable';
+	const absolute = amount < 0n ? -amount : amount;
+	try {
+		const whole = new Intl.NumberFormat('en-NG', {
+			style: 'currency',
+			currency,
+			minimumFractionDigits: 0,
+			maximumFractionDigits: 0
+		}).format(absolute / 100n);
+		return `${amount < 0n ? '-' : ''}${whole}.${(absolute % 100n).toString().padStart(2, '0')}`;
+	} catch {
+		return 'Amount unavailable';
+	}
 }
 
 /**
@@ -39,14 +50,35 @@ export function formatKobo(value: KoboValue, currency = 'NGN'): string {
  * then submit.
  */
 export function nairaInput(value: KoboValue): string {
- const amount = exactKobo(value);
- if (amount === null) return '';
- const negative = amount < 0n;
- const absolute = negative ? -amount : amount;
- return `${negative ? '-' : ''}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, '0')}`;
+	const amount = exactKobo(value);
+	if (amount === null) return '';
+	const negative = amount < 0n;
+	const absolute = negative ? -amount : amount;
+	return `${negative ? '-' : ''}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, '0')}`;
 }
 
-const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const ONES = [
+	'',
+	'one',
+	'two',
+	'three',
+	'four',
+	'five',
+	'six',
+	'seven',
+	'eight',
+	'nine',
+	'ten',
+	'eleven',
+	'twelve',
+	'thirteen',
+	'fourteen',
+	'fifteen',
+	'sixteen',
+	'seventeen',
+	'eighteen',
+	'nineteen'
+];
 const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
 
 function convertUnderThousand(n: number): string {
@@ -99,4 +131,3 @@ export function verbalizeNaira(value: KoboValue): string {
 	}
 	return result;
 }
-

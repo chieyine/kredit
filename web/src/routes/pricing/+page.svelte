@@ -1,46 +1,426 @@
 <script lang="ts">
-  import { checkedJSON, record } from '$lib/api/reliable';
-  import { baseFeeForKobo, feeForKobo, validFeeTerms, type FeeTerms } from '$lib/fee-terms';
-  import { parseNaira } from '$lib/money';
-  import { collectionBoundary, creditBoundary } from '$lib/financial-copy';
-  import Money from '$lib/components/Money.svelte';
-  let { data } = $props();
-  let rates = $derived<FeeTerms | null>(data.rates), pricingError = $derived(data.rates ? '' : 'We could not verify the current fees. Try again before relying on a quote.'), loading = $state(false);
-  let principalNaira = $state('500000'), collectedNaira = $state('0'), collectEverything = $state(false);
-  const principal = $derived(parseNaira(principalNaira));
-  const collected = $derived(collectEverything ? principal : parseNaira(collectedNaira));
-  const validExample = $derived(principal > 0 && collected >= 0 && collected <= principal);
-  const baseFee = $derived(rates && validExample ? baseFeeForKobo(principal, rates) : null);
-  const collectionFee = $derived(rates && validExample ? feeForKobo(collected, rates.collection_bps) : null);
-  const total = $derived(baseFee !== null && collectionFee !== null ? baseFee + collectionFee : null);
-  async function loadRates(signal: AbortSignal | undefined = undefined) {
-    loading = true; pricingError = ''; rates = null;
-    try {
-      rates = await checkedJSON('/api/v1/pricing', value => {
-        const result = record(value);
-        if (!validFeeTerms(result)) throw new Error('Fee rates were not verified.');
-        return result;
-      }, { signal });
-    } catch { if (!signal?.aborted) pricingError = 'We could not verify the current fees. Try again before relying on a quote.'; }
-    finally { loading = false; }
-  }
+	import { checkedJSON, record } from '$lib/api/reliable';
+	import { baseFeeForKobo, feeForKobo, validFeeTerms, type FeeTerms } from '$lib/fee-terms';
+	import { parseNaira } from '$lib/money';
+	import { collectionBoundary, creditBoundary } from '$lib/financial-copy';
+	import Money from '$lib/components/Money.svelte';
+	let { data } = $props();
+	let rates = $derived<FeeTerms | null>(data.rates),
+		pricingError = $derived(
+			data.rates ? '' : 'We could not verify the current fees. Try again before relying on a quote.'
+		),
+		loading = $state(false);
+	let principalNaira = $state('500000'),
+		collectedNaira = $state('0'),
+		collectEverything = $state(false);
+	const principal = $derived(parseNaira(principalNaira));
+	const collected = $derived(collectEverything ? principal : parseNaira(collectedNaira));
+	const validExample = $derived(principal > 0 && collected >= 0 && collected <= principal);
+	const baseFee = $derived(rates && validExample ? baseFeeForKobo(principal, rates) : null);
+	const collectionFee = $derived(rates && validExample ? feeForKobo(collected, rates.collection_bps) : null);
+	const total = $derived(baseFee !== null && collectionFee !== null ? baseFee + collectionFee : null);
+	async function loadRates(signal: AbortSignal | undefined = undefined) {
+		loading = true;
+		pricingError = '';
+		rates = null;
+		try {
+			rates = await checkedJSON(
+				'/api/v1/pricing',
+				(value) => {
+					const result = record(value);
+					if (!validFeeTerms(result)) throw new Error('Fee rates were not verified.');
+					return result;
+				},
+				{ signal }
+			);
+		} catch {
+			if (!signal?.aborted) pricingError = 'We could not verify the current fees. Try again before relying on a quote.';
+		} finally {
+			loading = false;
+		}
+	}
 </script>
+
 <main class="pricing-page">
-  <section class="shell pricing-hero"><div><p class="eyebrow">What it costs</p><h1>{data.copy.title}<br /><em>{data.copy.accent}</em></h1></div><div class="hero-side"><p>{data.copy.introduction}</p><p>A sale you have already accepted keeps the fee terms it was agreed on, even if our rates move afterwards.</p><span>No monthly fee · No joining fee</span></div></section>
-  <section class="shell" aria-label="Current Kredit fee rates">
-    {#if loading}<p role="status">Checking current fees…</p>{:else if pricingError}<div class="pricing-error" role="alert"><p>{pricingError}</p><button type="button" onclick={() => loadRates()}>Try again</button></div>{:else if rates}<div class="rates"><article><p>When a sale becomes active</p><strong>{rates.base_bps / 100}%</strong><h2>Base fee</h2><p>The seller pays it, on the value of the sale once it goes live.</p>{#if rates.min_fee_kobo}<p>Minimum: <Money amountKobo={rates.min_fee_kobo} />, capped at the sale amount.</p>{/if}</article><article><p>On successful bank collections</p><strong>{rates.collection_bps / 100}%</strong><h2>Collection fee</h2><p>Only on money that actually lands. A debit that fails earns us nothing.</p></article></div>{/if}
-  </section>
-  <section class="calculator-section"><div class="shell calculator-layout"><div><p class="eyebrow inverse">Work out your fee</p><h2>Use your own figures.</h2><p>Put in the real amount of the sale. Then try it both ways: your customer pays on his own, or Kredit has to collect part or all of it.</p><p>You pay the fee, not your customer. It is not added onto what he owes.</p></div><form class="calculator" onsubmit={event => event.preventDefault()}>
-    <label>Sale amount (₦)<input inputmode="decimal" bind:value={principalNaira} maxlength="40" aria-describedby="amount-help" /></label><p id="amount-help">Commas and up to two decimal places are accepted.</p>
-    <details><summary>Use a slider instead</summary><input type="range" min="1000" max="10000000" step="1000" value={Math.max(1000, Math.min(10000000, principal > 0 ? principal / 100 : 1000))} oninput={event => principalNaira = event.currentTarget.value} aria-label="Sale amount slider in naira" /><p>The typed amount is used for the calculation.</p></details>
-    <label class="check-label"><input type="checkbox" bind:checked={collectEverything} />Example: Kredit collects the full sale amount</label>
-    {#if !collectEverything}<label>Amount Kredit successfully collects (₦)<input inputmode="decimal" bind:value={collectedNaira} maxlength="40" /></label><p>Leave it at 0 if your customer pays everything himself.</p>{/if}
-    {#if !validExample}<p class="validation" role="alert">Enter a positive sale amount. The amount collected must be between 0 and the sale amount.</p>{/if}
-    <dl class="fee-example" aria-label="Fee example"><div><dt>Sale amount</dt><dd><Money amountKobo={principal > 0 ? principal : null} /></dd></div><div><dt>Base fee</dt><dd><Money amountKobo={baseFee} /></dd></div><div><dt>Collection fee</dt><dd><Money amountKobo={collectionFee} /></dd></div><div class="total"><dt>Kredit fee in this example</dt><dd><Money amountKobo={total} /></dd></div></dl>
-    <p class="scope-note">This covers our base and collection fees only. Check the sale itself and the provider disclosures for anything else that may apply. It is not a promise that the money will be collected.</p>
-  </form></div></section>
-  <section class="shell questions"><h2>Good to know</h2><details><summary>What if my customer pays late?</summary><p>{collectionBoundary}</p><p>A dispute holds the disputed amount from new automatic debits while it is reviewed. Separate account or safety restrictions may pause other collections. A debit already submitted to a bank may still complete.</p></details><details><summary>Does Kredit lend money?</summary><p>{creditBoundary}</p></details><details><summary>When does a sale become active?</summary><p>Accepting it is not enough on its own. The agreement has to be in place, the bank permission has to be there, and the goods conditions have to be met.</p></details><details><summary>Must my customer install an app?</summary><p>No. He opens a private link in whatever browser is on his phone and reads the sale there.</p></details><a class="primary" href="/signin">Create your account</a></section>
+	<section class="shell pricing-hero">
+		<div>
+			<p class="eyebrow">What it costs</p>
+			<h1>{data.copy.title}<br /><em>{data.copy.accent}</em></h1>
+		</div>
+		<div class="hero-side">
+			<p>{data.copy.introduction}</p>
+			<p>A sale you have already accepted keeps the fee terms it was agreed on, even if our rates move afterwards.</p>
+			<span>No monthly fee · No joining fee</span>
+		</div>
+	</section>
+	<section class="shell" aria-label="Current Kredit fee rates">
+		{#if loading}<p role="status">Checking current fees…</p>{:else if pricingError}<div
+				class="pricing-error"
+				role="alert"
+			>
+				<p>{pricingError}</p>
+				<button type="button" onclick={() => loadRates()}>Try again</button>
+			</div>{:else if rates}<div class="rates">
+				<article>
+					<p>When a sale becomes active</p>
+					<strong>{rates.base_bps / 100}%</strong>
+					<h2>Base fee</h2>
+					<p>The seller pays it, on the value of the sale once it goes live.</p>
+					{#if rates.min_fee_kobo}<p>
+							Minimum: <Money amountKobo={rates.min_fee_kobo} />, capped at the sale amount.
+						</p>{/if}
+				</article>
+				<article>
+					<p>On successful bank collections</p>
+					<strong>{rates.collection_bps / 100}%</strong>
+					<h2>Collection fee</h2>
+					<p>Only on money that actually lands. A debit that fails earns us nothing.</p>
+				</article>
+			</div>{/if}
+	</section>
+	<section class="calculator-section">
+		<div class="shell calculator-layout">
+			<div>
+				<p class="eyebrow inverse">Work out your fee</p>
+				<h2>Use your own figures.</h2>
+				<p>
+					Put in the real amount of the sale. Then try it both ways: your customer pays on his own, or Kredit has to
+					collect part or all of it.
+				</p>
+				<p>You pay the fee, not your customer. It is not added onto what he owes.</p>
+			</div>
+			<form class="calculator" onsubmit={(event) => event.preventDefault()}>
+				<label
+					>Sale amount (₦)<input
+						inputmode="decimal"
+						bind:value={principalNaira}
+						maxlength="40"
+						aria-describedby="amount-help"
+					/></label
+				>
+				<p id="amount-help">Commas and up to two decimal places are accepted.</p>
+				<details>
+					<summary>Use a slider instead</summary><input
+						type="range"
+						min="1000"
+						max="10000000"
+						step="1000"
+						value={Math.max(1000, Math.min(10000000, principal > 0 ? principal / 100 : 1000))}
+						oninput={(event) => (principalNaira = event.currentTarget.value)}
+						aria-label="Sale amount slider in naira"
+					/>
+					<p>The typed amount is used for the calculation.</p>
+				</details>
+				<label class="check-label"
+					><input type="checkbox" bind:checked={collectEverything} />Example: Kredit collects the full sale amount</label
+				>
+				{#if !collectEverything}<label
+						>Amount Kredit successfully collects (₦)<input
+							inputmode="decimal"
+							bind:value={collectedNaira}
+							maxlength="40"
+						/></label
+					>
+					<p>Leave it at 0 if your customer pays everything himself.</p>{/if}
+				{#if !validExample}<p class="validation" role="alert">
+						Enter a positive sale amount. The amount collected must be between 0 and the sale amount.
+					</p>{/if}
+				<dl class="fee-example" aria-label="Fee example">
+					<div>
+						<dt>Sale amount</dt>
+						<dd><Money amountKobo={principal > 0 ? principal : null} /></dd>
+					</div>
+					<div>
+						<dt>Base fee</dt>
+						<dd><Money amountKobo={baseFee} /></dd>
+					</div>
+					<div>
+						<dt>Collection fee</dt>
+						<dd><Money amountKobo={collectionFee} /></dd>
+					</div>
+					<div class="total">
+						<dt>Kredit fee in this example</dt>
+						<dd><Money amountKobo={total} /></dd>
+					</div>
+				</dl>
+				<p class="scope-note">
+					This covers our base and collection fees only. Check the sale itself and the provider disclosures for anything
+					else that may apply. It is not a promise that the money will be collected.
+				</p>
+			</form>
+		</div>
+	</section>
+	<section class="shell questions">
+		<h2>Good to know</h2>
+		<details>
+			<summary>What if my customer pays late?</summary>
+			<p>{collectionBoundary}</p>
+			<p>
+				A dispute holds the disputed amount from new automatic debits while it is reviewed. Separate account or safety
+				restrictions may pause other collections. A debit already submitted to a bank may still complete.
+			</p>
+		</details>
+		<details>
+			<summary>Does Kredit lend money?</summary>
+			<p>{creditBoundary}</p>
+		</details>
+		<details>
+			<summary>When does a sale become active?</summary>
+			<p>
+				Accepting it is not enough on its own. The agreement has to be in place, the bank permission has to be there,
+				and the goods conditions have to be met.
+			</p>
+		</details>
+		<details>
+			<summary>Must my customer install an app?</summary>
+			<p>No. He opens a private link in whatever browser is on his phone and reads the sale there.</p>
+		</details>
+		<a class="primary" href="/signin">Create your account</a>
+	</section>
 </main>
+
 <style>
-  .pricing-page{color:var(--color-foreground)}.pricing-hero{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(2rem,7vw,7rem);align-items:center;padding-block:clamp(3rem,7vw,6rem)}.pricing-hero h1{font-family:var(--font-serif);font-weight:500;font-size:clamp(3rem,7vw,6.25rem);line-height:1.03;letter-spacing:-.045em;margin:.8rem 0}.pricing-hero em{color:var(--color-primary);font-weight:500}.hero-side p{font-size:1.05rem;line-height:1.7;color:var(--color-muted)}.hero-side span{display:block;color:var(--color-primary);font-size:.9rem;font-weight:650;margin-top:1.5rem}.rates{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--color-border);border-radius:.6rem;overflow:hidden;margin-bottom:4rem;background:var(--color-surface)}.rates article{padding:2rem}.rates article+article{border-left:1px solid var(--color-border)}.rates strong{display:block;font-size:clamp(3rem,7vw,5.5rem);font-family:var(--font-serif);font-weight:500;letter-spacing:-.04em;margin:1.5rem 0;color:var(--color-primary)}.rates p{font-size:1rem;line-height:1.6;max-width:36ch}.rates h2{font-size:1.25rem}.calculator-section{background:var(--color-surface-muted);color:var(--color-foreground);padding-block:4rem}.calculator-layout{display:grid;grid-template-columns:.8fr 1.2fr;gap:clamp(2rem,5vw,5rem);align-items:start}.calculator-layout>div>h2{font-family:var(--font-serif);font-size:clamp(2.5rem,4vw,4rem);line-height:1.07;font-weight:500;letter-spacing:-.03em;margin:1rem 0}.calculator-layout>div>p{line-height:1.7;color:var(--color-muted)}.inverse{color:var(--color-muted)}.calculator{background:var(--color-surface);color:var(--color-foreground);border-radius:.6rem;padding:clamp(1.25rem,4vw,2rem)}.calculator label{display:grid;gap:.5rem;font-weight:650}.calculator input:not([type=checkbox]):not([type=range]){box-sizing:border-box;width:100%;min-height:3.25rem;padding:.8rem;border:1px solid var(--color-border);border-radius:.35rem;font:inherit;background:var(--color-surface)}.calculator input[type=range]{width:100%;accent-color:var(--color-primary)}.calculator p{font-size:.9rem;color:var(--color-muted);line-height:1.6}.calculator .check-label{display:flex;gap:.65rem;align-items:center;margin:1.25rem 0;line-height:1.5}.check-label input{flex-shrink:0;width:1.25rem;height:1.25rem;min-height:0;accent-color:var(--color-primary)}.calculator summary,.questions summary{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:3rem;cursor:pointer;line-height:1.5}.calculator summary::after,.questions summary::after{content:'+';color:var(--color-primary)}.calculator details[open]>summary::after,.questions details[open]>summary::after{content:'−'}.fee-example{margin:1.5rem 0 0;border-top:1px solid var(--color-border)}.fee-example>div{display:flex;justify-content:space-between;gap:1rem;padding:1rem 0;border-bottom:1px solid var(--color-border)}.fee-example dd{font-weight:750;text-align:right;margin:0;font-variant-numeric:tabular-nums}.fee-example .total{font-size:1.05rem;color:var(--color-primary-hover)}.scope-note{margin-bottom:0}.validation,.pricing-error{padding:1rem;background:var(--color-surface-muted);color:var(--color-warning)!important;border:1px solid var(--color-border);border-radius:.35rem}.pricing-error button{padding:.6rem 1rem;border:1px solid currentColor;background:transparent}.questions{padding-block:4rem;max-width:56rem}.questions h2{font-size:2rem;font-family:var(--font-serif);font-weight:500}.questions details{border-top:1px solid var(--color-border);padding:.6rem 0}.questions p{line-height:1.7;color:var(--color-muted)}.questions .primary{margin-top:2rem}.questions summary{font-weight:650}@media(max-width:760px){.pricing-hero,.calculator-layout{grid-template-columns:1fr}.pricing-hero{gap:1rem}.rates{grid-template-columns:1fr}.rates article+article{border-left:0;border-top:1px solid var(--color-border)}.rates article{padding:1.5rem}.calculator-section{padding-block:2.5rem}.fee-example>div{flex-wrap:wrap}.fee-example dd{margin-left:auto}}
+	.pricing-page {
+		color: var(--color-foreground);
+	}
+	.pricing-hero {
+		display: grid;
+		grid-template-columns: 1.1fr 0.9fr;
+		gap: clamp(2rem, 7vw, 7rem);
+		align-items: center;
+		padding-block: clamp(3rem, 7vw, 6rem);
+	}
+	.pricing-hero h1 {
+		font-family: var(--font-serif);
+		font-weight: 500;
+		font-size: clamp(3rem, 7vw, 6.25rem);
+		line-height: 1.03;
+		letter-spacing: -0.045em;
+		margin: 0.8rem 0;
+	}
+	.pricing-hero em {
+		color: var(--color-primary);
+		font-weight: 500;
+	}
+	.hero-side p {
+		font-size: 1.05rem;
+		line-height: 1.7;
+		color: var(--color-muted);
+	}
+	.hero-side span {
+		display: block;
+		color: var(--color-primary);
+		font-size: 0.9rem;
+		font-weight: 650;
+		margin-top: 1.5rem;
+	}
+	.rates {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		border: 1px solid var(--color-border);
+		border-radius: 0.6rem;
+		overflow: hidden;
+		margin-bottom: 4rem;
+		background: var(--color-surface);
+	}
+	.rates article {
+		padding: 2rem;
+	}
+	.rates article + article {
+		border-left: 1px solid var(--color-border);
+	}
+	.rates strong {
+		display: block;
+		font-size: clamp(3rem, 7vw, 5.5rem);
+		font-family: var(--font-serif);
+		font-weight: 500;
+		letter-spacing: -0.04em;
+		margin: 1.5rem 0;
+		color: var(--color-primary);
+	}
+	.rates p {
+		font-size: 1rem;
+		line-height: 1.6;
+		max-width: 36ch;
+	}
+	.rates h2 {
+		font-size: 1.25rem;
+	}
+	.calculator-section {
+		background: var(--color-surface-muted);
+		color: var(--color-foreground);
+		padding-block: 4rem;
+	}
+	.calculator-layout {
+		display: grid;
+		grid-template-columns: 0.8fr 1.2fr;
+		gap: clamp(2rem, 5vw, 5rem);
+		align-items: start;
+	}
+	.calculator-layout > div > h2 {
+		font-family: var(--font-serif);
+		font-size: clamp(2.5rem, 4vw, 4rem);
+		line-height: 1.07;
+		font-weight: 500;
+		letter-spacing: -0.03em;
+		margin: 1rem 0;
+	}
+	.calculator-layout > div > p {
+		line-height: 1.7;
+		color: var(--color-muted);
+	}
+	.inverse {
+		color: var(--color-muted);
+	}
+	.calculator {
+		background: var(--color-surface);
+		color: var(--color-foreground);
+		border-radius: 0.6rem;
+		padding: clamp(1.25rem, 4vw, 2rem);
+	}
+	.calculator label {
+		display: grid;
+		gap: 0.5rem;
+		font-weight: 650;
+	}
+	.calculator input:not([type='checkbox']):not([type='range']) {
+		box-sizing: border-box;
+		width: 100%;
+		min-height: 3.25rem;
+		padding: 0.8rem;
+		border: 1px solid var(--color-border);
+		border-radius: 0.35rem;
+		font: inherit;
+		background: var(--color-surface);
+	}
+	.calculator input[type='range'] {
+		width: 100%;
+		accent-color: var(--color-primary);
+	}
+	.calculator p {
+		font-size: 0.9rem;
+		color: var(--color-muted);
+		line-height: 1.6;
+	}
+	.calculator .check-label {
+		display: flex;
+		gap: 0.65rem;
+		align-items: center;
+		margin: 1.25rem 0;
+		line-height: 1.5;
+	}
+	.check-label input {
+		flex-shrink: 0;
+		width: 1.25rem;
+		height: 1.25rem;
+		min-height: 0;
+		accent-color: var(--color-primary);
+	}
+	.calculator summary,
+	.questions summary {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		min-height: 3rem;
+		cursor: pointer;
+		line-height: 1.5;
+	}
+	.calculator summary::after,
+	.questions summary::after {
+		content: '+';
+		color: var(--color-primary);
+	}
+	.calculator details[open] > summary::after,
+	.questions details[open] > summary::after {
+		content: '−';
+	}
+	.fee-example {
+		margin: 1.5rem 0 0;
+		border-top: 1px solid var(--color-border);
+	}
+	.fee-example > div {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1rem 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.fee-example dd {
+		font-weight: 750;
+		text-align: right;
+		margin: 0;
+		font-variant-numeric: tabular-nums;
+	}
+	.fee-example .total {
+		font-size: 1.05rem;
+		color: var(--color-primary-hover);
+	}
+	.scope-note {
+		margin-bottom: 0;
+	}
+	.validation,
+	.pricing-error {
+		padding: 1rem;
+		background: var(--color-surface-muted);
+		color: var(--color-warning) !important;
+		border: 1px solid var(--color-border);
+		border-radius: 0.35rem;
+	}
+	.pricing-error button {
+		padding: 0.6rem 1rem;
+		border: 1px solid currentColor;
+		background: transparent;
+	}
+	.questions {
+		padding-block: 4rem;
+		max-width: 56rem;
+	}
+	.questions h2 {
+		font-size: 2rem;
+		font-family: var(--font-serif);
+		font-weight: 500;
+	}
+	.questions details {
+		border-top: 1px solid var(--color-border);
+		padding: 0.6rem 0;
+	}
+	.questions p {
+		line-height: 1.7;
+		color: var(--color-muted);
+	}
+	.questions .primary {
+		margin-top: 2rem;
+	}
+	.questions summary {
+		font-weight: 650;
+	}
+	@media (max-width: 760px) {
+		.pricing-hero,
+		.calculator-layout {
+			grid-template-columns: 1fr;
+		}
+		.pricing-hero {
+			gap: 1rem;
+		}
+		.rates {
+			grid-template-columns: 1fr;
+		}
+		.rates article + article {
+			border-left: 0;
+			border-top: 1px solid var(--color-border);
+		}
+		.rates article {
+			padding: 1.5rem;
+		}
+		.calculator-section {
+			padding-block: 2.5rem;
+		}
+		.fee-example > div {
+			flex-wrap: wrap;
+		}
+		.fee-example dd {
+			margin-left: auto;
+		}
+	}
 </style>

@@ -3,6 +3,7 @@ package paymentclaims
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -133,15 +134,24 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (Claim, error) {
 }
 
 func (s *PostgresStore) ListForObligation(ctx context.Context, id string) []Claim {
-	items, _ := s.ReadForObligation(ctx, id)
+	items, err := s.ReadForObligation(ctx, id)
+	if err != nil {
+		panic(fmt.Errorf("paymentclaims: failed to read claims for obligation %s: %w", id, err))
+	}
 	return items
 }
 func (s *PostgresStore) ListForBuyer(ctx context.Context, id string) []Claim {
-	items, _ := s.ReadForBuyer(ctx, id)
+	items, err := s.ReadForBuyer(ctx, id)
+	if err != nil {
+		panic(fmt.Errorf("paymentclaims: failed to read claims for buyer %s: %w", id, err))
+	}
 	return items
 }
 func (s *PostgresStore) ListForSupplier(ctx context.Context, id string) []Claim {
-	items, _ := s.ReadForSupplier(ctx, id)
+	items, err := s.ReadForSupplier(ctx, id)
+	if err != nil {
+		panic(fmt.Errorf("paymentclaims: failed to read claims for supplier %s: %w", id, err))
+	}
 	return items
 }
 

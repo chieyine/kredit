@@ -1,15 +1,85 @@
 <script lang="ts">
- import PublishedLegalDocument from '$lib/components/PublishedLegalDocument.svelte';
- let { data } = $props();
- import DocumentLayout from '$lib/components/DocumentLayout.svelte';
- const sections = [{id:'contact',title:'Contact us'},{id:'details',title:'What to include'},{id:'review',title:'How we handle complaints'},{id:'payments',title:'Payment disputes'},{id:'escalation',title:'Review and escalation'}];
+	import PublishedLegalDocument from '$lib/components/PublishedLegalDocument.svelte';
+	let { data } = $props();
+	import DocumentLayout from '$lib/components/DocumentLayout.svelte';
+	const sections = [
+		{ id: 'contact', title: 'Contact us' },
+		{ id: 'details', title: 'What to include' },
+		{ id: 'review', title: 'How we handle complaints' },
+		{ id: 'payments', title: 'Payment disputes' },
+		{ id: 'escalation', title: 'Review and escalation' }
+	];
 </script>
-{#if data.publication}<PublishedLegalDocument publication={data.publication}/>{:else}
-<DocumentLayout title="Complaints" description="Tell Kredit about a problem with your account, a sale or a payment, what to include, and how to request a review." version={data.legal.complaintsVersion} effectiveDate={data.legal.effectiveDate} {sections}>
- <section id="contact"><h2>Contact us</h2><p>Email <a href={`mailto:${data.legal.legalEmail}`}>{data.legal.legalEmail}</a>. You can raise a complaint without signing in, including if you have lost account access.</p><p>Write to {data.legal.entityName} ({data.legal.registrationNumber}), {data.legal.serviceAddress}.</p><p>For an existing transaction, use the dispute controls in your <a href="/workspace/purchases/disputes">buyer account</a> or <a href="/workspace/disputes">supplier account</a> to attach the concern to its record.</p></section>
- <section id="details"><h2>What to include</h2><p>Include your contact details, the sale or payment reference, relevant dates and amounts, a description of the problem and the outcome you are seeking. Relevant receipts or delivery evidence can help us investigate.</p><p>Do not send sign-in codes, recovery codes, bank PINs or full card details. We may verify your identity before discussing private account information.</p></section>
- <section id="review"><h2>How we handle complaints</h2><p>We review the concern, request any missing information and explain the outcome and available next steps. Keep the case or transaction reference for follow-up. If more investigation is needed, we will explain what remains outstanding.</p><p>We handle complaint information according to our <a href="/legal/privacy">privacy notice</a>. Relevant records may be retained for dispute resolution, fraud prevention and applicable legal obligations.</p></section>
- <section id="payments"><h2>Payment disputes</h2><p>Reporting a transfer does not confirm that the supplier received it. A supplier must verify receipt before confirming payment. If a payment result is uncertain, retain the original reference and check its status before attempting another payment.</p><p>A recorded dispute may pause collection of the affected amount according to the agreement and the dispute's recorded effect. A debit already submitted may still complete. A complaint does not automatically cancel the sale or an undisputed balance.</p></section>
- <section id="escalation"><h2>Review and escalation</h2><p>If you disagree with the outcome, reply with the reference, explain the point that remains unresolved and provide any further evidence. You may request a further review.</p><p>For privacy concerns, you may also complain to the <a href="https://www.ndpc.gov.ng/" rel="noreferrer">Nigeria Data Protection Commission</a>. This process does not restrict your right to seek a remedy from a competent court or relevant regulator.</p></section>
-</DocumentLayout>
+
+{#if data.publication}<PublishedLegalDocument publication={data.publication} />{:else}
+	<DocumentLayout
+		title="Complaints"
+		description="Tell Kredit about a problem with your account, a sale or a payment, what to include, and how to request a review."
+		version={data.legal.complaintsVersion}
+		effectiveDate={data.legal.effectiveDate}
+		{sections}
+	>
+		<section id="contact">
+			<h2>Contact us</h2>
+			<p>
+				Email <a href={`mailto:${data.legal.legalEmail}`}>{data.legal.legalEmail}</a>. You can raise a complaint without
+				signing in, including if you have lost account access.
+			</p>
+			<p>Write to {data.legal.entityName} ({data.legal.registrationNumber}), {data.legal.serviceAddress}.</p>
+			<p>
+				For an existing transaction, use the dispute controls in your <a href="/workspace/purchases/disputes"
+					>buyer account</a
+				>
+				or <a href="/workspace/disputes">supplier account</a> to attach the concern to its record.
+			</p>
+		</section>
+		<section id="details">
+			<h2>What to include</h2>
+			<p>
+				Include your contact details, the sale or payment reference, relevant dates and amounts, a description of the
+				problem and the outcome you are seeking. Relevant receipts or delivery evidence can help us investigate.
+			</p>
+			<p>
+				Do not send sign-in codes, recovery codes, bank PINs or full card details. We may verify your identity before
+				discussing private account information.
+			</p>
+		</section>
+		<section id="review">
+			<h2>How we handle complaints</h2>
+			<p>
+				We review the concern, request any missing information and explain the outcome and available next steps. Keep
+				the case or transaction reference for follow-up. If more investigation is needed, we will explain what remains
+				outstanding.
+			</p>
+			<p>
+				We handle complaint information according to our <a href="/legal/privacy">privacy notice</a>. Relevant records
+				may be retained for dispute resolution, fraud prevention and applicable legal obligations.
+			</p>
+		</section>
+		<section id="payments">
+			<h2>Payment disputes</h2>
+			<p>
+				Reporting a transfer does not confirm that the supplier received it. A supplier must verify receipt before
+				confirming payment. If a payment result is uncertain, retain the original reference and check its status before
+				attempting another payment.
+			</p>
+			<p>
+				A recorded dispute may pause collection of the affected amount according to the agreement and the dispute's
+				recorded effect. A debit already submitted may still complete. A complaint does not automatically cancel the
+				sale or an undisputed balance.
+			</p>
+		</section>
+		<section id="escalation">
+			<h2>Review and escalation</h2>
+			<p>
+				If you disagree with the outcome, reply with the reference, explain the point that remains unresolved and
+				provide any further evidence. You may request a further review.
+			</p>
+			<p>
+				For privacy concerns, you may also complain to the <a href="https://www.ndpc.gov.ng/" rel="noreferrer"
+					>Nigeria Data Protection Commission</a
+				>. This process does not restrict your right to seek a remedy from a competent court or relevant regulator.
+			</p>
+		</section>
+	</DocumentLayout>
 {/if}

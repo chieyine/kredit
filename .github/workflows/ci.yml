@@ -30,8 +30,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: .go-version
           cache: true
@@ -76,7 +76,7 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
           go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
           go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.4.0
-      - uses: aquasecurity/setup-trivy@v0.2.6
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
           version: v0.74.0
           cache: true
@@ -129,7 +129,7 @@ jobs:
           docker build -f infra/containers/Dockerfile.web -t kredit-web:${{ github.sha }} .
       - name: Preserve synthetic regression evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: regression-evidence-${{ github.sha }}
           path: |

@@ -17,12 +17,18 @@
 	<div class="site-menu">
 		<div class="nav-links">
 			{#each links as [label, href] (href)}
-				<a class:active={page.url.pathname === href} aria-current={page.url.pathname === href ? 'page' : undefined} {href} onclick={closeMobileMenu}>{label}</a>
+				<a
+					class:active={page.url.pathname === href}
+					aria-current={page.url.pathname === href ? 'page' : undefined}
+					{href}
+					onclick={closeMobileMenu}>{label}</a
+				>
 			{/each}
 		</div>
 		<div class="nav-actions">
 			<a href="/start" onclick={closeMobileMenu}>Open Kredit</a>
-			<a class="header-cta" href="/demo" onclick={closeMobileMenu}>Explore the demo <span aria-hidden="true">↗</span></a>
+			<a class="header-cta" href="/demo" onclick={closeMobileMenu}>Explore the demo <span aria-hidden="true">↗</span></a
+			>
 		</div>
 	</div>
 {/snippet}
@@ -39,10 +45,18 @@
 </header>
 
 <style>
-	.desktop-site-menu { flex: 1; }
-	.site-menu-disclosure { display: none; }
+	.desktop-site-menu {
+		flex: 1;
+	}
+	.site-menu-disclosure {
+		display: none;
+	}
 	@media (max-width: 720px) {
-		.desktop-site-menu { display: none; }
-		.site-menu-disclosure { display: block; }
+		.desktop-site-menu {
+			display: none;
+		}
+		.site-menu-disclosure {
+			display: block;
+		}
 	}
 </style>

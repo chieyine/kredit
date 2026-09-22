@@ -9,7 +9,9 @@ export default defineConfig({
 		},
 		proxy: {
 			'/api': {
-				target: (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.API_INTERNAL_URL ?? 'http://localhost:8080',
+				target:
+					(globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.API_INTERNAL_URL ??
+					'http://localhost:8080',
 				changeOrigin: false
 			}
 		}

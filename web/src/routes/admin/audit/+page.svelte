@@ -41,8 +41,12 @@
 		const needle = query.trim().toLowerCase();
 		if (!needle) return events;
 		return events.filter((event) =>
-			[event.action, event.resource_type, event.resource_id, event.outcome, event.actor_user_id, event.request_id]
-				.some((value) => String(value ?? '').toLowerCase().includes(needle))
+			[event.action, event.resource_type, event.resource_id, event.outcome, event.actor_user_id, event.request_id].some(
+				(value) =>
+					String(value ?? '')
+						.toLowerCase()
+						.includes(needle)
+			)
 		);
 	});
 
@@ -53,11 +57,15 @@
 		try {
 			const path = '/api/v1/ops/audit';
 			const scope = organizationID.trim();
-			const result = await checkedJSON(scope ? `${path}?organization_id=${encodeURIComponent(scope)}` : path, rows('events', value => {
-				const item = record(value);
-				for (const key of ['id', 'occurred_at', 'action', 'resource_type', 'outcome', 'severity']) text(item[key]);
-				return item as AuditEvent;
-			}), { signal: request.signal });
+			const result = await checkedJSON(
+				scope ? `${path}?organization_id=${encodeURIComponent(scope)}` : path,
+				rows('events', (value) => {
+					const item = record(value);
+					for (const key of ['id', 'occurred_at', 'action', 'resource_type', 'outcome', 'severity']) text(item[key]);
+					return item as AuditEvent;
+				}),
+				{ signal: request.signal }
+			);
 			if (request.current()) events = result;
 		} catch (cause) {
 			// An audit trail that renders an outage as an empty list is worse than
@@ -71,7 +79,10 @@
 		}
 	}
 
-	onMount(() => { void load(); return () => requests.cancel(); });
+	onMount(() => {
+		void load();
+		return () => requests.cancel();
+	});
 </script>
 
 <svelte:head><title>Audit trail — Kredit admin</title></svelte:head>
@@ -81,12 +92,21 @@
 		<div>
 			<p class="eyebrow">Admin / Audit</p>
 			<h1>Audit trail</h1>
-			<p class="lede">Who did what, to which record, and whether it worked. Entries can be added but never changed or removed.</p>
+			<p class="lede">
+				Who did what, to which record, and whether it worked. Entries can be added but never changed or removed.
+			</p>
 		</div>
 	</header>
 
-	<form class="filters" onsubmit={(event) => { event.preventDefault(); load(); }}>
-		<label>Business <small>optional</small><input bind:value={organizationID} placeholder="Business reference" /></label>
+	<form
+		class="filters"
+		onsubmit={(event) => {
+			event.preventDefault();
+			load();
+		}}
+	>
+		<label>Business <small>optional</small><input bind:value={organizationID} placeholder="Business reference" /></label
+		>
 		<label class="find">Find<input type="search" bind:value={query} placeholder="Action, record or reference" /></label>
 		<button disabled={loading}>{loading ? 'Opening…' : 'Apply'}</button>
 	</form>
@@ -98,7 +118,11 @@
 	{:else if !visible.length}
 		<section class="empty">
 			<h2>{events.length ? 'Nothing matches that' : 'No entries yet'}</h2>
-			<p>{events.length ? 'Try a different action, record or reference.' : 'Account and money actions appear here as they happen.'}</p>
+			<p>
+				{events.length
+					? 'Try a different action, record or reference.'
+					: 'Account and money actions appear here as they happen.'}
+			</p>
 		</section>
 	{:else}
 		<p class="count" aria-live="polite">{visible.length} entr{visible.length === 1 ? 'y' : 'ies'}</p>
@@ -106,7 +130,11 @@
 			<table>
 				<caption class="sr-only">Audit entries, newest first</caption>
 				<thead>
-					<tr><th scope="col">When</th><th scope="col">What happened</th><th scope="col">Record</th><th scope="col">Result</th></tr>
+					<tr
+						><th scope="col">When</th><th scope="col">What happened</th><th scope="col">Record</th><th scope="col"
+							>Result</th
+						></tr
+					>
 				</thead>
 				<tbody>
 					{#each visible as event (event.id)}
@@ -118,12 +146,21 @@
 							</td>
 							<td>
 								<span>{event.resource_type.replaceAll('_', ' ')}</span>
-								{#if event.resource_id}<details><summary>Reference</summary><code>{event.resource_id}</code></details>{/if}
+								{#if event.resource_id}<details>
+										<summary>Reference</summary><code>{event.resource_id}</code>
+									</details>{/if}
 							</td>
 							<td>
-								<span class="outcome">{event.outcome === 'success' ? 'Done' : event.outcome === 'denied' ? 'Refused' : event.outcome.replaceAll('_', ' ')}</span>
+								<span class="outcome"
+									>{event.outcome === 'success'
+										? 'Done'
+										: event.outcome === 'denied'
+											? 'Refused'
+											: event.outcome.replaceAll('_', ' ')}</span
+								>
 								{#if event.actor_user_id || event.request_id}
-									<details><summary>Who and when</summary>
+									<details>
+										<summary>Who and when</summary>
 										{#if event.actor_user_id}<p>Person <code>{event.actor_user_id}</code></p>{/if}
 										{#if event.request_id}<p>Request <code>{event.request_id}</code></p>{/if}
 									</details>
@@ -138,30 +175,137 @@
 </main>
 
 <style>
-	.audit > header { padding: 2rem 0 1.5rem; border-bottom: 1px solid var(--color-border); }
-	.audit h1 { margin: .35rem 0; font-size: 1.9rem; line-height: 1.2; }
-	.lede { max-width: 60ch; color: var(--color-muted); line-height: 1.6; }
-	.filters { display: flex; align-items: end; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; }
-	.filters label { display: grid; gap: .35rem; font-weight: 650; }
-	.filters .find { flex: 1; min-width: min(100%, 16rem); }
-	.filters input { box-sizing: border-box; width: 100%; min-height: 3rem; padding: .7rem; border: 1px solid var(--color-border); background: var(--color-surface); font: inherit; }
-	.filters button { min-height: 3rem; padding: .7rem 1.1rem; border: 1px solid var(--color-primary); background: var(--color-primary); color:var(--color-on-primary); font: inherit; font-weight: 700; }
-	.count { color: var(--color-muted); }
-	.table-wrap { overflow-x: auto; }
-	table { width: 100%; border-collapse: collapse; }
-	th, td { padding: .8rem .75rem; border-bottom: 1px solid var(--color-border); text-align: left; vertical-align: top; }
-	th { background: var(--color-surface-muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
-	td time { white-space: nowrap; font-variant-numeric: tabular-nums; }
-	td small { display: block; color: var(--color-muted); }
-	.outcome { font-weight: 700; }
-	tr.failed .outcome { color: var(--color-destructive); }
-	tr.warned .outcome { color: var(--color-warning); }
-	details { margin-top: .35rem; }
-	summary { min-height: 2.25rem; display: flex; align-items: center; color: var(--color-primary); cursor: pointer; font-size: .88rem; }
-	code { overflow-wrap: anywhere; font-size: .82rem; }
-	.empty { padding: 2rem; border: 1px dashed var(--color-border); }
-	.empty h2 { margin: 0 0 .4rem; font-size: 1.15rem; }
-	.error { padding: 1rem; border-left: 3px solid var(--color-destructive); background:var(--color-background); line-height: 1.6; }
-	.error button { margin-left: .5rem; padding: .45rem .75rem; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; }
-	@media (max-width: 640px) { .filters label { width: 100%; } .filters button { width: 100%; } }
+	.audit > header {
+		padding: 2rem 0 1.5rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.audit h1 {
+		margin: 0.35rem 0;
+		font-size: 1.9rem;
+		line-height: 1.2;
+	}
+	.lede {
+		max-width: 60ch;
+		color: var(--color-muted);
+		line-height: 1.6;
+	}
+	.filters {
+		display: flex;
+		align-items: end;
+		flex-wrap: wrap;
+		gap: 1rem;
+		margin: 1.5rem 0;
+	}
+	.filters label {
+		display: grid;
+		gap: 0.35rem;
+		font-weight: 650;
+	}
+	.filters .find {
+		flex: 1;
+		min-width: min(100%, 16rem);
+	}
+	.filters input {
+		box-sizing: border-box;
+		width: 100%;
+		min-height: 3rem;
+		padding: 0.7rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		font: inherit;
+	}
+	.filters button {
+		min-height: 3rem;
+		padding: 0.7rem 1.1rem;
+		border: 1px solid var(--color-primary);
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		font: inherit;
+		font-weight: 700;
+	}
+	.count {
+		color: var(--color-muted);
+	}
+	.table-wrap {
+		overflow-x: auto;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+	th,
+	td {
+		padding: 0.8rem 0.75rem;
+		border-bottom: 1px solid var(--color-border);
+		text-align: left;
+		vertical-align: top;
+	}
+	th {
+		background: var(--color-surface-muted);
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	td time {
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+	td small {
+		display: block;
+		color: var(--color-muted);
+	}
+	.outcome {
+		font-weight: 700;
+	}
+	tr.failed .outcome {
+		color: var(--color-destructive);
+	}
+	tr.warned .outcome {
+		color: var(--color-warning);
+	}
+	details {
+		margin-top: 0.35rem;
+	}
+	summary {
+		min-height: 2.25rem;
+		display: flex;
+		align-items: center;
+		color: var(--color-primary);
+		cursor: pointer;
+		font-size: 0.88rem;
+	}
+	code {
+		overflow-wrap: anywhere;
+		font-size: 0.82rem;
+	}
+	.empty {
+		padding: 2rem;
+		border: 1px dashed var(--color-border);
+	}
+	.empty h2 {
+		margin: 0 0 0.4rem;
+		font-size: 1.15rem;
+	}
+	.error {
+		padding: 1rem;
+		border-left: 3px solid var(--color-destructive);
+		background: var(--color-background);
+		line-height: 1.6;
+	}
+	.error button {
+		margin-left: 0.5rem;
+		padding: 0.45rem 0.75rem;
+		border: 1px solid currentColor;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+	}
+	@media (max-width: 640px) {
+		.filters label {
+			width: 100%;
+		}
+		.filters button {
+			width: 100%;
+		}
+	}
 </style>

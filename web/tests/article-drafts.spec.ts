@@ -1,10 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { draftGuideSlugs, validateArticleSlugs } from '../src/lib/blog/articles';
 
-const expectedDraftSlugs = [
-	'net-7-net-14-net-30-payment-terms',
-	'invoice-vs-receipt-vs-statement'
-];
+const expectedDraftSlugs = ['net-7-net-14-net-30-payment-terms', 'invoice-vs-receipt-vs-statement'];
 
 test('article slug validation rejects malformed and duplicate slugs', () => {
 	expect(() => validateArticleSlugs(['valid-article', 'valid-article'])).toThrow(/Duplicate article slug/);

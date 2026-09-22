@@ -1,65 +1,53 @@
 <script lang="ts">
 	import RetainedAccounts from '$lib/components/RetainedAccounts.svelte';
- import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
+	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import OwnerDialog from '$lib/components/OwnerDialog.svelte';
+	import PlatformSettingHistory from '$lib/components/PlatformSettingHistory.svelte';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { record, text } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
 	import { adminGet, localTime } from '$lib/admin-client';
 
-	type Setting = {
-		key: string;
-        is_secret?: boolean;
-        connection_state?: string;
-        requires_restart?: boolean;
-        applied_version?: number;
-        connection_fields?: {key:string;label:string;kind:string}[];
-        connection_values?: Record<string,string|number|boolean>;
-		category: string;
-		value: any;
-		description: string;
-		version: number;
-		updated_at: string;
-		updated_by?: string;
-		reason?: string;
-	};
+	import type { Setting, Governance, SettingHistory } from '$lib/admin/platform-settings';
 
-	type Governance = {
-		mode: 'solo_owner' | 'delegated_team';
-		updated_at: string;
-		updated_by?: string;
-		reason: string;
-	};
-
-	type SettingHistory = {
-		id: string;
-		key: string;
-		old_value?: any;
-		new_value: any;
-		version: number;
-		action: string;
-		actor_id?: string;
-		reason: string;
-		recorded_at: string;
-	};
-
- const categories = [{ id: 'all', label: 'All settings' }, { id: 'features', label: 'Features' }, { id: 'integrations', label: 'Connections' }];
- let clearRuntimeSecrets = $state(false);
- let runtimeDraft = $state<Record<string,string|number|boolean>>({});
- let connectorEnabled = $state(true);
- let requestedConnectionOpened=false;
- let connectorAdapter = $state('');
- let connectorEndpoint = $state('');
- let connectorToken = $state('');
- let connectorFrom = $state('');
- let connectorWebhookSecret = $state('');
- let metaVerifyToken=$state(''),metaLanguage=$state('en_US'),metaAuthentication=$state(''),metaUtility=$state(''),metaMarketing=$state('');
- function clearConnector() { metaVerifyToken='';metaLanguage='en_US';metaAuthentication='';metaUtility='';metaMarketing=''; connectorAdapter = '';  connectorEndpoint = ''; connectorToken = ''; connectorFrom = ''; connectorWebhookSecret = ''; runtimeDraft = {}; clearRuntimeSecrets=false; }
+	const categories = [
+		{ id: 'all', label: 'All settings' },
+		{ id: 'features', label: 'Features' },
+		{ id: 'integrations', label: 'Connections' }
+	];
+	let clearRuntimeSecrets = $state(false);
+	let runtimeDraft = $state<Record<string, string | number | boolean>>({});
+	let connectorEnabled = $state(true);
+	let requestedConnectionOpened = false;
+	let connectorAdapter = $state('');
+	let connectorEndpoint = $state('');
+	let connectorToken = $state('');
+	let connectorFrom = $state('');
+	let connectorWebhookSecret = $state('');
+	let metaVerifyToken = $state(''),
+		metaLanguage = $state('en_US'),
+		metaAuthentication = $state(''),
+		metaUtility = $state(''),
+		metaMarketing = $state('');
+	function clearConnector() {
+		metaVerifyToken = '';
+		metaLanguage = 'en_US';
+		metaAuthentication = '';
+		metaUtility = '';
+		metaMarketing = '';
+		connectorAdapter = '';
+		connectorEndpoint = '';
+		connectorToken = '';
+		connectorFrom = '';
+		connectorWebhookSecret = '';
+		runtimeDraft = {};
+		clearRuntimeSecrets = false;
+	}
 
 	let settingIntent: MutationIntent | null = null;
- let governanceIntent: MutationIntent | null = null;
- let transferIntent: MutationIntent | null = null;
- let settings: Setting[] = $state([]);
+	let governanceIntent: MutationIntent | null = null;
+	let transferIntent: MutationIntent | null = null;
+	let settings: Setting[] = $state([]);
 	let governance: Governance | null = $state(null);
 	let selectedCategory = $state('all');
 	let searchQuery = $state('');
@@ -87,15 +75,15 @@
 	let historySettingKey: string | null = $state(null);
 	let historyEntries: SettingHistory[] = $state([]);
 	let historyLoading = $state(false);
-    let historyGeneration = 0;
-    let historyError = $state('');
+	let historyGeneration = 0;
+	let historyError = $state('');
 
 	let governanceModal = $state(false);
 	let newGovMode: 'solo_owner' | 'delegated_team' = $state('solo_owner');
 	let govReason = $state('');
 
 	let filteredSettings = $derived.by(() => {
-		return settings.filter(s => {
+		return settings.filter((s) => {
 			const matchCat = selectedCategory === 'all' || s.category === selectedCategory;
 			const q = searchQuery.toLowerCase().trim();
 			const matchQuery = !q || s.key.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
@@ -106,38 +94,59 @@
 	async function load() {
 		loading = true;
 		error = '';
-        governance = null; isOwner = false; settings = [];
+		governance = null;
+		isOwner = false;
+		settings = [];
 		try {
 			const [caps, res] = await Promise.all([
 				adminGet('/api/v1/ops/capabilities'),
 				adminGet('/api/v1/ops/platform-settings')
 			]);
-			if(!Array.isArray(caps.roles)||caps.roles.some((role:unknown)=>typeof role!=='string'))throw new Error('Admin permissions could not be verified.');
+			if (!Array.isArray(caps.roles) || caps.roles.some((role: unknown) => typeof role !== 'string'))
+				throw new Error('Admin permissions could not be verified.');
 			isOwner = caps.roles.includes('platform_owner');
-			if (!Array.isArray(res.settings) || !['solo_owner', 'delegated_team'].includes(res.governance?.mode)) throw new Error('Settings and approval rules could not be verified. Try again.');
-            const keys=new Set<string>();
-            settings = res.settings.map((value:unknown)=>{
-             const item=record(value);
-             for(const key of ['key','description','category'])text(item[key]);
-             if(keys.has(item.key as string)||!Number.isSafeInteger(item.version)||Number(item.version)<0||!('value' in item))throw new Error('Settings could not be verified.');
-             keys.add(item.key as string);
-             if(item.requires_restart){
-              if(!Array.isArray(item.connection_fields))throw new Error('Connection fields unavailable.');
-              for(const value of item.connection_fields){const field=record(value);text(field.key);text(field.label);if(!['password','boolean','number','url','text','retained'].includes(text(field.kind)))throw new Error('Unsupported connection field.');}
-             }
-             return item as Setting;
-            });
-            if(!requestedConnectionOpened){
-             const requested=new URL(window.location.href).searchParams.get('connection');
-             const target=settings.find(item=>item.key===requested);
-             if(target&&isOwner){requestedConnectionOpened=true;openEdit(target)}
-            }
+			if (!Array.isArray(res.settings) || !['solo_owner', 'delegated_team'].includes(res.governance?.mode))
+				throw new Error('Settings and approval rules could not be verified. Try again.');
+			const keys = new Set<string>();
+			settings = res.settings.map((value: unknown) => {
+				const item = record(value);
+				for (const key of ['key', 'description', 'category']) text(item[key]);
+				if (
+					keys.has(item.key as string) ||
+					!Number.isSafeInteger(item.version) ||
+					Number(item.version) < 0 ||
+					!('value' in item)
+				)
+					throw new Error('Settings could not be verified.');
+				keys.add(item.key as string);
+				if (item.requires_restart) {
+					if (!Array.isArray(item.connection_fields)) throw new Error('Connection fields unavailable.');
+					for (const value of item.connection_fields) {
+						const field = record(value);
+						text(field.key);
+						text(field.label);
+						if (!['password', 'boolean', 'number', 'url', 'text', 'retained'].includes(text(field.kind)))
+							throw new Error('Unsupported connection field.');
+					}
+				}
+				return item as Setting;
+			});
+			if (!requestedConnectionOpened) {
+				const requested = new URL(window.location.href).searchParams.get('connection');
+				const target = settings.find((item) => item.key === requested);
+				if (target && isOwner) {
+					requestedConnectionOpened = true;
+					openEdit(target);
+				}
+			}
 			if (res.governance) {
 				governance = res.governance;
 				newGovMode = res.governance?.mode;
 			}
 		} catch (e: any) {
-			governance=null;isOwner=false;settings=[];
+			governance = null;
+			isOwner = false;
+			settings = [];
 			error = e.message || 'We could not open the settings. Try again.';
 		} finally {
 			loading = false;
@@ -146,9 +155,20 @@
 
 	function openEdit(setting: Setting) {
 		editingSetting = setting;
-        settingIntent = new MutationIntent(`platform-setting:${setting.key}`, '/api/v1/ops/platform-settings');
-        clearConnector(); connectorEnabled = true;
-        if(setting.requires_restart){runtimeDraft=Object.fromEntries((setting.connection_fields||[]).map(field=>[field.key,field.kind==='password'?'':setting.connection_values?.[field.key]??(field.kind==='boolean'?false:field.kind==='number'?0:'')]))}
+		settingIntent = new MutationIntent(`platform-setting:${setting.key}`, '/api/v1/ops/platform-settings');
+		clearConnector();
+		connectorEnabled = true;
+		if (setting.requires_restart) {
+			runtimeDraft = Object.fromEntries(
+				(setting.connection_fields || []).map((field) => [
+					field.key,
+					field.kind === 'password'
+						? ''
+						: (setting.connection_values?.[field.key] ??
+							(field.kind === 'boolean' ? false : field.kind === 'number' ? 0 : ''))
+				])
+			);
+		}
 		editDraftValue = JSON.parse(JSON.stringify(setting.value));
 		editReason = '';
 		previewDiffModal = true;
@@ -156,21 +176,51 @@
 
 	async function submitSettingUpdate() {
 		if (!editingSetting || !settingIntent || busy) return;
-		const expectedSetting=editingSetting;
+		const expectedSetting = editingSetting;
 		busy = true;
 		error = '';
 		message = '';
 		try {
-			await settingIntent.run({
-				key: editingSetting.key,
-                clear_credentials: editingSetting.requires_restart && clearRuntimeSecrets,
- expected_version: editingSetting.version,
-				value: editingSetting.requires_restart ? JSON.stringify(runtimeDraft) : editingSetting.is_secret ? JSON.stringify({ adapter: connectorAdapter, verify_token: connectorEnabled?metaVerifyToken.trim():"",language:metaLanguage.trim(),authentication_template:metaAuthentication.trim(),utility_template:metaUtility.trim(),marketing_template:metaMarketing.trim(), enabled: connectorEnabled, endpoint: connectorEnabled ? connectorEndpoint.trim() : "", token: connectorEnabled ? connectorToken.trim() : "", from: connectorEnabled ? connectorFrom.trim() : "", webhook_secret: connectorEnabled ? connectorWebhookSecret.trim() : "" }) : editDraftValue,
-				reason: editReason
-			}, value => {const item=record(record(value).setting);if(item.key!==expectedSetting.key||!Number.isSafeInteger(item.version)||Number(item.version)<=expectedSetting.version)throw new Error('Setting save was not confirmed');return item;});
-			message = editingSetting.requires_restart ? 'Connection saved. Check Launch setup for application status; live operation still needs confirmation.' : `${editingSetting.description} — saved.`;
+			await settingIntent.run(
+				{
+					key: editingSetting.key,
+					clear_credentials: editingSetting.requires_restart && clearRuntimeSecrets,
+					expected_version: editingSetting.version,
+					value: editingSetting.requires_restart
+						? JSON.stringify(runtimeDraft)
+						: editingSetting.is_secret
+							? JSON.stringify({
+									adapter: connectorAdapter,
+									verify_token: connectorEnabled ? metaVerifyToken.trim() : '',
+									language: metaLanguage.trim(),
+									authentication_template: metaAuthentication.trim(),
+									utility_template: metaUtility.trim(),
+									marketing_template: metaMarketing.trim(),
+									enabled: connectorEnabled,
+									endpoint: connectorEnabled ? connectorEndpoint.trim() : '',
+									token: connectorEnabled ? connectorToken.trim() : '',
+									from: connectorEnabled ? connectorFrom.trim() : '',
+									webhook_secret: connectorEnabled ? connectorWebhookSecret.trim() : ''
+								})
+							: editDraftValue,
+					reason: editReason
+				},
+				(value) => {
+					const item = record(record(value).setting);
+					if (
+						item.key !== expectedSetting.key ||
+						!Number.isSafeInteger(item.version) ||
+						Number(item.version) <= expectedSetting.version
+					)
+						throw new Error('Setting save was not confirmed');
+					return item;
+				}
+			);
+			message = editingSetting.requires_restart
+				? 'Connection saved. Check Launch setup for application status; live operation still needs confirmation.'
+				: `${editingSetting.description} — saved.`;
 			previewDiffModal = false;
-            clearConnector();
+			clearConnector();
 			editingSetting = null;
 			await load();
 		} catch (e: any) {
@@ -180,36 +230,47 @@
 		}
 	}
 
-
 	async function openHistory(key: string) {
-        const generation = ++historyGeneration;
+		const generation = ++historyGeneration;
 		historySettingKey = key;
 		historyLoading = true;
-		historyEntries = []; historyError = '';
+		historyEntries = [];
+		historyError = '';
 		try {
 			const res = await adminGet(`/api/v1/ops/platform-settings/history?key=${encodeURIComponent(key)}`);
 			if (generation !== historyGeneration || historySettingKey !== key) return;
 			if (!Array.isArray(res.history)) throw new Error('History could not be verified.');
-            historyEntries = res.history;
+			historyEntries = res.history;
 		} catch (e: any) {
-			if (generation === historyGeneration && historySettingKey === key) historyError = e.message || 'We could not open the history for this setting.';
+			if (generation === historyGeneration && historySettingKey === key)
+				historyError = e.message || 'We could not open the history for this setting.';
 		} finally {
 			if (generation === historyGeneration) historyLoading = false;
 		}
 	}
 
 	async function submitGovernanceChange() {
-        if (busy) return;
+		if (busy) return;
 		busy = true;
 		error = '';
 		message = '';
 		try {
-			governanceIntent ??= new MutationIntent('platform-governance','/api/v1/ops/governance');
-			await governanceIntent.run({
-				mode: newGovMode,
-				reason: govReason
-			},value=>{const gov=record(record(value).governance);if(gov.mode!==newGovMode)throw new Error('Approval rule change was not confirmed');return gov;});
-			message = newGovMode === 'solo_owner' ? 'You can now approve your own changes.' : 'Changes now need a second administrator.';
+			governanceIntent ??= new MutationIntent('platform-governance', '/api/v1/ops/governance');
+			await governanceIntent.run(
+				{
+					mode: newGovMode,
+					reason: govReason
+				},
+				(value) => {
+					const gov = record(record(value).governance);
+					if (gov.mode !== newGovMode) throw new Error('Approval rule change was not confirmed');
+					return gov;
+				}
+			);
+			message =
+				newGovMode === 'solo_owner'
+					? 'You can now approve your own changes.'
+					: 'Changes now need a second administrator.';
 			governanceModal = false;
 			govReason = '';
 			await load();
@@ -226,18 +287,26 @@
 	let transferConfirmed = $state(false);
 
 	async function submitTransferOwnership() {
-        if (busy) return;
+		if (busy) return;
 		const targetUserId = transferTargetUserId.trim().toLowerCase();
 		busy = true;
 		error = '';
 		message = '';
 		try {
-			transferIntent ??= new MutationIntent('platform-transfer','/api/v1/ops/ownership/transfer');
-			await transferIntent.run({
-				target_user_id: targetUserId,
-				reason: transferReason,
-				confirm: transferConfirmed
-			},value=>{const result=record(value);if(result.transferred!==true||result.new_owner_user_id!==targetUserId)throw new Error('Ownership transfer was not confirmed');return result;});
+			transferIntent ??= new MutationIntent('platform-transfer', '/api/v1/ops/ownership/transfer');
+			await transferIntent.run(
+				{
+					target_user_id: targetUserId,
+					reason: transferReason,
+					confirm: transferConfirmed
+				},
+				(value) => {
+					const result = record(value);
+					if (result.transferred !== true || result.new_owner_user_id !== targetUserId)
+						throw new Error('Ownership transfer was not confirmed');
+					return result;
+				}
+			);
 			message = 'Ownership handed over.';
 			transferModal = false;
 			transferTargetUserId = '';
@@ -267,11 +336,31 @@
 		<div class="gov-pill-container">
 			<div class="gov-badge {governance?.mode}">
 				<span class="dot"></span>
-				<strong>{!governance ? 'Approval rules unavailable' : governance.mode === 'solo_owner' ? 'Solo owner' : 'Delegated team'}</strong>
+				<strong
+					>{!governance
+						? 'Approval rules unavailable'
+						: governance.mode === 'solo_owner'
+							? 'Solo owner'
+							: 'Delegated team'}</strong
+				>
 			</div>
 			{#if isOwner}
-				<button class="small-btn" onclick={() => { governanceModal = true; govReason = ''; }}>Change this</button>
-				<button class="small-btn danger" onclick={() => { transferModal = true; transferReason = ''; transferConfirmed = false; transferTargetUserId = ''; }}>Hand over ownership</button>
+				<button
+					class="small-btn"
+					onclick={() => {
+						governanceModal = true;
+						govReason = '';
+					}}>Change this</button
+				>
+				<button
+					class="small-btn danger"
+					onclick={() => {
+						transferModal = true;
+						transferReason = '';
+						transferConfirmed = false;
+						transferTargetUserId = '';
+					}}>Hand over ownership</button
+				>
 			{/if}
 		</div>
 	</div>
@@ -279,26 +368,28 @@
 	<VerifyIdentity />
 
 	<p class="subhead">
-		Manage product features and provider connections. Every change needs a fresh authenticator code and a reason, and the history cannot be edited afterwards.
+		Manage product features and provider connections. Every change needs a fresh authenticator code and a reason, and
+		the history cannot be edited afterwards.
 	</p>
 
 	{#if error}<p role="alert" class="alert error">{error}</p>{/if}
 	{#if message}<p role="status" class="alert success">{message}</p>{/if}
 
 	{#if governance}<div class="banner banner-info">
-		<div class="banner-title">
-			<strong>{governance?.mode === 'solo_owner' ? 'You run Kredit alone' : 'Changes need a second person'}</strong>
+			<div class="banner-title">
+				<strong>{governance?.mode === 'solo_owner' ? 'You run Kredit alone' : 'Changes need a second person'}</strong>
+			</div>
+			<p>
+				{#if governance?.mode === 'solo_owner'}
+					You can approve your own financial and business-policy proposals. Each approval needs a fresh authenticator
+					code and a written reason. Platform settings and provider connections are managed directly by the owner.
+				{:else}
+					Financial and business-policy proposals need a different administrator to approve them. Platform settings and
+					provider connections are managed directly by the owner.
+				{/if}
+			</p>
 		</div>
-		<p>
-			{#if governance?.mode === 'solo_owner'}
-				You can approve your own financial and business-policy proposals. Each approval needs a fresh authenticator code and a written reason. Platform settings and provider connections are managed directly by the owner.
-			{:else}
-				Financial and business-policy proposals need a different administrator to approve them. Platform settings and provider connections are managed directly by the owner.
-			{/if}
-		</p>
-	</div>
-
-    {/if}
+	{/if}
 	<!-- Controls & Category Filter -->
 	<div class="toolbar">
 		<div class="search-box">
@@ -306,9 +397,9 @@
 		</div>
 		<div class="category-tabs">
 			{#each categories as cat}
-				<button 
-					class="tab-btn {selectedCategory === cat.id ? 'active' : ''}" 
-					onclick={() => selectedCategory = cat.id}
+				<button
+					class="tab-btn {selectedCategory === cat.id ? 'active' : ''}"
+					onclick={() => (selectedCategory = cat.id)}
 				>
 					{cat.label}
 				</button>
@@ -346,8 +437,20 @@
 								<span class="category-tag">{s.category}</span>
 							</td>
 							<td class="val-col">
-								{#if s.is_secret}<span>{!s.version ? 'No admin override' : s.connection_state === 'restart_required' ? 'Saved · restart API and worker' : s.connection_state === 'applied_unverified' ? 'Applied to API · verify worker and provider' : s.connection_state === 'disabled' ? 'Disabled' : s.connection_state === 'enabled_unverified' ? 'Enabled · delivery not verified' : 'Configuration needs checking'}</span>
-                                {:else if typeof s.value === 'boolean'}
+								{#if s.is_secret}<span
+										>{!s.version
+											? 'No admin override'
+											: s.connection_state === 'restart_required'
+												? 'Saved · restart API and worker'
+												: s.connection_state === 'applied_unverified'
+													? 'Applied to API · verify worker and provider'
+													: s.connection_state === 'disabled'
+														? 'Disabled'
+														: s.connection_state === 'enabled_unverified'
+															? 'Enabled · delivery not verified'
+															: 'Configuration needs checking'}</span
+									>
+								{:else if typeof s.value === 'boolean'}
 									<span class="bool-tag {s.value ? 'enabled' : 'disabled'}">
 										{s.value ? 'Enabled' : 'Disabled'}
 									</span>
@@ -361,12 +464,8 @@
 								{#if s.reason}<p class="reason-hint">"{s.reason}"</p>{/if}
 							</td>
 							<td class="actions-col">
-								<button class="action-btn" onclick={() => openEdit(s)} disabled={!isOwner}>
-									Change
-								</button>
-								<button class="action-btn text-btn" onclick={() => openHistory(s.key)}>
-									History
-								</button>
+								<button class="action-btn" onclick={() => openEdit(s)} disabled={!isOwner}> Change </button>
+								<button class="action-btn text-btn" onclick={() => openHistory(s.key)}> History </button>
 							</td>
 						</tr>
 					{/each}
@@ -377,77 +476,246 @@
 
 	<!-- Edit Modal with Diff Preview -->
 	{#if previewDiffModal && editingSetting}
-		<OwnerDialog {busy} bind:open={previewDiffModal} title="Change this setting" description={editingSetting.description} onclose={() => { editingSetting = null; clearConnector(); }}>
-				<details class="setting-desc"><summary>Technical name</summary><code>{editingSetting.key}</code></details>
+		<OwnerDialog
+			{busy}
+			bind:open={previewDiffModal}
+			title="Change this setting"
+			description={editingSetting.description}
+			onclose={() => {
+				editingSetting = null;
+				clearConnector();
+			}}
+		>
+			<details class="setting-desc"><summary>Technical name</summary><code>{editingSetting.key}</code></details>
 
-				<form onsubmit={(e) => { e.preventDefault(); submitSettingUpdate(); }}><fieldset disabled={busy}>
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					submitSettingUpdate();
+				}}
+			>
+				<fieldset disabled={busy}>
 					<div class="form-group">
 						{#if !editingSetting.requires_restart}<label for="edit-val">New value</label>{/if}
 						{#if editingSetting.requires_restart}
-                            <p>Changes apply after restarting the API and worker. Saved access tokens and signing secrets stay hidden; leave them blank to keep the current value. A changed connection must be verified with the provider before launch.</p>
-                            {#if editingSetting.connection_fields?.some(field=>field.kind==='password')}
-                                <label class="credential-clear"><input type="checkbox" bind:checked={clearRuntimeSecrets} disabled={busy} onchange={()=>{if(clearRuntimeSecrets)for(const field of editingSetting?.connection_fields||[])if(field.kind==='password')runtimeDraft[field.key]=''}} />Remove current credentials instead of keeping blank fields</label>
-                                {#if clearRuntimeSecrets}<p>Removing credentials disconnects the provider after restart. Finish pending verification and bank operations before doing this.</p>{/if}
-                            {/if}
-                            {#each editingSetting.connection_fields || [] as field (field.key)}
-                                <label for={`connection-${field.key}`}>{field.label}</label>
-                                {#if field.key === 'CollectionAdapter'}
-                                    <select id={`connection-${field.key}`} bind:value={runtimeDraft[field.key]} disabled={busy}><option value="flutterwave">Flutterwave direct debit</option><option value="paystack">Paystack direct debit</option><option value="monnify">Monnify direct debit</option><option value="connector">Approved custom connector</option></select>
-                                {:else if field.kind === 'boolean'}
-                                    <select id={`connection-${field.key}`} bind:value={runtimeDraft[field.key]} disabled={busy}><option value={true}>Enabled</option><option value={false}>Disabled</option></select>
-                                {:else if field.kind === 'number'}
-                                    <input id={`connection-${field.key}`} type="number" min="0" max="9007199254740991" step="1" bind:value={runtimeDraft[field.key]} disabled={busy} required />
-                                {:else if field.kind === 'password'}
-                                    <input id={`connection-${field.key}`} type="password" bind:value={runtimeDraft[field.key]} autocomplete="new-password" disabled={busy} placeholder="Leave blank to keep current" />
-                                {:else if field.kind === 'url'}
-                                    <input id={`connection-${field.key}`} type="url" bind:value={runtimeDraft[field.key]} disabled={busy} />
-                                {:else if field.kind==='retained'}<RetainedAccounts bind:value={runtimeDraft[field.key]} disabled={busy} identity={field.key==='RetainedIdentityProviders'} />
-                                {:else}<input id={`connection-${field.key}`} type="text" bind:value={runtimeDraft[field.key]} disabled={busy} />{/if}
-                            {/each}
-                        {:else if editingSetting.is_secret}
-                            <select id="edit-val" bind:value={connectorEnabled} disabled={busy}>
-                                <option value={true}>Connect or replace credentials</option>
-                                <option value={false}>Disable this channel</option>
-                            </select>
-                            <p>Choose the provider connection for new messages. Existing messages keep their original connection.</p>
-                            {#if connectorEnabled}
-                                <label for="connector-adapter">Provider adapter</label>
-                                <select id="connector-adapter" bind:value={connectorAdapter} disabled={busy}>
-                                  <option value="">Default for this channel</option>
-                                  {#if editingSetting.key === 'integrations.notifications.email'}<option value="sendly">Sendly</option>{/if}
-                                  {#if editingSetting.key === 'integrations.notifications.sms'}<option value="mesaj">Mesaj</option>{/if}
-                                  {#if editingSetting.key === 'integrations.notifications.whatsapp'}<option value="meta">Meta WhatsApp Cloud API</option>{/if}
-                                  <option value="connector">Another provider through Kredit connector v1</option>
-                                </select>
-                                {#if connectorAdapter === 'meta'}
-                                <p>Use the versioned Meta messages address containing your phone-number ID. Templates must be approved by Meta.</p>
-                                <label for="meta-language">Template language code</label><input id="meta-language" bind:value={metaLanguage} required disabled={busy} placeholder="en_US" />
-                                <label for="meta-auth">Authentication template with copy-code button</label><input id="meta-auth" bind:value={metaAuthentication} required disabled={busy} />
-                                <label for="meta-utility">Utility template with one message-text placeholder</label><input id="meta-utility" bind:value={metaUtility} required disabled={busy} />
-                                <label for="meta-marketing">Marketing template with one message-text placeholder</label><input id="meta-marketing" bind:value={metaMarketing} required disabled={busy} />
-                                <label for="meta-secret">Meta app secret</label><input id="meta-secret" type="password" bind:value={connectorWebhookSecret} required minlength="32" autocomplete="new-password" disabled={busy} />
-                                <label for="meta-verify">Webhook verification token</label><input id="meta-verify" type="password" bind:value={metaVerifyToken} required minlength="32" autocomplete="new-password" disabled={busy} />
-                                <p>Set Meta's callback URL to your public API address followed by <code>/api/v1/webhooks/meta</code>. Use the same verification token and subscribe to messages.</p>
-                                {:else if connectorAdapter === 'connector'}
-                                <p>Use a connector implementing Kredit's send and authenticated delivery-status contract. Changing this connection applies to new messages; existing messages retain their original provider.</p>
-                                {:else if editingSetting.key === 'integrations.notifications.email'}
-                                <p>Use https://api.sendlyai.com/v1/messages and a live Sendly API key. Verify your kredit.ng sending domain in Sendly first.</p>
-                                <label for="connector-from">Sender email</label>
-                                <input id="connector-from" type="email" bind:value={connectorFrom} placeholder="hello@kredit.ng" required disabled={busy} />
-                                <label for="connector-webhook-secret">Sendly webhook signing secret</label>
-                                <input id="connector-webhook-secret" type="password" bind:value={connectorWebhookSecret} autocomplete="new-password" minlength="32" required disabled={busy} />
-                                {:else if editingSetting.key === 'integrations.notifications.sms'}
-                                <p>Use https://api.mesaj.cloud:25274/client/sms/send/bulk and your Mesaj bearer token. The provider must have a valid HTTPS certificate.</p>
-                                <label for="connector-from">Approved Mesaj sender ID</label>
-                                <input id="connector-from" type="text" bind:value={connectorFrom} maxlength="11" pattern="[A-Za-z0-9]+" required disabled={busy} />
-                                {/if}
-                                <label for="connector-endpoint">Provider HTTPS address</label>
-                                <input id="connector-endpoint" type="url" bind:value={connectorEndpoint} placeholder="https://your-connector.example/send" required disabled={busy} />
-                                <label for="connector-token">Connector access token</label>
-                                <input id="connector-token" type="password" bind:value={connectorToken} autocomplete="new-password" required disabled={busy} />
-                                <p>Enter both fields to replace the connection. Saved credentials are encrypted and cannot be revealed here.</p>
-                            {:else}<p>This stops delivery through this channel, including sign-in codes. Make sure you have another working sign-in channel before saving.</p>{/if}
-                        {:else if typeof editingSetting.value === 'boolean'}
+							<p>
+								Changes apply after restarting the API and worker. Saved access tokens and signing secrets stay hidden;
+								leave them blank to keep the current value. A changed connection must be verified with the provider
+								before launch.
+							</p>
+							{#if editingSetting.connection_fields?.some((field) => field.kind === 'password')}
+								<label class="credential-clear"
+									><input
+										type="checkbox"
+										bind:checked={clearRuntimeSecrets}
+										disabled={busy}
+										onchange={() => {
+											if (clearRuntimeSecrets)
+												for (const field of editingSetting?.connection_fields || [])
+													if (field.kind === 'password') runtimeDraft[field.key] = '';
+										}}
+									/>Remove current credentials instead of keeping blank fields</label
+								>
+								{#if clearRuntimeSecrets}<p>
+										Removing credentials disconnects the provider after restart. Finish pending verification and bank
+										operations before doing this.
+									</p>{/if}
+							{/if}
+							{#each editingSetting.connection_fields || [] as field (field.key)}
+								<label for={`connection-${field.key}`}>{field.label}</label>
+								{#if field.key === 'CollectionAdapter'}
+									<select id={`connection-${field.key}`} bind:value={runtimeDraft[field.key]} disabled={busy}
+										><option value="flutterwave">Flutterwave direct debit</option><option value="paystack"
+											>Paystack direct debit</option
+										><option value="monnify">Monnify direct debit</option><option value="connector"
+											>Approved custom connector</option
+										></select
+									>
+								{:else if field.kind === 'boolean'}
+									<select id={`connection-${field.key}`} bind:value={runtimeDraft[field.key]} disabled={busy}
+										><option value={true}>Enabled</option><option value={false}>Disabled</option></select
+									>
+								{:else if field.kind === 'number'}
+									<input
+										id={`connection-${field.key}`}
+										type="number"
+										min="0"
+										max="9007199254740991"
+										step="1"
+										bind:value={runtimeDraft[field.key]}
+										disabled={busy}
+										required
+									/>
+								{:else if field.kind === 'password'}
+									<input
+										id={`connection-${field.key}`}
+										type="password"
+										bind:value={runtimeDraft[field.key]}
+										autocomplete="new-password"
+										disabled={busy}
+										placeholder="Leave blank to keep current"
+									/>
+								{:else if field.kind === 'url'}
+									<input
+										id={`connection-${field.key}`}
+										type="url"
+										bind:value={runtimeDraft[field.key]}
+										disabled={busy}
+									/>
+								{:else if field.kind === 'retained'}<RetainedAccounts
+										bind:value={runtimeDraft[field.key]}
+										disabled={busy}
+										identity={field.key === 'RetainedIdentityProviders'}
+									/>
+								{:else}<input
+										id={`connection-${field.key}`}
+										type="text"
+										bind:value={runtimeDraft[field.key]}
+										disabled={busy}
+									/>{/if}
+							{/each}
+						{:else if editingSetting.is_secret}
+							<select id="edit-val" bind:value={connectorEnabled} disabled={busy}>
+								<option value={true}>Connect or replace credentials</option>
+								<option value={false}>Disable this channel</option>
+							</select>
+							<p>Choose the provider connection for new messages. Existing messages keep their original connection.</p>
+							{#if connectorEnabled}
+								<label for="connector-adapter">Provider adapter</label>
+								<select id="connector-adapter" bind:value={connectorAdapter} disabled={busy}>
+									<option value="">Default for this channel</option>
+									{#if editingSetting.key === 'integrations.notifications.email'}<option value="sendly">Sendly</option
+										>{/if}
+									{#if editingSetting.key === 'integrations.notifications.sms'}<option value="mesaj">Mesaj</option>{/if}
+									{#if editingSetting.key === 'integrations.notifications.whatsapp'}<option value="meta"
+											>Meta WhatsApp Cloud API</option
+										>{/if}
+									<option value="connector">Another provider through Kredit connector v1</option>
+								</select>
+								{#if connectorAdapter === 'meta'}
+									<p>
+										Use the versioned Meta messages address containing your phone-number ID. Templates must be approved
+										by Meta.
+									</p>
+									<label for="meta-language">Template language code</label><input
+										id="meta-language"
+										bind:value={metaLanguage}
+										required
+										disabled={busy}
+										placeholder="en_US"
+									/>
+									<label for="meta-auth">Authentication template with copy-code button</label><input
+										id="meta-auth"
+										bind:value={metaAuthentication}
+										required
+										disabled={busy}
+									/>
+									<label for="meta-utility">Utility template with one message-text placeholder</label><input
+										id="meta-utility"
+										bind:value={metaUtility}
+										required
+										disabled={busy}
+									/>
+									<label for="meta-marketing">Marketing template with one message-text placeholder</label><input
+										id="meta-marketing"
+										bind:value={metaMarketing}
+										required
+										disabled={busy}
+									/>
+									<label for="meta-secret">Meta app secret</label><input
+										id="meta-secret"
+										type="password"
+										bind:value={connectorWebhookSecret}
+										required
+										minlength="32"
+										autocomplete="new-password"
+										disabled={busy}
+									/>
+									<label for="meta-verify">Webhook verification token</label><input
+										id="meta-verify"
+										type="password"
+										bind:value={metaVerifyToken}
+										required
+										minlength="32"
+										autocomplete="new-password"
+										disabled={busy}
+									/>
+									<p>
+										Set Meta's callback URL to your public API address followed by <code>/api/v1/webhooks/meta</code>.
+										Use the same verification token and subscribe to messages.
+									</p>
+								{:else if connectorAdapter === 'connector'}
+									<p>
+										Use a connector implementing Kredit's send and authenticated delivery-status contract. Changing this
+										connection applies to new messages; existing messages retain their original provider.
+									</p>
+								{:else if editingSetting.key === 'integrations.notifications.email'}
+									<p>
+										Use https://api.sendlyai.com/v1/messages and a live Sendly API key. Verify your kredit.ng sending
+										domain in Sendly first.
+									</p>
+									<label for="connector-from">Sender email</label>
+									<input
+										id="connector-from"
+										type="email"
+										bind:value={connectorFrom}
+										placeholder="hello@kredit.ng"
+										required
+										disabled={busy}
+									/>
+									<label for="connector-webhook-secret">Sendly webhook signing secret</label>
+									<input
+										id="connector-webhook-secret"
+										type="password"
+										bind:value={connectorWebhookSecret}
+										autocomplete="new-password"
+										minlength="32"
+										required
+										disabled={busy}
+									/>
+								{:else if editingSetting.key === 'integrations.notifications.sms'}
+									<p>
+										Use https://api.mesaj.cloud:25274/client/sms/send/bulk and your Mesaj bearer token. The provider
+										must have a valid HTTPS certificate.
+									</p>
+									<label for="connector-from">Approved Mesaj sender ID</label>
+									<input
+										id="connector-from"
+										type="text"
+										bind:value={connectorFrom}
+										maxlength="11"
+										pattern="[A-Za-z0-9]+"
+										required
+										disabled={busy}
+									/>
+								{/if}
+								<label for="connector-endpoint">Provider HTTPS address</label>
+								<input
+									id="connector-endpoint"
+									type="url"
+									bind:value={connectorEndpoint}
+									placeholder="https://your-connector.example/send"
+									required
+									disabled={busy}
+								/>
+								<label for="connector-token">Connector access token</label>
+								<input
+									id="connector-token"
+									type="password"
+									bind:value={connectorToken}
+									autocomplete="new-password"
+									required
+									disabled={busy}
+								/>
+								<p>
+									Enter both fields to replace the connection. Saved credentials are encrypted and cannot be revealed
+									here.
+								</p>
+							{:else}<p>
+									This stops delivery through this channel, including sign-in codes. Make sure you have another working
+									sign-in channel before saving.
+								</p>{/if}
+						{:else if typeof editingSetting.value === 'boolean'}
 							<select id="edit-val" bind:value={editDraftValue}>
 								<option value={true}>On</option>
 								<option value={false}>Off</option>
@@ -457,46 +725,115 @@
 						{:else if typeof editingSetting.value === 'string'}
 							<input id="edit-val" type="text" bind:value={editDraftValue} required />
 						{:else}
-							<p class="not-editable">This setting holds structured data. It is changed in a release, not on this screen.</p>
+							<p class="not-editable">
+								This setting holds structured data. It is changed in a release, not on this screen.
+							</p>
 						{/if}
 					</div>
 
 					{#if editingSetting.requires_restart}
-                        <div class="diff-preview"><h3>Fields being changed</h3>
-                            {#each editingSetting.connection_fields || [] as field}
-                                {#if field.kind === 'password' ? clearRuntimeSecrets || runtimeDraft[field.key] !== '' : runtimeDraft[field.key] !== editingSetting.connection_values?.[field.key]}
-                                    <p><strong>{field.label}:</strong> {field.kind === 'retained' ? 'Update saved accounts; credentials remain hidden' : field.kind === 'password' ? (runtimeDraft[field.key] ? 'Replace hidden value' : 'Remove current value') : `${readable(editingSetting.connection_values?.[field.key])} → ${readable(runtimeDraft[field.key])}`}</p>
-                                {/if}
-                            {/each}
-                        </div>
-                    {/if}
-                    <div class="diff-preview">
+						<div class="diff-preview">
+							<h3>Fields being changed</h3>
+							{#each editingSetting.connection_fields || [] as field}
+								{#if field.kind === 'password' ? clearRuntimeSecrets || runtimeDraft[field.key] !== '' : runtimeDraft[field.key] !== editingSetting.connection_values?.[field.key]}
+									<p>
+										<strong>{field.label}:</strong>
+										{field.kind === 'retained'
+											? 'Update saved accounts; credentials remain hidden'
+											: field.kind === 'password'
+												? runtimeDraft[field.key]
+													? 'Replace hidden value'
+													: 'Remove current value'
+												: `${readable(editingSetting.connection_values?.[field.key])} → ${readable(runtimeDraft[field.key])}`}
+									</p>
+								{/if}
+							{/each}
+						</div>
+					{/if}
+					<div class="diff-preview">
 						<h3>What changes</h3>
-						<div class="diff-row before"><span class="diff-label">Now</span><strong>{editingSetting.is_secret ? (editingSetting.version ? 'Saved configuration' : 'Deployment configuration, if available') : readable(editingSetting.value)}</strong></div>
-						<div class="diff-row after"><span class="diff-label">After</span><strong>{editingSetting.requires_restart ? 'Saved configuration; follow application status in Launch setup' : editingSetting.is_secret ? (connectorEnabled ? 'Replace connection; delivery still needs verification' : 'Channel disabled') : readable(editDraftValue)}</strong></div>
+						<div class="diff-row before">
+							<span class="diff-label">Now</span><strong
+								>{editingSetting.is_secret
+									? editingSetting.version
+										? 'Saved configuration'
+										: 'Deployment configuration, if available'
+									: readable(editingSetting.value)}</strong
+							>
+						</div>
+						<div class="diff-row after">
+							<span class="diff-label">After</span><strong
+								>{editingSetting.requires_restart
+									? 'Saved configuration; follow application status in Launch setup'
+									: editingSetting.is_secret
+										? connectorEnabled
+											? 'Replace connection; delivery still needs verification'
+											: 'Channel disabled'
+										: readable(editDraftValue)}</strong
+							>
+						</div>
 					</div>
 
 					<div class="form-group">
 						<label for="edit-reason">Why are you making this change?</label>
-						<textarea id="edit-reason" rows="3" bind:value={editReason} placeholder="This is recorded permanently and cannot be edited later." required minlength="8" maxlength="2000"></textarea>
+						<textarea
+							id="edit-reason"
+							rows="3"
+							bind:value={editReason}
+							placeholder="This is recorded permanently and cannot be edited later."
+							required
+							minlength="8"
+							maxlength="2000"
+						></textarea>
 					</div>
 
 					{#if error}<p role="alert" class="error">{error}</p>{/if}
-                    <div class="modal-actions">
-						<button type="button" class="cancel-btn" onclick={() => { previewDiffModal = false; editingSetting = null; clearConnector(); }} disabled={busy}>Cancel</button>
-						<button type="submit" class="save-btn" disabled={busy || editReason.trim().length < 8 || (editingSetting.requires_restart ? false : editingSetting.is_secret ? (connectorEnabled && (!connectorEndpoint.trim() || !connectorToken.trim())) : JSON.stringify(editingSetting.value) === JSON.stringify(editDraftValue))}>
+					<div class="modal-actions">
+						<button
+							type="button"
+							class="cancel-btn"
+							onclick={() => {
+								previewDiffModal = false;
+								editingSetting = null;
+								clearConnector();
+							}}
+							disabled={busy}>Cancel</button
+						>
+						<button
+							type="submit"
+							class="save-btn"
+							disabled={busy ||
+								editReason.trim().length < 8 ||
+								(editingSetting.requires_restart
+									? false
+									: editingSetting.is_secret
+										? connectorEnabled && (!connectorEndpoint.trim() || !connectorToken.trim())
+										: JSON.stringify(editingSetting.value) === JSON.stringify(editDraftValue))}
+						>
 							{busy ? 'Saving…' : 'Save this change'}
 						</button>
 					</div>
-				</fieldset></form>
+				</fieldset>
+			</form>
 		</OwnerDialog>
 	{/if}
 
 	<!-- Governance Switcher Modal -->
 	{#if governanceModal}
-		<OwnerDialog {busy} open={governanceModal} title="Who approves changes" description="This decides whether you can approve your own changes, or whether a second administrator has to." onclose={() => (governanceModal = false)}>
-
-				<form onsubmit={(e) => { e.preventDefault(); submitGovernanceChange(); }}><fieldset disabled={busy}>
+		<OwnerDialog
+			{busy}
+			open={governanceModal}
+			title="Who approves changes"
+			description="This decides whether you can approve your own changes, or whether a second administrator has to."
+			onclose={() => (governanceModal = false)}
+		>
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					submitGovernanceChange();
+				}}
+			>
+				<fieldset disabled={busy}>
 					<div class="form-group">
 						<span class="group-label">Choose one</span>
 						<div class="mode-options">
@@ -504,14 +841,18 @@
 								<input type="radio" name="gov-mode" value="solo_owner" bind:group={newGovMode} />
 								<div>
 									<strong>I run Kredit alone</strong>
-									<p>You approve your own changes. Each one still needs a fresh authenticator code and a written reason.</p>
+									<p>
+										You approve your own changes. Each one still needs a fresh authenticator code and a written reason.
+									</p>
 								</div>
 							</label>
 							<label class="mode-radio">
 								<input type="radio" name="gov-mode" value="delegated_team" bind:group={newGovMode} />
 								<div>
 									<strong>A second person approves</strong>
-									<p>Nobody approves their own change, including you. Choose this once you have a second administrator.</p>
+									<p>
+										Nobody approves their own change, including you. Choose this once you have a second administrator.
+									</p>
 								</div>
 							</label>
 						</div>
@@ -519,74 +860,84 @@
 
 					<div class="form-group">
 						<label for="gov-reason">Why are you changing this?</label>
-						<textarea id="gov-reason" rows="3" bind:value={govReason} placeholder="This is recorded permanently and cannot be edited later." required minlength="8" maxlength="2000"></textarea>
+						<textarea
+							id="gov-reason"
+							rows="3"
+							bind:value={govReason}
+							placeholder="This is recorded permanently and cannot be edited later."
+							required
+							minlength="8"
+							maxlength="2000"
+						></textarea>
 					</div>
 
 					{#if error}<p role="alert" class="error">{error}</p>{/if}
-                    <div class="modal-actions">
-						<button type="button" class="cancel-btn" onclick={() => governanceModal = false} disabled={busy}>Cancel</button>
+					<div class="modal-actions">
+						<button type="button" class="cancel-btn" onclick={() => (governanceModal = false)} disabled={busy}
+							>Cancel</button
+						>
 						<button type="submit" class="save-btn" disabled={busy || govReason.trim().length < 8}>
 							{busy ? 'Saving…' : 'Save this'}
 						</button>
 					</div>
-				</fieldset></form>
+				</fieldset>
+			</form>
 		</OwnerDialog>
 	{/if}
 
 	<!-- History Drawer / Modal -->
 	{#if historySettingKey}
-		<OwnerDialog open={true} title="History" description="Every change to this setting, oldest last. This record cannot be edited." onclose={() => (historySettingKey = null)}>
-				{#if historyLoading}
-					<div class="loading-state">Opening history…</div>
-				{:else if historyError}<p role="alert" class="error">{historyError}</p><button type="button" onclick={() => openHistory(historySettingKey!)}>Try again</button>
-				{:else if historyEntries.length === 0}
-					<div class="empty-state">This setting has not been changed yet.</div>
-				{:else}
-					<div class="table-wrap">
-						<table class="history-table">
-							<thead>
-								<tr>
-									<th>Version</th>
-									<th>Action</th>
-									<th>Changed to</th>
-									<th>When</th>
-									<th>Reason and who</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each historyEntries as h}
-									<tr>
-										<td>v{h.version}</td>
-										<td><span class="action-tag">{h.action}</span></td>
-										<td>{readable(h.new_value)}</td>
-										<td>{localTime(h.recorded_at)}</td>
-										<td>
-											<strong>{h.reason}</strong>
-											{#if h.actor_id}<p class="actor-sub">Changed by {h.actor_id}</p>{/if}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
-		</OwnerDialog>
+		<PlatformSettingHistory
+			settingKey={historySettingKey}
+			entries={historyEntries}
+			loading={historyLoading}
+			error={historyError}
+			{readable}
+			onretry={openHistory}
+			onclose={() => (historySettingKey = null)}
+		/>
 	{/if}
 
 	<!-- Ownership Transfer Modal -->
 	{#if transferModal}
-		<OwnerDialog {busy} open={transferModal} title="Hand over ownership" description="The person you choose becomes the owner of Kredit and you stop being the owner. It happens straight away and it is recorded permanently." onclose={() => (transferModal = false)}>
-
-				<form onsubmit={(e) => { e.preventDefault(); submitTransferOwnership(); }}><fieldset disabled={busy}>
+		<OwnerDialog
+			{busy}
+			open={transferModal}
+			title="Hand over ownership"
+			description="The person you choose becomes the owner of Kredit and you stop being the owner. It happens straight away and it is recorded permanently."
+			onclose={() => (transferModal = false)}
+		>
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					submitTransferOwnership();
+				}}
+			>
+				<fieldset disabled={busy}>
 					<div class="form-group">
 						<label for="transfer-target">Who takes over</label>
-						<input id="transfer-target" type="text" bind:value={transferTargetUserId} placeholder="Their Kredit user reference" aria-describedby="transfer-target-help" required />
+						<input
+							id="transfer-target"
+							type="text"
+							bind:value={transferTargetUserId}
+							placeholder="Their Kredit user reference"
+							aria-describedby="transfer-target-help"
+							required
+						/>
 						<small id="transfer-target-help">Find it on the Users page, under the person's name.</small>
 					</div>
 
 					<div class="form-group">
 						<label for="transfer-reason">Why are you handing it over?</label>
-						<textarea id="transfer-reason" rows="3" bind:value={transferReason} placeholder="This is recorded permanently and cannot be edited later." required minlength="8" maxlength="2000"></textarea>
+						<textarea
+							id="transfer-reason"
+							rows="3"
+							bind:value={transferReason}
+							placeholder="This is recorded permanently and cannot be edited later."
+							required
+							minlength="8"
+							maxlength="2000"
+						></textarea>
 					</div>
 
 					<div class="form-group checkbox-group">
@@ -597,20 +948,34 @@
 					</div>
 
 					{#if error}<p role="alert" class="error">{error}</p>{/if}
-                    <div class="modal-actions">
-						<button type="button" class="cancel-btn" onclick={() => transferModal = false} disabled={busy}>Cancel</button>
-						<button type="submit" class="danger-btn" disabled={busy || !transferConfirmed || transferReason.trim().length < 8 || !transferTargetUserId.trim()}>
+					<div class="modal-actions">
+						<button type="button" class="cancel-btn" onclick={() => (transferModal = false)} disabled={busy}
+							>Cancel</button
+						>
+						<button
+							type="submit"
+							class="danger-btn"
+							disabled={busy || !transferConfirmed || transferReason.trim().length < 8 || !transferTargetUserId.trim()}
+						>
 							{busy ? 'Handing over…' : 'Hand over ownership'}
 						</button>
 					</div>
-				</fieldset></form>
+				</fieldset>
+			</form>
 		</OwnerDialog>
 	{/if}
 </main>
 
 <style>
- fieldset{border:0;margin:0;padding:0;min-width:0;}
- .gov-pill-container{flex-wrap:wrap;}
+	fieldset {
+		border: 0;
+		margin: 0;
+		padding: 0;
+		min-width: 0;
+	}
+	.gov-pill-container {
+		flex-wrap: wrap;
+	}
 	main {
 		max-width: 1200px;
 		margin: 0 auto;
@@ -627,7 +992,7 @@
 	}
 
 	.subhead {
-		color:var(--color-foreground);
+		color: var(--color-foreground);
 		font-size: 0.95rem;
 		line-height: 1.5;
 		margin-bottom: 1.5rem;
@@ -650,15 +1015,15 @@
 	}
 
 	.gov-badge.solo_owner {
-		background:var(--color-surface-muted);
-		color:var(--color-overdue);
-		border:1px solid var(--color-surface-muted);
+		background: var(--color-surface-muted);
+		color: var(--color-overdue);
+		border: 1px solid var(--color-surface-muted);
 	}
 
 	.gov-badge.delegated_team {
-		background:var(--color-background);
-		color:var(--color-primary);
-		border:1px solid var(--color-surface-muted);
+		background: var(--color-background);
+		color: var(--color-primary);
+		border: 1px solid var(--color-surface-muted);
 	}
 
 	.dot {
@@ -677,15 +1042,15 @@
 	}
 
 	.banner-warning {
-		background:var(--color-surface);
-		border:1px solid var(--color-surface-muted);
-		color:var(--color-overdue);
+		background: var(--color-surface);
+		border: 1px solid var(--color-surface-muted);
+		color: var(--color-overdue);
 	}
 
 	.banner-info {
-		background:var(--color-background);
-		border:1px solid var(--color-primary);
-		color:var(--color-primary);
+		background: var(--color-background);
+		border: 1px solid var(--color-primary);
+		color: var(--color-primary);
 	}
 
 	.toolbar {
@@ -698,7 +1063,7 @@
 	.search-box input {
 		width: 100%;
 		padding: 0.75rem 1rem;
-		border:1px solid var(--color-border);
+		border: 1px solid var(--color-border);
 		border-radius: 0.5rem;
 		font-size: 0.95rem;
 	}
@@ -710,8 +1075,8 @@
 	}
 
 	.tab-btn {
-		background:var(--color-background);
-		border:1px solid var(--color-border);
+		background: var(--color-background);
+		border: 1px solid var(--color-border);
 		padding: 0.4rem 0.8rem;
 		border-radius: 0.4rem;
 		font-size: 0.85rem;
@@ -721,24 +1086,25 @@
 	}
 
 	.tab-btn:hover {
-		background:var(--color-surface-muted);
+		background: var(--color-surface-muted);
 	}
 
 	.tab-btn.active {
-		background:var(--color-primary);
-		color:var(--color-on-primary);
-		border-color:var(--color-primary);
+		background: var(--color-primary);
+		color: var(--color-on-primary);
+		border-color: var(--color-primary);
 	}
 
 	.table-wrap {
 		overflow-x: auto;
-		background:var(--color-surface);
-		border:1px solid var(--color-border);
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
 		border-radius: 0.75rem;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 	}
 
-	.settings-table, .history-table {
+	.settings-table,
+	.history-table {
 		width: 100%;
 		border-collapse: collapse;
 		text-align: left;
@@ -746,16 +1112,16 @@
 	}
 
 	th {
-		background:var(--color-surface);
+		background: var(--color-surface);
 		padding: 0.8rem 1rem;
-		border-bottom:1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-border);
 		font-weight: 600;
-		color:var(--color-primary);
+		color: var(--color-primary);
 	}
 
 	td {
 		padding: 0.8rem 1rem;
-		border-bottom:1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-border);
 		vertical-align: top;
 	}
 
@@ -766,13 +1132,13 @@
 	.setting-key {
 		font-family: monospace;
 		font-weight: 600;
-		color:var(--color-primary);
+		color: var(--color-primary);
 		display: block;
 		font-size: 0.9rem;
 	}
 
 	.setting-desc {
-		color:var(--color-primary);
+		color: var(--color-primary);
 		font-size: 0.8rem;
 		margin-top: 0.2rem;
 		line-height: 1.3;
@@ -781,8 +1147,8 @@
 	.category-tag {
 		display: inline-block;
 		padding: 0.2rem 0.5rem;
-		background:var(--color-background);
-		color:var(--color-primary);
+		background: var(--color-background);
+		color: var(--color-primary);
 		border-radius: 0.3rem;
 		font-size: 0.75rem;
 		text-transform: capitalize;
@@ -797,13 +1163,13 @@
 	}
 
 	.bool-tag.enabled {
-		background:var(--color-background);
-		color:var(--color-positive);
+		background: var(--color-background);
+		color: var(--color-positive);
 	}
 
 	.bool-tag.disabled {
-		background:var(--color-background);
-		color:var(--color-overdue);
+		background: var(--color-background);
+		color: var(--color-overdue);
 	}
 
 	.actions-col {
@@ -817,20 +1183,20 @@
 		font-size: 0.8rem;
 		font-weight: 600;
 		border-radius: 0.35rem;
-		border:1px solid var(--color-border);
-		background:var(--color-surface);
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
 		cursor: pointer;
 	}
 
 	.action-btn:hover:not(:disabled) {
-		background:var(--color-surface);
-		border-color:var(--color-border);
+		background: var(--color-surface);
+		border-color: var(--color-border);
 	}
 
 	.text-btn {
 		border: none;
 		background: none;
-		color:var(--color-primary);
+		color: var(--color-primary);
 	}
 
 	.text-btn:hover {
@@ -840,13 +1206,13 @@
 
 	.date {
 		font-size: 0.8rem;
-		color:var(--color-primary);
+		color: var(--color-primary);
 		display: block;
 	}
 
 	.reason-hint {
 		font-size: 0.75rem;
-		color:var(--color-muted);
+		color: var(--color-muted);
 		font-style: italic;
 		margin-top: 0.2rem;
 	}
@@ -864,7 +1230,7 @@
 	}
 
 	.modal-card {
-		background:var(--color-surface);
+		background: var(--color-surface);
 		border-radius: 0.8rem;
 		padding: 1.5rem;
 		max-width: 540px;
@@ -893,8 +1259,15 @@
 		padding: 0.2rem 0.5rem;
 	}
 
-	.credential-clear { display:flex !important; gap:.5rem; align-items:start; }
- .credential-clear input { width:auto !important; flex-shrink:0; }
+	.credential-clear {
+		display: flex !important;
+		gap: 0.5rem;
+		align-items: start;
+	}
+	.credential-clear input {
+		width: auto !important;
+		flex-shrink: 0;
+	}
 	.form-group {
 		margin: 1.25rem 0;
 	}
@@ -906,21 +1279,26 @@
 		font-size: 0.85rem;
 	}
 
-	.form-group input + label, .form-group select + label { margin-top: 1rem; }
-	.form-group input, .form-group select, .form-group textarea {
-        box-sizing: border-box;
+	.form-group input + label,
+	.form-group select + label {
+		margin-top: 1rem;
+	}
+	.form-group input,
+	.form-group select,
+	.form-group textarea {
+		box-sizing: border-box;
 		width: 100%;
 		padding: 0.65rem;
-		border:1px solid var(--color-border);
+		border: 1px solid var(--color-border);
 		border-radius: 0.4rem;
 		font-size: 0.9rem;
 	}
 
 	.diff-preview {
-		background:var(--color-surface);
+		background: var(--color-surface);
 		padding: 1rem;
 		border-radius: 0.5rem;
-		border:1px solid var(--color-border);
+		border: 1px solid var(--color-border);
 		margin: 1rem 0;
 	}
 
@@ -928,7 +1306,7 @@
 		font-size: 0.85rem;
 		margin-bottom: 0.5rem;
 		text-transform: uppercase;
-		color:var(--color-primary);
+		color: var(--color-primary);
 	}
 
 	.diff-row {
@@ -939,17 +1317,17 @@
 	}
 
 	.diff-row.before {
-		color:var(--color-overdue);
+		color: var(--color-overdue);
 	}
 
 	.diff-row.after {
-		color:var(--color-positive);
+		color: var(--color-positive);
 	}
 
 	.security-note {
-		background:var(--color-background);
-		border:1px solid var(--color-surface-muted);
-		color:var(--color-primary);
+		background: var(--color-background);
+		border: 1px solid var(--color-surface-muted);
+		color: var(--color-primary);
 		padding: 0.75rem;
 		border-radius: 0.4rem;
 		font-size: 0.8rem;
@@ -967,7 +1345,7 @@
 		display: flex;
 		gap: 0.75rem;
 		align-items: flex-start;
-		border:1px solid var(--color-border);
+		border: 1px solid var(--color-border);
 		padding: 0.75rem;
 		border-radius: 0.5rem;
 		cursor: pointer;
@@ -975,7 +1353,7 @@
 
 	.mode-radio p {
 		font-size: 0.8rem;
-		color:var(--color-primary);
+		color: var(--color-primary);
 		margin-top: 0.2rem;
 	}
 
@@ -987,8 +1365,8 @@
 	}
 
 	.save-btn {
-		background:var(--color-primary);
-		color:var(--color-on-primary);
+		background: var(--color-primary);
+		color: var(--color-on-primary);
 		border: none;
 		padding: 0.6rem 1.2rem;
 		border-radius: 0.4rem;
@@ -997,7 +1375,7 @@
 	}
 
 	.save-btn.warn {
-		background:var(--color-overdue);
+		background: var(--color-overdue);
 	}
 
 	.save-btn:disabled {
@@ -1006,16 +1384,16 @@
 	}
 
 	.cancel-btn {
-		background:var(--color-background);
-		border:1px solid var(--color-border);
+		background: var(--color-background);
+		border: 1px solid var(--color-border);
 		padding: 0.6rem 1.2rem;
 		border-radius: 0.4rem;
 		cursor: pointer;
 	}
 
 	.small-btn {
-		background:var(--color-background);
-		border:1px solid var(--color-border);
+		background: var(--color-background);
+		border: 1px solid var(--color-border);
 		padding: 0.35rem 0.75rem;
 		border-radius: 0.375rem;
 		font-size: 0.8rem;
@@ -1024,14 +1402,14 @@
 	}
 
 	.small-btn.danger {
-		background:var(--color-background);
-		color:var(--color-overdue);
-		border-color:var(--color-surface-muted);
+		background: var(--color-background);
+		color: var(--color-overdue);
+		border-color: var(--color-surface-muted);
 	}
 
 	.danger-btn {
-		background:var(--color-overdue);
-		color:var(--color-on-primary);
+		background: var(--color-overdue);
+		color: var(--color-on-primary);
 		border: none;
 		padding: 0.6rem 1.2rem;
 		border-radius: 0.4rem;
@@ -1053,7 +1431,7 @@
 		align-items: flex-start;
 		gap: 0.5rem;
 		font-size: 0.85rem;
-		color:var(--color-primary);
+		color: var(--color-primary);
 		cursor: pointer;
 	}
 
@@ -1069,15 +1447,15 @@
 	}
 
 	.alert.error {
-		background:var(--color-background);
-		color:var(--color-overdue);
-		border:1px solid var(--color-surface-muted);
+		background: var(--color-background);
+		color: var(--color-overdue);
+		border: 1px solid var(--color-surface-muted);
 	}
 
 	.alert.success {
-		background:var(--color-background);
-		color:var(--color-positive);
-		border:1px solid var(--color-surface-muted);
+		background: var(--color-background);
+		color: var(--color-positive);
+		border: 1px solid var(--color-surface-muted);
 	}
 
 	.mono {
@@ -1086,13 +1464,14 @@
 	}
 
 	.desc {
-		color:var(--color-primary);
+		color: var(--color-primary);
 		font-size: 0.85rem;
 	}
 
-	.empty-state, .loading-state {
+	.empty-state,
+	.loading-state {
 		text-align: center;
 		padding: 3rem 1rem;
-		color:var(--color-primary);
+		color: var(--color-primary);
 	}
 </style>

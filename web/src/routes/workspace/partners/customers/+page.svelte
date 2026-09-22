@@ -14,8 +14,7 @@
 	emptyCopy="Add a customer before you record a sale."
 	searchPlaceholder="Customer name"
 	rowTitle={(c) => c.trading_name || c.legal_name || 'Customer'}
-	rowDetail={(c) =>
-		c.trading_name && c.legal_name && c.trading_name !== c.legal_name ? c.legal_name : ''}
+	rowDetail={(c) => (c.trading_name && c.legal_name && c.trading_name !== c.legal_name ? c.legal_name : '')}
 	rowStatus={(c) => c.state ?? ''}
 	rowAmount={(c) => c.outstanding_kobo ?? null}
 	rowAmountLabel="Owed to you"

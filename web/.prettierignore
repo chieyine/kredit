@@ -1,0 +1,9 @@
+.svelte-kit
+.vercel
+build
+node_modules
+test-results
+playwright-report
+src/lib/api/generated
+static
+pnpm-lock.yaml

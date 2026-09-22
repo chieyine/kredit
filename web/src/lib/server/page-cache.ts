@@ -1,5 +1,6 @@
 const ACCOUNT_PAGE = /^\/(?:account|start|workspace|personal|admin|agents)(?:\/|$)/;
-const PRIVATE_PAGE = /^\/(?:account|start|signin|workspace|personal|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(?:\/|$)/;
+const PRIVATE_PAGE =
+	/^\/(?:account|start|signin|workspace|personal|admin|agents|c|pay|receipt|secure|recover|buyer-invitations)(?:\/|$)/;
 const PUBLIC_CACHE = 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400';
 const TARGETED_CACHE_HEADERS = [
 	'cdn-cache-control',
@@ -35,12 +36,13 @@ export function applyPageCachePolicy(
 	hasSessionCookie = false
 ): void {
 	const path = decodedPath(pathname);
-	const privateResponse = path === null
-		|| PRIVATE_PAGE.test(path)
-		|| hasSessionCookie
-		|| response.status >= 400
-		|| (method !== 'GET' && method !== 'HEAD')
-		|| response.headers.has('set-cookie');
+	const privateResponse =
+		path === null ||
+		PRIVATE_PAGE.test(path) ||
+		hasSessionCookie ||
+		response.status >= 400 ||
+		(method !== 'GET' && method !== 'HEAD') ||
+		response.headers.has('set-cookie');
 	if (privateResponse) {
 		response.headers.set('cache-control', 'private, no-store');
 		for (const name of TARGETED_CACHE_HEADERS) response.headers.set(name, 'no-store');

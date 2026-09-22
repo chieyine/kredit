@@ -1,11 +1,144 @@
 <script lang="ts">
- type Account={api_key?:string;contract_code?:string;adapter?:string;partial?:boolean;name:string;endpoint:string;token:string;webhook_secret:string};
- let {value=$bindable(''),disabled=false,identity=false}:{value:string|number|boolean;disabled?:boolean;identity?:boolean}=$props();
- let accounts=$state<Account[]>([]),error=$state('');
- $effect(()=>{try{const parsed=JSON.parse(typeof value==='string'&&value?value:'[]');if(!Array.isArray(parsed)||parsed.length>8)throw new Error('Invalid accounts');accounts=parsed.map(item=>{if(!item||typeof item.name!=='string'||typeof item.endpoint!=='string'||typeof item.token!=='string'||typeof item.webhook_secret!=='string')throw new Error('Invalid account');return item});error=''}catch{error='Saved accounts could not be read. Refresh the settings before editing.'}});
- function changed(){value=JSON.stringify(accounts)}
- function add(){accounts.push({name:'',endpoint:'',token:'',webhook_secret:''});changed()}
- function remove(index:number){accounts.splice(index,1);changed()}
+	type Account = {
+		api_key?: string;
+		contract_code?: string;
+		adapter?: string;
+		partial?: boolean;
+		name: string;
+		endpoint: string;
+		token: string;
+		webhook_secret: string;
+	};
+	let {
+		value = $bindable(''),
+		disabled = false,
+		identity = false
+	}: { value: string | number | boolean; disabled?: boolean; identity?: boolean } = $props();
+	let accounts = $state<Account[]>([]),
+		error = $state('');
+	$effect(() => {
+		try {
+			const parsed = JSON.parse(typeof value === 'string' && value ? value : '[]');
+			if (!Array.isArray(parsed) || parsed.length > 8) throw new Error('Invalid accounts');
+			accounts = parsed.map((item) => {
+				if (
+					!item ||
+					typeof item.name !== 'string' ||
+					typeof item.endpoint !== 'string' ||
+					typeof item.token !== 'string' ||
+					typeof item.webhook_secret !== 'string'
+				)
+					throw new Error('Invalid account');
+				return item;
+			});
+			error = '';
+		} catch {
+			error = 'Saved accounts could not be read. Refresh the settings before editing.';
+		}
+	});
+	function changed() {
+		value = JSON.stringify(accounts);
+	}
+	function add() {
+		accounts.push({ name: '', endpoint: '', token: '', webhook_secret: '' });
+		changed();
+	}
+	function remove(index: number) {
+		accounts.splice(index, 1);
+		changed();
+	}
 </script>
-<div class="accounts"><p>Save an account here before switching to another provider. Existing requests keep their original account. New requests use the active provider.</p><p>Keep the same name and provider account for existing work. A new account needs a different name. Choose the adapter that originally handled these requests.</p>{#if error}<p role="alert">{error}</p>{:else}{#each accounts as account,index}<fieldset {disabled}><legend>Saved account {index+1}</legend><label>Adapter<select bind:value={account.adapter} onchange={changed}><option value="">Connector</option><option value="mono">{identity?'Mono lookup':'Mono bank collections'}</option>{#if !identity}<option value="paystack">Paystack direct debit</option><option value="flutterwave">Flutterwave direct debit</option><option value="monnify">Monnify direct debit</option>{/if}</select></label>{#if !identity&&account.adapter==='mono'}<label><input type="checkbox" bind:checked={account.partial} onchange={changed}/>This account used partial recovery</label>{/if}<label>Account name<input bind:value={account.name} oninput={changed} required pattern={String.raw`[A-Za-z0-9][A-Za-z0-9_\-]{1,63}`} maxlength="64" /></label>{#if !["flutterwave","monnify"].includes(account.adapter??"")}<label>Connection address<input type="url" bind:value={account.endpoint} oninput={changed} required={account.adapter!=="paystack"} /></label>{/if}{#if account.adapter==="monnify"}<label>API key<input type="password" bind:value={account.api_key} oninput={changed} autocomplete="new-password" placeholder="Leave blank to keep saved key" /></label><label>Contract code<input bind:value={account.contract_code} oninput={changed}/></label>{/if}<label>Access token<input type="password" bind:value={account.token} oninput={changed} autocomplete="new-password" placeholder="Leave blank to keep saved token" /></label><label>Webhook signing secret<input type="password" bind:value={account.webhook_secret} oninput={changed} autocomplete="new-password" placeholder="Leave blank to keep saved secret" /></label><button type="button" onclick={()=>remove(index)}>Remove this saved account</button></fieldset>{/each}<button type="button" disabled={disabled||accounts.length>=8} onclick={add}>Add saved account</button><p>Removing an account stops status checks for its unfinished work. Keep it until all requests and financial records have been reconciled.</p>{/if}</div>
-<style>.accounts{grid-column:1/-1}fieldset{display:grid;gap:.7rem;padding:1rem;margin-block:.8rem}label{display:grid;gap:.3rem}input,button{padding:.65rem;font:inherit}p{line-height:1.5}</style>
+
+<div class="accounts">
+	<p>
+		Save an account here before switching to another provider. Existing requests keep their original account. New
+		requests use the active provider.
+	</p>
+	<p>
+		Keep the same name and provider account for existing work. A new account needs a different name. Choose the adapter
+		that originally handled these requests.
+	</p>
+	{#if error}<p role="alert">{error}</p>{:else}{#each accounts as account, index}<fieldset {disabled}>
+				<legend>Saved account {index + 1}</legend><label
+					>Adapter<select bind:value={account.adapter} onchange={changed}
+						><option value="">Connector</option><option value="mono"
+							>{identity ? 'Mono lookup' : 'Mono bank collections'}</option
+						>{#if !identity}<option value="paystack">Paystack direct debit</option><option value="flutterwave"
+								>Flutterwave direct debit</option
+							><option value="monnify">Monnify direct debit</option>{/if}</select
+					></label
+				>{#if !identity && account.adapter === 'mono'}<label
+						><input type="checkbox" bind:checked={account.partial} onchange={changed} />This account used partial
+						recovery</label
+					>{/if}<label
+					>Account name<input
+						bind:value={account.name}
+						oninput={changed}
+						required
+						pattern={String.raw`[A-Za-z0-9][A-Za-z0-9_\-]{1,63}`}
+						maxlength="64"
+					/></label
+				>{#if !['flutterwave', 'monnify'].includes(account.adapter ?? '')}<label
+						>Connection address<input
+							type="url"
+							bind:value={account.endpoint}
+							oninput={changed}
+							required={account.adapter !== 'paystack'}
+						/></label
+					>{/if}{#if account.adapter === 'monnify'}<label
+						>API key<input
+							type="password"
+							bind:value={account.api_key}
+							oninput={changed}
+							autocomplete="new-password"
+							placeholder="Leave blank to keep saved key"
+						/></label
+					><label>Contract code<input bind:value={account.contract_code} oninput={changed} /></label>{/if}<label
+					>Access token<input
+						type="password"
+						bind:value={account.token}
+						oninput={changed}
+						autocomplete="new-password"
+						placeholder="Leave blank to keep saved token"
+					/></label
+				><label
+					>Webhook signing secret<input
+						type="password"
+						bind:value={account.webhook_secret}
+						oninput={changed}
+						autocomplete="new-password"
+						placeholder="Leave blank to keep saved secret"
+					/></label
+				><button type="button" onclick={() => remove(index)}>Remove this saved account</button>
+			</fieldset>{/each}<button type="button" disabled={disabled || accounts.length >= 8} onclick={add}
+			>Add saved account</button
+		>
+		<p>
+			Removing an account stops status checks for its unfinished work. Keep it until all requests and financial records
+			have been reconciled.
+		</p>{/if}
+</div>
+
+<style>
+	.accounts {
+		grid-column: 1/-1;
+	}
+	fieldset {
+		display: grid;
+		gap: 0.7rem;
+		padding: 1rem;
+		margin-block: 0.8rem;
+	}
+	label {
+		display: grid;
+		gap: 0.3rem;
+	}
+	input,
+	button {
+		padding: 0.65rem;
+		font: inherit;
+	}
+	p {
+		line-height: 1.5;
+	}
+</style>

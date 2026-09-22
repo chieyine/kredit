@@ -7,7 +7,7 @@ const json = (body: unknown) => ({
 });
 
 test.beforeEach(async ({ page, context, baseURL }) => {
- await page.route('**/api/v1/ops/attention',r=>r.fulfill(json({items:[]})));
+	await page.route('**/api/v1/ops/attention', (r) => r.fulfill(json({ items: [] })));
 	await context.addCookies([
 		{
 			name: 'kredit_session',
@@ -40,7 +40,7 @@ test('the admin section exposes the main platform work without dead screens', as
 				users: [
 					{
 						id: 'user-1',
-                        version: 1,
+						version: 1,
 						display_name: 'Ada Okafor',
 						identifier: 'ada@example.com',
 						status: 'active',
@@ -116,7 +116,10 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 	await expect(mobileNavigation).toBeVisible();
 	await expect(mobileNavigation.getByRole('link')).toHaveCount(4);
 	await expect(mobileNavigation.getByRole('button')).toHaveCount(0);
-	await page.getByRole('navigation', { name: 'Admin account', exact: true }).getByRole('button', { name: 'Menu', exact: true }).click();
+	await page
+		.getByRole('navigation', { name: 'Admin account', exact: true })
+		.getByRole('button', { name: 'Menu', exact: true })
+		.click();
 
 	const more = page.getByRole('dialog', { name: 'Admin account menu' });
 	await expect(more).toBeVisible();
@@ -135,12 +138,24 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 test('an administrator can find a person and give access without copying an ID', async ({ page }) => {
 	await page.route('**/api/v1/ops/team', async (route) => route.fulfill(json({ members: [] })));
 	await page.route('**/api/v1/ops/users?q=*&limit=10', async (route) =>
-		route.fulfill(json({ users: [{ id: 'user-1', display_name: 'Ada Okafor', identifier: 'ada@example.com', status: 'active' }] }))
+		route.fulfill(
+			json({ users: [{ id: 'user-1', display_name: 'Ada Okafor', identifier: 'ada@example.com', status: 'active' }] })
+		)
 	);
 	let submitted: Record<string, unknown> | undefined;
 	await page.route('**/api/v1/ops/team/user-1/roles', async (route) => {
 		submitted = route.request().postDataJSON();
-		await route.fulfill(json({ member: { assignment_id: 'role-1', user_id: 'user-1', display_name: 'Ada Okafor', identifier: 'ada@example.com', role: submitted!.role } }));
+		await route.fulfill(
+			json({
+				member: {
+					assignment_id: 'role-1',
+					user_id: 'user-1',
+					display_name: 'Ada Okafor',
+					identifier: 'ada@example.com',
+					role: submitted!.role
+				}
+			})
+		);
 	});
 
 	await page.goto('/admin/team');
@@ -151,8 +166,8 @@ test('an administrator can find a person and give access without copying an ID',
 	await page.getByLabel('Role').selectOption('dispute_reviewer');
 	await page.getByLabel('Why are you giving access?').fill('Ada will review customer disputes.');
 	await page.getByRole('button', { name: 'Review this access' }).click();
- expect(submitted).toBeUndefined();
- await page.getByRole('button', { name: 'Grant the reviewed access' }).click();
+	expect(submitted).toBeUndefined();
+	await page.getByRole('button', { name: 'Grant the reviewed access' }).click();
 
 	await expect(page.getByText('Admin access was granted and recorded.')).toBeVisible();
 	expect(submitted).toMatchObject({ role: 'dispute_reviewer', reason: 'Ada will review customer disputes.' });

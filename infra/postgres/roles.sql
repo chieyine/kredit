@@ -21,9 +21,19 @@ REVOKE ALL ON SCHEMA app FROM PUBLIC;
 GRANT USAGE ON SCHEMA app TO kredit_app, kredit_worker, kredit_backup;
 
 -- Existing application tables keep their repository-level baseline grants;
--- row-level security is the tenant authorization boundary. New tables are
--- deliberately NOT auto-granted to either runtime role: a migration must make
--- an explicit privilege decision before new data becomes reachable.
+-- row-level security is the tenant authorization boundary.
+--
+-- The ALTER DEFAULT PRIVILEGES below withholds grants from tables created
+-- after this file runs. That property does not survive a re-run: every deploy
+-- path applies this file AFTER migrations, and the blanket GRANT then sweeps
+-- up whatever those migrations created. Demonstrated on a live database - a
+-- table created after roles.sql has no grants, and holds INSERT/SELECT/UPDATE
+-- the moment roles.sql runs again.
+--
+-- So the review, not this file, is what keeps new data from silently becoming
+-- reachable: scripts/db-grant-check.sh diffs the runtime roles' actual reach
+-- against docs/compliance/runtime-grant-inventory.txt and fails CI on any
+-- change. A table appearing there is a decision someone has to approve.
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA app TO kredit_app;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA app TO kredit_worker;
 REVOKE UPDATE, DELETE ON app.audit_events FROM kredit_app, kredit_worker;

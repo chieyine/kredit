@@ -1,11 +1,66 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-const organization = { id: 'org-a11y', business_type: 'limited_company', legal_name: 'Accessible Supplies Limited', trading_name: 'Accessible Supplies' };
-const line = { id: 'line-a11y', supplier_organization_id: organization.id, buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', approved_limit_kobo: 100_000_000, current_exposure_kobo: 0, reserved_pending_kobo: 25_000_000, available_limit_kobo: 75_000_000, state: 'ACTIVE', version: 2 };
-const drawdown = { id: 'drawdown-a11y', trade_line_id: 'line-a11y', principal_kobo: 25_000_000, goods_description: 'Twenty bags of rice', invoice_reference: 'INV-A11Y', due_date: '2026-10-30', collection_at: '2026-10-31T09:00:00Z', grace_hours: 24, agreement_hash: 'accessible-agreement-hash', state: 'GOODS_RELEASED', delivery_method: 'Courier', release_evidence_reference: 'TRACK-A11Y' };
-const creditRequest = { id: 'request-a11y', state: 'BUYER_REVIEWING', supplier_legal_name: 'Accessible Supplies Limited', buyer_legal_name: 'Inclusive Retail Limited', buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', principal_kobo: 50_000_000, goods_description: 'Verified inventory', due_date: '2026-10-30', collection_at: '2026-10-31T09:00:00Z', grace_hours: 24, schedule_type: 'one_time', fee_terms:{policy_revision:1,base_bps:50,collection_bps:50} };
-const dispute = { id: 'dispute-a11y', obligation_id: 'obligation-a11y', supplier_organization_id: organization.id, buyer_user_id: 'buyer-a11y', total_disputed_kobo: 10_000_000, remaining_disputed_kobo: 10_000_000, reason: 'Goods quality', explanation: 'The delivered batch did not match the accepted specification.', state: 'OPEN', collection_effect: 'CONTESTED_ONLY', opened_at: '2026-08-29T08:00:00Z' };
+const organization = {
+	id: 'org-a11y',
+	business_type: 'limited_company',
+	legal_name: 'Accessible Supplies Limited',
+	trading_name: 'Accessible Supplies'
+};
+const line = {
+	id: 'line-a11y',
+	supplier_organization_id: organization.id,
+	buyer_user_id: 'buyer-a11y',
+	buyer_business_id: 'business-a11y',
+	approved_limit_kobo: 100_000_000,
+	current_exposure_kobo: 0,
+	reserved_pending_kobo: 25_000_000,
+	available_limit_kobo: 75_000_000,
+	state: 'ACTIVE',
+	version: 2
+};
+const drawdown = {
+	id: 'drawdown-a11y',
+	trade_line_id: 'line-a11y',
+	principal_kobo: 25_000_000,
+	goods_description: 'Twenty bags of rice',
+	invoice_reference: 'INV-A11Y',
+	due_date: '2026-10-30',
+	collection_at: '2026-10-31T09:00:00Z',
+	grace_hours: 24,
+	agreement_hash: 'accessible-agreement-hash',
+	state: 'GOODS_RELEASED',
+	delivery_method: 'Courier',
+	release_evidence_reference: 'TRACK-A11Y'
+};
+const creditRequest = {
+	id: 'request-a11y',
+	state: 'BUYER_REVIEWING',
+	supplier_legal_name: 'Accessible Supplies Limited',
+	buyer_legal_name: 'Inclusive Retail Limited',
+	buyer_user_id: 'buyer-a11y',
+	buyer_business_id: 'business-a11y',
+	principal_kobo: 50_000_000,
+	goods_description: 'Verified inventory',
+	due_date: '2026-10-30',
+	collection_at: '2026-10-31T09:00:00Z',
+	grace_hours: 24,
+	schedule_type: 'one_time',
+	fee_terms: { policy_revision: 1, base_bps: 50, collection_bps: 50 }
+};
+const dispute = {
+	id: 'dispute-a11y',
+	obligation_id: 'obligation-a11y',
+	supplier_organization_id: organization.id,
+	buyer_user_id: 'buyer-a11y',
+	total_disputed_kobo: 10_000_000,
+	remaining_disputed_kobo: 10_000_000,
+	reason: 'Goods quality',
+	explanation: 'The delivered batch did not match the accepted specification.',
+	state: 'OPEN',
+	collection_effect: 'CONTESTED_ONLY',
+	opened_at: '2026-08-29T08:00:00Z'
+};
 
 async function mockAPI(page: Page) {
 	await page.route('**/api/v1/**', async (route: Route) => {
@@ -14,36 +69,105 @@ async function mockAPI(page: Page) {
 		let status = 200;
 		if (path === '/api/v1/me' && route.request().method() === 'GET') {
 			if (new URL(page.url()).pathname === '/signin') status = 401;
-			else body = { user: { id: 'user-a11y', status: 'active', created_at: '2026-01-01T00:00:00Z' }, session: { id: 'session-a11y', user_id: 'user-a11y', authentication_level: 'AAL1', created_at: '2026-01-01T00:00:00Z', expires_at: '2027-01-01T00:00:00Z' }, mfa_enrolled: false, organizations: [organization] };
-		}
-		else if (path === '/api/v1/platform/capabilities') body = { features: { trade_lines: true, drawdowns: true } };
-		else if (path === '/api/v1/buyer/businesses') body={businesses:[{id:'business-a11y',workspace_id:'buyer-workspace',legal_name:'Inclusive Retail Limited'}]};
+			else
+				body = {
+					user: { id: 'user-a11y', status: 'active', created_at: '2026-01-01T00:00:00Z' },
+					session: {
+						id: 'session-a11y',
+						user_id: 'user-a11y',
+						authentication_level: 'AAL1',
+						created_at: '2026-01-01T00:00:00Z',
+						expires_at: '2027-01-01T00:00:00Z'
+					},
+					mfa_enrolled: false,
+					organizations: [organization]
+				};
+		} else if (path === '/api/v1/platform/capabilities') body = { features: { trade_lines: true, drawdowns: true } };
+		else if (path === '/api/v1/buyer/businesses')
+			body = {
+				businesses: [{ id: 'business-a11y', workspace_id: 'buyer-workspace', legal_name: 'Inclusive Retail Limited' }]
+			};
 		else if (path === '/api/v1/organizations') body = { organizations: [organization] };
-		else if (path.endsWith('/onboarding')) body = { profile: { version: 5, kyb_state: 'approved', settlement_state: 'verified', billing_state: 'configured', authorized_representative_name: 'Ada Example', authorized_representative_title: 'Director', terms_version: 'supplier-terms-v1', privacy_version: 'privacy-v1' }, readiness: { state: 'pilot_ready', ready: true, requirements: [{ code: 'business_identity', label: 'Business identity', complete: true, manage_path: '/workspace/onboarding' }], missing: [] }, permissions: { business: true, consents: true }, current_terms_version: 'supplier-terms-v1', current_privacy_version: 'privacy-v1' };
-		else if (path.endsWith('/customers')) body = { customers: [{ id: 'buyer-a11y', buyer_user_id: 'buyer-a11y', buyer_business_id: 'business-a11y', legal_name: 'Inclusive Retail Limited', state: 'verified' }] };
+		else if (path.endsWith('/onboarding'))
+			body = {
+				profile: {
+					version: 5,
+					kyb_state: 'approved',
+					settlement_state: 'verified',
+					billing_state: 'configured',
+					authorized_representative_name: 'Ada Example',
+					authorized_representative_title: 'Director',
+					terms_version: 'supplier-terms-v1',
+					privacy_version: 'privacy-v1'
+				},
+				readiness: {
+					state: 'pilot_ready',
+					ready: true,
+					requirements: [
+						{
+							code: 'business_identity',
+							label: 'Business identity',
+							complete: true,
+							manage_path: '/workspace/onboarding'
+						}
+					],
+					missing: []
+				},
+				permissions: { business: true, consents: true },
+				current_terms_version: 'supplier-terms-v1',
+				current_privacy_version: 'privacy-v1'
+			};
+		else if (path.endsWith('/customers'))
+			body = {
+				customers: [
+					{
+						id: 'buyer-a11y',
+						buyer_user_id: 'buyer-a11y',
+						buyer_business_id: 'business-a11y',
+						legal_name: 'Inclusive Retail Limited',
+						state: 'verified'
+					}
+				]
+			};
 		else if (path.endsWith('/trade-lines/line-a11y/statement')) body = { line, drawdowns: [drawdown] };
 		else if (path.endsWith('/trade-lines')) body = { trade_lines: [line] };
 		else if (path.endsWith('/payments')) body = { payments: [] };
 		else if (path.endsWith('/payment-claims')) body = { payment_claims: [] };
-		else if (path === '/api/v1/buyer/credit-requests/request-a11y') body = { request: creditRequest, agreement: { id: 'agreement-a11y', document_hash: 'a'.repeat(64) } };
+		else if (path === '/api/v1/buyer/credit-requests/request-a11y')
+			body = { request: creditRequest, agreement: { id: 'agreement-a11y', document_hash: 'a'.repeat(64) } };
 		else if (path === '/api/v1/buyer/credit-requests/request-a11y/payments') body = { payments: [] };
 		else if (path.endsWith('/disputes/dispute-a11y')) body = { dispute, evidence: [], decisions: [] };
 		else if (path.endsWith('/disputes')) body = { disputes: [dispute] };
 		else if (path === '/api/v1/me/privacy-requests') body = { requests: [] };
-		else if (path === '/api/v1/ops/commands/preview') body = { command: { current_version: 1, impact_preview: { effect: 'Sensitive actions will be blocked.', will_notify: true, audit: 'Immutable event required.' } } };
-		else if (path.startsWith('/api/v1/account-recovery/requests')) body = { message: 'If eligible, recovery instructions have been sent.' };
+		else if (path === '/api/v1/ops/commands/preview')
+			body = {
+				command: {
+					current_version: 1,
+					impact_preview: {
+						effect: 'Sensitive actions will be blocked.',
+						will_notify: true,
+						audit: 'Immutable event required.'
+					}
+				}
+			};
+		else if (path.startsWith('/api/v1/account-recovery/requests'))
+			body = { message: 'If eligible, recovery instructions have been sent.' };
 		await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 	});
 }
 
 async function expectNoSeriousViolations(page: Page, label: string) {
 	const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
-	const blocking = results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical');
+	const blocking = results.violations.filter(
+		(violation) => violation.impact === 'serious' || violation.impact === 'critical'
+	);
 	expect(blocking, `${label}: ${blocking.map((item) => `${item.id} (${item.nodes.length})`).join(', ')}`).toEqual([]);
 }
 
 test.beforeEach(async ({ page, context, baseURL }) => {
-	await context.addCookies([{ name: 'kredit_session', value: 'accessibility-session', url: baseURL ?? 'http://127.0.0.1:5173' }]);
+	await context.addCookies([
+		{ name: 'kredit_session', value: 'accessibility-session', url: baseURL ?? 'http://127.0.0.1:5173' }
+	]);
 	await mockAPI(page);
 });
 
@@ -64,9 +188,12 @@ for (const journey of [
 		await page.goto(journey[1]);
 		if (journey[1] !== '/signin') await expect(page.locator('.account-gate')).toHaveCount(0);
 		await expect(page.locator('h1')).toBeVisible();
-		if (journey[0] === 'supplier onboarding') await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
-		if (journey[0] === 'credit creation') await expect(page.getByRole('combobox', { name: 'Customer', exact: true })).toBeVisible();
-		if (journey[0] === 'goods receipt and drawdown' || journey[0] === 'goods release') await expect(page.getByText('Twenty bags of rice')).toBeVisible();
+		if (journey[0] === 'supplier onboarding')
+			await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
+		if (journey[0] === 'credit creation')
+			await expect(page.getByRole('combobox', { name: 'Customer', exact: true })).toBeVisible();
+		if (journey[0] === 'goods receipt and drawdown' || journey[0] === 'goods release')
+			await expect(page.getByText('Twenty bags of rice')).toBeVisible();
 		await expectNoSeriousViolations(page, journey[0]);
 	});
 }
@@ -95,9 +222,20 @@ test('keyboard, focus, reflow, reduced motion, and touch-target safeguards remai
 	// A 640 CSS-pixel viewport is the layout viewport produced by 200% browser zoom
 	// on the required 1280px desktop baseline.
 	await page.setViewportSize({ width: 640, height: 800 });
-	const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+	const overflow = await page.evaluate(
+		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+	);
 	expect(overflow).toBeLessThanOrEqual(1);
-	const tooSmall = await page.locator('button:visible, a:visible, input:visible, select:visible, textarea:visible').evaluateAll((elements) => elements.filter((element) => { const box = element.getBoundingClientRect(); return box.width > 0 && box.height > 0 && box.height < 24; }).map((element) => element.outerHTML));
+	const tooSmall = await page
+		.locator('button:visible, a:visible, input:visible, select:visible, textarea:visible')
+		.evaluateAll((elements) =>
+			elements
+				.filter((element) => {
+					const box = element.getBoundingClientRect();
+					return box.width > 0 && box.height > 0 && box.height < 24;
+				})
+				.map((element) => element.outerHTML)
+		);
 	expect(tooSmall).toEqual([]);
 });
 
@@ -108,7 +246,7 @@ test('credit validation focuses a linked error summary', async ({ page }) => {
 	await page.getByLabel('What goods are they taking?').fill('Inventory');
 	await page.getByLabel('First payment date').fill('2026-10-30');
 	await page.getByLabel('Optional later collection time (Nigerian time)').fill('2026-10-31T09:00');
-	await page.getByRole('button', { name: 'Check terms', exact:true }).click();
+	await page.getByRole('button', { name: 'Check terms', exact: true }).click();
 	const summary = page.getByRole('alert');
 	await expect(summary).toContainText('Check the customer, goods, amount and first payment date.');
 	await expect(summary).toBeFocused();
@@ -118,17 +256,19 @@ test('offline mode is announced and financial actions remain unqueued', async ({
 	await page.goto('/workspace/settings');
 	await expect(page.locator('.palette-trigger')).toHaveAttribute('data-ready', 'true');
 	await context.setOffline(true);
-	await expect(page.getByText('You are offline. New money actions cannot be sent. An earlier request may still be processing.')).toBeVisible();
+	await expect(
+		page.getByText('You are offline. New money actions cannot be sent. An earlier request may still be processing.')
+	).toBeVisible();
 	await context.setOffline(false);
 });
 
 test('keyboard selection opens the focused command-palette result', async ({ page }) => {
-  await page.goto('/workspace/today');
-  await page.getByRole('button', { name: /Search/ }).click();
-  const result = page.getByRole('option').nth(1);
-  const destination = await result.locator('span').innerText();
-  await result.focus();
-  await page.keyboard.press('Enter');
-  await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe(destination);
-  await expect(page.getByRole('dialog', { name: 'Go to page' })).toHaveCount(0);
+	await page.goto('/workspace/today');
+	await page.getByRole('button', { name: /Search/ }).click();
+	const result = page.getByRole('option').nth(1);
+	const destination = await result.locator('span').innerText();
+	await result.focus();
+	await page.keyboard.press('Enter');
+	await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe(destination);
+	await expect(page.getByRole('dialog', { name: 'Go to page' })).toHaveCount(0);
 });
