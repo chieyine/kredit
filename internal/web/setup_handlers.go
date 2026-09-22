@@ -72,27 +72,39 @@ func (s *Server) ownerSetup(w http.ResponseWriter, r *http.Request) {
 	tasks = append(tasks, setupTask{"consumer-sales", "Consumer sales", "review_required", "Eligible retailers activate automatically using their verified business and receiving account. Manage exceptions and escalated returns.", "/admin/consumer-sales"})
 	tasks = append(tasks, setupTask{"legal", "Website and legal documents", "review_required", "Review and publish your business details, terms and privacy policy.", "/admin/website"})
 	tasks = append(tasks, setupTask{"team", "Super-admin security and team access", "review_required", "Keep recovery methods current and grant only the access each person needs.", "/admin/team"})
-	rows, err := s.runtime.Database.Raw().Query(r.Context(), `SELECT process,versions,state,updated_at FROM app.runtime_process_status ORDER BY process`)
+	rows, err := s.runtime.Database.Raw().Query(r.Context(), `
+		SELECT process,boot_id::text AS instance_id,instance_name,version,revision,versions,state,updated_at,
+		       (state<>'stopped' AND updated_at>now()-interval '45 seconds' AND updated_at<=now()+interval '5 seconds') AS fresh,false AS legacy
+		FROM app.runtime_process_instances WHERE updated_at>now()-interval '24 hours'
+		UNION ALL
+		SELECT process,'legacy:'||process,'untracked instances','unknown','unknown',versions,state,updated_at,
+		       updated_at<=now()+interval '5 seconds',true
+		FROM app.runtime_process_status WHERE updated_at>now()-interval '45 seconds'
+		ORDER BY fresh DESC,updated_at DESC,process,instance_id LIMIT 501`)
 	if err != nil {
 		writeProblem(w, 503, "setup_unavailable", "Service configuration status could not be read.")
 		return
 	}
 	type processStatus struct {
-		Process   string          `json:"process"`
-		Versions  json.RawMessage `json:"versions"`
-		State     string          `json:"state"`
-		UpdatedAt time.Time       `json:"updated_at"`
-		Fresh     bool            `json:"fresh"`
+		Process      string          `json:"process"`
+		InstanceID   string          `json:"instance_id"`
+		InstanceName string          `json:"instance_name"`
+		Version      string          `json:"version"`
+		Revision     string          `json:"revision"`
+		Legacy       bool            `json:"legacy"`
+		Versions     json.RawMessage `json:"versions"`
+		State        string          `json:"state"`
+		UpdatedAt    time.Time       `json:"updated_at"`
+		Fresh        bool            `json:"fresh"`
 	}
 	processes := []processStatus{}
 	for rows.Next() {
 		var item processStatus
-		if err = rows.Scan(&item.Process, &item.Versions, &item.State, &item.UpdatedAt); err != nil {
+		if err = rows.Scan(&item.Process, &item.InstanceID, &item.InstanceName, &item.Version, &item.Revision, &item.Versions, &item.State, &item.UpdatedAt, &item.Fresh, &item.Legacy); err != nil {
 			rows.Close()
 			writeProblem(w, 503, "setup_unavailable", "Service configuration status could not be read.")
 			return
 		}
-		item.Fresh = time.Since(item.UpdatedAt) < 45*time.Second
 		processes = append(processes, item)
 	}
 	err = rows.Err()
@@ -100,6 +112,10 @@ func (s *Server) ownerSetup(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeProblem(w, 503, "setup_unavailable", "Service configuration status could not be read.")
 		return
+	}
+	recordsTruncated := len(processes) > 500
+	if recordsTruncated {
+		processes = processes[:500]
 	}
 	all, err := s.runtime.PlatformSettings.GetAll(r.Context(), false)
 	if err != nil {
@@ -113,5 +129,5 @@ func (s *Server) ownerSetup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.auditPlatformRead(r, user.ID, "platform_setup.viewed", "platform_setup", "")
-	writeJSON(w, 200, map[string]any{"tasks": tasks, "processes": processes, "saved_versions": wanted, "auto_apply": s.config.AdminConfigAutoApply, "configuration_gates": report.Gates, "provider_initialization_failures": len(s.runtime.ProviderFailures), "readiness_note": "Configuration status is separate from completed launch verification.", "checked_at": time.Now().UTC()})
+	writeJSON(w, 200, map[string]any{"tasks": tasks, "processes": processes, "process_records_truncated": recordsTruncated, "process_status_note": "Heartbeats cover observed instances in the last 24 hours, not an authoritative replica inventory. Legacy slots may represent multiple processes.", "saved_versions": wanted, "auto_apply": s.config.AdminConfigAutoApply, "configuration_gates": report.Gates, "provider_initialization_failures": len(s.runtime.ProviderFailures), "readiness_note": "Configuration status is separate from completed launch verification.", "checked_at": time.Now().UTC()})
 }

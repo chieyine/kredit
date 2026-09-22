@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"kredit/internal/platform/txcleanup"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -43,15 +45,19 @@ func open(ctx context.Context, databaseURL, runtimeRole string) (*Pool, error) {
 	}
 	maxConns := int32(20)
 	if val := os.Getenv("DATABASE_MAX_CONNS"); val != "" {
-		if n, err := strconv.ParseInt(val, 10, 32); err == nil && n > 0 {
-			maxConns = int32(n)
+		n, err := strconv.ParseInt(val, 10, 32)
+		if err != nil || n <= 0 {
+			return nil, errors.New("DATABASE_MAX_CONNS must be a positive 32-bit integer")
 		}
+		maxConns = int32(n)
 	}
 	minConns := min(int32(2), maxConns)
 	if val := os.Getenv("DATABASE_MIN_CONNS"); val != "" {
-		if n, err := strconv.ParseInt(val, 10, 32); err == nil && n >= 0 {
-			minConns = int32(n)
+		n, err := strconv.ParseInt(val, 10, 32)
+		if err != nil || n < 0 {
+			return nil, errors.New("DATABASE_MIN_CONNS must be a non-negative 32-bit integer")
 		}
+		minConns = int32(n)
 	}
 	if minConns > maxConns {
 		return nil, errors.New("DATABASE_MIN_CONNS cannot exceed DATABASE_MAX_CONNS")
@@ -73,19 +79,21 @@ func open(ctx context.Context, databaseURL, runtimeRole string) (*Pool, error) {
 		// Component entrypoints pass constants, not deployment input.
 		config.ConnConfig.RuntimeParams["role"] = runtimeRole
 	}
-	stmtTimeout := "30000"
-	if val := os.Getenv("DATABASE_STATEMENT_TIMEOUT_MS"); val != "" {
-		// PostgreSQL reads statement_timeout=0 as "no timeout", which removes
-		// the only bound on a runaway query holding a pool connection. A
-		// deployment that sets this to 0 almost certainly meant to unset it.
-		if n, err := strconv.Atoi(val); err != nil || n <= 0 {
-			return nil, errors.New("DATABASE_STATEMENT_TIMEOUT_MS must be a positive number of milliseconds")
-		}
-		stmtTimeout = val
+	if err := configureRuntimeTimeouts(config.ConnConfig.RuntimeParams); err != nil {
+		return nil, err
 	}
-	setRuntimeDefault(config.ConnConfig.RuntimeParams, "statement_timeout", stmtTimeout)
-	setRuntimeDefault(config.ConnConfig.RuntimeParams, "lock_timeout", "5000")
-	setRuntimeDefault(config.ConnConfig.RuntimeParams, "idle_in_transaction_session_timeout", "30000")
+	// Verify every physical connection, including replacements after startup.
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		verifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if err := verifyRuntimeTimeouts(verifyCtx, conn, config.ConnConfig.RuntimeParams); err != nil {
+			return err
+		}
+		if runtimeRole != "" {
+			return verifyRuntimeRole(verifyCtx, conn, runtimeRole)
+		}
+		return nil
+	}
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres pool: %w", err)
@@ -93,39 +101,6 @@ func open(ctx context.Context, databaseURL, runtimeRole string) (*Pool, error) {
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
-	}
-	if runtimeRole != "" {
-		var sessionUser, currentUser string
-		var superuser, bypassRLS, databaseOwner, applicationObjectOwner bool
-		err = pool.QueryRow(ctx, `
-			SELECT session_user,
-			       current_user,
-			       session_role.rolsuper,
-			       session_role.rolbypassrls,
-			       EXISTS (SELECT 1 FROM pg_database d WHERE d.datname=current_database() AND d.datdba=session_role.oid),
-			       EXISTS (
-			           SELECT 1
-			           FROM pg_class c
-			           JOIN pg_namespace n ON n.oid=c.relnamespace
-			           WHERE c.relowner=session_role.oid
-			             AND n.nspname IN ('app','ledger','jobs')
-			       )
-			FROM pg_roles session_role
-			WHERE session_role.rolname=session_user`).Scan(
-			&sessionUser, &currentUser, &superuser, &bypassRLS, &databaseOwner, &applicationObjectOwner,
-		)
-		if err != nil {
-			pool.Close()
-			return nil, fmt.Errorf("verify postgres runtime role: %w", err)
-		}
-		if currentUser != runtimeRole {
-			pool.Close()
-			return nil, fmt.Errorf("postgres runtime role is %q, require %q", currentUser, runtimeRole)
-		}
-		if superuser || bypassRLS || databaseOwner || applicationObjectOwner {
-			pool.Close()
-			return nil, fmt.Errorf("postgres session user %q is privileged; a dedicated runtime login is required", sessionUser)
-		}
 	}
 	return &Pool{inner: pool}, nil
 }
@@ -165,12 +140,12 @@ func (p *Pool) CheckSchema(ctx context.Context) error {
 	if p == nil || p.inner == nil {
 		return errors.New("postgres pool is not configured")
 	}
-	var appOutbox, ledgerTransactions, riverJobs string
-	if err := p.inner.QueryRow(ctx, `SELECT COALESCE(to_regclass('app.outbox_events')::text,''), COALESCE(to_regclass('ledger.transactions')::text,''), COALESCE(to_regclass('jobs.river_job')::text,'')`).Scan(&appOutbox, &ledgerTransactions, &riverJobs); err != nil {
+	var appOutbox, ledgerTransactions, riverJobs, runtimeInstances string
+	if err := p.inner.QueryRow(ctx, `SELECT COALESCE(to_regclass('app.outbox_events')::text,''), COALESCE(to_regclass('ledger.transactions')::text,''), COALESCE(to_regclass('jobs.river_job')::text,''), COALESCE(to_regclass('app.runtime_process_instances')::text,'')`).Scan(&appOutbox, &ledgerTransactions, &riverJobs, &runtimeInstances); err != nil {
 		return fmt.Errorf("check postgres schema: %w", err)
 	}
-	if appOutbox == "" || ledgerTransactions == "" || riverJobs == "" {
-		return fmt.Errorf("database migrations are incomplete (outbox=%t ledger=%t river=%t)", appOutbox != "", ledgerTransactions != "", riverJobs != "")
+	if appOutbox == "" || ledgerTransactions == "" || riverJobs == "" || runtimeInstances == "" {
+		return fmt.Errorf("database migrations are incomplete (outbox=%t ledger=%t river=%t runtime_instances=%t)", appOutbox != "", ledgerTransactions != "", riverJobs != "", runtimeInstances != "")
 	}
 	return nil
 }
@@ -195,14 +170,7 @@ func (p *Pool) WithTx(ctx context.Context, fn func(pgx.Tx) error) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
-			panic(p)
-		} else if err != nil {
-			_ = tx.Rollback(ctx)
-		}
-	}()
+	defer txcleanup.Finish(ctx, tx, &err)
 	if err = fn(tx); err != nil {
 		return err
 	}

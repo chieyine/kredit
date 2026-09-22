@@ -5,6 +5,8 @@
 # A new line here means a migration put customer-reachable data behind a
 # runtime role. That is a decision, not a side effect - review it.
 #
+# Migration 204 instance-heartbeat grants were added from the reviewed SQL;
+# this edit does not claim regeneration or validation of the older entries.
 # Regenerate:  DATABASE_URL=... bash scripts/db-grant-inventory.sh
 kredit_app app.account_recovery_codes insert,select,update
 kredit_app app.account_recovery_events insert,select,update
@@ -147,6 +149,7 @@ kredit_app app.release_evidence insert,select,update
 kredit_app app.repayment_schedules insert,select,update
 kredit_app app.request_rate_limits insert,select,update
 kredit_app app.risk_holds insert,select,update
+kredit_app app.runtime_process_instances delete,insert,select,update
 kredit_app app.runtime_process_status insert,select,update
 kredit_app app.schedule_items insert,select,update
 kredit_app app.seller_settlement_receipts insert,select,update
@@ -308,6 +311,7 @@ kredit_worker app.release_evidence insert,select,update
 kredit_worker app.repayment_schedules insert,select,update
 kredit_worker app.request_rate_limits insert,select,update
 kredit_worker app.risk_holds insert,select,update
+kredit_worker app.runtime_process_instances delete,insert,select,update
 kredit_worker app.runtime_process_status insert,select,update
 kredit_worker app.schedule_items insert,select,update
 kredit_worker app.seller_settlement_receipts insert,select,update

@@ -8,7 +8,8 @@ import (
 
 func TestActivationPostsBalancedPrincipalAndBaseFee(t *testing.T) {
 	store := NewStore()
-	transaction, err := store.PostActivation("obligation-1", Money(120000000), now(), "obligation-1:activation")
+	effectiveAt := now()
+	transaction, err := store.PostActivation("obligation-1", Money(120000000), effectiveAt, "obligation-1:activation")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +24,7 @@ func TestActivationPostsBalancedPrincipalAndBaseFee(t *testing.T) {
 	if debit != credit || debit != 120600000 {
 		t.Fatalf("unexpected balance: debit=%d credit=%d", debit, credit)
 	}
-	retry, err := store.PostActivation("obligation-1", Money(120000000), now(), "obligation-1:activation")
+	retry, err := store.PostActivation("obligation-1", Money(120000000), effectiveAt, "obligation-1:activation")
 	if err != nil {
 		t.Fatal(err)
 	}

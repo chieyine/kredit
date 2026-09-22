@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"kredit/internal/platform/txcleanup"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -228,7 +230,7 @@ func (s *PostgresStore) UpdateValidated(ctx context.Context, actorID, key string
 func (s *PostgresStore) Update(ctx context.Context, actorID, key string, raw json.RawMessage, reason string, version int) (Setting, error) {
 	return s.update(ctx, actorID, key, raw, reason, version, nil)
 }
-func (s *PostgresStore) update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string, expectedVersion int, validate func(Service, json.RawMessage) (json.RawMessage, error)) (Setting, error) {
+func (s *PostgresStore) update(ctx context.Context, actorID string, key string, rawValue json.RawMessage, reason string, expectedVersion int, validate func(Service, json.RawMessage) (json.RawMessage, error)) (result Setting, err error) {
 	reason = strings.TrimSpace(reason)
 	if len(reason) < 4 {
 		return Setting{}, errors.New("a reason of at least 4 characters is required")
@@ -243,7 +245,7 @@ func (s *PostgresStore) update(ctx context.Context, actorID string, key string, 
 	if err != nil {
 		return Setting{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer txcleanup.Finish(ctx, tx, &err)
 
 	if _, runtimeConnection := RuntimeConnections[key]; runtimeConnection {
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('kredit-runtime-connections',0))`); err != nil {
@@ -398,7 +400,7 @@ func (s *PostgresStore) GetGovernance(ctx context.Context) (Governance, error) {
 	return g, nil
 }
 
-func (s *PostgresStore) SetGovernance(ctx context.Context, actorID string, mode string, reason string) (Governance, error) {
+func (s *PostgresStore) SetGovernance(ctx context.Context, actorID string, mode string, reason string) (result Governance, err error) {
 	reason = strings.TrimSpace(reason)
 	if len(reason) < 4 {
 		return Governance{}, errors.New("a reason of at least 4 characters is required")
@@ -411,7 +413,7 @@ func (s *PostgresStore) SetGovernance(ctx context.Context, actorID string, mode 
 	if err != nil {
 		return Governance{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer txcleanup.Finish(ctx, tx, &err)
 	var previousMode string
 	if err := tx.QueryRow(ctx, `SELECT mode FROM app.platform_governance WHERE id='singleton' FOR UPDATE`).Scan(&previousMode); err != nil {
 		return Governance{}, fmt.Errorf("read current governance before changing it: %w", err)

@@ -177,6 +177,7 @@ func (s *Store) post(transaction Transaction) (Transaction, error) {
 	if transaction.EffectiveAt.IsZero() {
 		transaction.EffectiveAt = s.now()
 	}
+	transaction.EffectiveAt = transaction.EffectiveAt.UTC().Truncate(time.Microsecond)
 	transaction.RecordedAt = s.now()
 	transaction.ID = s.newID()
 	transaction.Postings = append([]Posting(nil), transaction.Postings...)
@@ -187,6 +188,11 @@ func (s *Store) post(transaction Transaction) (Transaction, error) {
 
 func sameTransactionIntent(existing, requested Transaction) bool {
 	if existing.EventType != requested.EventType || existing.ReferenceType != requested.ReferenceType || existing.ReferenceID != requested.ReferenceID || len(existing.Postings) != len(requested.Postings) {
+		return false
+	}
+	// An omitted date means "reuse the recorded date" on replay. An explicit
+	// date is accounting intent and must match at PostgreSQL's precision.
+	if !requested.EffectiveAt.IsZero() && !existing.EffectiveAt.UTC().Truncate(time.Microsecond).Equal(requested.EffectiveAt.UTC().Truncate(time.Microsecond)) {
 		return false
 	}
 	// Posting order is not part of the intent: PostgreSQL reloads postings by

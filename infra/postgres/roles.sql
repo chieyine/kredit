@@ -1,18 +1,31 @@
 -- Apply with a migration/admin role after schema migrations. This file is a
 -- deployment template; it intentionally does not contain passwords.
+-- This script owns its transaction; run it standalone after migrations.
+-- A later failure must not commit any earlier broad baseline grants.
+BEGIN;
+
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kredit_app') THEN
-        CREATE ROLE kredit_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+        CREATE ROLE kredit_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kredit_worker') THEN
-        CREATE ROLE kredit_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+        CREATE ROLE kredit_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kredit_migrator') THEN
         CREATE ROLE kredit_migrator NOLOGIN NOSUPERUSER CREATEDB NOCREATEROLE;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kredit_backup') THEN
         CREATE ROLE kredit_backup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+    END IF;
+    -- Do not silently reuse a privileged role left by an earlier deployment.
+    -- Refuse drift rather than changing unrelated owner or backup privileges.
+    IF EXISTS (
+        SELECT 1 FROM pg_roles
+        WHERE rolname IN ('kredit_app','kredit_worker')
+          AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)
+    ) THEN
+        RAISE EXCEPTION 'kredit_app and kredit_worker must be unprivileged NOLOGIN roles; correct role drift before applying grants';
     END IF;
 END
 $$;
@@ -376,3 +389,8 @@ GRANT SELECT ON app.order_credit_notes TO kredit_worker;
 -- The reconciliation read path requires both nested invoker predicates.
 -- This read-only predicate does not confer evidence mutation authority.
 GRANT EXECUTE ON FUNCTION app.order_evidence_visible(uuid),app.order_supplier_authorized(uuid,text[]) TO kredit_worker;
+
+-- Per-boot heartbeats; RLS limits deletion to this process kind's stale rows.
+GRANT SELECT,INSERT,UPDATE,DELETE ON app.runtime_process_instances TO kredit_app,kredit_worker;
+
+COMMIT;

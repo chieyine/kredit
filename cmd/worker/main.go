@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"kredit/internal/notifications"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,19 +14,19 @@ import (
 	"kredit/internal/config"
 	"kredit/internal/db"
 	"kredit/internal/jobs"
+	"kredit/internal/notifications"
 	"kredit/internal/outbox"
 	"kredit/internal/platform/logging"
 	"kredit/internal/platformsettings"
 	"kredit/internal/web"
 )
 
-// healthServer exposes a minimal liveness/readiness endpoint so Kubernetes can
-// detect a wedged worker. It binds only inside the pod network.
+// healthServer exposes local liveness and readiness. Readiness also requires
+// successful progress from the critical scheduling activities.
 func startHealthServer(addr string, ready func() error) (*http.Server, <-chan error) {
-	mux := healthHandler(ready)
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           healthHandler(ready),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      5 * time.Second,
@@ -34,9 +34,7 @@ func startHealthServer(addr string, ready func() error) (*http.Server, <-chan er
 		MaxHeaderBytes:    16 << 10,
 	}
 	failures := make(chan error, 1)
-	go func() {
-		failures <- server.ListenAndServe()
-	}()
+	go func() { failures <- server.ListenAndServe() }()
 	return server, failures
 }
 
@@ -66,43 +64,50 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
 		os.Exit(runSelfHealthcheck())
 	}
-	cfg, err := config.Load()
+	if err := run(); err != nil {
+		logging.New().Error("worker stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() (result error) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	cfg, err := config.LoadBootstrap()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("load worker startup configuration: %w", err)
 	}
 	logger := logging.New()
-	database, err := db.OpenAsRole(context.Background(), cfg.RiverDatabaseURL, "kredit_worker")
+	startupCtx, startupCancel := context.WithTimeout(ctx, 45*time.Second)
+	defer startupCancel()
+	database, err := db.OpenAsRole(startupCtx, cfg.RiverDatabaseURL, "kredit_worker")
 	if err != nil {
-		logger.Error("worker database startup failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("worker database startup: %w", err)
 	}
 	defer database.Close()
-	if err := database.CheckSchema(context.Background()); err != nil {
-		logger.Error("worker database schema check failed", "error", err)
-		os.Exit(1)
+	if err := database.CheckSchema(startupCtx); err != nil {
+		return fmt.Errorf("worker database schema: %w", err)
 	}
-	if err := database.CheckPersistenceContract(context.Background()); err != nil {
-		logger.Error("worker persistence contract check failed", "error", err)
-		os.Exit(1)
+	if err := database.CheckPersistenceContract(startupCtx); err != nil {
+		return fmt.Errorf("worker persistence contract: %w", err)
 	}
 	settings := platformsettings.NewPostgresStore(database.Raw(), platformsettings.NewEncryptor(cfg.SettingsEncryptionKey), nil)
-	startupCtx, startupCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	cfg, err = config.ApplyStoredConnections(startupCtx, cfg, settings, "", nil)
-	startupCancel()
 	if err != nil {
-		logger.Error("saved connection configuration could not be activated", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("activate saved worker configuration: %w", err)
 	}
+	startupCancel()
 	runtime := web.NewRuntimeWithDB(cfg, database)
-	if len(runtime.ProviderFailures) > 0 {
-		logger.Error("worker startup blocked: a configured provider could not initialize")
-		os.Exit(1)
-	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = runtime.Tracer.Shutdown(shutdownCtx)
+		if err := runtime.Tracer.Shutdown(shutdownCtx); err != nil {
+			result = errors.Join(result, fmt.Errorf("flush worker tracing: %w", err))
+		}
 	}()
+	if len(runtime.ProviderFailures) > 0 {
+		return errors.New("worker startup blocked: a configured provider could not initialize")
+	}
 	jobClient, err := jobs.NewClientWithHandlers(database.Raw(), logger, jobs.Handlers{
 		CleanupDocuments: runtime.Documents.CleanupOrphans,
 		MaturedCredit: func(ctx context.Context) error {
@@ -139,15 +144,77 @@ func main() {
 		},
 	})
 	if err != nil {
-		logger.Error("worker initialization failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("initialize worker: %w", err)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	go config.WatchConnections(ctx, cfg, settings, database.Raw(), "worker", stop)
+	// Scheduling stops before River. Its work context remains alive during the
+	// graceful drain; cancellation is the fallback if that drain exceeds 10s.
+	jobCtx, cancelJobs := context.WithCancel(context.Background())
+	defer cancelJobs()
+	if err := jobClient.Start(jobCtx); err != nil {
+		return fmt.Errorf("start worker: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := jobClient.Stop(shutdownCtx)
+		cancel()
+		if err != nil {
+			cancelJobs()
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cleanupCancel()
+			result = errors.Join(result, fmt.Errorf("drain worker: %w", err), jobClient.Stop(cleanupCtx))
+		}
+	}()
+
+	dispatcher := outbox.NewDispatcher(runtime.Outbox, outbox.PublishFunc(func(ctx context.Context, event outbox.Event) error {
+		if event.EventType == "notification.requested" {
+			return runtime.QueueOutboxNotification(ctx, event)
+		}
+		return jobClient.EnqueueReconciliation(ctx, jobs.ReconciliationArgs{Operation: jobs.OpReconcileLedger, ResourceID: event.AggregateType + ":" + event.AggregateID})
+	}))
+	schedule := startWorkerSchedule(ctx, logger, []*periodicTask{
+		{name: "maintenance", interval: time.Minute, budget: 30 * time.Second, critical: true, work: func(ctx context.Context) error {
+			var failures []error
+			for _, operation := range []string{jobs.OpExpireReservations, jobs.OpEvaluateSchedules, jobs.OpReconcileSupplierOnboarding} {
+				if err := jobClient.EnqueueMaintenance(ctx, jobs.MaintenanceArgs{Operation: operation}); err != nil {
+					failures = append(failures, fmt.Errorf("enqueue %s: %w", operation, err))
+				}
+			}
+			return errors.Join(failures...)
+		}},
+		{name: "collections", interval: time.Minute, budget: 45 * time.Second, critical: true, work: func(ctx context.Context) error {
+			return runtime.EnqueueCollectionWork(ctx, cfg)
+		}},
+		{name: "ledger_reconciliation", interval: 5 * time.Minute, budget: 30 * time.Second, critical: true, work: func(ctx context.Context) error {
+			return jobClient.EnqueueReconciliation(ctx, jobs.ReconciliationArgs{Operation: jobs.OpReconcileLedger})
+		}},
+		{name: "outbox", interval: 2 * time.Second, budget: 30 * time.Second, critical: true, work: func(ctx context.Context) error {
+			return dispatchOutbox(ctx, dispatcher, logger)
+		}},
+		{name: "notifications", interval: 30 * time.Second, budget: 90 * time.Second, work: func(ctx context.Context) error {
+			return enqueueDueNotifications(ctx, runtime, jobClient, logger)
+		}},
+		{name: "documents", interval: 30 * time.Second, budget: 30 * time.Second, work: func(ctx context.Context) error {
+			return enqueuePendingDocuments(ctx, runtime, jobClient, logger)
+		}},
+	})
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		result = errors.Join(result, schedule.Stop(shutdownCtx))
+	}()
+	watchCtx, cancelWatch := context.WithCancel(ctx)
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		config.WatchConnections(watchCtx, cfg, settings, database.Raw(), "worker", stop)
+	}()
+	defer func() { cancelWatch(); <-watchDone }()
 
 	healthServer, healthErrors := startHealthServer(envOr("WORKER_HEALTH_ADDR", ":8081"), func() error {
 		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := schedule.Ready(); err != nil {
 			return err
 		}
 		pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -157,123 +224,51 @@ func main() {
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = healthServer.Shutdown(shutdownCtx)
+		if err := healthServer.Shutdown(shutdownCtx); err != nil {
+			result = errors.Join(result, fmt.Errorf("worker health shutdown: %w", err), healthServer.Close())
+		}
 	}()
-
 	logger.Info("worker started", "version", cfg.Version)
-	if err := jobClient.Start(ctx); err != nil {
-		logger.Error("worker failed to start", "error", err)
-		os.Exit(1)
-	}
-	maintenanceTicker := time.NewTicker(time.Minute)
-	defer maintenanceTicker.Stop()
-	reconciliationTicker := time.NewTicker(5 * time.Minute)
-	defer reconciliationTicker.Stop()
-	deliveryTicker := time.NewTicker(30 * time.Second)
-	defer deliveryTicker.Stop()
-	outboxTicker := time.NewTicker(2 * time.Second)
-	defer outboxTicker.Stop()
-	dispatcher := outbox.NewDispatcher(runtime.Outbox, outbox.PublishFunc(func(ctx context.Context, event outbox.Event) error {
-		if event.EventType == "notification.requested" {
-			return runtime.QueueOutboxNotification(ctx, event)
-		}
-		// Every committed financial event is handed to River before its outbox
-		// row is acknowledged. The reconciliation job is intentionally keyed by
-		// aggregate so bursts collapse without losing the safety check.
-		return jobClient.EnqueueReconciliation(ctx, jobs.ReconciliationArgs{Operation: jobs.OpReconcileLedger, ResourceID: event.AggregateType + ":" + event.AggregateID})
-	}))
-	if err := jobClient.EnqueueMaintenance(ctx, jobs.MaintenanceArgs{Operation: jobs.OpExpireReservations}); err != nil {
-		logger.Error("initial maintenance job enqueue failed", "error", err)
-	}
-	if err := jobClient.EnqueueMaintenance(ctx, jobs.MaintenanceArgs{Operation: jobs.OpEvaluateSchedules}); err != nil {
-		logger.Error("initial schedule evaluation enqueue failed", "error", err)
-	}
-	if err := jobClient.EnqueueMaintenance(ctx, jobs.MaintenanceArgs{Operation: jobs.OpReconcileSupplierOnboarding}); err != nil {
-		logger.Error("initial supplier onboarding reconciliation enqueue failed", "error", err)
-	}
-	if err := jobClient.EnqueueReconciliation(ctx, jobs.ReconciliationArgs{Operation: jobs.OpReconcileLedger}); err != nil {
-		logger.Error("initial financial reconciliation enqueue failed", "error", err)
-	}
-	if err := runtime.EnqueueCollectionWork(ctx, cfg); err != nil {
-		logger.Error("collection work discovery failed", "error", err)
-	}
-	enqueueDueNotifications(ctx, runtime, jobClient, logger)
-	enqueuePendingDocuments(ctx, runtime, jobClient, logger)
-	dispatchOutbox(ctx, dispatcher, logger)
-	go func() {
-		for {
-			select {
-			case <-maintenanceTicker.C:
-				if err := runtime.EnqueueCollectionWork(ctx, cfg); err != nil {
-					logger.Error("collection work discovery failed", "error", err)
-				}
-				if err := jobClient.EnqueueMaintenance(ctx, jobs.MaintenanceArgs{Operation: jobs.OpExpireReservations}); err != nil {
-					logger.Error("maintenance job enqueue failed", "error", err)
-				}
-				if err := jobClient.EnqueueMaintenance(ctx, jobs.MaintenanceArgs{Operation: jobs.OpEvaluateSchedules}); err != nil {
-					logger.Error("schedule evaluation enqueue failed", "error", err)
-				}
-				if err := jobClient.EnqueueMaintenance(ctx, jobs.MaintenanceArgs{Operation: jobs.OpReconcileSupplierOnboarding}); err != nil {
-					logger.Error("supplier onboarding reconciliation enqueue failed", "error", err)
-				}
-			case <-reconciliationTicker.C:
-				if err := jobClient.EnqueueReconciliation(ctx, jobs.ReconciliationArgs{Operation: jobs.OpReconcileLedger}); err != nil {
-					logger.Error("financial reconciliation enqueue failed", "error", err)
-				}
-			case <-deliveryTicker.C:
-				enqueueDueNotifications(ctx, runtime, jobClient, logger)
-				enqueuePendingDocuments(ctx, runtime, jobClient, logger)
-			case <-outboxTicker.C:
-				dispatchOutbox(ctx, dispatcher, logger)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	var healthFailed bool
 	select {
 	case <-ctx.Done():
+		logger.Info("worker stopping")
+		return nil
 	case err := <-healthErrors:
-		healthFailed = true
-		logger.Error("worker health server stopped unexpectedly", "error", err)
 		stop()
+		return fmt.Errorf("worker health server stopped unexpectedly: %w", err)
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := jobClient.Stop(shutdownCtx); err != nil {
-		logger.Error("worker shutdown failed", "error", err)
-		os.Exit(1)
-	}
-	if healthFailed {
-		os.Exit(1)
-	}
-	logger.Info("worker stopped")
 }
 
-func enqueueDueNotifications(ctx context.Context, runtime *web.Runtime, client *jobs.Client, logger interface{ Error(string, ...any) }) {
+func enqueueDueNotifications(ctx context.Context, runtime *web.Runtime, client *jobs.Client, logger interface{ Error(string, ...any) }) error {
+	var failures []error
 	for _, channel := range []string{notifications.ChannelEmail, notifications.ChannelSMS, notifications.ChannelWhatsApp} {
 		lookupCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		if err := runtime.Notifications.ReconcileDelivery(lookupCtx, channel, 20); err != nil {
-			logger.Error("message delivery lookup failed", "channel", channel, "error", err)
-		}
+		err := runtime.Notifications.ReconcileDelivery(lookupCtx, channel, 20)
 		cancel()
+		if err != nil {
+			logger.Error("notification receipt reconciliation failed", "channel", channel, "error", err)
+			failures = append(failures, err)
+		}
 	}
 	ids, err := runtime.Notifications.DueDeliveryIDs(ctx, 100)
 	if err != nil {
-		logger.Error("notification delivery discovery failed", "error", err)
-		return
+		return errors.Join(append(failures, err)...)
 	}
 	for _, id := range ids {
 		if err := client.EnqueueNotification(ctx, jobs.NotificationArgs{Operation: jobs.OpDeliver, NotificationID: id}); err != nil {
 			logger.Error("notification delivery enqueue failed", "notification_id", id, "error", err)
+			failures = append(failures, err)
 		}
 	}
+	return errors.Join(failures...)
 }
 
-func dispatchOutbox(ctx context.Context, dispatcher *outbox.Dispatcher, logger interface{ Error(string, ...any) }) {
-	if _, err := dispatcher.DispatchOnce(ctx, 100); err != nil {
+func dispatchOutbox(ctx context.Context, dispatcher *outbox.Dispatcher, logger interface{ Error(string, ...any) }) error {
+	_, err := dispatcher.DispatchOnce(ctx, 100)
+	if err != nil {
 		logger.Error("outbox dispatch failed", "error", err)
 	}
+	return err
 }
 
 func envOr(name, fallback string) string {
@@ -283,16 +278,13 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
-// runSelfHealthcheck lets container healthchecks probe the worker's local
-// health server without requiring curl or a shell inside the runtime image.
 func runSelfHealthcheck() int {
 	addr := envOr("WORKER_HEALTH_ADDR", ":8081")
-	host := addr
-	if strings.HasPrefix(host, ":") {
-		host = "127.0.0.1" + host
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
 	}
 	client := &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	response, err := client.Get("http://" + host + "/readyz")
+	response, err := client.Get("http://" + addr + "/readyz")
 	if err != nil {
 		return 1
 	}
@@ -303,15 +295,17 @@ func runSelfHealthcheck() int {
 	return 0
 }
 
-func enqueuePendingDocuments(ctx context.Context, runtime *web.Runtime, client *jobs.Client, logger interface{ Error(string, ...any) }) {
+func enqueuePendingDocuments(ctx context.Context, runtime *web.Runtime, client *jobs.Client, logger interface{ Error(string, ...any) }) error {
 	ids, err := runtime.Documents.PendingScanIDs(ctx, 100)
 	if err != nil {
-		logger.Error("document scan discovery failed", "error", err)
-		return
+		return err
 	}
+	var failures []error
 	for _, id := range ids {
 		if err := client.EnqueueDocument(ctx, jobs.DocumentArgs{Operation: jobs.OpScan, DocumentID: id}); err != nil {
 			logger.Error("document scan enqueue failed", "document_id", id, "error", err)
+			failures = append(failures, err)
 		}
 	}
+	return errors.Join(failures...)
 }

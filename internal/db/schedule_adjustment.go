@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"kredit/internal/ledger"
 
 	"github.com/jackc/pgx/v5"
@@ -84,17 +85,11 @@ func ReduceSchedulePrincipalTx(ctx context.Context, tx pgx.Tx, obligation string
 	return nil
 }
 
-// UpdateObligationBalanceTx is the single way an obligation's outstanding
-// balance changes. It moves the balance, derives the payment status from the
-// same two numbers every other writer uses, bumps the credit request version
-// and patches the read projection — and fails if the projection is missing,
-// because a balance that moved without its projection is a lie the next reader
-// will believe.
-//
-// payments, operations and disputes each carry a private copy of this. They
-// agree; the copy that was written independently (order credit notes) did not,
-// and lost the projection, the version and the status vocabulary. New callers
-// use this one.
+// UpdateObligationBalanceTx moves an obligation balance, its request version and
+// its read projection together. The caller must hold the financial-operation
+// locks, install the tenant context, and roll back the entire transaction on
+// any error. The authoritative obligation/request relationship and principal
+// are checked here as well; independent caller-supplied IDs are not sufficient.
 func UpdateObligationBalanceTx(ctx context.Context, tx pgx.Tx, requestID, obligationID string, outstanding, principal ledger.Money) error {
 	if tx == nil || requestID == "" || obligationID == "" || outstanding < 0 || principal < 0 || outstanding > principal {
 		return errors.New("valid transaction, credit request, obligation and balance within principal are required")
@@ -108,18 +103,43 @@ func UpdateObligationBalanceTx(ctx context.Context, tx pgx.Tx, requestID, obliga
 	default:
 		status = "PARTIALLY_PAID"
 	}
-	if _, err := tx.Exec(ctx, `UPDATE app.obligations SET outstanding_kobo=$2,payment_status=$3 WHERE id=$1::uuid`, obligationID, int64(outstanding), status); err != nil {
-		return err
+	// UPDATE retains the existing obligation-then-request lock order. RETURNING
+	// requires a matching visible row and supplies canonical stored identifiers.
+	var storedRequestID, storedObligationID string
+	if err := tx.QueryRow(ctx, `
+		UPDATE app.obligations SET outstanding_kobo=$2,payment_status=$3
+		WHERE id=$1::uuid AND credit_request_id=$4::uuid AND principal_kobo=$5::bigint
+		RETURNING credit_request_id::text,id::text`, obligationID, int64(outstanding), status, requestID, int64(principal)).Scan(&storedRequestID, &storedObligationID); err != nil {
+		return fmt.Errorf("update matching obligation and principal: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE app.credit_requests SET version=version+1,updated_at=now() WHERE id=$1::uuid`, requestID); err != nil {
-		return err
+	var version int64
+	if err := tx.QueryRow(ctx, `
+		UPDATE app.credit_requests SET version=version+1,updated_at=now()
+		WHERE id=$1::uuid RETURNING version`, storedRequestID).Scan(&version); err != nil {
+		return fmt.Errorf("advance obligation credit request version: %w", err)
 	}
-	command, err := tx.Exec(ctx, `UPDATE app.credit_aggregate_snapshots SET aggregate=jsonb_set(jsonb_set(jsonb_set(aggregate,'{obligation,outstanding_kobo}',to_jsonb($2::bigint),false),'{obligation,payment_status}',to_jsonb($3::text),false),'{request,version}',to_jsonb(version+1),false),version=version+1,updated_at=now() WHERE credit_request_id=$1`, requestID, int64(outstanding), status)
+	command, err := tx.Exec(ctx, `
+		UPDATE app.credit_aggregate_snapshots
+		SET aggregate=jsonb_set(jsonb_set(jsonb_set(aggregate,
+		    '{obligation,outstanding_kobo}',to_jsonb($2::bigint),false),
+		    '{obligation,payment_status}',to_jsonb($3::text),false),
+		    '{request,version}',to_jsonb($5::bigint),false),
+		    version=$5::bigint,updated_at=now()
+		WHERE credit_request_id=$1
+		  AND version=$5::bigint-1
+		  AND jsonb_typeof(aggregate->'request')='object'
+		  AND jsonb_typeof(aggregate->'obligation')='object'
+		  AND aggregate#>>'{request,id}'=$1::text
+		  AND aggregate#>>'{obligation,id}'=$4
+		  AND aggregate#>>'{request,version}'=version::text
+		  AND jsonb_typeof(aggregate#>'{obligation,outstanding_kobo}')='number'
+		  AND jsonb_typeof(aggregate#>'{obligation,payment_status}')='string'`,
+		storedRequestID, int64(outstanding), status, storedObligationID, version)
 	if err != nil {
-		return err
+		return fmt.Errorf("update obligation read projection: %w", err)
 	}
 	if command.RowsAffected() != 1 {
-		return errors.New("credit aggregate snapshot not found")
+		return errors.New("credit aggregate snapshot is missing, stale or inconsistent; reconcile before adjusting")
 	}
 	return nil
 }

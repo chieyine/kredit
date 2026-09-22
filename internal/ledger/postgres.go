@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kredit/internal/outbox"
+	"kredit/internal/platform/txcleanup"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -102,7 +103,7 @@ func settlementAccount(source string) (string, error) {
 	}
 }
 
-func (s *PostgresStore) post(transaction Transaction) (Transaction, error) {
+func (s *PostgresStore) post(transaction Transaction) (posted Transaction, retErr error) {
 	if s == nil || s.pool == nil {
 		return Transaction{}, errors.New("ledger database is not configured")
 	}
@@ -111,14 +112,11 @@ func (s *PostgresStore) post(transaction Transaction) (Transaction, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if transaction.EffectiveAt.IsZero() {
-		transaction.EffectiveAt = time.Now().UTC()
-	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Transaction{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer txcleanup.Finish(ctx, tx, &retErr)
 	result, err := s.postTx(ctx, tx, transaction)
 	if err != nil {
 		return Transaction{}, err
@@ -136,9 +134,14 @@ func (s *PostgresStore) postTx(ctx context.Context, tx pgx.Tx, transaction Trans
 	if err := validateTransaction(transaction); err != nil {
 		return Transaction{}, err
 	}
+	// Preserve whether the caller omitted the date before assigning a default.
+	// Otherwise a zero-date retry would compare a new clock reading with the
+	// original journal's effective date and incorrectly conflict.
+	requested := transaction
 	if transaction.EffectiveAt.IsZero() {
 		transaction.EffectiveAt = time.Now().UTC()
 	}
+	transaction.EffectiveAt = transaction.EffectiveAt.UTC().Truncate(time.Microsecond)
 	var id string
 	err := tx.QueryRow(ctx, `
 		INSERT INTO ledger.transactions (event_type, reference_type, reference_id, idempotency_key, effective_at)
@@ -153,7 +156,7 @@ func (s *PostgresStore) postTx(ctx context.Context, tx pgx.Tx, transaction Trans
 		if err != nil {
 			return Transaction{}, err
 		}
-		if !sameTransactionIntent(result, transaction) {
+		if !sameTransactionIntent(result, requested) {
 			return Transaction{}, errors.New("idempotency key was reused for a different ledger transaction")
 		}
 		if err := s.appendOutbox(ctx, tx, result); err != nil {

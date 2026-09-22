@@ -115,7 +115,7 @@ func TestCreditLifecycleActivatesObligationAndPostsBalancedLedger(t *testing.T) 
 	if tx.Postings[2].Debit != 500 || tx.Postings[3].Credit != 500 {
 		t.Fatal("fee postings incorrect")
 	}
-	if tx2, err := ledgerStore.PostActivation(created.ID, 100000, time.Now(), created.ID+":activation"); err != nil || tx2.ID != tx.ID {
+	if tx2, err := ledgerStore.PostActivation(created.ID, 100000, tx.EffectiveAt, created.ID+":activation"); err != nil || tx2.ID != tx.ID {
 		t.Fatal("activation was not idempotent")
 	}
 }

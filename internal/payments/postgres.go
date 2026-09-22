@@ -13,6 +13,7 @@ import (
 	"kredit/internal/billing"
 	"kredit/internal/ledger"
 	"kredit/internal/outbox"
+	"kredit/internal/platform/txcleanup"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,7 +39,7 @@ func (s *PostgresStore) Record(input RecordInput) (Payment, Allocation, error) {
 	return s.RecordContext(context.Background(), input)
 }
 
-func (s *PostgresStore) RecordContext(ctx context.Context, input RecordInput) (Payment, Allocation, error) {
+func (s *PostgresStore) RecordContext(ctx context.Context, input RecordInput) (recorded Payment, allocated Allocation, retErr error) {
 	if s == nil || s.pool == nil {
 		return Payment{}, Allocation{}, errors.New("payment database is not configured")
 	}
@@ -46,7 +47,7 @@ func (s *PostgresStore) RecordContext(ctx context.Context, input RecordInput) (P
 	if err != nil {
 		return Payment{}, Allocation{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer txcleanup.Finish(ctx, tx, &retErr)
 	payment, allocation, err := s.RecordTx(ctx, tx, input)
 	if err != nil {
 		return Payment{}, Allocation{}, err
@@ -67,7 +68,11 @@ func (s *PostgresStore) AfterCommit(obligationID string) {
 
 // RecordTx composes payment recognition with another domain mutation. The caller
 // owns rollback/commit and must call AfterCommit following a successful commit.
+// Existing aggregate locks must follow obligation-before-request order.
 func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInput) (Payment, Allocation, error) {
+	if tx == nil {
+		return Payment{}, Allocation{}, errors.New("payment transaction is required")
+	}
 	if s == nil || s.pool == nil {
 		return Payment{}, Allocation{}, errors.New("payment database is not configured")
 	}
@@ -98,6 +103,9 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 		return existing, allocation, nil
 	}
 
+	if err := db.LockObligationRequest(ctx, tx, input.ObligationID); err != nil {
+		return Payment{}, Allocation{}, err
+	}
 	var snapshot ObligationSnapshot
 	var creditRequestID string
 	err := tx.QueryRow(ctx, `
@@ -105,8 +113,7 @@ func (s *PostgresStore) RecordTx(ctx context.Context, tx pgx.Tx, input RecordInp
 		       o.principal_kobo, o.outstanding_kobo, c.collection_at, o.currency, c.id::text, c.fee_terms
 		FROM app.obligations o
 		JOIN app.credit_requests c ON c.id = o.credit_request_id
-		WHERE o.id = $1::uuid
-		FOR UPDATE OF o, c`, input.ObligationID).Scan(
+		WHERE o.id = $1::uuid`, input.ObligationID).Scan(
 		&snapshot.ID, &snapshot.BuyerUserID, &snapshot.SupplierOrganizationID,
 		&snapshot.PrincipalKobo, &snapshot.OutstandingKobo, &snapshot.CollectionAt,
 		&snapshot.Currency, &creditRequestID, &snapshot.FeeTerms)
@@ -297,7 +304,7 @@ func (s *PostgresStore) Reverse(paymentID, actor, reason string) (Payment, error
 	return s.ReverseContext(context.Background(), paymentID, actor, reason)
 }
 
-func (s *PostgresStore) ReverseContext(ctx context.Context, paymentID, actor, reason string) (Payment, error) {
+func (s *PostgresStore) ReverseContext(ctx context.Context, paymentID, actor, reason string) (reversed Payment, retErr error) {
 	if s == nil || s.pool == nil {
 		return Payment{}, errors.New("payment database is not configured")
 	}
@@ -308,13 +315,26 @@ func (s *PostgresStore) ReverseContext(ctx context.Context, paymentID, actor, re
 	if err != nil {
 		return Payment{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer txcleanup.Finish(ctx, tx, &retErr)
 	if err := db.SetTenantContext(ctx, tx); err != nil {
 		return Payment{}, err
 	}
-	payment, err := loadPayment(ctx, tx, paymentID, true)
+	// Read only to locate the already-authorized aggregate. Lock its obligation
+	// and request before the payment row, then reread the payment under lock.
+	payment, err := loadPayment(ctx, tx, paymentID, false)
 	if err != nil {
 		return Payment{}, err
+	}
+	obligationID := payment.ObligationID
+	if err := db.LockObligationRequest(ctx, tx, obligationID); err != nil {
+		return Payment{}, err
+	}
+	payment, err = loadPayment(ctx, tx, paymentID, true)
+	if err != nil {
+		return Payment{}, err
+	}
+	if payment.ObligationID != obligationID {
+		return Payment{}, errors.New("payment aggregate changed while acquiring locks")
 	}
 	if payment.State == StateReversed {
 		return payment, nil
@@ -422,7 +442,7 @@ func (s *PostgresStore) Get(paymentID string) (Payment, error) {
 	return s.GetContext(context.Background(), paymentID)
 }
 
-func (s *PostgresStore) GetContext(ctx context.Context, paymentID string) (Payment, error) {
+func (s *PostgresStore) GetContext(ctx context.Context, paymentID string) (found Payment, retErr error) {
 	if s == nil || s.pool == nil {
 		return Payment{}, errors.New("payment database is not configured")
 	}
@@ -430,7 +450,7 @@ func (s *PostgresStore) GetContext(ctx context.Context, paymentID string) (Payme
 	if err != nil {
 		return Payment{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer txcleanup.Finish(ctx, tx, &retErr)
 	if err := db.SetTenantContext(ctx, tx); err != nil {
 		return Payment{}, err
 	}
@@ -441,7 +461,7 @@ func (s *PostgresStore) Rebuild(obligationID string) (ledger.Money, error) {
 	return s.RebuildContext(context.Background(), obligationID)
 }
 
-func (s *PostgresStore) RebuildContext(ctx context.Context, obligationID string) (ledger.Money, error) {
+func (s *PostgresStore) RebuildContext(ctx context.Context, obligationID string) (rebuilt ledger.Money, retErr error) {
 	if s == nil || s.pool == nil {
 		return 0, errors.New("payment database is not configured")
 	}
@@ -449,8 +469,11 @@ func (s *PostgresStore) RebuildContext(ctx context.Context, obligationID string)
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer txcleanup.Finish(ctx, tx, &retErr)
 	if err := db.SetObligationContext(ctx, tx, obligationID); err != nil {
+		return 0, err
+	}
+	if err := db.LockObligationRequest(ctx, tx, obligationID); err != nil {
 		return 0, err
 	}
 	var principal, current ledger.Money
@@ -572,7 +595,7 @@ func (s *PostgresStore) Read(obligationID string) ([]Payment, error) {
 	return s.ReadContext(context.Background(), obligationID)
 }
 
-func (s *PostgresStore) ReadContext(ctx context.Context, obligationID string) ([]Payment, error) {
+func (s *PostgresStore) ReadContext(ctx context.Context, obligationID string) (found []Payment, retErr error) {
 	if s == nil || s.pool == nil || obligationID == "" {
 		return nil, errors.New("payment database or obligation unavailable")
 	}
@@ -580,7 +603,7 @@ func (s *PostgresStore) ReadContext(ctx context.Context, obligationID string) ([
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer txcleanup.Finish(ctx, tx, &retErr)
 	if err := db.SetTenantContext(ctx, tx); err != nil {
 		return nil, err
 	}

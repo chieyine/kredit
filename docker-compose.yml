@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: kredit
       POSTGRES_PASSWORD: kredit
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -24,8 +24,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio-data:/data
 
@@ -43,8 +43,8 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
   provider-simulator:
     build:
@@ -54,7 +54,7 @@ services:
     environment:
       SIMULATOR_ADDR: :8090
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     healthcheck:
       test: ["CMD", "/app/kredit-provider-simulator", "-healthcheck"]
       interval: 10s

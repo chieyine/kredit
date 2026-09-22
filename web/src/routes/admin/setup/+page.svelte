@@ -7,6 +7,11 @@
 	type Task = { id: string; label: string; state: string; detail: string; url: string };
 	type Process = {
 		process: string;
+		instance_id: string;
+		instance_name: string;
+		version: string;
+		revision: string;
+		legacy: boolean;
 		versions: Record<string, number>;
 		state: string;
 		updated_at: string;
@@ -21,6 +26,8 @@
 		autoApply = $state(false),
 		checkedAt = $state(''),
 		failures = $state(0);
+	let truncated = $state(false);
+	let processNote = $state('');
 	let busy = false;
 	const gateLabels: Record<string, string> = {
 		security_review: 'Security review reference',
@@ -50,6 +57,7 @@
 	};
 	function applied(item: Process) {
 		return (
+			!item.legacy &&
 			item.fresh &&
 			item.state === 'current' &&
 			Object.entries(versions).every(([key, version]) => item.versions[key] === version) &&
@@ -73,16 +81,38 @@
 			for (const value of Object.values(saved))
 				if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error('Saved versions could not be verified.');
 			versions = saved as Record<string, number>;
+			const observedIDs = new Set<string>();
 			processes = data.processes.map((value) => {
 				const item = record(value);
+				const process = text(item.process);
+				if (process !== 'api' && process !== 'worker') throw new Error('Unknown service status');
+				// An older API reports one shared slot, not a verified instance.
+				const legacy = item.instance_id === undefined || item.legacy === true;
+				const instanceID = item.instance_id === undefined ? `legacy:${process}` : text(item.instance_id);
+				if (!instanceID || observedIDs.has(instanceID)) throw new Error('Invalid service instance identity');
+				observedIDs.add(instanceID);
+				const appliedVersions = record(item.versions);
+				for (const version of Object.values(appliedVersions)) {
+					if (!Number.isSafeInteger(version) || Number(version) < 1) throw new Error('Invalid applied version');
+				}
 				return {
-					process: text(item.process),
-					versions: record(item.versions) as Record<string, number>,
+					process,
+					instance_id: instanceID,
+					instance_name: legacy ? 'Untracked instances' : text(item.instance_name),
+					version: legacy ? 'unknown' : text(item.version),
+					revision: legacy ? 'unknown' : text(item.revision),
+					legacy,
+					versions: appliedVersions as Record<string, number>,
 					state: text(item.state),
 					updated_at: text(item.updated_at),
 					fresh: item.fresh === true
 				};
 			});
+			truncated = data.process_records_truncated === true;
+			processNote =
+				typeof data.process_status_note === 'string'
+					? data.process_status_note
+					: 'Status covers observed services, not an authoritative count of running instances.';
 			if (!Array.isArray(data.configuration_gates)) throw new Error('Launch requirements could not be verified.');
 			gates = data.configuration_gates.map((value) => {
 				const item = record(value);
@@ -125,19 +155,37 @@
 					? 'Saved service settings apply automatically. The API and background worker restart safely to pick them up.'
 					: 'This deployment needs automatic configuration updates enabled. Until then, saved service settings require an operator restart.'}
 			</p>
-			{#each ['api', 'worker'] as name}{@const item = processes.find((value) => value.process === name)}
-				<p>
-					<strong>{name === 'api' ? 'Website service' : 'Background worker'}:</strong>
-					{item
-						? applied(item)
-							? 'Latest settings applied'
-							: !item.fresh
-								? 'Status is out of date'
-								: item.state === 'saved_configuration_unavailable'
-									? 'Saved configuration could not be applied'
-									: 'Applying saved settings'
-						: 'Waiting for service status'}
-				</p>{/each}
+			<p>{processNote}</p>
+			{#if truncated}<p role="alert">
+					Only the 500 most recent instance records are shown. This list is incomplete.
+				</p>{/if}
+			{#each ['api', 'worker'] as name}
+				{@const instances = processes.filter((value) => value.process === name)}
+				<h3>{name === 'api' ? 'Website service' : 'Background worker'}</h3>
+				{#each instances as item (item.instance_id)}
+					<p>
+						<strong>{item.instance_name} · {item.instance_id.slice(0, 12)}:</strong>
+						{item.legacy
+							? 'Legacy shared status; individual instances cannot be verified'
+							: item.state === 'stopped'
+								? 'This instance has stopped'
+								: !item.fresh
+									? 'Status is out of date'
+									: applied(item)
+										? 'Latest settings applied on this instance'
+										: item.state === 'saved_configuration_unavailable'
+											? 'Saved configuration could not be applied'
+											: item.state === 'restart_required'
+												? 'Restart required to apply saved settings'
+												: 'Saved settings are not yet confirmed on this instance'}
+						<br />Version {item.version} · revision {item.revision.slice(0, 12)} · last reported {localTime(
+							item.updated_at
+						)}
+					</p>
+				{:else}
+					<p>Waiting for service status.</p>
+				{/each}
+			{/each}
 			{#if failures > 0}<p role="alert">
 					A configured provider could not be started. Review its settings before launch.
 				</p>{/if}
