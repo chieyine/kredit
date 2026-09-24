@@ -206,7 +206,7 @@
 			</dl>
 			{#if existingBusinesses.length}<label
 					>Business joining this supplier<select bind:value={workspaceID} disabled={busy || !!acceptance?.unresolved}
-						><option value="">Create the business shown above</option>{#each existingBusinesses as b}<option
+						><option value="">Create the business shown above</option>{#each existingBusinesses as b (b.id)}<option
 								value={b.id}>{b.name}</option
 							>{/each}</select
 					></label

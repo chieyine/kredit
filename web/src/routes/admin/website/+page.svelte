@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { record } from '$lib/api/reliable';
 	import { articles, articleCategories } from '$lib/blog/articles';
 	import { onMount } from 'svelte';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
@@ -45,28 +46,30 @@
 		historyError = '';
 		preview = false;
 		try {
-			const value = decodeWebsiteRecord(await adminGet(`/api/v1/ops/website/${selected}`, signal));
+			const value = decodeWebsiteRecord(await adminGet(`/api/v1/ops/website/${encodeURIComponent(selected)}`, signal));
 			if (signal.aborted) return;
 			current = value;
 			copy = cloneCopy(value.content?.draft ?? websiteDefaults[selected]);
 			try {
 				const result = await adminGet(`/api/v1/ops/platform-settings/history?key=website.${selected}`, signal);
 				if (!Array.isArray(result.history)) throw new Error('History was incomplete.');
-				const rows = result.history.map((item: any) => {
+				const rows = result.history.map((value: unknown) => {
+					const item = record(value);
 					if (
 						item.key !== `website.${selected}` ||
 						!Number.isSafeInteger(item.version) ||
-						item.version < 1 ||
+						Number(item.version) < 1 ||
 						typeof item.recorded_at !== 'string' ||
 						!Number.isFinite(Date.parse(item.recorded_at)) ||
 						typeof item.reason !== 'string'
 					)
 						throw new Error('History was incomplete.');
+					const saved = item.new_value && typeof item.new_value === 'object' ? record(item.new_value) : {};
 					return {
-						version: item.version,
+						version: Number(item.version),
 						recorded_at: item.recorded_at,
 						reason: item.reason,
-						copy: decodeWebsiteCopy(item.new_value?.draft)
+						copy: decodeWebsiteCopy(saved.draft)
 					};
 				});
 				if (!signal.aborted) history = rows;
@@ -90,7 +93,7 @@
 			const body = JSON.stringify(payload);
 			if (requestIdentity.body !== body) requestIdentity = { body, key: idempotencyKey() };
 			current = decodeWebsiteRecord(
-				await adminPost(`/api/v1/ops/website/${selected}`, payload, 'POST', requestIdentity.key)
+				await adminPost(`/api/v1/ops/website/${encodeURIComponent(selected)}`, payload, 'POST', requestIdentity.key)
 			);
 			copy = cloneCopy(current.content!.draft);
 			requestIdentity = { body: '', key: '' };
@@ -130,7 +133,7 @@
 	<div class="toolbar">
 		<label
 			>Page<select bind:value={selected} disabled={busy || loading || dirty} onchange={() => load()}
-				>{#each Object.entries(websitePages) as [key, label]}<option value={key}>{label}</option>{/each}</select
+				>{#each Object.entries(websitePages) as [key, label] (key)}<option value={key}>{label}</option>{/each}</select
 			></label
 		><button type="button" disabled={busy || loading} onclick={() => load()}>Reload saved copy</button>
 	</div>
@@ -168,7 +171,7 @@
 					>Introduction<textarea bind:value={copy.introduction} required maxlength="2000" rows="4"></textarea></label
 				>
 				{#if selected === 'faq' || isLegalPage(selected) || isGuidePage(selected)}
-					{#each copy.sections as section, i}
+					{#each copy.sections as section, i (i)}
 						<section class="question">
 							<label
 								>{selected === 'faq' ? 'Question' : 'Section heading'}
@@ -213,12 +216,12 @@
 					>
 					<label
 						>Topic<select bind:value={copy.guide.category}
-							>{#each articleCategories as category}<option>{category}</option>{/each}</select
+							>{#each articleCategories as category, i (i)}<option>{category}</option>{/each}</select
 						></label
 					>
 					<label>Main search phrase<input bind:value={copy.guide.keyphrase} required maxlength="200" /></label>
 					<h2>Questions and answers</h2>
-					{#each copy.guide.faq as q, i}<section class="question">
+					{#each copy.guide.faq as q, i (i)}<section class="question">
 							<label>Question {i + 1}<input bind:value={q.heading} maxlength="200" required /></label><label
 								>Answer<textarea bind:value={q.body} maxlength="6000" required rows="4"></textarea></label
 							><button
@@ -236,7 +239,7 @@
 						}}>Add guide question</button
 					>
 					<h2>Further reading</h2>
-					{#each copy.guide.sources as source, i}<section class="question">
+					{#each copy.guide.sources as source, i (i)}<section class="question">
 							<label>Source name<input bind:value={source.name} maxlength="200" required /></label><label
 								>Source HTTPS address<input type="url" bind:value={source.url} maxlength="2000" required /></label
 							><label>Source note<textarea bind:value={source.note} maxlength="2000"></textarea></label><button
@@ -255,8 +258,8 @@
 					>
 					<label
 						>Related guides<select multiple bind:value={copy.guide.related}
-							>{#each articles.filter((a) => 'guide-' + a.slug !== selected) as article}<option value={article.slug}
-									>{article.title}</option
+							>{#each articles.filter((a) => 'guide-' + a.slug !== selected) as article (article.slug)}<option
+									value={article.slug}>{article.title}</option
 								>{/each}</select
 						></label
 					>
@@ -296,13 +299,13 @@
 				<p class="eyebrow">Copy preview · private</p>
 				<h2>{copy.title} <em>{copy.accent}</em></h2>
 				<p>{copy.introduction}</p>
-				{#each copy.sections as section}<h3>{section.heading}</h3>
+				{#each copy.sections as section, idx (idx)}<h3>{section.heading}</h3>
 					<p>{section.body}</p>
 					{#if section.points}<ul>
-							{#each section.points as point}<li>{point}</li>{/each}
+							{#each section.points as point, i (i)}<li>{point}</li>{/each}
 						</ul>{/if}{/each}{#if copy.guide}<p>{copy.guide.description} · {copy.guide.category}</p>
-					{#each copy.guide.faq as q}<h3>{q.heading}</h3>
-						<p>{q.body}</p>{/each}{#each copy.guide.sources as source}<p>
+					{#each copy.guide.faq as q, i (i)}<h3>{q.heading}</h3>
+						<p>{q.body}</p>{/each}{#each copy.guide.sources as source, i (i)}<p>
 							{source.name} — {source.url}<br />{source.note}
 						</p>{/each}{/if}{#if copy.contact}<p>
 						{copy.contact.support_email}<br />{copy.contact.privacy_email}<br />{copy.contact.phone}<br />{copy.contact
@@ -321,7 +324,7 @@
 		<section class="history">
 			<h2>Earlier saved copy</h2>
 			<p>Restore an earlier version into a new draft. Published history is preserved.</p>
-			{#if historyError}<p role="alert">{historyError}</p>{/if}{#each history as item}<article>
+			{#if historyError}<p role="alert">{historyError}</p>{/if}{#each history as item, i (i)}<article>
 					<div>
 						<strong>Version {item.version}</strong>
 						<p>{localTime(item.recorded_at)} · {item.reason}</p>

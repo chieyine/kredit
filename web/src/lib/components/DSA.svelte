@@ -2,9 +2,82 @@
 	import { onMount, tick } from 'svelte';
 	import { read, Mutation, money, kobo } from '$lib/consumer';
 	import { record, normalizeNigerianPhone } from '$lib/api/reliable';
-	type Row = Record<string, any>;
+	type Rules = {
+		version: number;
+		enabled: boolean;
+		onboarding_kobo: number;
+		activation_kobo: number;
+		threshold_kobo: number;
+		share_bps: number;
+		share_months: number;
+		initial_limit: number;
+	};
+	type Wallet = {
+		earned_kobo: number;
+		matured_kobo: number;
+		paid_kobo: number;
+		reserved_kobo: number;
+		next_available_at: string | null;
+	};
+	type AgentDetails = {
+		code: string;
+		name: string;
+		phone: string;
+		status: string;
+		onboarding_limit: number;
+		version: number;
+		bank_name: string;
+		account_name: string;
+		account_number: string;
+	};
+	type Agent = AgentDetails & { id: string; referrals: number; activated: number };
+	type Referral = {
+		id: string;
+		business_name: string;
+		created_at: string;
+		terms: Omit<Rules, 'version' | 'enabled' | 'initial_limit'>;
+		share_ends_at: string | null;
+		blocked: boolean;
+		progress: string;
+		fees_kobo: number;
+		checked_at: string | null;
+		version: number;
+	};
+	type Earning = { id: string; kind: string; amount_kobo: number; reason: string; available_at: string };
+	type Payout = {
+		id: string;
+		amount_kobo: number;
+		bank_name: string;
+		account_name: string;
+		account_number: string;
+		state: string;
+		bank_reference: string | null;
+		version: number;
+	};
+	const listKeys = ['agents', 'referrals', 'earnings', 'payouts'] as const;
+	type ListKey = (typeof listKeys)[number];
+	type Dashboard = {
+		rules: Rules;
+		self: AgentDetails | null;
+		wallet: Wallet;
+		agents: Agent[];
+		referrals: Referral[];
+		earnings: Earning[];
+		payouts: Payout[];
+		next: Partial<Record<ListKey, string>>;
+	};
+	/** Any record an admin can open for review; the rules review opens an empty one. */
+	type Reviewable = {
+		id?: string;
+		version?: number;
+		name?: string;
+		business_name?: string;
+		status?: string;
+		onboarding_limit?: number;
+		blocked?: boolean;
+	};
 	let { admin = false }: { admin?: boolean } = $props();
-	let data = $state<Row | null>(null),
+	let data = $state<Dashboard | null>(null),
 		error = $state(''),
 		message = $state(''),
 		busy = $state(false),
@@ -15,7 +88,7 @@
 		accountName = $state(''),
 		account = $state(''),
 		consent = $state(false),
-		selected = $state<Row | null>(null),
+		selected = $state<Reviewable | null>(null),
 		action = $state(''),
 		reason = $state(''),
 		reference = $state(''),
@@ -31,13 +104,27 @@
 		enabled = $state(true);
 	const mutation = new Mutation();
 	const endpoint = $derived(admin ? '/api/v1/ops/dsa' : '/api/v1/dsa');
-	function decode(v: unknown) {
+	function decode(v: unknown): Dashboard {
 		const d = record(v);
-		for (const k of ['agents', 'referrals', 'earnings', 'payouts'])
-			if (!Array.isArray(d[k])) throw new Error('Referral records were incomplete.');
-		record(d.rules);
+		for (const k of listKeys) if (!Array.isArray(d[k])) throw new Error('Referral records were incomplete.');
+		const rules = record(d.rules);
+		for (const k of [
+			'version',
+			'onboarding_kobo',
+			'activation_kobo',
+			'threshold_kobo',
+			'share_bps',
+			'share_months',
+			'initial_limit'
+		])
+			if (!Number.isSafeInteger(rules[k])) throw new Error('Referral rules were incomplete.');
+		if (typeof rules.enabled !== 'boolean') throw new Error('Referral rules were incomplete.');
 		record(d.wallet);
-		return d as Row;
+		if (d.self !== null && d.self !== undefined) record(d.self);
+		if (d.next !== undefined) record(d.next);
+		// The lists and wallet are shaped by the server's SQL; the checks above
+		// cover what this page computes with before trusting the rest.
+		return { ...d, self: d.self ?? null, next: d.next ?? {} } as unknown as Dashboard;
 	}
 	async function load() {
 		busy = true;
@@ -65,16 +152,24 @@
 			busy = false;
 		}
 	}
-	async function more(key: string) {
+	async function more(key: ListKey) {
+		const cursor = data?.next[key];
+		if (!cursor) return;
 		busy = true;
 		error = '';
 		try {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built and consumed within one request
 			const p = new URLSearchParams();
 			if (agent) p.set('agent', agent);
-			p.set(key + '_before', data?.next[key]);
+			p.set(key + '_before', cursor);
 			const next = decode(await read(endpoint + '?' + p));
 			if (data) {
-				data[key] = [...data[key], ...next[key]];
+				// Each list is appended with its own element type; a dynamic key
+				// would widen the arrays to a union the template cannot use.
+				if (key === 'agents') data.agents = [...data.agents, ...next.agents];
+				else if (key === 'referrals') data.referrals = [...data.referrals, ...next.referrals];
+				else if (key === 'earnings') data.earnings = [...data.earnings, ...next.earnings];
+				else data.payouts = [...data.payouts, ...next.payouts];
 				data.next[key] = next.next[key];
 			}
 		} catch (e) {
@@ -113,7 +208,7 @@
 			error = e instanceof Error ? e.message : 'Check your details.';
 		}
 	}
-	function choose(row: Row, what: string) {
+	function choose(row: Reviewable, what: string) {
 		selected = row;
 		action = what;
 		reason = '';
@@ -303,7 +398,7 @@
 						void load();
 					}}>All agents</button
 				>
-				{#each data.agents as a}<article>
+				{#each data.agents as a (a.id)}<article>
 						<h3>{a.name}</h3>
 						<p>{a.phone} · {a.code} · {a.status}</p>
 						<p>{a.referrals} businesses · {a.activated} activated · Onboarding reward limit: {a.onboarding_limit}</p>
@@ -335,7 +430,7 @@
 		<section id="dsa-businesses">
 			<p class="eyebrow">Referral progress</p>
 			<h2>Referred businesses</h2>
-			{#each data.referrals as r}<article>
+			{#each data.referrals as r, i (i)}<article>
 					<h3>{r.business_name}</h3>
 					<p>{r.progress}{r.blocked ? ' · Restricted' : ''}</p>
 					<p>Eligible fees: {money(r.fees_kobo)} · Last checked: {date(r.checked_at)}</p>
@@ -359,7 +454,7 @@
 		<section class="reward-history">
 			<p class="eyebrow">Every adjustment, recorded</p>
 			<h2>Reward history</h2>
-			{#each data.earnings as r}<article>
+			{#each data.earnings as r, i (i)}<article>
 					<strong>{money(r.amount_kobo)} · {r.kind}</strong>
 					<p>{r.reason} · Due: {date(r.available_at)}</p>
 				</article>{:else}<div class="empty-state">
@@ -372,7 +467,7 @@
 		<section id="dsa-payouts">
 			<p class="eyebrow">Money sent to your bank</p>
 			<h2>Payouts</h2>
-			{#each data.payouts as p}<article>
+			{#each data.payouts as p (p.id)}<article>
 					<div class="record-heading">
 						<strong>{money(p.amount_kobo)}</strong><span class="status" class:status-paid={p.state === 'paid'}
 							>{p.state}</span

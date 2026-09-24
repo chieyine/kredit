@@ -4,7 +4,8 @@
 	import { checkedJSON, record, rows, text, publicError, LatestRequest } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import ShareActions from '$lib/components/ShareActions.svelte';
-	let organizations: any[] = $state([]),
+	import { organization, type Organization } from '$lib/records';
+	let organizations: Organization[] = $state([]),
 		organizationID = $state(''),
 		targetType = $state('email'),
 		target = $state(''),
@@ -19,6 +20,7 @@
 		copied = $state(false);
 	let loading = $state(true);
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
 	async function load() {
 		const request = reads.begin();
@@ -28,16 +30,15 @@
 			const items = await checkedJSON(
 				'/api/v1/organizations',
 				rows('organizations', (value) => {
-					const row = record(value);
-					if (!text(row.id)) throw new Error('Missing business');
-					text(row.legal_name);
+					const row = organization(value);
+					if (!row.id) throw new Error('Missing business');
 					return row;
 				}),
 				{ signal: request.signal }
 			);
 			if (request.current()) {
 				organizations = items;
-				organizationID = requestedWorkspace(items as { id: string }[]);
+				organizationID = requestedWorkspace(items);
 			}
 		} catch (cause) {
 			if (request.current()) error = publicError(cause, 'your businesses');
@@ -127,7 +128,7 @@
 				<div class="grid">
 					<label
 						>Your business<select bind:value={organizationID} required
-							>{#each organizations as organization}<option value={organization.id}
+							>{#each organizations as organization (organization.id)}<option value={organization.id}
 									>{organization.trading_name || organization.legal_name}</option
 								>{/each}</select
 						></label

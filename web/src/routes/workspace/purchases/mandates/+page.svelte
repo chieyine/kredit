@@ -3,25 +3,41 @@
 	import { workspaceHref } from '$lib/workspace-navigation';
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import { onMount } from 'svelte';
-	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
+	import type { KoboValue } from '$lib/money';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { kobo } from '$lib/records';
 	import Money from '$lib/components/Money.svelte';
 	import { productLabel } from '$lib/product-language';
-	let mandates: any[] = $state([]),
+	type BankPermission = {
+		id: string;
+		provider: string;
+		provider_adapter: string;
+		status: string;
+		amount_ceiling_kobo: KoboValue;
+		cancellation_requested: boolean;
+	};
+	let mandates: BankPermission[] = $state([]),
 		error = $state(''),
 		busy = $state(''),
 		loading = $state(true),
 		notice = $state('');
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
-	function mandateRecord(value: unknown) {
+	function mandateRecord(value: unknown): BankPermission {
 		const row = record(value);
 		for (const key of ['id', 'provider', 'status']) if (!text(row[key])) throw new Error('Incomplete bank permission');
 		if (!['NOT_STARTED', 'PENDING', 'ACTIVE', 'PAUSED', 'CANCELLED', 'EXPIRED', 'FAILED'].includes(String(row.status)))
 			throw new Error('Unknown bank permission status');
-		kobo(row.amount_ceiling_kobo);
-		return row;
+		return {
+			id: text(row.id),
+			provider: text(row.provider),
+			provider_adapter: optionalText(row.provider_adapter),
+			status: text(row.status),
+			amount_ceiling_kobo: kobo(row.amount_ceiling_kobo),
+			cancellation_requested: row.cancellation_requested === true
+		};
 	}
 	async function load() {
 		const read = reads.begin();
@@ -39,7 +55,7 @@
 			if (read.current()) loading = false;
 		}
 	}
-	async function command(mandate: any, action: 'cancel' | 'restore' | 'refresh') {
+	async function command(mandate: BankPermission, action: 'cancel' | 'restore' | 'refresh') {
 		if (busy || loading) return;
 		busy = mandate.id;
 		error = '';
@@ -83,7 +99,7 @@
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	{#if notice}<p role="status">{notice}</p>{/if}
 	{#if loading}<p role="status">Opening bank debit permissions…</p>{:else if mandates.length}<section class="cards">
-			{#each mandates as mandate}<article>
+			{#each mandates as mandate (mandate.id)}<article>
 					<div><strong>{mandate.provider}</strong><span>{productLabel(mandate.status)}</span></div>
 					<p>Permission limit: <Money amountKobo={mandate.amount_ceiling_kobo} /></p>
 					{#if mandate.cancellation_requested && mandate.status === 'PAUSED'}<p>

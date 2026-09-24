@@ -15,6 +15,7 @@
 		busy = $state(false),
 		loading = $state(true);
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
 	function decodeCase(value: unknown): Case {
 		const item = record(value);
@@ -160,7 +161,7 @@
 					disabled={busy || loading}
 					bind:value={organizationID}
 					onchange={() => chooseWorkspace(organizationID)}
-					>{#each organizations as organization}<option value={organization.id}
+					>{#each organizations as organization (organization.id)}<option value={organization.id}
 							>{organization.trading_name || organization.legal_name}</option
 						>{/each}</select
 				></label
@@ -188,7 +189,7 @@
 			</p>{:else if !organizationID}<p>
 				Create a business account to send and track help requests, or use the complaint link below.
 			</p>{:else if cases.length}<div class="cases">
-				{#each cases as item}<article>
+				{#each cases as item (item.id)}<article>
 						<strong>Help number {item.id}</strong><span>{productLabel(item.state)}</span><small
 							>Sent {new Date(item.created_at).toLocaleDateString('en-NG')}</small
 						>{#if item.state === 'RESOLVED'}<button disabled={busy} onclick={() => updateCase(item, 'CLOSED')}

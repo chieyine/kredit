@@ -58,7 +58,7 @@
 		Keep the same name and provider account for existing work. A new account needs a different name. Choose the adapter
 		that originally handled these requests.
 	</p>
-	{#if error}<p role="alert">{error}</p>{:else}{#each accounts as account, index}<fieldset {disabled}>
+	{#if error}<p role="alert">{error}</p>{:else}{#each accounts as account, index (index)}<fieldset {disabled}>
 				<legend>Saved account {index + 1}</legend><label
 					>Adapter<select bind:value={account.adapter} onchange={changed}
 						><option value="">Connector</option><option value="mono"

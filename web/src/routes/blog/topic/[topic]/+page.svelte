@@ -12,7 +12,7 @@
 		mainEntity: {
 			'@type': 'ItemList',
 			numberOfItems: data.articles.length,
-			itemListElement: data.articles.map((article: any, index: number) => ({
+			itemListElement: data.articles.map((article, index) => ({
 				'@type': 'ListItem',
 				position: index + 1,
 				name: article.title,
@@ -53,7 +53,7 @@
 			<span>{data.category}</span>
 		</div>
 		<div class="topic-list">
-			{#each data.articles as article, index}<a href={`/blog/${article.slug}`}
+			{#each data.articles as article, index (article.slug)}<a href={`/blog/${article.slug}`}
 					><b>{String(index + 1).padStart(2, '0')}</b>
 					<div>
 						<h3>{article.title}</h3>

@@ -3,7 +3,7 @@
 </script>
 
 <div class="skeleton" role="status" aria-label="Loading">
-	{#each Array(rows) as _}
+	{#each Array(rows) as _, i (i)}
 		<span class:tall></span>
 	{/each}
 	<span class="sr-only">Loading…</span>

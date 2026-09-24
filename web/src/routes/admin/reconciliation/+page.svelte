@@ -27,6 +27,7 @@
 		cases.filter((item) => filter === 'all' || (filter === 'mine' ? item.owner_id === actorID : item.owner_id === null))
 	);
 	const requests = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
 	const names: Record<string, string> = {
 		provider_reversal: 'Bank debit reversal',

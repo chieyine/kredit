@@ -81,7 +81,7 @@
 <nav class="topic-nav" aria-label="Browse guide categories">
 	<p class="eyebrow">Browse one topic</p>
 	<div>
-		{#each topics as topic}<a href={`/blog/topic/${topic.slug}`}
+		{#each topics as topic (topic.slug)}<a href={`/blog/topic/${topic.slug}`}
 				><span>{topic.count} {topic.count === 1 ? 'guide' : 'guides'}</span><strong>{topic.category}</strong><i
 					aria-hidden="true">→</i
 				></a
@@ -105,7 +105,7 @@
 			/></label
 		><label
 			>Topic<select disabled={!interactive} bind:value={category}
-				><option value="All guides">All guides</option>{#each articleCategories as item}<option value={item}
+				><option value="All guides">All guides</option>{#each articleCategories as item, i (i)}<option value={item}
 						>{item}</option
 					>{/each}</select
 			></label
@@ -117,7 +117,7 @@
 		<p id="archive-title">{visiblePosts.length} helpful {visiblePosts.length === 1 ? 'guide' : 'guides'}</p>
 		<span>Guide / Reading time</span>
 	</div>
-	{#each visiblePosts as post}
+	{#each visiblePosts as post, idx (idx)}
 		<a class="post-row" href={post.href}>
 			<span class="issue">{post.issue}</span>
 			<div>

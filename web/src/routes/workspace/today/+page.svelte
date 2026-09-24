@@ -264,7 +264,7 @@
 		<div class="toolbar">
 			<label
 				>Business<select bind:value={organizationID} onchange={() => chooseWorkspace(organizationID)}
-					>{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option
+					>{#each organizations as org (org.id)}<option value={org.id}>{org.trading_name || org.legal_name}</option
 						>{/each}</select
 				></label
 			><button type="button" onclick={loadRequests}>Refresh</button><a href="/workspace/onboarding">Business setup</a>
@@ -305,7 +305,7 @@
 				</div>
 				<a href="/workspace/sales{scopeQuery}">View sales</a>
 			</header>
-			{#each [{ resource: sales, label: 'Sales' }, { resource: payments, label: 'Payments' }, { resource: overdue, label: 'Overdue sales' }, { resource: claims, label: 'Reported transfers' }, { resource: disputes, label: 'Reported problems' }] as item}<ResourceNotice
+			{#each [{ resource: sales, label: 'Sales' }, { resource: payments, label: 'Payments' }, { resource: overdue, label: 'Overdue sales' }, { resource: claims, label: 'Reported transfers' }, { resource: disputes, label: 'Reported problems' }] as item, i (i)}<ResourceNotice
 					resource={item.resource}
 					label={item.label}
 					retry={loadRequests}

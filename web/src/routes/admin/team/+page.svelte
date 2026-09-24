@@ -6,6 +6,7 @@
 	import { MutationIntent } from '$lib/api/mutation';
 	const requests = new LatestRequest();
 	const searches = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
 	function intent(url: string) {
 		let value = intents.get(url);
@@ -205,7 +206,7 @@
 			<section>
 				<h2>Current admin access</h2>
 				{#if loading}<p>Loading the admin team…</p>{:else}
-					{#each members as item}
+					{#each members as item, i (i)}
 						<article>
 							<div><strong>{item.display_name}</strong><span>{item.identifier}</span></div>
 							<div>
@@ -263,7 +264,7 @@
 				</form>
 				{#if userResults.length}
 					<div class="results" aria-label="User search results">
-						{#each userResults as user}<button type="button" onclick={() => chooseUser(user)}
+						{#each userResults as user, i (i)}<button type="button" onclick={() => chooseUser(user)}
 								><strong>{user.display_name}</strong><span>{user.identifier} · {user.status}</span></button
 							>{/each}
 					</div>

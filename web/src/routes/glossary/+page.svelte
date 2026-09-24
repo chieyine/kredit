@@ -58,11 +58,11 @@
 	</header>
 
 	<nav class="letter-index" aria-label="Glossary letters">
-		{#each ['A', 'D', 'G', 'M', 'O', 'P', 'T'] as letter}<a href={'#letter-' + letter}>{letter}</a>{/each}
+		{#each ['A', 'D', 'G', 'M', 'O', 'P', 'T'] as letter, i (i)}<a href={'#letter-' + letter}>{letter}</a>{/each}
 	</nav>
 
 	<dl class="term-list">
-		{#each terms as [letter, term, definition], index}
+		{#each terms as [letter, term, definition], index (index)}
 			<div id={index === 0 || terms[index - 1][0] !== letter ? 'letter-' + letter : undefined}>
 				<dt><span>{letter}</span>{term}</dt>
 				<dd>{definition}</dd>

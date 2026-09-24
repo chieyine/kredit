@@ -2,7 +2,34 @@
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { onMount } from 'svelte';
 	import { adminGet, adminPost, localTime, localInput, lagosISO } from '$lib/admin-client';
-	let items: any[] = $state([]),
+	import { optionalText, record, rows, text } from '$lib/api/reliable';
+	type InboxItem = {
+		id: string;
+		kind: string;
+		state: string;
+		title: string;
+		href: string;
+		author: string;
+		owner: string;
+		due_at: string;
+	};
+	function inboxItem(value: unknown): InboxItem {
+		const item = record(value);
+		const href = text(item.href);
+		// Server-provided links are only followed inside the admin area.
+		if (!href.startsWith('/admin') || href.startsWith('//')) throw new Error('Approval inbox could not be verified.');
+		return {
+			id: text(item.id),
+			kind: text(item.kind),
+			state: text(item.state),
+			title: text(item.title),
+			href,
+			author: optionalText(item.author),
+			owner: optionalText(item.owner),
+			due_at: text(item.due_at)
+		};
+	}
+	let items: InboxItem[] = $state([]),
 		actor = $state(''),
 		q = $state(''),
 		offset = $state(0),
@@ -10,7 +37,7 @@
 		busy = $state(false),
 		error = $state(''),
 		message = $state('');
-	let selected: any = $state(null),
+	let selected: InboxItem | null = $state(null),
 		due = $state(''),
 		reason = $state('');
 	async function load() {
@@ -22,8 +49,9 @@
 			const b = await adminGet(`/api/v1/ops/approval-inbox?q=${encodeURIComponent(q)}&offset=${offset}`);
 			if (!Array.isArray(b.items) || typeof b.actor_id !== 'string')
 				throw new Error('Approval inbox could not be verified.');
-			more = b.items.length > 200;
-			items = b.items.slice(0, 200);
+			const verified = rows('items', inboxItem)(b);
+			more = verified.length > 200;
+			items = verified.slice(0, 200);
 			actor = b.actor_id;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'We could not open this. Try again.';
@@ -74,7 +102,7 @@
 		<label>Search reviews<input bind:value={q} type="search" /></label><button disabled={busy}>Search</button>
 	</form>
 	{#if error}<p role="alert">{error}</p>{/if}{#if message}<p role="status">{message}</p>{/if}
-	{#each items as item}<article>
+	{#each items as item (`${item.kind}:${item.id}`)}<article>
 			<h2><a href={item.href}>{item.title}</a></h2>
 			<p>{item.kind.replaceAll('_', ' ')} · {item.state.replaceAll('_', ' ')} · Proposed by {item.author}</p>
 			<p>

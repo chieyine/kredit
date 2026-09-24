@@ -99,7 +99,8 @@
 	{#if businesses.state === 'ready' && businesses.data.length}<div class="filters">
 			<label
 				>Business<select bind:value={organizationID} onchange={() => chooseWorkspace(organizationID)}
-					>{#each businesses.data as item}<option value={item.id}>{item.trading_name || item.legal_name}</option
+					>{#each businesses.data as item (item.id)}<option value={item.id}
+							>{item.trading_name || item.legal_name}</option
 						>{/each}</select
 				></label
 			><label class="search-field"

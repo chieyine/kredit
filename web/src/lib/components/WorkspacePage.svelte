@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="Row extends object">
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -6,7 +6,8 @@
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import Money from '$lib/components/Money.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import { checkedJSON, publicError, RequestError, record as objectRecord, text } from '$lib/api/reliable';
+	import { checkedJSON, publicError, RequestError, record as objectRecord } from '$lib/api/reliable';
+	import { organization, type Organization } from '$lib/records';
 	import type { KoboValue } from '$lib/money';
 
 	/**
@@ -18,8 +19,11 @@
 	 * list look the same and read like nothing. Each page now names its own
 	 * title, status, amount and link, and a record it cannot describe is not
 	 * rendered as a row of identifiers.
+	 *
+	 * `Row` is the record shape the caller's row functions read. The component
+	 * only checks each record is an object; callers must treat fields as
+	 * optional and fall back when one is missing.
 	 */
-	type Row = Record<string, any>;
 	let {
 		eyebrow,
 		title,
@@ -68,7 +72,7 @@
 	let loading = $state(true),
 		error = $state(''),
 		records = $state<Row[]>([]);
-	let organizations = $state<Row[]>([]),
+	let organizations = $state<Organization[]>([]),
 		organizationID = $state(''),
 		query = $state(''),
 		pageNumber = $state(1);
@@ -108,7 +112,7 @@
 		pageNumber = 1;
 		async function read(url: string) {
 			try {
-				return await checkedJSON<any>(url, (value) => value, { signal });
+				return await checkedJSON(url, objectRecord, { signal });
 			} catch (cause) {
 				if (cause instanceof RequestError && cause.status === 401)
 					location.assign(`/signin?next=${encodeURIComponent(page.url.pathname + page.url.search)}`);
@@ -120,13 +124,8 @@
 				const data = await read('/api/v1/organizations');
 				if (version !== requestVersion) return;
 				if (!Array.isArray(data.organizations)) throw new Error('unavailable');
-				organizations = data.organizations.map((value: unknown) => {
-					const item = objectRecord(value);
-					text(item.id);
-					text(item.legal_name);
-					return item;
-				});
-				organizationID = requestedWorkspace(organizations as { id: string }[]);
+				organizations = data.organizations.map(organization);
+				organizationID = requestedWorkspace(organizations);
 			}
 			if (organizationPath && !organizationID) return;
 			const data = await read(
@@ -135,7 +134,7 @@
 			if (version !== requestVersion) return;
 			const value = collectionKey ? data[collectionKey] : data;
 			if (!Array.isArray(value)) throw new Error('unavailable');
-			records = value.map(objectRecord);
+			records = value.map((item) => objectRecord(item) as Row);
 		} catch (cause) {
 			if (version === requestVersion && !signal.aborted) {
 				error = publicError(cause, title.toLowerCase());
@@ -173,7 +172,8 @@
 				<label
 					>Business
 					<select bind:value={organizationID} onchange={() => chooseWorkspace(organizationID)}>
-						{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}
+						{#each organizations as org (org.id)}<option value={org.id}>{org.trading_name || org.legal_name}</option
+							>{/each}
 					</select>
 				</label>
 			{/if}
@@ -206,7 +206,7 @@
 		</p>
 		<ul class="records">
 			<!-- Several attempts or businesses can legitimately link to the same detail page. -->
-			{#each visible as record}
+			{#each visible as record, i (i)}
 				{@const href = workspaceHref(rowHref(record, organizationID), page.url)}
 				{@const amount = rowAmount(record)}
 				<li>

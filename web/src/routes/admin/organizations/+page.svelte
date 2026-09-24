@@ -1,10 +1,33 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { checkedJSON, publicError, record, rows, text, LatestRequest } from '$lib/api/reliable';
+	import {
+		checkedJSON,
+		optionalNumber,
+		optionalText,
+		publicError,
+		record,
+		rows,
+		text,
+		LatestRequest
+	} from '$lib/api/reliable';
+	import type { KoboValue } from '$lib/money';
+	import { kobo } from '$lib/records';
 	const requests = new LatestRequest();
 	import { onMount } from 'svelte';
 	import Money from '$lib/components/Money.svelte';
-	let organizations = $state<any[]>([]),
+	type AdminOrganization = {
+		id: string;
+		status: string;
+		business_type: string;
+		legal_name: string;
+		trading_name: string;
+		industry: string;
+		outstanding_kobo: KoboValue;
+		open_sales: number;
+		member_count: number;
+		version: number;
+	};
+	let organizations = $state<AdminOrganization[]>([]),
 		query = $state(''),
 		loading = $state(true),
 		error = $state('');
@@ -15,12 +38,22 @@
 		try {
 			const result = await checkedJSON(
 				`/api/v1/ops/organizations?q=${encodeURIComponent(query.trim())}`,
-				rows('organizations', (value) => {
+				rows('organizations', (value): AdminOrganization => {
 					const item = record(value);
-					for (const key of ['id', 'status', 'business_type', 'legal_name']) text(item[key]);
 					if (!Number.isSafeInteger(item.version) || Number(item.version) < 1)
 						throw new Error('Missing current version');
-					return item;
+					return {
+						id: text(item.id),
+						status: text(item.status),
+						business_type: text(item.business_type),
+						legal_name: text(item.legal_name),
+						trading_name: optionalText(item.trading_name),
+						industry: optionalText(item.industry),
+						outstanding_kobo: kobo(item.outstanding_kobo),
+						open_sales: optionalNumber(item.open_sales),
+						member_count: optionalNumber(item.member_count),
+						version: Number(item.version)
+					};
 				}),
 				{ signal: request.signal }
 			);
@@ -61,7 +94,7 @@
 			<p class="error">{error}</p>
 			<button type="button" onclick={load}>Try again</button>
 		</section>{:else if loading}<p>Loading businesses…</p>{:else}<section>
-			{#each organizations as org}<article>
+			{#each organizations as org (org.id)}<article>
 					<div class="top">
 						<div>
 							<small>{org.business_type.replaceAll('_', ' ')}</small>

@@ -22,7 +22,7 @@
 		<p class="eyebrow">Getting started</p>
 		<h2 id="role-steps">A clear next step, every time.</h2>
 		<ol class="steps">
-			{#each stage.steps as [title, body]}
+			{#each stage.steps as [title, body], i (i)}
 				<li>
 					<div>
 						<h3>{title}</h3>

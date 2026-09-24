@@ -1,13 +1,25 @@
 <script lang="ts">
-	import { checkedJSON, publicError, record, rows } from '$lib/api/reliable';
+	import { checkedJSON, publicError, record, rows, text } from '$lib/api/reliable';
 	let error = $state('');
 	import { onMount } from 'svelte';
 	import { idempotencyKey } from '$lib/api/client';
-	import { adminPost } from '$lib/admin-client';
+	import { adminPost, commandPreview } from '$lib/admin-client';
 	let actionKey = '';
 	import ProtectedActionDialog from '$lib/components/ProtectedActionDialog.svelte';
-	let events = $state<any[]>([]),
-		selected = $state<any>(null),
+	type ProviderEvent = { provider: string; event_id: string; event_type: string; state: string; attempts: number };
+	function providerEvent(value: unknown): ProviderEvent {
+		const item = record(value);
+		if (!Number.isSafeInteger(item.attempts)) throw new Error('Incomplete provider event');
+		return {
+			provider: text(item.provider),
+			event_id: text(item.event_id),
+			event_type: text(item.event_type),
+			state: text(item.state),
+			attempts: Number(item.attempts)
+		};
+	}
+	let events = $state<ProviderEvent[]>([]),
+		selected = $state<ProviderEvent | null>(null),
 		message = $state(''),
 		dialogOpen = $state(false),
 		loading = $state(true);
@@ -15,7 +27,7 @@
 		loading = true;
 		error = '';
 		try {
-			events = await checkedJSON('/api/v1/ops/provider-events', rows('events', record));
+			events = await checkedJSON('/api/v1/ops/provider-events', rows('events', providerEvent));
 		} catch (cause) {
 			error = publicError(cause, 'provider events');
 		} finally {
@@ -23,6 +35,7 @@
 		}
 	}
 	function input(reason: string) {
+		if (!selected) throw new Error('Choose an event first.');
 		return {
 			command_type: 'retry_webhook',
 			target_type: selected.provider,
@@ -32,11 +45,9 @@
 		};
 	}
 	async function preview(reason: string) {
-		const body = await adminPost('/api/v1/ops/commands/preview', input(reason));
-		if (typeof body.command?.impact_preview?.effect !== 'string')
-			throw new Error('The impact preview could not be verified.');
+		const { impact_preview: impact } = commandPreview(await adminPost('/api/v1/ops/commands/preview', input(reason)));
 		actionKey = idempotencyKey();
-		return body.command.impact_preview.effect;
+		return impact.effect;
 	}
 	async function confirm(reason: string) {
 		actionKey ||= idempotencyKey();
@@ -58,7 +69,9 @@
 	{#if message}<p class="notice" role="status">{message}</p>{/if}{#if error}<section role="alert">
 			<p class="error">{error}</p>
 			<button type="button" onclick={load}>Try again</button>
-		</section>{:else if loading}<p role="status">Loading provider events…</p>{:else}{#each events as item}<article>
+		</section>{:else if loading}<p role="status">
+			Loading provider events…
+		</p>{:else}{#each events as item (`${item.provider}:${item.event_id}`)}<article>
 				<header><strong>{item.provider} · {item.event_type}</strong><span class="status">{item.state}</span></header>
 				<code>{item.event_id}</code>
 				<p>{item.attempts} processing attempts</p>

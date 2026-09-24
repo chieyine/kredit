@@ -324,7 +324,7 @@
 				>
 			</div>{/if}
 		<ol class="steps" aria-label="Sale steps">
-			{#each ['Customer', 'Goods & amount', 'Payment date', 'Review'] as label, index}<li
+			{#each ['Customer', 'Goods & amount', 'Payment date', 'Review'] as label, index (index)}<li
 					aria-current={step === index + 1 ? 'step' : undefined}
 				>
 					<span aria-hidden="true">{index + 1}</span>{label}
@@ -338,14 +338,15 @@
 			{#if step === 1}
 				{#if organizations.state === 'ready' && organizations.data.length > 1}<label
 						>Your business<select bind:value={organizationID} disabled={busy} onchange={() => loadCustomers(true)}
-							>{#each organizations.data as org}<option value={org.id}>{org.trading_name || org.legal_name}</option
+							>{#each organizations.data as org (org.id)}<option value={org.id}
+									>{org.trading_name || org.legal_name}</option
 								>{/each}</select
 						></label
 					>{/if}
 				<ResourceNotice resource={customers} label="Customers" retry={() => void loadCustomers()} />
 				{#if customers.state === 'ready'}{#if customers.data.length}<label
 							>Customer<select bind:value={selectedBuyer} disabled={busy}
-								><option value="">Choose a customer</option>{#each customers.data as item}<option
+								><option value="">Choose a customer</option>{#each customers.data as item, i (i)}<option
 										value={customerKey(item)}>{item.trading_name || item.legal_name}</option
 									>{/each}</select
 							></label

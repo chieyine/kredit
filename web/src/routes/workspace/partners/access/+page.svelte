@@ -129,7 +129,7 @@
 	<VerifyIdentity />
 	<label
 		>Business<select bind:value={organization} disabled={busy || loading} onchange={() => chooseWorkspace(organization)}
-			>{#each businesses as b}<option value={b.id}>{b.name}</option>{/each}</select
+			>{#each businesses as b (b.id)}<option value={b.id}>{b.name}</option>{/each}</select
 		></label
 	>
 	{#if error}<p role="alert">{error}</p>
@@ -156,7 +156,7 @@
 					>Manage your team</a
 				>.
 			</p>{/if}
-		{#each scopes as s}<section class="card">
+		{#each scopes as s (s.user_id)}<section class="card">
 				<h2>{s.name}</h2>
 				{#if !s.active}<p role="status">
 						Membership has changed. An owner must save a new access decision before this member can work with customer
@@ -170,7 +170,7 @@
 							></select
 						></label
 					>
-					{#if s.mode === 'branches'}{#each branches as b}<label class="check"
+					{#if s.mode === 'branches'}{#each branches as b (b.id)}<label class="check"
 								><input
 									type="checkbox"
 									checked={s.branch_ids.includes(b.id)}

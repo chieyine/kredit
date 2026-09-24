@@ -48,6 +48,7 @@
 	let errorSummary: HTMLParagraphElement = $state()!;
 	let reviewHeading: HTMLHeadingElement = $state()!;
 	let creation: MutationIntent | null = null;
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- retry cache, never rendered
 	const uploadedInvoices = new Map<string, { id: string; hash: string }>();
 	const businessReads = new LatestRequest(),
 		customerReads = new LatestRequest();
@@ -483,7 +484,8 @@
 					<div class="form-grid">
 						<label
 							>Your business<select bind:value={organizationID} onchange={changeBusiness} required
-								>{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option
+								>{#each organizations as org (org.id)}<option value={org.id}
+										>{org.trading_name || org.legal_name}</option
 									>{/each}</select
 							></label
 						>{#if customerLoading}<p role="status">Checking your customers…</p>{:else if customerError}<div
@@ -501,7 +503,7 @@
 								/></label
 							><label
 								>Customer<select bind:value={selectedBuyer} onchange={chooseBuyer} required
-									><option value="">Choose a customer</option>{#each visibleCustomers as customer}<option
+									><option value="">Choose a customer</option>{#each visibleCustomers as customer, i (i)}<option
 											value={customerKey(customer)}>{customer.trading_name || customer.legal_name}</option
 										>{/each}</select
 								></label
@@ -526,7 +528,7 @@
 				<div>
 					<h2>What are they taking, and for how much?</h2>
 					{#if savedItems.length}<div class="saved-items">
-							<strong>Goods you sold before</strong>{#each savedItems.slice(0, 4) as item}<button
+							<strong>Goods you sold before</strong>{#each savedItems.slice(0, 4) as item, i (i)}<button
 									type="button"
 									onclick={() => useSaved(item)}>{item.name} · ₦{item.amount}</button
 								>{/each}

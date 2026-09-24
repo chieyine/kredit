@@ -2,9 +2,11 @@
 	import { MutationIntent } from '$lib/api/mutation';
 	import { page } from '$app/state';
 	import { localTime } from '$lib/admin-client';
-	import { checkedJSON, record, rows, text, LatestRequest, publicError } from '$lib/api/reliable';
-	let item = $state<any>(null),
-		timeline: any[] = $state([]),
+	import { checkedJSON, optionalText, record, rows, text, LatestRequest, publicError } from '$lib/api/reliable';
+	type SupportCase = { id: string; state: string; subject_type: string; subject_id: string; created_at: string };
+	type CaseEvent = { action: string; created_at: string; note: string };
+	let item = $state<SupportCase | null>(null),
+		timeline: CaseEvent[] = $state([]),
 		error = $state(''),
 		notice = $state(''),
 		loading = $state(true),
@@ -22,18 +24,24 @@
 				`/api/v1/ops/cases/${encodeURIComponent(id)}`,
 				(value) => {
 					const body = record(value),
-						item = record(body.case);
-					if (text(item.id) !== id) throw new Error('Case identity mismatch');
-					text(item.state);
-					text(item.subject_type);
-					text(item.created_at);
+						row = record(body.case);
+					const item: SupportCase = {
+						id: text(row.id),
+						state: text(row.state),
+						subject_type: text(row.subject_type),
+						subject_id: optionalText(row.subject_id),
+						created_at: text(row.created_at)
+					};
+					if (item.id !== id) throw new Error('Case identity mismatch');
 					return {
 						item,
-						timeline: rows('timeline', (value) => {
+						timeline: rows('timeline', (value): CaseEvent => {
 							const event = record(value);
-							text(event.action);
-							text(event.created_at);
-							return event;
+							return {
+								action: text(event.action),
+								created_at: text(event.created_at),
+								note: optionalText(event.note)
+							};
 						})(body)
 					};
 				},
@@ -42,7 +50,8 @@
 			if (!request.current()) return;
 			item = data.item;
 			timeline = data.timeline;
-			nextState = item.state === 'OPEN' ? 'IN_PROGRESS' : item.state === 'IN_PROGRESS' ? 'RESOLVED' : 'CLOSED';
+			const current = data.item.state;
+			nextState = current === 'OPEN' ? 'IN_PROGRESS' : current === 'IN_PROGRESS' ? 'RESOLVED' : 'CLOSED';
 		} catch (cause) {
 			if (request.current()) error = publicError(cause, 'this case');
 		} finally {
@@ -97,7 +106,7 @@
 		>
 			{error}
 		</p>
-		<button onclick={() => load(page.params.id!)}>Try again</button>{:else}<section class="summary">
+		<button onclick={() => load(page.params.id!)}>Try again</button>{:else if item}<section class="summary">
 			<div><span>Status</span><strong>{item.state.replaceAll('_', ' ')}</strong></div>
 			<div><span>Subject</span><strong>{item.subject_type.replaceAll('_', ' ')}</strong></div>
 			<div><span>Reference</span><code>{item.subject_id}</code></div>
@@ -107,7 +116,7 @@
 			<section>
 				<h2>Case history</h2>
 				<ol>
-					{#each timeline as event}<li>
+					{#each timeline as event, i (i)}<li>
 							<strong>{event.action.replaceAll('_', ' ')}</strong><span>{localTime(event.created_at)}</span
 							>{#if event.note}<p>{event.note}</p>{/if}
 						</li>{/each}

@@ -21,7 +21,12 @@ func (s *Server) listOrganizationDue(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	horizon := now.Add(7 * 24 * time.Hour)
-	items := []map[string]any{}
+	type dueItem struct {
+		id    string
+		dueAt time.Time
+		body  map[string]any
+	}
+	dueItems := []dueItem{}
 	for _, v := range views {
 		if v.Obligation == nil || v.Obligation.OutstandingKobo <= 0 {
 			continue
@@ -55,8 +60,17 @@ func (s *Server) listOrganizationDue(w http.ResponseWriter, r *http.Request) {
 		if !due.After(now) {
 			state = "DUE"
 		}
-		items = append(items, map[string]any{"id": v.Request.ID, "credit_request_id": v.Request.ID, "obligation_id": v.Obligation.ID, "buyer_legal_name": v.Request.BuyerLegalName, "amount_kobo": amount, "due_at": due, "state": state})
+		dueItems = append(dueItems, dueItem{id: v.Request.ID, dueAt: due, body: map[string]any{"id": v.Request.ID, "credit_request_id": v.Request.ID, "obligation_id": v.Obligation.ID, "buyer_legal_name": v.Request.BuyerLegalName, "amount_kobo": amount, "due_at": due, "state": state}})
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i]["due_at"].(time.Time).Before(items[j]["due_at"].(time.Time)) })
+	sort.SliceStable(dueItems, func(i, j int) bool {
+		if !dueItems[i].dueAt.Equal(dueItems[j].dueAt) {
+			return dueItems[i].dueAt.Before(dueItems[j].dueAt)
+		}
+		return dueItems[i].id < dueItems[j].id
+	})
+	items := make([]map[string]any, 0, len(dueItems))
+	for _, item := range dueItems {
+		items = append(items, item.body)
+	}
 	writeJSON(w, 200, map[string]any{"due": items, "as_of": now, "through": horizon})
 }

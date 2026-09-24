@@ -25,17 +25,29 @@
 			checkingVerification = false;
 		}
 	}
-	import { formatKobo, sumKobo } from '$lib/money';
-	import { kobo, saleView } from '$lib/records';
+	import { exactKobo, formatKobo, sumKobo, type KoboValue } from '$lib/money';
+	import { kobo, saleView, type SaleView } from '$lib/records';
 	import { checkedJSON, LatestRequest, record, rows, text, publicError } from '$lib/api/reliable';
 	import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
 
-	let portal = $state<any>(null);
-	let requests = $state<any[]>([]);
+	type Portal = {
+		person: { full_name: string };
+		business: { id: string; legal_name: string };
+		verification_current: boolean;
+	};
+	type PaymentDay = {
+		obligation_id: string;
+		outstanding_kobo: KoboValue;
+		next_due_kobo: KoboValue;
+		next_due_at: string | null;
+		overdue: boolean;
+	};
+	let portal = $state<Portal | null>(null);
+	let requests = $state<SaleView[]>([]);
 	let error = $state('');
 	let balancesUnavailable = $state(false);
 	let loading = $state(true);
-	let paymentDays = $state<any[]>([]),
+	let paymentDays = $state<PaymentDay[]>([]),
 		datesUnavailable = $state(true);
 	// A sale whose obligation did not load contributes nothing we can vouch for,
 	// so the total is reported as unconfirmed rather than quietly understated.
@@ -57,7 +69,7 @@
 										'RECEIPT_CONFIRMATION_PENDING',
 										'CANCELLED',
 										'DECLINED'
-								  ].includes(item.request?.state)
+								  ].includes(item.request.state)
 								? 0
 								: null
 					)
@@ -65,31 +77,32 @@
 	);
 	const pending = $derived(
 		requests.filter((item) =>
-			['SENT', 'BUYER_REVIEWING', 'PENDING_BUYER_CONFIRMATION'].includes(
-				String(item.request?.state ?? item.state ?? '').toUpperCase()
-			)
+			['SENT', 'BUYER_REVIEWING', 'PENDING_BUYER_CONFIRMATION'].includes(item.request.state.toUpperCase())
 		)
 	);
-	const openBalances = $derived(requests.filter((item) => Number(item.obligation?.outstanding_kobo ?? 0) > 0));
+	const openBalances = $derived(requests.filter((item) => (exactKobo(item.obligation?.outstanding_kobo) ?? 0n) > 0n));
 
 	const nextPayment = $derived(
 		[...paymentDays]
-			.filter((item) => item.next_due_at && Number(item.outstanding_kobo) > 0)
-			.sort((a, b) => Date.parse(a.next_due_at) - Date.parse(b.next_due_at))[0] ?? null
+			.filter((item) => item.next_due_at && (exactKobo(item.outstanding_kobo) ?? 0n) > 0n)
+			.sort((a, b) => Date.parse(a.next_due_at ?? '') - Date.parse(b.next_due_at ?? ''))[0] ?? null
 	);
-	const overdueCount = $derived(paymentDays.filter((item) => item.overdue && Number(item.outstanding_kobo) > 0).length);
-	function decodeDays(value: unknown) {
-		return rows('obligations', (value) => {
+	const overdueCount = $derived(
+		paymentDays.filter((item) => item.overdue && (exactKobo(item.outstanding_kobo) ?? 0n) > 0n).length
+	);
+	function decodeDays(value: unknown): PaymentDay[] {
+		return rows('obligations', (value): PaymentDay => {
 			const item = record(value);
-			text(item.obligation_id);
-			kobo(item.outstanding_kobo);
-			kobo(item.next_due_kobo);
-			if (
-				typeof item.overdue !== 'boolean' ||
-				(item.next_due_at != null && !Number.isFinite(Date.parse(text(item.next_due_at))))
-			)
+			const nextDueAt = item.next_due_at == null ? null : text(item.next_due_at);
+			if (typeof item.overdue !== 'boolean' || (nextDueAt !== null && !Number.isFinite(Date.parse(nextDueAt))))
 				throw new Error('Invalid payment dates');
-			return item;
+			return {
+				obligation_id: text(item.obligation_id),
+				outstanding_kobo: kobo(item.outstanding_kobo),
+				next_due_kobo: kobo(item.next_due_kobo),
+				next_due_at: nextDueAt,
+				overdue: item.overdue
+			};
 		})(value);
 	}
 
@@ -105,12 +118,15 @@
 			const [account, sales, days] = await Promise.allSettled([
 				checkedJSON(
 					`/api/v1/buyer/me${query}`,
-					(value) => {
+					(value): Portal => {
 						const response = record(value),
-							portal = record(response.portal);
-						text(record(portal.person).full_name);
-						text(record(portal.business).legal_name);
-						return { ...portal, verification_current: response.verification_current === true };
+							portal = record(response.portal),
+							business = record(portal.business);
+						return {
+							person: { full_name: text(record(portal.person).full_name) },
+							business: { id: text(business.id), legal_name: text(business.legal_name) },
+							verification_current: response.verification_current === true
+						};
 					},
 					{ signal: request.signal }
 				),
@@ -125,10 +141,11 @@
 				error = publicError(account.reason, 'your account');
 				return;
 			}
-			portal = account.value;
+			const verified = account.value;
+			portal = verified;
 			if (days.status !== 'fulfilled') error = publicError(days.reason, 'your payment dates');
 			if (sales.status === 'fulfilled') {
-				requests = sales.value.filter((item) => item.request?.buyer_business_id === portal.business.id);
+				requests = sales.value.filter((item) => item.request.buyer_business_id === verified.business.id);
 				balancesUnavailable = false;
 				if (days.status === 'fulfilled') {
 					const ids = new Set(requests.map((item) => item.obligation?.id).filter(Boolean));
@@ -198,7 +215,7 @@
 						></a
 					>{:else if nextPayment}<a class="due-strip" href={workspaceHref('/workspace/purchases/obligations', page.url)}
 						><span>Next: {formatKobo(nextPayment.next_due_kobo)}</span><em
-							>by {new Date(nextPayment.next_due_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })} →</em
+							>by {new Date(nextPayment.next_due_at ?? '').toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })} →</em
 						></a
 					>{:else if outstanding > 0n}<a
 						class="due-strip"

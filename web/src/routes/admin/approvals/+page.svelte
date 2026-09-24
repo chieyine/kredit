@@ -2,10 +2,11 @@
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { onMount } from 'svelte';
 	import { adminGet, localTime, localInput, lagosISO } from '$lib/admin-client';
-	import { formatKobo, parseNaira, exactKobo } from '$lib/money';
+	import { formatKobo, parseNaira, exactKobo, type KoboValue } from '$lib/money';
 	import { LatestRequest, record, rows, text } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	const reads = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
 	function write(url: string, payload: unknown, decode: (value: unknown) => unknown) {
 		let intent = intents.get(url);
@@ -15,44 +16,93 @@
 		}
 		return intent.run(payload, decode);
 	}
-	function snapshot(value: unknown, requireItems = false) {
+	type ScheduleItem = {
+		id: string;
+		due_at: string;
+		principal_due_kobo: KoboValue;
+		allocated_kobo: KoboValue;
+		cancelled: boolean;
+	};
+	type Snapshot = { outstanding_kobo: KoboValue; items: ScheduleItem[] };
+	type ProposedDate = { item_id: string; due_at: string };
+	type Change = {
+		id: string;
+		kind: string;
+		state: string;
+		reason: string;
+		proposed_by: string;
+		proposer: string;
+		approver: string;
+		expires_at: string;
+		obligation_id: string;
+		before_values: Snapshot;
+		proposed_values: { amount_kobo: KoboValue; dates: ProposedDate[] };
+	};
+	type ChangeContext = { obligation_id: string; snapshot: Snapshot };
+	function exactAmount(value: unknown, message: string): KoboValue {
+		if (typeof value !== 'number' && typeof value !== 'string' && typeof value !== 'bigint') throw new Error(message);
+		if (exactKobo(value) === null) throw new Error(message);
+		return value;
+	}
+	function snapshot(value: unknown, requireItems = false): Snapshot {
 		const result = record(value);
-		if (exactKobo(result.outstanding_kobo as any) === null) throw new Error('Outstanding amount was incomplete');
-		if (requireItems || result.items !== undefined) {
-			rows('items', (value) => {
-				const item = record(value);
-				text(item.id);
-				text(item.due_at);
-				if (exactKobo(item.principal_due_kobo as any) === null || exactKobo(item.allocated_kobo as any) === null)
-					throw new Error('Schedule amounts were incomplete');
-				return item;
-			})(result);
-		}
-		return result;
+		const outstanding = exactAmount(result.outstanding_kobo, 'Outstanding amount was incomplete');
+		const items =
+			requireItems || result.items !== undefined
+				? rows('items', (value): ScheduleItem => {
+						const item = record(value);
+						return {
+							id: text(item.id),
+							due_at: text(item.due_at),
+							principal_due_kobo: exactAmount(item.principal_due_kobo, 'Schedule amounts were incomplete'),
+							allocated_kobo: exactAmount(item.allocated_kobo, 'Schedule amounts were incomplete'),
+							cancelled: item.cancelled === true
+						};
+					})(result)
+				: [];
+		return { outstanding_kobo: outstanding, items };
 	}
-	function change(value: unknown) {
+	function change(value: unknown): Change {
 		const item = record(value);
-		for (const key of ['id', 'kind', 'state', 'reason', 'proposed_by', 'proposer', 'expires_at', 'obligation_id'])
-			text(item[key]);
 		const proposed = record(item.proposed_values);
-		snapshot(item.before_values, item.kind === 'schedule_amendment');
-		if (item.kind === 'schedule_amendment') {
-			rows('dates', (value) => {
-				const date = record(value);
-				text(date.item_id);
-				text(date.due_at);
-				return date;
-			})(proposed);
-		} else if (exactKobo(proposed.amount_kobo as any) === null) throw new Error('Proposed amount was incomplete');
-		return item;
+		const kind = text(item.kind);
+		const dates =
+			kind === 'schedule_amendment'
+				? rows('dates', (value): ProposedDate => {
+						const date = record(value);
+						return { item_id: text(date.item_id), due_at: text(date.due_at) };
+					})(proposed)
+				: [];
+		return {
+			id: text(item.id),
+			kind,
+			state: text(item.state),
+			reason: text(item.reason),
+			proposed_by: text(item.proposed_by),
+			proposer: text(item.proposer),
+			approver: typeof item.approver === 'string' ? item.approver : '',
+			expires_at: text(item.expires_at),
+			obligation_id: text(item.obligation_id),
+			before_values: snapshot(item.before_values, kind === 'schedule_amendment'),
+			proposed_values: {
+				amount_kobo:
+					kind === 'schedule_amendment' ? 0 : exactAmount(proposed.amount_kobo, 'Proposed amount was incomplete'),
+				dates
+			}
+		};
 	}
-	function difference(a: any, b: any) {
+	function difference(a: KoboValue, b: KoboValue) {
 		const x = exactKobo(a),
 			y = exactKobo(b);
 		return formatKobo(x === null || y === null ? null : x - y);
 	}
-	let changes: any[] = $state([]),
-		context: any = $state(null),
+	function unpaid(item: ScheduleItem) {
+		const due = exactKobo(item.principal_due_kobo),
+			allocated = exactKobo(item.allocated_kobo);
+		return due !== null && allocated !== null && due > allocated;
+	}
+	let changes: Change[] = $state([]),
+		context: ChangeContext | null = $state(null),
 		reference = $state(''),
 		kind = $state('write_off'),
 		amount = $state(''),
@@ -93,21 +143,23 @@
 				adminGet('/api/v1/ops/governance', read.signal)
 			]);
 			if (!read.current()) return;
+			const mode = gov.governance && typeof gov.governance === 'object' ? record(gov.governance).mode : undefined;
 			if (
 				!Array.isArray(b.changes) ||
 				!Array.isArray(c.roles) ||
-				!['solo_owner', 'delegated_team'].includes(gov.governance?.mode)
+				typeof mode !== 'string' ||
+				!['solo_owner', 'delegated_team'].includes(mode)
 			)
 				throw new Error('Proposals and approval rules could not be verified.');
 			const verified = rows('changes', change)(b);
-			c.roles.forEach(text);
-			text(c.actor_id);
+			const verifiedRoles = c.roles.map(text);
+			const actorID = text(c.actor_id);
 			changes = verified.slice(0, 100);
 			more = verified.length > 100;
-			actor = c.actor_id;
-			roles = c.roles;
-			isPlatformOwner = c.roles?.includes('platform_owner') || false;
-			if (gov.governance?.mode) governanceMode = gov.governance?.mode;
+			actor = actorID;
+			roles = verifiedRoles;
+			isPlatformOwner = verifiedRoles.includes('platform_owner');
+			governanceMode = mode;
 		} catch (e) {
 			if (read.current()) error = e instanceof Error ? e.message : 'That did not go through. Try again.';
 		} finally {
@@ -121,13 +173,13 @@
 		context = null;
 		try {
 			const loaded = await adminGet(`/api/v1/ops/change-context?q=${encodeURIComponent(reference)}`);
-			text(loaded.obligation_id);
-			snapshot(loaded.snapshot, true);
-			context = loaded;
+			const verified: ChangeContext = {
+				obligation_id: text(loaded.obligation_id),
+				snapshot: snapshot(loaded.snapshot, true)
+			};
+			context = verified;
 			dates = Object.fromEntries(
-				context.snapshot.items
-					.filter((i: any) => !i.cancelled && i.principal_due_kobo > i.allocated_kobo)
-					.map((i: any) => [i.id, localInput(i.due_at)])
+				verified.snapshot.items.filter((i) => !i.cancelled && unpaid(i)).map((i) => [i.id, localInput(i.due_at)])
 			);
 			proposalID = crypto.randomUUID();
 		} catch (e) {
@@ -137,7 +189,8 @@
 		}
 	}
 	async function propose() {
-		if (busy) return;
+		if (busy || !context) return;
+		const obligationID = context.obligation_id;
 		busy = true;
 		error = '';
 		message = '';
@@ -152,7 +205,7 @@
 			const expectedID = proposalID;
 			await write(
 				'/api/v1/ops/admin-changes',
-				{ id: expectedID, obligation_id: context.obligation_id, kind, reason, values, expires_at: lagosISO(expires) },
+				{ id: expectedID, obligation_id: obligationID, kind, reason, values, expires_at: lagosISO(expires) },
 				(value) => {
 					if (record(value).id !== expectedID) throw new Error('Proposal was not confirmed');
 					return true;
@@ -169,7 +222,7 @@
 			busy = false;
 		}
 	}
-	async function decide(c: any, action: string) {
+	async function decide(c: Change, action: string) {
 		if (busy) return;
 		busy = true;
 		error = '';
@@ -190,7 +243,7 @@
 			busy = false;
 		}
 	}
-	async function soloApprove(c: any) {
+	async function soloApprove(c: Change) {
 		if (busy) return;
 		busy = true;
 		error = '';
@@ -263,7 +316,7 @@
 							List every unpaid part-payment in its current order. Dates must leave enough notice. Any debit with an
 							unclear result must be settled first.
 						</p>
-						{#each context.snapshot.items.filter((i: any) => i.id in dates) as item}<label
+						{#each context.snapshot.items.filter((i) => i.id in dates) as item (item.id)}<label
 								>{difference(item?.principal_due_kobo, item?.allocated_kobo)} · currently {localTime(
 									item?.due_at || ''
 								)}<input type="datetime-local" disabled={busy} bind:value={dates[item.id]} required /></label
@@ -297,7 +350,7 @@
 			>Find a proposal</button
 		>
 	</form>
-	{#each changes as c}<article id={c.id}>
+	{#each changes as c (c.id)}<article id={c.id}>
 			<h3>{c.kind.replaceAll('_', ' ')} · {c.state.replaceAll('_', ' ')}</h3>
 			<p>{c.reason}</p>
 			<p>
@@ -307,8 +360,8 @@
 			<p>Expires {localTime(c.expires_at)} · Reference {c.obligation_id}</p>
 			{#if c.kind === 'schedule_amendment'}<table>
 					<thead><tr><th>Unpaid amount</th><th>Current date at proposal</th><th>Proposed date</th></tr></thead><tbody
-						>{#each c.proposed_values.dates as date}{@const item = c.before_values.items.find(
-								(i: any) => i.id === date.item_id
+						>{#each c.proposed_values.dates as date, idx (idx)}{@const item = c.before_values.items.find(
+								(i) => i.id === date.item_id
 							)}<tr
 								><td>{difference(item?.principal_due_kobo, item?.allocated_kobo)}</td><td
 									>{localTime(item?.due_at || '')}</td

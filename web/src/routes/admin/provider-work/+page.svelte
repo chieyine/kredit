@@ -80,7 +80,7 @@
 	{#if error}<p role="alert">{error}</p>{/if}{#if loading}<p role="status">Loading current records…</p>{:else if !error}
 		<p>Checked {timeLabel(asOf)}. Showing the oldest 100 records; counts include the full queue.</p>
 		<section class="connections">
-			{#each connections as item}<article>
+			{#each connections as item, i (i)}<article>
 					<h2>{item.provider}</h2>
 					<strong>{status(item.state)}</strong>
 					<p>{item.action}</p>
@@ -89,7 +89,7 @@
 		</section>
 		<label
 			>Work type<select bind:value={filter}
-				><option value="all">All</option>{#each Object.entries(counts) as [kind, count]}<option value={kind}
+				><option value="all">All</option>{#each Object.entries(counts) as [kind, count] (kind)}<option value={kind}
 						>{kind} ({String(count)})</option
 					>{/each}</select
 			></label

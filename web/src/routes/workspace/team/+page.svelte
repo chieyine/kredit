@@ -15,6 +15,7 @@
 		loading = $state(true);
 	let roleDraft: Record<string, string> = $state({});
 	const reads = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
 	function decodeMember(value: unknown): Member {
 		const item = record(value);
@@ -161,7 +162,7 @@
 	<section class="card">
 		<h2>People who can enter your account</h2>
 		{#if loading}<p role="status">Opening your staff list…</p>{:else if members.length}<div class="member-list">
-				{#each members as member}<article>
+				{#each members as member (member.user_id)}<article>
 						<div>
 							<strong>{productLabel(member.role)}</strong><span class="status">{productLabel(member.status)}</span
 							><small>Account {member.user_id}</small>

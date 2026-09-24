@@ -68,7 +68,7 @@
 				<div class="journey-top"><span>Sample sale</span><strong>{stage + 1} of {stages.length}</strong></div>
 				<div class="progress" aria-hidden="true"><span style={`width:${progress}%`}></span></div>
 				<ol>
-					{#each stages as item, index}<li class:done={index < stage} class:active={index === stage}>
+					{#each stages as item, index (index)}<li class:done={index < stage} class:active={index === stage}>
 							<span>{index < stage ? '✓' : index + 1}</span>
 							<div><small>{item.role}</small><strong>{item.title}</strong></div>
 						</li>{/each}
@@ -121,7 +121,7 @@
 					{#if stage === 0}<div class="amount-choice">
 							<p>Choose a sample amount</p>
 							<div>
-								{#each amounts as option}<button
+								{#each amounts as option, i (i)}<button
 										class:chosen={amount === option}
 										disabled={!interactive}
 										onclick={() => (amount = option)}>{money(option)}</button

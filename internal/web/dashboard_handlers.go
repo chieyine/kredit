@@ -124,7 +124,12 @@ func (s *Server) listOrganizationCustomers(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	customers := map[string]map[string]any{}
+	type customerSummary struct {
+		fields       map[string]any
+		requestCount int
+		outstanding  ledger.Money
+	}
+	customers := map[string]*customerSummary{}
 	var buyerRows []buyers.Customer
 	if source, ok := s.runtime.Buyers.(interface {
 		ReadCustomers(string) ([]buyers.Customer, error)
@@ -138,36 +143,52 @@ func (s *Server) listOrganizationCustomers(w http.ResponseWriter, r *http.Reques
 		buyerRows = s.runtime.Buyers.ListCustomers(organizationID)
 	}
 	for _, customer := range buyerRows {
-		customers[customer.BuyerUserID+"\x00"+customer.BuyerBusinessID] = map[string]any{"id": customer.BuyerUserID, "buyer_user_id": customer.BuyerUserID, "buyer_business_id": customer.BuyerBusinessID, "legal_name": customer.LegalName, "trading_name": customer.TradingName, "industry": customer.Industry, "state": customer.Status, "request_count": 0, "outstanding_kobo": int64(0)}
+		customers[customer.BuyerUserID+"\x00"+customer.BuyerBusinessID] = &customerSummary{fields: map[string]any{"id": customer.BuyerUserID, "buyer_user_id": customer.BuyerUserID, "buyer_business_id": customer.BuyerBusinessID, "legal_name": customer.LegalName, "trading_name": customer.TradingName, "industry": customer.Industry, "state": customer.Status}}
 	}
-	financialRows6, readErr6 := s.runtime.readCreditForSupplier(r.Context(), organizationID)
-	if financialReadError(w, readErr6) {
+	financialRows, readErr := s.runtime.readCreditForSupplier(r.Context(), organizationID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	for _, view := range financialRows6 {
-		customer := customers[view.Request.BuyerUserID+"\x00"+view.Request.BuyerBusinessID]
+	for _, view := range financialRows {
+		key := view.Request.BuyerUserID + "\x00" + view.Request.BuyerBusinessID
+		customer := customers[key]
 		if customer == nil {
-			customer = map[string]any{"id": view.Request.BuyerUserID, "buyer_user_id": view.Request.BuyerUserID, "buyer_business_id": view.Request.BuyerBusinessID, "legal_name": view.Request.BuyerLegalName, "trading_name": view.Request.BuyerTradingName, "state": "ACTIVE", "request_count": 0, "outstanding_kobo": int64(0)}
-			customers[view.Request.BuyerUserID+"\x00"+view.Request.BuyerBusinessID] = customer
+			customer = &customerSummary{fields: map[string]any{"id": view.Request.BuyerUserID, "buyer_user_id": view.Request.BuyerUserID, "buyer_business_id": view.Request.BuyerBusinessID, "legal_name": view.Request.BuyerLegalName, "trading_name": view.Request.BuyerTradingName, "state": "ACTIVE"}}
+			customers[key] = customer
 		}
-		customer["request_count"] = customer["request_count"].(int) + 1
+		customer.requestCount++
 		if view.Obligation != nil {
-			total, err := ledger.CheckedAdd(ledger.Money(customer["outstanding_kobo"].(int64)), view.Obligation.OutstandingKobo)
+			total, err := ledger.CheckedAdd(customer.outstanding, view.Obligation.OutstandingKobo)
 			if financialReadError(w, err) {
 				return
 			}
-			customer["outstanding_kobo"] = int64(total)
+			customer.outstanding = total
 		}
 	}
-	items := make([]map[string]any, 0, len(customers))
-	for _, customer := range customers {
-		if !access.Can(membership.Role, access.PermissionReadFinancial) {
-			delete(customer, "outstanding_kobo")
-			delete(customer, "request_count")
-		}
-		items = append(items, customer)
+	canReadFinancial := access.Can(membership.Role, access.PermissionReadFinancial)
+	type sortableCustomer struct {
+		key, legalName string
+		fields         map[string]any
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i]["legal_name"].(string) < items[j]["legal_name"].(string) })
+	sorted := make([]sortableCustomer, 0, len(customers))
+	for key, customer := range customers {
+		if canReadFinancial {
+			customer.fields["request_count"] = customer.requestCount
+			customer.fields["outstanding_kobo"] = int64(customer.outstanding)
+		}
+		legalName, _ := customer.fields["legal_name"].(string)
+		sorted = append(sorted, sortableCustomer{key: key, legalName: legalName, fields: customer.fields})
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].legalName != sorted[j].legalName {
+			return sorted[i].legalName < sorted[j].legalName
+		}
+		return sorted[i].key < sorted[j].key
+	})
+	items := make([]map[string]any, 0, len(sorted))
+	for _, customer := range sorted {
+		items = append(items, customer.fields)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"customers": items})
 }
 

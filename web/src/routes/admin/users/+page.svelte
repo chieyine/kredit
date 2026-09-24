@@ -1,9 +1,27 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { checkedJSON, publicError, record, rows, text, LatestRequest } from '$lib/api/reliable';
+	import {
+		checkedJSON,
+		optionalNumber,
+		optionalText,
+		publicError,
+		record,
+		rows,
+		text,
+		LatestRequest
+	} from '$lib/api/reliable';
 	const requests = new LatestRequest();
 	import { onMount } from 'svelte';
-	let users = $state<any[]>([]),
+	type AdminUser = {
+		id: string;
+		status: string;
+		display_name: string;
+		identifier: string;
+		organization_count: number;
+		last_authenticated_at: string;
+		version: number;
+	};
+	let users = $state<AdminUser[]>([]),
 		query = $state(''),
 		loading = $state(true),
 		error = $state('');
@@ -14,12 +32,19 @@
 		try {
 			const result = await checkedJSON(
 				`/api/v1/ops/users?q=${encodeURIComponent(query.trim())}`,
-				rows('users', (value) => {
+				rows('users', (value): AdminUser => {
 					const item = record(value);
-					for (const key of ['id', 'status', 'display_name', 'identifier']) text(item[key]);
 					if (!Number.isSafeInteger(item.version) || Number(item.version) < 1)
 						throw new Error('Missing current version');
-					return item;
+					return {
+						id: text(item.id),
+						status: text(item.status),
+						display_name: text(item.display_name),
+						identifier: text(item.identifier),
+						organization_count: optionalNumber(item.organization_count),
+						last_authenticated_at: optionalText(item.last_authenticated_at),
+						version: Number(item.version)
+					};
 				}),
 				{ signal: request.signal }
 			);
@@ -63,7 +88,7 @@
 				<caption>{users.length} user{users.length === 1 ? '' : 's'} shown</caption><thead
 					><tr><th>User</th><th>Status</th><th>Businesses</th><th>Last sign-in</th><th></th></tr></thead
 				><tbody
-					>{#each users as user}<tr
+					>{#each users as user (user.id)}<tr
 							><td><strong>{user.display_name}</strong><small>{user.identifier}</small><code>{user.id}</code></td><td
 								><span class:bad={user.status !== 'active'}>{user.status}</span></td
 							><td>{user.organization_count}</td><td

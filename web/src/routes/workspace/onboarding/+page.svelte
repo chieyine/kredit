@@ -3,13 +3,13 @@
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, record, rows, text, publicError } from '$lib/api/reliable';
 	import { MutationIntent, MutationError } from '$lib/api/mutation';
-	import { settingsProfile } from '$lib/api/onboarding-settings';
+	import { settingsProfile, type SettingsProfile } from '$lib/api/onboarding-settings';
 	import { productLabel } from '$lib/product-language';
 	let businessType = '',
 		orgID = '',
-		profile: any = {},
-		readiness: any = { requirements: [], missing: [] },
-		permissions: any = {},
+		profile: SettingsProfile = { version: 0 },
+		readiness: Readiness = { ready: false, state: '', requirements: [], missing: [] },
+		permissions: Record<string, boolean> = {},
 		terms = '',
 		privacy = '',
 		loading = true,
@@ -23,8 +23,17 @@
 		code = '';
 	let loadError = '';
 	const reads = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
-	function summary(value: unknown) {
+	type Requirement = { code: string; label: string; manage_path: string; complete: boolean };
+	type Readiness = { ready: boolean; state: string; requirements: Requirement[]; missing: Requirement[] };
+	type SetupResult = {
+		profile?: SettingsProfile;
+		readiness?: Readiness;
+		challenge_id?: string;
+		development_code?: string;
+	};
+	function summary(value: unknown): Readiness {
 		const data = record(value);
 		if (
 			typeof data.ready !== 'boolean' ||
@@ -33,7 +42,7 @@
 			!Array.isArray(data.requirements)
 		)
 			throw new Error('Incomplete setup');
-		const requirement = (value: unknown) => {
+		const requirement = (value: unknown): Requirement => {
 			const row = record(value);
 			if (!text(row.code) || !text(row.label)) throw new Error('Incomplete step');
 			const path = text(row.manage_path);
@@ -44,7 +53,7 @@
 				/[\\\x00-\x1f]/.test(path)
 			)
 				throw new Error('Incomplete step');
-			return row;
+			return { code: text(row.code), label: text(row.label), manage_path: path, complete: row.complete };
 		};
 		const all = data.requirements.map(requirement),
 			missing = data.missing.map(requirement);
@@ -55,7 +64,7 @@
 		)
 			throw new Error('Inconsistent setup progress');
 		if (data.ready !== (missing.length === 0)) throw new Error('Inconsistent setup readiness');
-		return { ...data, requirements: all, missing };
+		return { ready: data.ready, state: data.state, requirements: all, missing };
 	}
 
 	async function load() {
@@ -85,9 +94,11 @@
 				`/api/v1/organizations/${encodeURIComponent(orgID)}/onboarding`,
 				(value) => {
 					const d = record(value);
-					const permissions = record(d.permissions);
-					for (const value of Object.values(permissions))
+					const permissions: Record<string, boolean> = {};
+					for (const [key, value] of Object.entries(record(d.permissions))) {
 						if (typeof value !== 'boolean') throw new Error('Incomplete permissions');
+						permissions[key] = value;
+					}
 					return {
 						profile: settingsProfile(d.profile),
 						readiness: summary(d.readiness),
@@ -125,21 +136,21 @@
 			}
 			const d = await intent.run(
 				body,
-				(value) => {
+				(value): SetupResult => {
 					const d = record(value);
 					if (path === 'contacts/challenges') {
-						if (!text(d.challenge_id) || !Number.isFinite(Date.parse(text(d.expires_at))))
-							throw new Error('Incomplete code');
-						if (d.development_code !== undefined) text(d.development_code);
-					} else {
-						d.profile = settingsProfile(d.profile);
-						d.readiness = summary(d.readiness);
+						const challengeID = text(d.challenge_id);
+						if (!challengeID || !Number.isFinite(Date.parse(text(d.expires_at)))) throw new Error('Incomplete code');
+						return {
+							challenge_id: challengeID,
+							development_code: d.development_code === undefined ? undefined : text(d.development_code)
+						};
 					}
-					return d;
+					return { profile: settingsProfile(d.profile), readiness: summary(d.readiness) };
 				},
 				method
 			);
-			if (d.profile) {
+			if (d.profile && d.readiness) {
 				profile = d.profile;
 				readiness = d.readiness;
 			}
@@ -158,8 +169,8 @@
 	async function requestContact() {
 		const d = await mutate('contacts/challenges', 'POST', { identifier: contact, channel });
 		if (d) {
-			challengeID = String(d.challenge_id);
-			code = String(d.development_code ?? '');
+			challengeID = d.challenge_id ?? '';
+			code = d.development_code ?? '';
 			message = 'Code sent. Enter it below.';
 		}
 	}
@@ -258,14 +269,14 @@
 						: `${readiness.missing?.length ?? 0} thing${(readiness.missing?.length ?? 0) === 1 ? '' : 's'} still to do before selling setup is complete.`}
 				</p>
 			</div>
-			<strong>{readiness.requirements?.filter((r: any) => r.complete).length}/{readiness.requirements?.length}</strong>
+			<strong>{readiness.requirements.filter((r) => r.complete).length}/{readiness.requirements?.length}</strong>
 		</section>
 		{#if message}<p class="notice" role="status">
 				{message}
 				{#if message.includes('MFA')}<a href="/account/security">Open security</a>{/if}
 			</p>{/if}
 		<section class="steps" aria-label="Setup progress">
-			{#each readiness.requirements ?? [] as requirement}<article class:done={requirement.complete}>
+			{#each readiness.requirements ?? [] as requirement (requirement.code)}<article class:done={requirement.complete}>
 					<span>{requirement.complete ? '✓' : '○'}</span>
 					<div>
 						<strong>{simpleStep(requirement.code, requirement.label)}</strong>{#if !requirement.complete}<a
@@ -341,7 +352,7 @@
 						businesses complete business verification. We will never ask for your password or your bank PIN. Anybody who
 						does is not us.
 					</p>
-					{#if profile.kyb_provider_reference && !['approved', 'rejected'].includes(profile.kyb_state)}<button
+					{#if profile.kyb_provider_reference && !['approved', 'rejected'].includes(profile.kyb_state ?? '')}<button
 							disabled={busy}
 							onclick={refreshKYB}>Check my status again</button
 						>{:else}<button disabled={busy} onclick={submitKYB}>Start the check</button>{/if}<small

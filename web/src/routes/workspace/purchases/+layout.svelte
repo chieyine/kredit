@@ -43,7 +43,7 @@
 				let identity = '';
 				if (detail[1] === 'bank-authorization') {
 					identity = await checkedJSON(
-						`/api/v1/buyer/bank-authorization/${id}`,
+						`/api/v1/buyer/bank-authorization/${encodeURIComponent(id)}`,
 						(value) => text(record(record(value).mandate).business_id),
 						{ signal: request.signal }
 					);
@@ -51,7 +51,7 @@
 					let endpoint = detail[1] === 'orders' ? `credit-requests/${id}` : `obligations/${id}`;
 					if (detail[1] === 'disputes') {
 						const obligation = await checkedJSON(
-							`/api/v1/buyer/disputes/${id}`,
+							`/api/v1/buyer/disputes/${encodeURIComponent(id)}`,
 							(value) => text(record(record(value).dispute).obligation_id),
 							{ signal: request.signal }
 						);
@@ -115,7 +115,7 @@
 	<div class="shell purchase-context">
 		{#if businesses.length}<label
 				>Purchasing business<select bind:value={selected} onchange={change}
-					><option value="" disabled>Choose your business</option>{#each businesses as business}<option
+					><option value="" disabled>Choose your business</option>{#each businesses as business (business.id)}<option
 							value={business.id}>{business.name}</option
 						>{/each}</select
 				></label

@@ -23,10 +23,10 @@
 	effectiveDate={publication.effective_date!}
 	{sections}
 >
-	{#each publication.copy.sections as section, index}<section id={`section-${index + 1}`}>
+	{#each publication.copy.sections as section, index (index)}<section id={`section-${index + 1}`}>
 			<h2>{section.heading}</h2>
-			{#each section.body.split(/\n{2,}/) as paragraph}<p>
-					{#each pieces(paragraph) as piece}{#if piece.href}<a href={piece.href} rel="noreferrer">{piece.text}</a
+			{#each section.body.split(/\n{2,}/) as paragraph, idx (idx)}<p>
+					{#each pieces(paragraph) as piece, i (i)}{#if piece.href}<a href={piece.href} rel="noreferrer">{piece.text}</a
 							>{:else}{piece.text}{/if}{/each}
 				</p>{/each}
 		</section>{/each}

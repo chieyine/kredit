@@ -61,7 +61,7 @@
 			<h2>What is in place.</h2>
 		</div>
 		<div class="safeguard-list">
-			{#each safeguards as [title, body], index}<article>
+			{#each safeguards as [title, body], index (index)}<article>
 					<span>0{index + 1}</span>
 					<h3>{title}</h3>
 					<p>{body}</p>

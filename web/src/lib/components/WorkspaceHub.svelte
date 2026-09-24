@@ -21,11 +21,11 @@
 		<h1>{title}</h1>
 		<p class="lede">{description}</p>
 	</header>
-	{#each groups as group}<section>
+	{#each groups as group, groupIndex (groupIndex)}<section>
 			<h2>{group.title}</h2>
 			<p>{group.description}</p>
 			<div class="hub-cards">
-				{#each group.links as [label, href, body]}<a href={workspaceHref(href, page.url)}
+				{#each group.links as [label, href, body], linkIndex (linkIndex)}<a href={workspaceHref(href, page.url)}
 						><h3>{label}</h3>
 						<p>{body}</p>
 						<span aria-hidden="true">→</span></a

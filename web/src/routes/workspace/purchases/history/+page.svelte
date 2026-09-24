@@ -180,10 +180,10 @@
 					Review decisions stay alongside the original records. Any change to money owed is recorded separately through
 					the payment or financial-change process.
 				</p>
-				{#each history.corrections as item}<article>
+				{#each history.corrections as item, idx (idx)}<article>
 						<h3>{item.reason}</h3>
 						<p><StatusPill status={item.state} /></p>
-						{#each item.decisions as decision}<p>
+						{#each item.decisions as decision, i (i)}<p>
 								<strong>{decision.outcome === 'APPROVED' ? 'Approved correction note' : 'Review decision'}</strong> · {readableDate(
 									decision.decided_at
 								)}

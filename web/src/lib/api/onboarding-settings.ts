@@ -1,11 +1,38 @@
 import { adminGet } from '$lib/admin-client';
 import { record, text } from './reliable';
 
-export function settingsProfile(value: unknown) {
+/**
+ * A business's onboarding profile. `version` is verified because every save
+ * sends it back as the expected version; the named text fields are the ones
+ * the setup screens read, and the rest stay available as unknown values.
+ */
+export type SettingsProfile = {
+	version: number;
+	authorized_representative_name?: string;
+	authorized_representative_title?: string;
+	kyb_provider_reference?: string;
+	kyb_state?: string;
+	terms_version?: string;
+	privacy_version?: string;
+	[key: string]: unknown;
+};
+const profileText = [
+	'authorized_representative_name',
+	'authorized_representative_title',
+	'kyb_provider_reference',
+	'kyb_state',
+	'terms_version',
+	'privacy_version'
+];
+
+export function settingsProfile(value: unknown): SettingsProfile {
 	const profile = record(value);
 	if (!Number.isSafeInteger(profile.version) || Number(profile.version) < 0)
 		throw new Error('We could not confirm the current settings. Refresh this page before saving.');
-	return profile;
+	for (const key of profileText)
+		if (profile[key] != null && typeof profile[key] !== 'string')
+			throw new Error('We could not confirm the current settings. Refresh this page before saving.');
+	return { ...profile, version: Number(profile.version) } as SettingsProfile;
 }
 
 export async function loadOnboardingSettings(

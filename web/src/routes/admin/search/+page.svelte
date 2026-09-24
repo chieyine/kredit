@@ -4,7 +4,8 @@
 		loading = $state(false),
 		error = $state(''),
 		searched = $state(false),
-		results: any[] = $state([]);
+		results: SearchResult[] = $state([]);
+	type SearchResult = { id: string; type: string; reference: string; state: string };
 	async function search(event: SubmitEvent) {
 		event.preventDefault();
 		if (loading) return;
@@ -19,10 +20,9 @@
 		try {
 			results = await checkedJSON(
 				`/api/v1/ops/search?q=${encodeURIComponent(query.trim())}`,
-				rows('results', (value) => {
+				rows('results', (value): SearchResult => {
 					const item = record(value);
-					for (const key of ['id', 'type', 'reference', 'state']) text(item[key]);
-					return item;
+					return { id: text(item.id), type: text(item.type), reference: text(item.reference), state: text(item.state) };
 				})
 			);
 		} catch (cause) {
@@ -53,7 +53,7 @@
 	{#if error}<p class="error" role="alert">{error}</p>{:else if loading}<p role="status">
 			Checking the reference…
 		</p>{:else if searched && !results.length}<p>No matching reference was found.</p>{:else if results.length}<section>
-			{#each results as result}<article>
+			{#each results as result (`${result.type}:${result.id}`)}<article>
 					<div><strong>{result.type.replaceAll('_', ' ')}</strong><span>{result.state}</span></div>
 					<code>{result.reference}</code>{#if result.type === 'request_receipt'}<p>
 							This is the saved HTTP receipt, not confirmation that money moved. Put the sale, the payment and what the

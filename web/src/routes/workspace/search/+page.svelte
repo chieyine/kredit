@@ -216,7 +216,7 @@
 	<div class="search-bar">
 		<label
 			>Business<select bind:value={organizationID} onchange={() => chooseWorkspace(organizationID)}
-				>{#each organizations as organization}<option value={organization.id}
+				>{#each organizations as organization (organization.id)}<option value={organization.id}
 						>{organization.trading_name || organization.legal_name}</option
 					>{/each}</select
 			></label
@@ -246,7 +246,7 @@
 		{#if customerResults.length}<section>
 				<h2>Customers</h2>
 				<div class="results">
-					{#each customerResults as customer}<a
+					{#each customerResults as customer, i (i)}<a
 							href={`/workspace/partners/customers/${encodeURIComponent(customer.buyer_user_id)}?organization=${encodeURIComponent(organizationID)}`}
 							><div>
 								<strong>{customer.trading_name || customer.legal_name || 'Customer'}</strong><small
@@ -262,7 +262,7 @@
 		{#if saleResults.length}<section>
 				<h2>Sales</h2>
 				<div class="results">
-					{#each saleResults as sale}<a
+					{#each saleResults as sale (sale.id)}<a
 							href={`/workspace/sales/${encodeURIComponent(sale.id)}?organization=${encodeURIComponent(organizationID)}`}
 							><div>
 								<strong>{sale.buyer_legal_name || 'Credit sale'}</strong><small
@@ -276,7 +276,7 @@
 		{#if paymentResults.length}<section>
 				<h2>Payments</h2>
 				<div class="results">
-					{#each paymentResults as payment}<a
+					{#each paymentResults as payment (payment.id)}<a
 							href={`/workspace/money/received?organization=${organizationID}&q=${encodeURIComponent(payment.reference || payment.provider_reference || payment.external_reference || payment.id)}`}
 							><div>
 								<strong

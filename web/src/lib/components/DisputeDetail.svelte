@@ -2,18 +2,19 @@
 	import { getContext } from 'svelte';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, publicError, record, text } from '$lib/api/reliable';
 	import { formatKobo, nairaInput, parseNaira, type KoboValue } from '$lib/money';
 	import { productLabel } from '$lib/product-language';
-	import { kobo, timeLabel } from '$lib/records';
+	import { timeLabel } from '$lib/records';
+	import { disputeDetail, type Dispute, type DisputeDecision, type DisputeEvidence } from '$lib/disputes';
 	let { endpoint, backHref, canDecide = false }: { endpoint: string; backHref: string; canDecide?: boolean } = $props();
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
 	const requests = new LatestRequest();
 	const evidenceIntent = $derived(new MutationIntent(account.userID, `${endpoint}/evidence`));
 	const decisionIntent = $derived(new MutationIntent(account.userID, `${endpoint}/decide`));
-	let dispute: any = $state(null),
-		evidence: any[] = $state([]),
-		decisions: any[] = $state([]);
+	let dispute: Dispute | null = $state(null),
+		evidence: DisputeEvidence[] = $state([]),
+		decisions: DisputeDecision[] = $state([]);
 	let loading = $state(true),
 		busy = $state(false),
 		error = $state(''),
@@ -33,28 +34,12 @@
 		loading = true;
 		error = '';
 		try {
-			const data = await checkedJSON(
-				endpoint,
-				(value) => {
-					const response = record(value),
-						item = record(response.dispute);
-					text(item.id);
-					text(item.state);
-					kobo(item.total_disputed_kobo);
-					kobo(item.remaining_disputed_kobo);
-					return {
-						dispute: item,
-						evidence: rows('evidence', record)(response),
-						decisions: rows('decisions', record)(response)
-					};
-				},
-				{ signal: request.signal }
-			);
+			const data = await checkedJSON(endpoint, disputeDetail, { signal: request.signal });
 			if (!request.current()) return;
 			dispute = data.dispute;
 			evidence = data.evidence;
 			decisions = data.decisions;
-			remaining = nairaInput(dispute.remaining_disputed_kobo);
+			remaining = nairaInput(data.dispute.remaining_disputed_kobo);
 		} catch (cause) {
 			if (request.current()) {
 				dispute = null;
@@ -230,7 +215,7 @@
 		<section class="card">
 			<h2>What has been added</h2>
 			{#if evidence.length}<ol>
-					{#each evidence as item}<li>
+					{#each evidence as item, i (i)}<li>
 							<p>{item.statement || 'A document was added.'}</p>
 							{#if item.document_id}<button type="button" onclick={() => openDocument(item.document_id)}
 									>Open document</button
@@ -279,7 +264,7 @@
 		<section class="card">
 			<h2>Decisions so far</h2>
 			{#if decisions.length}<ol>
-					{#each decisions as item}<li>
+					{#each decisions as item, i (i)}<li>
 							<strong>{productLabel(item.outcome)}</strong>
 							<p>{item.reason}</p>
 							<small>{timeLabel(item.decided_at)}</small>

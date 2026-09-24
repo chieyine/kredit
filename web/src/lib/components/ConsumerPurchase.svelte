@@ -19,10 +19,10 @@
 	const mutation = new Mutation();
 	const endpoint = $derived(
 		admin
-			? `/api/v1/ops/consumer-sales/${id}`
+			? `/api/v1/ops/consumer-sales/${encodeURIComponent(id)}`
 			: organization
-				? `/api/v1/organizations/${organization}/consumer-sales/${id}`
-				: `/api/v1/buyer/purchases/${id}`
+				? `/api/v1/organizations/${encodeURIComponent(organization)}/consumer-sales/${encodeURIComponent(id)}`
+				: `/api/v1/buyer/purchases/${encodeURIComponent(id)}`
 	);
 	const buyer = $derived(!admin && !organization);
 	const pendingClaims = $derived(
@@ -191,7 +191,7 @@
 			<div class="table">
 				<table>
 					<thead><tr><th>Date</th><th>Scheduled</th><th>Confirmed towards this payment</th></tr></thead><tbody
-						>{#each sale.schedule_progress as due}<tr
+						>{#each sale.schedule_progress as due, i (i)}<tr
 								><td>{due.date}</td><td>{money(due.amount_kobo)}</td><td>{money(due.paid_kobo)}</td></tr
 							>{/each}</tbody
 					>
@@ -217,7 +217,7 @@
 					>Correct a recorded receipt</button
 				>{/if}
 			{#if pendingClaims.length}<h3>Payments awaiting review</h3>
-				{#each pendingClaims as claim}<p>
+				{#each pendingClaims as claim, i (i)}<p>
 						{money(claim.amount_kobo)} · {claim.reference} · {claim.note}
 					</p>{/each}{#if !buyer}<button onclick={() => choose('reject_claim')} disabled={busy}
 						>Review an unmatched payment</button
@@ -294,13 +294,13 @@
 					{#if ['payment', 'reject_claim'].includes(action) && pendingClaims.length}<label
 							>Customer payment report<select value={related} onchange={(e) => useClaim(e.currentTarget.value)}
 								><option value="">{action === 'payment' ? 'Record a separate receipt' : 'Choose a report'}</option
-								>{#each pendingClaims as e}<option value={e.id}>{e.reference} · {money(e.amount_kobo)}</option
+								>{#each pendingClaims as e (e.id)}<option value={e.id}>{e.reference} · {money(e.amount_kobo)}</option
 									>{/each}</select
 							></label
 						>{/if}
 					{#if action === 'reverse_payment'}<label
 							>Receipt to reverse<select bind:value={related} required
-								><option value="">Choose receipt</option>{#each payments as e}<option value={e.id}
+								><option value="">Choose receipt</option>{#each payments as e (e.id)}<option value={e.id}
 										>{e.reference} · {money(e.amount_kobo)}</option
 									>{/each}</select
 							></label
@@ -333,7 +333,7 @@
 			</form>{/if}
 		<section>
 			<h2>Purchase history</h2>
-			{#each sale.events as event}<article>
+			{#each sale.events as event, i (i)}<article>
 					<strong>{label(event.action)}{event.amount_kobo > 0 ? ` · ${money(event.amount_kobo)}` : ''}</strong>
 					<p>{event.note}</p>
 					<small>{new Date(event.occurred_at).toLocaleString('en-NG')} · {event.reference}</small>
