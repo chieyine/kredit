@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { exactKobo, formatKobo, nairaInput, parseNaira, type KoboValue } from '$lib/money';
 	import { timeLabel } from '$lib/records';
+	import { productLabel } from '$lib/product-language';
 	import { page } from '$app/state';
 	import { checkedJSON, record, text, LatestRequest, publicError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
@@ -140,10 +141,10 @@
 			<p class="error">{error}</p>
 			<button onclick={load} disabled={busy}>Reload dispute</button>
 		</section>{:else if dispute}<section class="summary">
-			<div><span>Status</span><strong>{dispute.state.replaceAll('_', ' ')}</strong></div>
+			<div><span>Status</span><strong>{productLabel(dispute.state)}</strong></div>
 			<div><span>Disputed</span><strong>{money(dispute.total_disputed_kobo)}</strong></div>
 			<div><span>Still disputed</span><strong>{money(dispute.remaining_disputed_kobo)}</strong></div>
-			<div><span>Bank-debit effect</span><strong>{dispute.collection_effect.replaceAll('_', ' ')}</strong></div>
+			<div><span>Bank-debit effect</span><strong>{productLabel(dispute.collection_effect)}</strong></div>
 		</section>
 		<article>
 			<h2>{dispute.reason}</h2>

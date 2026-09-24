@@ -2,6 +2,7 @@
 	import { MutationIntent } from '$lib/api/mutation';
 	import { page } from '$app/state';
 	import { localTime } from '$lib/admin-client';
+	import { productLabel, shortReference } from '$lib/product-language';
 	import { checkedJSON, optionalText, record, rows, text, LatestRequest, publicError } from '$lib/api/reliable';
 	type SupportCase = { id: string; state: string; subject_type: string; subject_id: string; created_at: string };
 	type CaseEvent = { action: string; created_at: string; note: string };
@@ -107,9 +108,9 @@
 			{error}
 		</p>
 		<button onclick={() => load(page.params.id!)}>Try again</button>{:else if item}<section class="summary">
-			<div><span>Status</span><strong>{item.state.replaceAll('_', ' ')}</strong></div>
-			<div><span>Subject</span><strong>{item.subject_type.replaceAll('_', ' ')}</strong></div>
-			<div><span>Reference</span><code>{item.subject_id}</code></div>
+			<div><span>Status</span><strong>{productLabel(item.state)}</strong></div>
+			<div><span>Subject</span><strong>{productLabel(item.subject_type)}</strong></div>
+			<div><span>Reference</span><code title={item.subject_id}>{shortReference(item.subject_id)}</code></div>
 			<div><span>Opened</span><strong>{localTime(item.created_at)}</strong></div>
 		</section>
 		<div class="columns">

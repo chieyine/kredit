@@ -44,9 +44,18 @@
 				AccountRecoveryCompleted: 'Account recovery completed',
 				PrivacyRequestReceived: 'Information request received',
 				PrivacyExportReady: 'Your information copy is ready',
-				NotificationPreferencesChanged: 'Message settings changed'
+				NotificationPreferencesChanged: 'Message settings changed',
+				BuyerPaymentClaimed: 'Customer says they paid',
+				BuyerInvitation: 'Invitation to trade',
+				ConsumerPaymentDue: 'Payment due',
+				ConsumerPurchaseUpdated: 'Purchase updated',
+				CollectionScheduled: 'Bank debit scheduled',
+				CollectionCancelled: 'Bank debit cancelled',
+				MandateExpiring: 'Bank permission ending soon',
+				MandateRevoked: 'Bank permission withdrawn',
+				MandateCancelled: 'Bank permission cancelled'
 			}) as Record<string, string>
-		)[value] ?? productLabel(value);
+		)[value] ?? productLabel(value.replace(/([a-z])([A-Z])/g, '$1_$2'));
 	const visible = $derived(
 		filter === 'all'
 			? items

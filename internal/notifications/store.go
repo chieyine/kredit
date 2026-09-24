@@ -650,8 +650,28 @@ func defaultTemplate(eventType string) string {
 		return "Your copy of your information is ready to download. The link works for a short time only."
 	case "PrivacyRequestCompleted":
 		return "Your information request is finished. Reference: {{reference}}."
+	case "BuyerPaymentClaimed":
+		return "A customer says they paid you {{amount}}. Check your bank, then confirm or reject it in Kredit."
+	case "PaymentClaimDecision":
+		return "Your seller has answered about the {{amount}} you said you paid. Open Kredit to see what they decided."
+	case "SellerSettlementRecorded":
+		return "A payout to your bank has been recorded. Open your bank settings in Kredit to check it."
+	case "TradeLineDrawdownConfirmationRequired":
+		return "Your seller added a {{amount}} purchase to your credit limit. Check the terms and confirm it in Kredit."
+	case "TradeLineDrawdownConfirmed":
+		return "Your customer confirmed a {{amount}} purchase on their limit. Send the goods when you are ready."
+	case "TradeLineDrawdownSafeToRelease":
+		return "You can now send the goods for the {{amount}} purchase. Record the dispatch in Kredit when they leave."
+	case "TradeLineDrawdownGoodsReleased":
+		return "Your seller sent goods worth {{amount}}. Confirm they arrived or report a problem in Kredit."
+	case "TradeLineDrawdownReceiptRequired":
+		return "Did the goods worth {{amount}} arrive as agreed? Tell us in Kredit."
+	case "TradeLineDrawdownReceiptConfirmed":
+		return "Your customer confirmed the goods worth {{amount}} arrived. Their payment days have started."
+	case "TradeLineDrawdownCancelled":
+		return "The {{amount}} purchase on the credit limit was cancelled. That amount is free to use again."
 	default:
-		return "Kredit update: {{reference}}. {{next_action}}"
+		return "There is an update on your Kredit account. {{next_action}}"
 	}
 }
 

@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { productLabel } from '$lib/product-language';
+	import { productLabel, shortReference } from '$lib/product-language';
 	type Organization = { id: string; legal_name: string; trading_name?: string };
 	type Case = { id: string; state: string; created_at: string };
 	let organizations = $state<Organization[]>([]),
@@ -97,7 +97,7 @@
 				(value) => decodeCase(record(value).case)
 			);
 			message = '';
-			notice = `Your message was saved. Help number: ${item.id}`;
+			notice = `Your message was saved. Help number: ${shortReference(item.id)}`;
 			await loadCases();
 		} catch (cause) {
 			error =
@@ -191,7 +191,7 @@
 				Create a business account to send and track help requests, or use the complaint link below.
 			</p>{:else if cases.length}<div class="cases">
 				{#each cases as item (item.id)}<article>
-						<strong>Help number {item.id}</strong><span>{productLabel(item.state)}</span><small
+						<strong>Help number {shortReference(item.id)}</strong><span>{productLabel(item.state)}</span><small
 							>Sent {readableDate(item.created_at)}</small
 						>{#if item.state === 'RESOLVED'}<button disabled={busy} onclick={() => updateCase(item, 'CLOSED')}
 								>Close this request</button

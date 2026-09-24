@@ -1,7 +1,26 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import DisputeDetail from '$lib/components/DisputeDetail.svelte';
-	let organizationID = $derived(page.url.searchParams.get('organization') ?? '');
+	import { checkedJSON, publicError, rows } from '$lib/api/reliable';
+	import { organization } from '$lib/records';
+	// A link from a notice or a bookmark may not name the business. Fall back to
+	// the account's first business, as the sale page does, rather than refusing.
+	const requested = $derived(page.url.searchParams.get('organization') ?? '');
+	let fallback = $state(''),
+		error = $state(''),
+		loading = $state(false);
+	const organizationID = $derived(requested || fallback);
+	$effect(() => {
+		if (requested || fallback) return;
+		loading = true;
+		checkedJSON('/api/v1/organizations', rows('organizations', organization))
+			.then((items) => {
+				fallback = items[0]?.id ?? '';
+				if (!fallback) error = 'Add your business first, then open this problem.';
+			})
+			.catch((cause) => (error = publicError(cause, 'your business')))
+			.finally(() => (loading = false));
+	});
 </script>
 
 <svelte:head><title>Problem details — Kredit</title></svelte:head>
@@ -10,8 +29,8 @@
 	<h1>Resolve this dispute</h1>
 	{#if organizationID}<DisputeDetail
 			endpoint={`/api/v1/organizations/${encodeURIComponent(organizationID)}/disputes/${encodeURIComponent(page.params.id ?? '')}`}
-			backHref="/workspace/disputes"
-		/>{:else}<p class="error" role="alert">
-			We could not find the business for this problem. Go back to the problems page and open it again.
+			backHref={`/workspace/disputes?organization=${encodeURIComponent(organizationID)}`}
+		/>{:else if loading}<p role="status">Opening this problem…</p>{:else if error}<p class="error" role="alert">
+			{error}
 		</p>{/if}
 </main>

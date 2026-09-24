@@ -79,6 +79,18 @@ const labels: Record<string, string> = {
 	CLARIFICATION_REQUIRED: 'More information needed',
 	PARTIALLY_APPROVED: 'Partly approved',
 	COOLING_OFF: 'Waiting period',
+	CLOSED: 'Closed',
+
+	// Business types, as a customer fills them in
+	UNREGISTERED_BUSINESS: 'Not registered yet',
+	REGISTERED_BUSINESS: 'Registered business name',
+	SOLE_PROPRIETOR: 'Sole trader',
+	LIMITED_COMPANY: 'Limited company',
+	PARTNERSHIP: 'Partnership',
+
+	// What a help request is about
+	BUSINESS_ACCOUNT: 'Business account',
+	OBLIGATION: 'An amount owed',
 
 	// Roles. A role is a name, not a description of the job.
 	OWNER: 'Owner',
@@ -166,4 +178,9 @@ export function providerName(value: string, adapter = '') {
 		providerNames[adapter.toLowerCase()] ??
 		(key.startsWith('mock') ? 'Test bank' : productLabel(value))
 	);
+}
+
+/** A short, readable handle for a long record ID, such as "3F2A91C0". */
+export function shortReference(id: string) {
+	return id.replaceAll('-', '').slice(0, 8).toUpperCase();
 }
