@@ -116,7 +116,7 @@
 <main class="shell workspace messages">
 	<header>
 		<p class="eyebrow">Message history</p>
-		<h1>Know exactly what Kredit sent.<br />Know whether it arrived.</h1>
+		<h1>Messages Kredit sent you</h1>
 		<p class="lede">
 			Every reminder, payment message and account notice, with its latest delivery status. We never show private codes
 			here.
@@ -182,10 +182,9 @@
 	.messages h1 {
 		max-width: 15ch;
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 6vw, 5.2rem);
-		font-weight: 500;
-		line-height: 0.94;
-		letter-spacing: -0.055em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.summary {
 		display: grid;

@@ -628,10 +628,8 @@
 		margin: 1rem 0 1.5rem;
 	}
 	.task-heading h1 {
-		font-family: inherit;
 		font-size: 2rem;
 		line-height: 1.2;
-		letter-spacing: -0.03em;
 		margin: 0.35rem 0;
 	}
 	.task-heading p {

@@ -271,13 +271,6 @@
 		border-radius: 1.25rem;
 		background: var(--color-surface);
 	}
-	.eyebrow {
-		color: var(--color-primary);
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		font-size: 0.78rem;
-	}
 	h1 {
 		font-size: clamp(2rem, 6vw, 4rem);
 		line-height: 1;

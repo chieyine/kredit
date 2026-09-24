@@ -64,7 +64,7 @@
 <svelte:head><title>Provider events — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Provider events</p>
-	<h1>Webhook processing history.</h1>
+	<h1>Webhook history</h1>
 	<p class="lede">Raw payloads remain private. Duplicate identity is preserved through every controlled replay.</p>
 	{#if message}<p class="notice" role="status">{message}</p>{/if}{#if error}<section role="alert">
 			<p class="error">{error}</p>

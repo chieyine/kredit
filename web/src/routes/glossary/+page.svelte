@@ -72,7 +72,7 @@
 
 	<aside>
 		<p>Still have a question?</p>
-		<a href="/faq">Read the common questions <span>↗</span></a>
+		<a href="/faq">Read the common questions <span aria-hidden="true">→</span></a>
 	</aside>
 </main>
 

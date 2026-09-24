@@ -65,7 +65,7 @@
 <svelte:head><title>Operations jobs — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Jobs</p>
-	<h1>Durable work queues.</h1>
+	<h1>Background jobs</h1>
 	<p class="lede">
 		Payloads remain hidden. Failed work can only be retried after an impact preview, reason, current-version check,
 		recent MFA, and confirmation.

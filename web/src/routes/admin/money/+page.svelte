@@ -126,9 +126,8 @@
 		max-width: 15ch;
 		margin: 0.4rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(2.5rem, 6vw, 4.5rem);
-		font-weight: 500;
-		line-height: 0.95;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
 	}
 	.money header p {
 		max-width: 42rem;

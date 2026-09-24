@@ -306,7 +306,7 @@
 		cursor: default;
 	}
 	h1 {
-		font-size: clamp(2rem, 5vw, 3.5rem);
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
 		line-height: 1.1;
 	}
 	.card h3 {

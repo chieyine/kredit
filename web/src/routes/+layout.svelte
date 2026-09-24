@@ -153,7 +153,9 @@
 	/>{/if}
 {#if publicChrome}<SiteHeader />{/if}
 {#if privateShell}
-	<div id="main-content" tabindex="-1">{@render children()}</div>
+	<!-- The working surface: account, workspace, personal purchases and admin.
+	     app.css scopes the product look (square corners, calm motion) to it. -->
+	<div id="main-content" class="product-route" tabindex="-1">{@render children()}</div>
 {:else}
 	<div id="main-content" class="motion-scope public-route" tabindex="-1">
 		{#key page.url.pathname}{@render children()}{/key}

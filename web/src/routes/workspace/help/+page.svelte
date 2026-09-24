@@ -209,8 +209,8 @@
 	}
 	.help h1 {
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 7vw, 5rem);
-		line-height: 0.95;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
 	}
 	.card,
 	form,

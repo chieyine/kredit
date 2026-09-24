@@ -48,8 +48,10 @@
 	<header>
 		<div>
 			<p class="eyebrow">Kredit admin</p>
-			<h1>Run the whole platform from one place.</h1>
-			<p class="lede">Help users, check businesses and money, settle problems and keep Kredit healthy.</p>
+			<h1>Operations overview</h1>
+			<p class="lede">
+				Help users, check businesses and money, and resolve problems. Work that needs someone is listed first.
+			</p>
 		</div>
 		{#if role}<span class="role">{role.replaceAll('_', ' ')}</span>{/if}
 	</header>
@@ -102,10 +104,9 @@
 		max-width: 14ch;
 		margin: 0.5rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(2.6rem, 6vw, 5rem);
-		font-weight: 500;
-		line-height: 0.94;
-		letter-spacing: -0.05em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.role {
 		flex: none;

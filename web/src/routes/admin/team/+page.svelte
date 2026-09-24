@@ -283,10 +283,10 @@
 								><option value="support_agent">Support agent</option><option value="compliance_reviewer"
 									>Compliance reviewer</option
 								><option value="dispute_reviewer">Dispute reviewer</option><option value="finance_operator"
-									>Financial operator — propose corrections and date changes</option
-								><option value="policy_manager">Policy manager — propose business policies</option><option
-									value="approver">Approver — independently approve changes</option
-								><option value="access_administrator">Access administrator — manage admin team</option><option
+									>Financial operator: propose corrections and date changes</option
+								><option value="policy_manager">Policy manager: propose business policies</option><option
+									value="approver">Approver: independently approve changes</option
+								><option value="access_administrator">Access administrator: manage admin team</option><option
 									value="platform_admin">Platform administrator</option
 								></select
 							></label
@@ -318,9 +318,7 @@
 							</p>
 							<p>{roleEffect(grantReview.role)}</p>
 							<p>
-								Ends: {grantReview.expires_at
-									? localTime(grantReview.expires_at)
-									: 'No expiry — remains active until revoked'}
+								Ends: {grantReview.expires_at ? localTime(grantReview.expires_at) : 'No expiry. Active until revoked'}
 							</p>
 							<p>Recorded reason: {grantReview.reason}</p>
 							<p>The server rechecks your authority before saving. This change is kept in the audit trail.</p>
@@ -344,9 +342,8 @@
 	.team h1 {
 		margin: 0.4rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(2.5rem, 6vw, 4.5rem);
-		font-weight: 500;
-		line-height: 0.95;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
 	}
 	.team header p {
 		max-width: 44rem;

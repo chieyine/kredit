@@ -105,8 +105,8 @@
 		max-width: 52rem;
 	}
 	.form-page h1 {
-		font-size: clamp(2.4rem, 6vw, 4.5rem);
-		line-height: 1;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
 	}
 	.card {
 		display: grid;

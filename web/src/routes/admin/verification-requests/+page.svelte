@@ -101,8 +101,8 @@
 			<fieldset disabled={busy}>
 				<legend>Resolve selected attempt</legend><label
 					>Provider result<select bind:value={action}
-						><option value="link">Provider check exists — verify and attach its reference</option><option
-							value="not_created">Provider confirms no verification was created — permit a new attempt</option
+						><option value="link">Provider check exists: verify and attach its reference</option><option
+							value="not_created">Provider confirms no verification was created: allow a new attempt</option
 						></select
 					></label
 				>

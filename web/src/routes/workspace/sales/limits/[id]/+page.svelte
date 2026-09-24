@@ -38,8 +38,8 @@
 	const stateLabel = (state: string) =>
 		({
 			PENDING_BUYER_CONFIRMATION: 'Waiting for the customer to agree',
-			BUYER_CONFIRMED: 'Customer agreed — you can send the goods',
-			GOODS_RELEASED: 'Goods sent — waiting for them to confirm',
+			BUYER_CONFIRMED: 'Customer agreed. You can send the goods',
+			GOODS_RELEASED: 'Goods sent. Waiting for the customer to confirm',
 			RECEIPT_ISSUE_REPORTED: 'Customer reported a problem',
 			ACTIVATED: 'Payment has started',
 			CANCELLED: 'Cancelled',

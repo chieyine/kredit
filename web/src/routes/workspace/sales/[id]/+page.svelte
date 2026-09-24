@@ -554,7 +554,7 @@
 				href={`/workspace/sales/new?organization=${encodeURIComponent(organizationID)}&customer=${encodeURIComponent(view.request.buyer_user_id ?? '')}&goods=${encodeURIComponent(view.request.goods_description)}&amount=${encodeURIComponent(nairaInput(view.request.principal_kobo))}`}
 				>Sell these same goods again</a
 			><a class="repeat" href={`/workspace/sales/${id}/deliveries?organization=${encodeURIComponent(organizationID)}`}
-				>Deliveries & Credit Notes →</a
+				>Deliveries and credit notes →</a
 			><ShareActions
 				compact
 				title="Kredit payment reminder"

@@ -136,8 +136,8 @@
 
 <svelte:head><title>Application evidence — Kredit</title></svelte:head>
 <main class="shell workspace analytics">
-	<p class="eyebrow">Operations / Application evidence</p>
-	<h1>Show what Kredit has achieved.</h1>
+	<p class="eyebrow">Operations</p>
+	<h1>Application evidence</h1>
 	<p class="lede">
 		Review figures calculated from Kredit records for the selected period. Check each measure’s definition and
 		reconciliation status before sharing it.
@@ -217,7 +217,7 @@
 		</section>
 		<section class="feedback-breakdown" aria-labelledby="feedback-title">
 			<div>
-				<p class="eyebrow">Direct user signal</p>
+				<p class="eyebrow">From page feedback</p>
 				<h2 id="feedback-title">Can people understand Kredit?</h2>
 				<p>
 					These answers come from the question shown inside a seller or customer account. We do not collect a comment, a
@@ -293,10 +293,9 @@
 	.analytics > h1 {
 		max-width: 12ch;
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 7vw, 5.5rem);
-		font-weight: 500;
-		line-height: 0.92;
-		letter-spacing: -0.055em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.analytics form {
 		display: grid;

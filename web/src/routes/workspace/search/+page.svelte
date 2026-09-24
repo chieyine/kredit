@@ -301,10 +301,9 @@
 	.search-page h1 {
 		margin: 0.5rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 7vw, 5.5rem);
-		font-weight: 500;
-		line-height: 0.92;
-		letter-spacing: -0.055em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.search-bar {
 		display: grid;

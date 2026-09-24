@@ -196,7 +196,7 @@
 </script>
 
 <svelte:head>
-	<title>Deliveries & Credit Notes — Kredit</title>
+	<title>Deliveries and credit notes — Kredit</title>
 </svelte:head>
 
 <main class="shell workspace deliveries-page">
@@ -206,8 +206,8 @@
 		</a>
 	</div>
 
-	<p class="eyebrow">Sales · Order Lifecycle</p>
-	<h1>Deliveries & Credit Notes</h1>
+	<p class="eyebrow">Sales · Deliveries</p>
+	<h1>Deliveries and credit notes</h1>
 	<p class="lede">
 		Track partial shipments, signed delivery receipts, and approved credit adjustments with dual-control governance.
 	</p>
@@ -220,7 +220,7 @@
 	{:else}
 		<!-- Section 1: Line Items -->
 		<section class="card">
-			<h2>Order Line Items</h2>
+			<h2>Items on this order</h2>
 			{#if !lineItems.length}
 				<p class="empty-note">
 					This order is tracked at the whole-contract level, or line items have not yet been broken down.
@@ -261,7 +261,7 @@
 
 		<!-- Section 2: Partial Shipments -->
 		<section class="card">
-			<h2>Shipments & Dispatches</h2>
+			<h2>Shipments</h2>
 			{#if shipments.length}
 				<div class="shipment-list">
 					{#each shipments as s, i (i)}
@@ -320,7 +320,7 @@
 
 		<!-- Section 3: Credit Notes -->
 		<section class="card">
-			<h2>Approved Credit Notes</h2>
+			<h2>Approved credit notes</h2>
 			<p class="muted">
 				Credit notes reduce outstanding receivable balances. Under maker-checker dual control, the issuer cannot approve
 				their own credit note.
@@ -331,7 +331,7 @@
 					{#each creditNotes as cn, i (i)}
 						<div class="credit-note-item">
 							<div>
-								<strong>{formatKobo(cn.amount_kobo)}</strong> — {cn.reason}
+								<strong>{formatKobo(cn.amount_kobo)}</strong>: {cn.reason}
 								<p class="muted">Created {cn.created_at.slice(0, 10)}</p>
 							</div>
 							<span class={`badge ${cn.status === 'approved' ? 'success' : 'warning'}`}>{cn.status}</span>

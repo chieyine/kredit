@@ -267,7 +267,7 @@ test('operations overview presents redacted health counters', async ({ page }) =
 		})
 	);
 	await page.goto('/admin');
-	await expect(page.getByRole('heading', { name: 'Run the whole platform from one place.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Operations overview' })).toBeVisible();
 	await expect(page.getByText('Work in progress')).toBeVisible();
 	await expect(page.getByText('platform admin', { exact: true })).toBeVisible();
 });
@@ -340,7 +340,7 @@ test('application evidence shows real traction, user clarity, filters, and recon
 		});
 	});
 	await page.goto('/admin/analytics');
-	await expect(page.getByRole('heading', { name: 'Show what Kredit has achieved.' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Application evidence' })).toBeVisible();
 	await expect(page.getByText('Trade credit recorded')).toBeVisible();
 	await expect(page.getByLabel(/Evidence for/).getByText('₦1,200,000.00')).toBeVisible();
 	await expect(page.getByText('80.0%')).toBeVisible();

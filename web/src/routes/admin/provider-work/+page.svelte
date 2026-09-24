@@ -63,7 +63,7 @@
 	const status = (state: string) =>
 		({
 			not_configured: 'Not configured',
-			configured_unverified: 'Configured — live operation not confirmed',
+			configured_unverified: 'Configured, but live operation not confirmed',
 			configuration_unavailable: 'Configuration could not be read',
 			disabled: 'Disabled'
 		})[state] ?? state;

@@ -74,21 +74,21 @@
 			<a href={`/blog/topic/${category.slug}`}
 				><span
 					><strong>More on {article.category.toLowerCase()}</strong><small>Everything else on this topic.</small></span
-				><b aria-hidden="true">↗</b></a
+				><b aria-hidden="true">→</b></a
 			>
 			<a href="/glossary"
 				><span><strong>Terms, explained</strong><small>Look up a word from this guide.</small></span><b
-					aria-hidden="true">↗</b
+					aria-hidden="true">→</b
 				></a
 			>
 			<a href="/how-it-works"
 				><span><strong>How Kredit works</strong><small>Follow a sale from agreement to payment.</small></span><b
-					aria-hidden="true">↗</b
+					aria-hidden="true">→</b
 				></a
 			>
 			<a href="/faq"
 				><span><strong>Questions about Kredit</strong><small>Read about fees, payments and your account.</small></span
-				><b aria-hidden="true">↗</b></a
+				><b aria-hidden="true">→</b></a
 			>
 		</div>
 	</nav>

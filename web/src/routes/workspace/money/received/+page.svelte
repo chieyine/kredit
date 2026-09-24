@@ -389,10 +389,9 @@
 		max-width: 11ch;
 		margin: 0.45rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(3.2rem, 7vw, 6rem);
-		font-weight: 500;
-		line-height: 0.9;
-		letter-spacing: -0.06em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.page-heading label,
 	.filters label {

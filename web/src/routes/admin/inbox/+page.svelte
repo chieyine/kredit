@@ -107,7 +107,7 @@
 			<p>{item.kind.replaceAll('_', ' ')} · {item.state.replaceAll('_', ' ')} · Proposed by {item.author}</p>
 			<p>
 				<strong>{item.owner || 'Unassigned'}</strong> · Due {localTime(item.due_at)}
-				{new Date(item.due_at) < new Date() ? '— overdue' : ''}
+				{new Date(item.due_at) < new Date() ? '· overdue' : ''}
 			</p>
 			<a href={item.href}>Review and decide →</a>
 			<button

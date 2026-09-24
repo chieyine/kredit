@@ -191,7 +191,7 @@
 				<div class="stage-footer">
 					{#if stage > 0}<button class="restart" onclick={restart}>Start again</button>{/if}{#if stage === 6}<a
 							class="start-real"
-							href="/signin">Now add my first real sale <span>↗</span></a
+							href="/signin">Now add my first real sale <span>→</span></a
 						>{:else}<span>Your choices stay on this device.</span>{/if}
 				</div>
 			</div>
@@ -211,7 +211,7 @@
 			<p><span>05</span><b>What was paid?</b>{money(payment)}.</p>
 			<p><span>06</span><b>What is left?</b>{money(balance)}.</p>
 		</div>
-		<a class="final-cta" href="/signin">Start with one customer — free <span aria-hidden="true">↗</span></a>
+		<a class="final-cta" href="/signin">Start with one customer, free <span aria-hidden="true">→</span></a>
 	</section>
 </main>
 
@@ -255,11 +255,9 @@
 		align-items: center;
 		gap: 0.65rem;
 		margin: 0 0 1.4rem;
-		color: var(--color-foreground);
-		font-size: 0.7rem;
-		font-weight: 850;
-		letter-spacing: 0.13em;
-		text-transform: uppercase;
+		color: var(--color-muted);
+		font-size: 0.9rem;
+		font-weight: 550;
 	}
 	.eyebrow span {
 		width: 1.8rem;

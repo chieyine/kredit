@@ -49,10 +49,10 @@
 <svelte:head><title>Operations diagnostics — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Diagnostics</p>
-	<h1>One-hour operational health.</h1>
+	<h1>The last hour</h1>
 	<p>
 		Provider latency signals, webhook lag, queue age, reconciliation, drift, dead letters, notifications, scanning,
-		mandates, and settlements—without raw payloads or unredacted correlation identifiers.
+		mandates and settlements, without raw payloads or unredacted correlation identifiers.
 	</p>
 	{#if error}<section role="alert">
 			<p class="error">{error}</p>

@@ -36,7 +36,7 @@
 	<header>
 		<div>
 			<p class="eyebrow">Admin / Disputes</p>
-			<h1>Review every money disagreement fairly.</h1>
+			<h1>Disputes</h1>
 			<p>The amount, what evidence was attached, and what is still unanswered, before you record a decision.</p>
 		</div>
 		<label
@@ -90,9 +90,8 @@
 		max-width: 17ch;
 		margin: 0.4rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(2.5rem, 6vw, 4.5rem);
-		font-weight: 500;
-		line-height: 0.95;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
 	}
 	.disputes header p {
 		max-width: 42rem;

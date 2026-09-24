@@ -387,8 +387,8 @@
 			<section class="card enterprise-health">
 				<div class="health-header">
 					<div>
-						<p class="eyebrow">Enterprise Risk Analytics</p>
-						<h2>Portfolio Health & Concentration</h2>
+						<p class="eyebrow">Risk</p>
+						<h2>How spread out your credit is</h2>
 					</div>
 					<div class="badge-wrap">
 						<span class={`health-badge badge-${enterprise.portfolio_health.health_rating.toLowerCase()}`}>
@@ -424,7 +424,7 @@
 
 			{#if enterprise.branch_exposures && enterprise.branch_exposures.length > 0}
 				<section class="card branch-section">
-					<h2>Branch & Territory Exposure</h2>
+					<h2>Credit by branch and territory</h2>
 					<p>Breakdown of outstanding credit balances and ageing across operating branches.</p>
 					<div class="table-wrap">
 						<table class="branch-table">
@@ -497,10 +497,9 @@
 	.reports h1 {
 		max-width: 15ch;
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 6vw, 5.4rem);
-		font-weight: 500;
-		line-height: 0.92;
-		letter-spacing: -0.055em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.toolbar {
 		display: flex;

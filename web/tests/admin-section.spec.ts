@@ -87,7 +87,7 @@ test('the admin section exposes the main platform work without dead screens', as
 	);
 
 	await page.goto('/admin');
-	await expect(page.getByRole('heading', { name: 'Run the whole platform from one place.' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Operations overview' })).toBeVisible();
 	await expect(page.getByRole('navigation', { name: 'Admin account', exact: true })).toBeVisible();
 
 	await page.goto('/admin/users');

@@ -20,8 +20,8 @@
 	const stateLabel = (state: string) =>
 		({
 			PENDING_BUYER_CONFIRMATION: 'Please read this sale',
-			BUYER_CONFIRMED: 'You said yes — the seller can now send the goods',
-			GOODS_RELEASED: 'The seller sent the goods — did they reach you?',
+			BUYER_CONFIRMED: 'You agreed. The seller can now send the goods',
+			GOODS_RELEASED: 'The seller sent the goods. Did they reach you?',
 			RECEIPT_ISSUE_REPORTED: 'Problem reported',
 			ACTIVATED: 'Payment has started',
 			CANCELLED: 'Cancelled',
