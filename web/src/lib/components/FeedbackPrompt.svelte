@@ -147,7 +147,6 @@
 	}
 	.answers button:disabled {
 		cursor: wait;
-		opacity: 0.6;
 	}
 	.answers .later {
 		border-color: transparent;

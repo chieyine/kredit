@@ -3,6 +3,16 @@
 	import { onMount } from 'svelte';
 	import { adminGet, adminPost, localTime, localInput, lagosISO } from '$lib/admin-client';
 	import { optionalText, record, rows, text } from '$lib/api/reliable';
+	import { productLabel } from '$lib/product-language';
+	const kindNames: Record<string, string> = {
+		policy: 'Business policy',
+		financial_change: 'Money change',
+		dispute: 'Reported problem',
+		financial_review: 'Financial review',
+		recovery: 'Account recovery',
+		privacy: 'Privacy request',
+		support: 'Support case'
+	};
 	type InboxItem = {
 		id: string;
 		kind: string;
@@ -104,7 +114,11 @@
 	{#if error}<p role="alert">{error}</p>{/if}{#if message}<p role="status">{message}</p>{/if}
 	{#each items as item (`${item.kind}:${item.id}`)}<article>
 			<h2><a href={item.href}>{item.title}</a></h2>
-			<p>{item.kind.replaceAll('_', ' ')} · {item.state.replaceAll('_', ' ')} · Proposed by {item.author}</p>
+			<p>
+				{kindNames[item.kind] ?? productLabel(item.kind)} · {productLabel(item.state)}{item.author
+					? ` · Raised by ${item.author}`
+					: ''}
+			</p>
 			<p>
 				<strong>{item.owner || 'Unassigned'}</strong> · Due {localTime(item.due_at)}
 				{new Date(item.due_at) < new Date() ? '· overdue' : ''}

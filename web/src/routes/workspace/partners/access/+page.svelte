@@ -223,9 +223,7 @@
 		background: var(--color-surface);
 		color: inherit;
 	}
-	button:disabled {
-		opacity: 0.6;
-	}
+
 	p {
 		line-height: 1.7;
 	}

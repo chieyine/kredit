@@ -143,7 +143,7 @@ func (s *Store) Create(ctx context.Context, actor, org string, in Input) (Sale, 
 	defer func() { _ = tx.Rollback(ctx) }()
 	var ready bool
 	if e = tx.QueryRow(ctx, `SELECT app.consumer_retailer_ready($1::uuid)`, org).Scan(&ready); e != nil || !ready {
-		return Sale{}, errors.New("finish business onboarding and connect your registered receiving account; consumer sales activate automatically unless a restriction applies")
+		return Sale{}, RuleError{"Finish business onboarding and connect your registered receiving account; consumer sales activate automatically unless a restriction applies"}
 	}
 	if e = sellerPermission(ctx, tx, actor, org, access.PermissionCreateCredit); e != nil {
 		return Sale{}, e
@@ -152,22 +152,22 @@ func (s *Store) Create(ctx context.Context, actor, org string, in Input) (Sale, 
 	switch in.TargetType {
 	case "email":
 		if !regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`).MatchString(in.Target) {
-			return Sale{}, errors.New("enter the customer's email")
+			return Sale{}, RuleError{"Enter the customer's email"}
 		}
 	case "phone":
 		if !regexp.MustCompile(`^\+234[789][01][0-9]{8}$`).MatchString(in.Target) {
-			return Sale{}, errors.New("use the customer's WhatsApp number in +234 format")
+			return Sale{}, RuleError{"Use the customer's WhatsApp number in +234 format"}
 		}
 	default:
-		return Sale{}, errors.New("choose email or WhatsApp")
+		return Sale{}, RuleError{"Choose email or WhatsApp"}
 	}
 	if len(in.Target) > 254 {
-		return Sale{}, errors.New("customer contact is too long")
+		return Sale{}, RuleError{"Customer contact is too long"}
 	}
 	var enabled bool
 	e = tx.QueryRow(ctx, `SELECT c.enabled,c.bank_name,c.account_name,c.account_number,o.legal_name,o.business_address FROM app.consumer_settings c JOIN app.organizations o ON o.id=c.organization_id JOIN app.supplier_onboarding_profiles p ON p.organization_id=o.id WHERE c.organization_id=$1::uuid AND p.readiness_state='pilot_ready' AND p.kyb_state='approved' AND (p.kyb_expires_at IS NULL OR p.kyb_expires_at>now()) AND p.settlement_state='verified' AND p.billing_state='configured' FOR SHARE OF c,p`, org).Scan(&enabled, &in.Terms.BankName, &in.Terms.AccountName, &in.Terms.AccountNumber, &in.Terms.SellerName, &in.Terms.SellerAddress)
 	if e != nil || !enabled {
-		return Sale{}, errors.New("finish business onboarding and connect your registered receiving account")
+		return Sale{}, RuleError{"Finish business onboarding and connect your registered receiving account"}
 	}
 	terms, hash, e := Prepare(in.Terms, time.Now())
 	if e != nil {
@@ -340,7 +340,7 @@ func (s *Store) Act(ctx context.Context, actor, org, id string, admin bool, in A
 		return Sale{}, e
 	}
 	if v.Version != in.Version {
-		return Sale{}, errors.New("this purchase changed; refresh it before continuing")
+		return Sale{}, ErrChanged
 	}
 	if e = history(ctx, tx, &v); e != nil {
 		return Sale{}, e
@@ -349,7 +349,7 @@ func (s *Store) Act(ctx context.Context, actor, org, id string, admin bool, in A
 		var ready bool
 		e = tx.QueryRow(ctx, `SELECT app.consumer_retailer_ready($1::uuid)`, v.OrganizationID).Scan(&ready)
 		if e != nil || !ready {
-			return Sale{}, errors.New("this retailer must finish its current verification before you accept; existing payments and refunds remain available")
+			return Sale{}, RuleError{"This retailer must finish its current verification before you accept. Existing payments and refunds remain available."}
 		}
 	}
 	before := v

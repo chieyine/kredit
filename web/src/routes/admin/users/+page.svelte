@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDateTime } from '$lib/datetime';
 	import { page } from '$app/state';
 	import {
 		checkedJSON,
@@ -92,9 +93,7 @@
 							><td><strong>{user.display_name}</strong><small>{user.identifier}</small><code>{user.id}</code></td><td
 								><span class:bad={user.status !== 'active'}>{user.status}</span></td
 							><td>{user.organization_count}</td><td
-								>{user.last_authenticated_at
-									? new Date(user.last_authenticated_at).toLocaleString('en-NG')
-									: 'Never'}</td
+								>{user.last_authenticated_at ? readableDateTime(user.last_authenticated_at) : 'Never'}</td
 							><td
 								><a
 									href={`/admin/controls?target_type=user&target_id=${encodeURIComponent(user.id)}&status=${encodeURIComponent(user.status)}&version=${user.version}`}

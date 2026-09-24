@@ -396,7 +396,6 @@
 	}
 	button:disabled {
 		cursor: default;
-		opacity: 0.6;
 	}
 	.badge {
 		display: inline-block;

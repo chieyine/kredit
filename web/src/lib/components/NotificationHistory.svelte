@@ -44,9 +44,27 @@
 				AccountRecoveryCompleted: 'Account recovery completed',
 				PrivacyRequestReceived: 'Information request received',
 				PrivacyExportReady: 'Your information copy is ready',
-				NotificationPreferencesChanged: 'Message settings changed'
+				NotificationPreferencesChanged: 'Message settings changed',
+				BuyerPaymentClaimed: 'Customer says they paid',
+				PaymentClaimDecision: 'Seller answered your payment report',
+				SellerSettlementRecorded: 'Payout recorded',
+				TradeLineDrawdownConfirmationRequired: 'Purchase on your limit to confirm',
+				TradeLineDrawdownConfirmed: 'Customer confirmed a purchase',
+				TradeLineDrawdownSafeToRelease: 'Ready to send the goods',
+				TradeLineDrawdownGoodsReleased: 'Goods sent',
+				TradeLineDrawdownReceiptRequired: 'Confirm the goods arrived',
+				TradeLineDrawdownReceiptConfirmed: 'Customer received the goods',
+				TradeLineDrawdownCancelled: 'Purchase on a limit cancelled',
+				BuyerInvitation: 'Invitation to trade',
+				ConsumerPaymentDue: 'Payment due',
+				ConsumerPurchaseUpdated: 'Purchase updated',
+				CollectionScheduled: 'Bank debit scheduled',
+				CollectionCancelled: 'Bank debit cancelled',
+				MandateExpiring: 'Bank permission ending soon',
+				MandateRevoked: 'Bank permission withdrawn',
+				MandateCancelled: 'Bank permission cancelled'
 			}) as Record<string, string>
-		)[value] ?? productLabel(value);
+		)[value] ?? productLabel(value.replace(/([a-z])([A-Z])/g, '$1_$2'));
 	const visible = $derived(
 		filter === 'all'
 			? items
@@ -254,6 +272,7 @@
 		margin-top: 2rem;
 	}
 	.list article {
+		min-width: 0;
 		padding: 1rem 1.1rem;
 		border: 1px solid var(--color-border);
 		border-left: 4px solid var(--color-primary);
@@ -283,6 +302,8 @@
 		font-weight: 750;
 	}
 	.body {
+		/* message bodies carry full links, which must wrap on a phone */
+		overflow-wrap: anywhere;
 		margin: 0.75rem 0;
 		color: var(--color-foreground);
 		line-height: 1.6;
@@ -329,8 +350,11 @@
 		.toolbar {
 			align-items: stretch;
 		}
+		/* size each filter to its word and let the row wrap, so a long name
+		   such as WhatsApp never runs into its neighbour */
 		.toolbar button {
-			flex: 1;
+			flex: 1 1 auto;
+			padding-inline: 0.6rem;
 		}
 		.toolbar a {
 			width: 100%;

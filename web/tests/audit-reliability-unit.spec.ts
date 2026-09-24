@@ -278,7 +278,8 @@ test('partial disputes never promise a blanket debit stop', () => {
 	expect(disputeEffectCopy('CONTESTED_ONLY', 10049)).toContain('₦100.49');
 	expect(disputeEffectCopy('CONTESTED_ONLY')).toContain('Undisputed amounts may still be collected');
 	expect(disputeEffectCopy('FULL_BLOCK')).toContain('already sent to the bank may still complete');
-	expect(disputeEffectCopy('NO_AUTOMATIC_BLOCK')).toContain('does not request an automatic hold');
+	expect(disputeEffectCopy('NO_AUTOMATIC_BLOCK')).toContain('does not ask for an automatic hold');
+	expect(disputeEffectCopy('CONTESTED_ONLY', 10049, true)).toContain('is now on hold');
 });
 
 test('prices retain exact kobo, fee floors and caps', () => {

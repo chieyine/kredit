@@ -7,8 +7,17 @@ import (
 	"time"
 )
 
+// RuleError is a request that breaks a rule of the sale, such as a payment
+// time before acceptance. Its message is written for the person acting.
+type RuleError struct{ message string }
+
+func (e RuleError) Error() string { return e.message }
+
+// ErrChanged means the sale moved on since the person loaded it.
+var ErrChanged = errors.New("this purchase changed; refresh it before continuing")
+
 func (s *Sale) Apply(actor, role string, in Action, now time.Time) (Event, error) {
-	fail := func(message string) (Event, error) { return Event{}, errors.New(message) }
+	fail := func(message string) (Event, error) { return Event{}, RuleError{message} }
 	buyer := role == "buyer"
 	seller := role == "seller" || role == "admin"
 	ev := Event{Action: in.Action, Amount: in.Amount, Reference: strings.TrimSpace(in.Reference), RelatedID: in.RelatedID, Note: strings.TrimSpace(in.Note), At: now, RecordedAt: now}
@@ -59,7 +68,7 @@ func (s *Sale) Apply(actor, role string, in Action, now time.Time) (Event, error
 		s.Address = strings.TrimSpace(in.Address)
 		s.AcceptedAt = &now
 		s.State = "active"
-		ev.Note = "Accepted " + s.Hash + "; adult and terms consent recorded"
+		ev.Note = "Agreement accepted. The customer confirmed they are 18 or older and agreed to the terms."
 		ev.Reference = s.Hash
 	case "decline":
 		if !buyer || s.State != "offered" {
@@ -131,7 +140,7 @@ func (s *Sale) Apply(actor, role string, in Action, now time.Time) (Event, error
 		s.CaseState = "requested"
 	case "escalate":
 		if !buyer || s.CaseState != "rejected" || !evidence() {
-			return fail("A rejected return can be escalated to super admin with a reason.")
+			return fail("A refused return can be sent to Kredit support for review, with a reason.")
 		}
 		s.CaseState = "escalated"
 	case "approve_return", "reject_return":

@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { adminPost } from '$lib/admin-client';
 	import { loadOnboardingSettings, settingsProfile } from '$lib/api/onboarding-settings';
-	import { parseNaira, nairaInput } from '$lib/money';
+	import { formatKobo, parseNaira, nairaInput } from '$lib/money';
 	let organizationName = '',
 		orgID = '',
 		profile: Record<string, unknown> = {},
@@ -96,11 +96,39 @@
 						bind:value={grace}
 					/></label
 				><button disabled={busy || limitNaira <= 0} onclick={save}>{busy ? 'Saving…' : 'Save these choices'}</button
-				>{:else}<p>You can look at these, but only the owner or an allowed worker can change them.</p>{/if}
+				>{:else}<dl class="terms">
+					<div>
+						<dt>Most one customer should owe you at once</dt>
+						<dd>{formatKobo(parseNaira(limitNaira))}</dd>
+					</div>
+					<div>
+						<dt>Days a customer has to pay</dt>
+						<dd>{days} {days === 1 ? 'day' : 'days'}</dd>
+					</div>
+					<div>
+						<dt>Extra hours you normally give after that</dt>
+						<dd>{grace} {grace === 1 ? 'hour' : 'hours'}</dd>
+					</div>
+				</dl>
+				<p>Only the owner, or someone the owner allows, can change these.</p>{/if}
 		</section>{/if}<a href="/workspace/onboarding">← Back to account setup</a>
 </main>
 
 <style>
+	.terms {
+		display: grid;
+		gap: 0.9rem;
+		margin: 0 0 1.25rem;
+	}
+	.terms dt {
+		color: var(--color-muted);
+		font-size: 0.9rem;
+	}
+	.terms dd {
+		margin: 0.15rem 0 0;
+		font-size: 1.1rem;
+		font-weight: 650;
+	}
 	.form-page {
 		max-width: 52rem;
 	}

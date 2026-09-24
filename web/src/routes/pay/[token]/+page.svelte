@@ -61,7 +61,7 @@
 			</div>
 			<div>
 				<dt>Money left to pay</dt>
-				<dd><Money amountKobo={intent.amount_kobo} /></dd>
+				<dd class="amount"><Money amountKobo={intent.amount_kobo} /></dd>
 			</div>
 		</dl>
 		<p>{intent.provider_action}</p>
@@ -94,7 +94,7 @@
 	dl div {
 		display: flex;
 		justify-content: space-between;
-		gap: 2rem;
+		gap: 1rem;
 	}
 	dt {
 		color: var(--color-muted);
@@ -102,6 +102,10 @@
 	dd {
 		font-weight: 750;
 		text-align: right;
+	}
+	/* an amount reads as one figure; it must not break at the decimal point */
+	.amount {
+		white-space: nowrap;
 	}
 	.privacy {
 		font-size: 0.9rem;

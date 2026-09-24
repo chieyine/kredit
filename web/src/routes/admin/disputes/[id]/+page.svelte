@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { exactKobo, formatKobo, nairaInput, parseNaira, type KoboValue } from '$lib/money';
 	import { timeLabel } from '$lib/records';
+	import { productLabel, reasonText } from '$lib/product-language';
 	import { page } from '$app/state';
 	import { checkedJSON, record, text, LatestRequest, publicError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
@@ -140,13 +141,13 @@
 			<p class="error">{error}</p>
 			<button onclick={load} disabled={busy}>Reload dispute</button>
 		</section>{:else if dispute}<section class="summary">
-			<div><span>Status</span><strong>{dispute.state.replaceAll('_', ' ')}</strong></div>
+			<div><span>Status</span><strong>{productLabel(dispute.state)}</strong></div>
 			<div><span>Disputed</span><strong>{money(dispute.total_disputed_kobo)}</strong></div>
 			<div><span>Still disputed</span><strong>{money(dispute.remaining_disputed_kobo)}</strong></div>
-			<div><span>Bank-debit effect</span><strong>{dispute.collection_effect.replaceAll('_', ' ')}</strong></div>
+			<div><span>Bank-debit effect</span><strong>{productLabel(dispute.collection_effect)}</strong></div>
 		</section>
 		<article>
-			<h2>{dispute.reason}</h2>
+			<h2>{reasonText(dispute.reason)}</h2>
 			<p>{dispute.explanation}</p>
 		</article>
 		<div class="columns">
@@ -169,6 +170,10 @@
 			</section>
 			{#if !['RESOLVED', 'WITHDRAWN'].includes(dispute.state)}<section class="action">
 					<h2>Record a decision</h2>
+					<p class="help">
+						Check the sale first: if the seller has already approved a credit note for this problem, it has already come
+						off the balance, so do not take it off twice.
+					</p>
 					<form onsubmit={decide}>
 						<fieldset disabled={busy}>
 							<label
@@ -177,9 +182,14 @@
 										value="PARTIAL_ADJUSTMENT">Make a partial adjustment</option
 									><option value="FULL_ADJUSTMENT">Remove the disputed amount</option></select
 								></label
-							><label>Correct sale amount (₦)<input inputmode="decimal" maxlength="40" bind:value={validNaira} /></label
 							><label
-								>Amount to remove from the balance (₦)<input
+								>Of the disputed money, the part that is owed after all (₦)<input
+									inputmode="decimal"
+									maxlength="40"
+									bind:value={validNaira}
+								/></label
+							><label
+								>Amount to take off what the customer owes (₦)<input
 									inputmode="decimal"
 									maxlength="40"
 									bind:value={adjustmentNaira}
@@ -246,6 +256,12 @@
 	}
 	.decision {
 		margin: 0.7rem 0;
+	}
+	.action .help {
+		margin: 0.4rem 0 1rem;
+		font-size: 0.9rem;
+		line-height: 1.5;
+		opacity: 0.85;
 	}
 	.action {
 		align-self: start;

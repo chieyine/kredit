@@ -52,7 +52,7 @@
 		<dl>
 			<div>
 				<dt>Money paid</dt>
-				<dd><Money amountKobo={receipt.amount_kobo} /></dd>
+				<dd class="amount"><Money amountKobo={receipt.amount_kobo} /></dd>
 			</div>
 			<div>
 				<dt>Day it was paid</dt>
@@ -86,7 +86,7 @@
 	dl div {
 		display: flex;
 		justify-content: space-between;
-		gap: 2rem;
+		gap: 1rem;
 	}
 	dt {
 		color: var(--color-muted);
@@ -95,6 +95,10 @@
 		font-weight: 750;
 		text-align: right;
 		overflow-wrap: anywhere;
+	}
+	/* an amount reads as one figure; it must not break at the decimal point */
+	.amount {
+		white-space: nowrap;
 	}
 	.support-card {
 		margin: 1.5rem 0;

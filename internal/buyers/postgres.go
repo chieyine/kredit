@@ -425,13 +425,16 @@ func (s *PostgresStore) ReadBusinessPortal(ctx context.Context, userID, business
 	for rows.Next() {
 		var item VerificationCase
 		var reasons []string
-		var safe map[string]string
+		// Stored results are written as strings, but older rows (the demo seed
+		// among them) hold JSON booleans. Read either rather than failing the
+		// whole account page on one stored flag.
+		var stored map[string]any
 		var completed, expires *time.Time
-		if err := rows.Scan(&item.ID, &item.SubjectType, &item.SubjectID, &item.Provider, &item.ProviderReference, &item.VerificationLevel, &item.State, &reasons, &safe, &item.StartedAt, &completed, &expires); err != nil {
+		if err := rows.Scan(&item.ID, &item.SubjectType, &item.SubjectID, &item.Provider, &item.ProviderReference, &item.VerificationLevel, &item.State, &reasons, &stored, &item.StartedAt, &completed, &expires); err != nil {
 			rows.Close()
 			return Portal{}, err
 		}
-		item.Reasons, item.SafeResult = reasons, safe
+		item.Reasons, item.SafeResult = reasons, safeResultText(stored)
 		if completed != nil {
 			item.CompletedAt = *completed
 		}
@@ -482,6 +485,21 @@ func (s *PostgresStore) ReadBusinessPortal(ctx context.Context, userID, business
 		return Portal{}, err
 	}
 	return Portal{Person: person, Business: business, Representative: representative, VerificationCases: verificationCases, Consents: consents, BankAccounts: accounts}, nil
+}
+
+func safeResultText(stored map[string]any) map[string]string {
+	if stored == nil {
+		return nil
+	}
+	result := make(map[string]string, len(stored))
+	for key, value := range stored {
+		if text, ok := value.(string); ok {
+			result[key] = text
+		} else {
+			result[key] = fmt.Sprint(value)
+		}
+	}
+	return result
 }
 
 func (s *PostgresStore) AddBankAccountReference(userID, ownerType, ownerID string, reference BankAccountReference) (BankAccountReference, error) {

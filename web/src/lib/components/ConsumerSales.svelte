@@ -383,7 +383,7 @@
 			</p>{:else}{#each matching as sale, i (i)}<a class="sale record-row" href={href(sale)}
 					><strong>{sale.terms.item}</strong><span
 						>{sale.customer_name || sale.target} · {label(sale.state)}{sale.case_state
-							? ` · Return ${label(sale.case_state)}`
+							? ` · ${label(sale.case_state)}`
 							: ''}</span
 					><span>{money(sale.outstanding_kobo)} left to pay · {money(sale.refund_due_kobo)} refund due</span></a
 				>{:else}<div class="empty-state">

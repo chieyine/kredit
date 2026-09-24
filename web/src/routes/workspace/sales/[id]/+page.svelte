@@ -4,7 +4,6 @@
 	import SaleCosts from '$lib/components/SaleCosts.svelte';
 	import { actualPaymentTime } from '$lib/financial-input';
 	import { localInput, lagosISO } from '$lib/admin-client';
-	import { feeDisclosure } from '$lib/fee-terms';
 	import { exactKobo, formatKobo, nairaInput, parseNaira, type KoboValue } from '$lib/money';
 	import { page } from '$app/state';
 	import { getContext, untrack } from 'svelte';
@@ -347,11 +346,20 @@
 			error = 'Save your changes before sending this sale.';
 			return false;
 		}
-		return mutate(
+		const confirmed = await mutate(
 			`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/${path}`,
 			body,
 			path === 'payments' ? 'payment' : path === 'disputes' ? 'dispute' : 'request'
 		);
+		// Say what just happened; the changed status alone is easy to miss.
+		const done: Record<string, string> = {
+			send: 'Sent. Your customer can now read the sale and accept or decline it.',
+			cancel: 'Cancelled. Nothing more happens with this sale.',
+			release: 'Dispatch recorded. Your customer will be asked to confirm the goods arrived.',
+			disputes: 'Problem recorded. Both sides can see it on this sale.'
+		};
+		if (confirmed && done[path]) notice = done[path];
+		return confirmed;
 	}
 	async function recordPayment() {
 		paymentNotice = '';
@@ -559,13 +567,12 @@
 			><ShareActions
 				compact
 				title="Kredit payment reminder"
-				text={`Hello ${view.request.buyer_legal_name}, this is a reminder that ${formatKobo(view.obligation?.outstanding_kobo ?? view.request.principal_kobo)} is left for ${view.request.goods_description}. Payment day: ${nextDueItem?.due_at?.slice(0, 10) ?? (view.obligation ? 'Check your current payment schedule' : view.request.due_date)}.`}
+				text={`Hello ${view.request.buyer_legal_name}, this is a reminder that ${formatKobo(view.obligation?.outstanding_kobo ?? view.request.principal_kobo)} is left for ${view.request.goods_description}. Payment day: ${nextDueItem?.due_at ? readableDate(nextDueItem.due_at) : view.obligation ? 'check your current payment schedule' : readableDate(view.request.due_date)}.`}
 			/>
 		</div>
 		<section class="detail-grid">
 			<article class="card">
 				<h2>The sale</h2>
-				<p>{feeDisclosure(view.request.fee_terms)}</p>
 				<dl>
 					<div>
 						<dt>Money to pay</dt>

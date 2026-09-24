@@ -63,7 +63,60 @@ export type Purchase = {
 };
 export const money = (n: number) =>
 	new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(n / 100);
-export const label = (v: string) => v.replaceAll('_', ' ');
+const words: Record<string, string> = {
+	offered: 'Waiting for the customer',
+	active: 'Being paid',
+	received: 'Delivered',
+	completed: 'Paid in full',
+	cancelled: 'Cancelled',
+	declined: 'Declined',
+	requested: 'Return requested',
+	escalated: 'Sent to Kredit support',
+	rejected: 'Return refused',
+	approved: 'Return approved'
+};
+const sentence = (v: string) => v.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase());
+/** A consumer sale's state or return case in plain words. */
+export const label = (v: string) => words[v] ?? sentence(v);
+// Each form's heading matches the button that opened it.
+const actions: Record<string, string> = {
+	accept: 'Review and accept',
+	decline: 'Decline this offer',
+	cancel: 'Cancel',
+	release: 'Record dispatch or handover',
+	received: 'Confirm you received the goods',
+	payment: 'Confirm money received',
+	claim: 'Report a payment you made',
+	reject_claim: 'Review an unmatched payment',
+	reverse_payment: 'Correct a recorded receipt',
+	reduce_price: 'Reduce the sale price',
+	refund: 'Record a refund paid to the customer',
+	request_return: 'Report a problem or ask to return it',
+	approve_return: 'Approve the return and full refund',
+	reject_return: 'Decline the return',
+	escalate: 'Ask Kredit to review the decision'
+};
+const events: Record<string, string> = {
+	accept: 'Accepted',
+	decline: 'Declined',
+	cancel: 'Cancelled',
+	release: 'Goods sent',
+	received: 'Goods received',
+	payment: 'Payment recorded',
+	claim: 'Payment reported',
+	reject_claim: 'Reported payment not found',
+	reverse_payment: 'Payment reversed',
+	reduce_price: 'Price reduced',
+	refund: 'Refund recorded',
+	request_return: 'Return requested',
+	approve_return: 'Return approved',
+	reject_return: 'Return refused',
+	escalate: 'Sent to Kredit support'
+};
+/** A recorded step in a consumer sale's history, in the past tense. */
+export const eventLabel = (v: string) => events[v] ?? sentence(v);
+/** What a button on a consumer sale does, as a heading for its form. */
+export const actionLabel = (v: string) => actions[v] ?? sentence(v);
 export function kobo(v: string) {
 	const amount = parseNaira(v);
 	if (amount < 0) throw new Error('Enter a valid naira amount with no more than two decimal places.');

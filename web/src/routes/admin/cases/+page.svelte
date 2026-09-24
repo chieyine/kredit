@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { readableDateTime } from '$lib/datetime';
 	import { checkedJSON, optionalText, publicError, record, text, rows, LatestRequest } from '$lib/api/reliable';
 	const requests = new LatestRequest();
 	import { onMount } from 'svelte';
+	import { productLabel, shortReference } from '$lib/product-language';
 	type SupportCase = {
 		id: string;
 		state: string;
@@ -70,11 +72,11 @@
 			{#each items as item (item.id)}<a href={`/admin/cases/${encodeURIComponent(item.id)}`}
 					><span class:urgent={item.break_glass}>{item.break_glass ? 'Urgent access' : 'Support case'}</span>
 					<div>
-						<h2>{item.subject_type.replaceAll('_', ' ')}</h2>
-						<p>{item.subject_id}</p>
-						<small>Updated {new Date(item.updated_at).toLocaleString('en-NG')}</small>
+						<h2>{productLabel(item.subject_type)}</h2>
+						<p>Reference {shortReference(item.subject_id)}</p>
+						<small>Updated {readableDateTime(item.updated_at)}</small>
 					</div>
-					<strong>{item.state.replaceAll('_', ' ')}</strong><b>→</b></a
+					<strong>{productLabel(item.state)}</strong><b>→</b></a
 				>{:else}<div class="empty-state">
 					<h2>No cases in this view</h2>
 					<p>Choose another status or return later.</p>

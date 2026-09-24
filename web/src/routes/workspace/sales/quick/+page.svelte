@@ -9,6 +9,7 @@
 		LatestRequest,
 		readResource,
 		record,
+		RequestError,
 		rows,
 		text,
 		type Resource
@@ -168,8 +169,13 @@
 				);
 				if (organizationID !== scope || dueDate !== date) return;
 				timing = result;
-			} catch {
-				error = 'We could not verify the payment date. Try again before saving.';
+			} catch (cause) {
+				// Access is checked here first (role, fresh sign-in check, account
+				// hold); say which rather than suggesting the date was the problem.
+				error =
+					cause instanceof RequestError && [401, 403, 423].includes(cause.status)
+						? cause.message
+						: 'We could not verify the payment date. Try again before saving.';
 				return;
 			} finally {
 				busy = false;

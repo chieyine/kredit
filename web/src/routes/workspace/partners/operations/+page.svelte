@@ -302,7 +302,6 @@
 		justify-self: start;
 	}
 	button:disabled {
-		opacity: 0.6;
 		cursor: default;
 	}
 	h1 {

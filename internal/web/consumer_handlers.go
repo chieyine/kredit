@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"kredit/internal/access"
 	"kredit/internal/consumer"
 	"net/http"
@@ -133,7 +134,15 @@ func (s *Server) consumerSales(w http.ResponseWriter, r *http.Request) {
 	}
 	result, e := store.Act(r.Context(), user.ID, org, id, admin, in)
 	if e != nil {
-		writeProblem(w, 409, "purchase_action_unconfirmed", e.Error())
+		var rule consumer.RuleError
+		switch {
+		case errors.As(e, &rule):
+			writeProblem(w, 422, "purchase_action_invalid", rule.Error())
+		case errors.Is(e, consumer.ErrChanged):
+			writeProblem(w, 409, "purchase_changed", e.Error())
+		default:
+			writeProblem(w, 409, "purchase_action_unconfirmed", e.Error())
+		}
 		return
 	}
 	writeJSON(w, 200, result)

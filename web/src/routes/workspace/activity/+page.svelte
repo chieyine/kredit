@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDateTime } from '$lib/datetime';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
@@ -213,7 +214,7 @@
 						: readiness.ready
 							? 'Ready'
 							: productLabel(readiness.state, 'Check setup')}</strong
-				><a href="/workspace/onboarding">Finish setting up →</a>
+				><a href="/workspace/onboarding">{readiness?.ready ? 'See your setup →' : 'Finish setting up →'}</a>
 			</article>
 		</section>
 		<section class="card">
@@ -231,7 +232,7 @@
 								<strong>{productLabel(item.subject_type)} correction</strong><span>{productLabel(item.state)}</span>
 							</div>
 							<p>{item.reason}</p>
-							<small>Requested {new Date(item.created_at).toLocaleString('en-NG')}</small
+							<small>Requested {readableDateTime(item.created_at)}</small
 							>{#if ['OPEN', 'UNDER_REVIEW'].includes(item.state)}<label
 									>Why are you deciding this?<textarea disabled={!!busy} bind:value={decisionReasons[item.id]} rows="2"
 									></textarea></label
@@ -256,7 +257,7 @@
 					</p>{:else if actions.length}<ul>
 						{#each actions as item, i (i)}<li>
 								<strong>{productLabel(item.action_type)}</strong> · <Money amountKobo={item.amount_kobo} /><small
-									>{item.reason} · {new Date(item.created_at).toLocaleString('en-NG')}</small
+									>{item.reason} · {readableDateTime(item.created_at)}</small
 								>
 							</li>{/each}
 					</ul>{:else}<p>You have not written off any money or changed any fee.</p>{/if}
@@ -268,7 +269,7 @@
 					</p>{:else if events.length}<ul>
 						{#each events.slice(0, 30) as item, i (i)}<li>
 								<strong>{activityLabel(item.action, item.resource_type)}</strong><small
-									>{new Date(item.created_at).toLocaleString('en-NG')}</small
+									>{readableDateTime(item.created_at)}</small
 								>
 							</li>{/each}
 					</ul>{:else}<p>Nothing to show yet.</p>{/if}

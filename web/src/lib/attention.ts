@@ -1,3 +1,4 @@
+import { reasonText } from './product-language';
 import { formatKobo } from './money';
 import type { SaleView, WorkRow } from './records';
 export interface AttentionItem {
@@ -35,8 +36,8 @@ export function attentionItems(
 		items.push({
 			id: `dispute-${item.id}`,
 			rank: 0,
-			title: 'A sale needs review',
-			detail: item.reason || 'Check the reported problem and the amount on hold.',
+			title: 'A customer reported a problem',
+			detail: item.reason ? reasonText(item.reason) : 'Check the reported problem and the amount on hold.',
 			href: `/workspace/disputes/${encodeURIComponent(item.id)}${query}`,
 			action: 'Review problem'
 		});

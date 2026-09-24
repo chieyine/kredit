@@ -12,6 +12,8 @@
 		if (next.actor === own) return 'You';
 		if (next.actor === 'Seller') return 'The seller';
 		if (next.actor === 'Customer') return 'Your customer';
+		if (next.actor === 'Customer / bank')
+			return audience === 'buyer' ? 'You and your bank' : 'Your customer and their bank';
 		return next.actor;
 	});
 </script>

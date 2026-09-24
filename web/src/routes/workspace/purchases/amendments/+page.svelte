@@ -162,19 +162,19 @@
 				: error
 					? 'Date changes could not be loaded.'
 					: 'No repayment date changes to review.'}
-		</p>{/each}<button
-		disabled={busy || loading || !offset}
-		onclick={() => {
-			offset = Math.max(0, offset - 100);
-			load();
-		}}>Previous</button
-	><button
-		disabled={busy || loading || !more}
-		onclick={() => {
-			offset += 100;
-			load();
-		}}>Next</button
-	>{#if error}<button disabled={busy || loading} onclick={load}>Reload date changes</button>{/if}
+		</p>{/each}{#if offset || more}<button
+			disabled={busy || loading || !offset}
+			onclick={() => {
+				offset = Math.max(0, offset - 100);
+				load();
+			}}>Previous</button
+		><button
+			disabled={busy || loading || !more}
+			onclick={() => {
+				offset += 100;
+				load();
+			}}>Next</button
+		>{/if}{#if error}<button disabled={busy || loading} onclick={load}>Reload date changes</button>{/if}
 </main>
 
 <style>

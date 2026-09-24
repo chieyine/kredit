@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { checkedJSON, LatestRequest, record, text, publicError, RequestError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
+	import { productLabel } from '$lib/product-language';
 
 	type Preview = {
 		legal_versions: { terms_version: string; privacy_version: string };
@@ -195,7 +196,7 @@
 				</div>
 				<div>
 					<dt>Business type</dt>
-					<dd>{preview.invitation.proposed_business_type}</dd>
+					<dd>{productLabel(preview.invitation.proposed_business_type)}</dd>
 				</div>
 				<div>
 					<dt>Address</dt>
