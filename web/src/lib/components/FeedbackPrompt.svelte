@@ -80,7 +80,7 @@
 {#if visible}
 	<section class="feedback" aria-labelledby={`feedback-title-${area}`}>
 		<div>
-			<p class="eyebrow">Help us make Kredit better</p>
+			<p class="eyebrow">Quick question</p>
 			<h2 id={`feedback-title-${area}`}>Was this page easy to understand?</h2>
 			{#if message}<p class:error={message.startsWith('We could not')} role="status">{message}</p>{/if}
 		</div>
@@ -100,56 +100,59 @@
 {/if}
 
 <style>
+	/* A question in passing, not a banner: it sits under the page's real work
+	   and reads quieter than any action on it. */
 	.feedback {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 2rem;
-		margin: 2.5rem 0 0;
-		padding: 1.35rem 1.5rem;
-		border: 1px solid var(--color-border);
-		border-left: 6px solid var(--color-accent);
-		background: var(--color-surface);
+		margin: 3rem 0 0;
+		padding: 1.1rem 0 0;
+		border-top: 1px solid var(--color-border);
 	}
 	.feedback h2 {
-		margin: 0.25rem 0;
-		font-family: var(--font-serif);
-		font-size: clamp(1.35rem, 3vw, 1.8rem);
-		font-weight: 500;
+		margin: 0.15rem 0;
+		font-family: var(--font-sans);
+		font-size: 1rem;
+		font-weight: 600;
 	}
 	.feedback p {
-		margin: 0.3rem 0;
+		margin: 0.2rem 0;
 	}
 	.answers {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.55rem;
+		gap: 0.4rem;
 	}
 	.answers button {
-		min-width: 4.5rem;
-		min-height: 2.75rem;
-		padding: 0.6rem 0.85rem;
-		border: 1px solid var(--color-primary);
-		border-radius: 0;
-		background: var(--color-primary);
-		color: var(--color-on-primary);
+		min-width: 4rem;
+		min-height: 2.5rem;
+		padding: 0.45rem 0.85rem;
+		border: 1px solid var(--color-border-strong);
+		background: var(--color-surface);
+		color: var(--color-foreground);
 		font: inherit;
-		font-weight: 750;
+		font-size: 0.92rem;
+		font-weight: 550;
 		cursor: pointer;
+		transition:
+			border-color 180ms ease,
+			background-color 180ms ease;
 	}
-	.answers button:hover,
+	.answers button:hover:not(:disabled),
 	.answers button:focus-visible {
-		background: var(--color-primary);
 		border-color: var(--color-primary);
+		background: var(--color-surface-muted);
 	}
 	.answers button:disabled {
 		cursor: wait;
 		opacity: 0.6;
 	}
 	.answers .later {
-		color: var(--color-primary);
+		border-color: transparent;
 		background: transparent;
-		border-color: var(--color-border);
+		color: var(--color-muted);
 	}
 	.error {
 		color: var(--color-overdue);
@@ -158,6 +161,7 @@
 		.feedback {
 			align-items: stretch;
 			flex-direction: column;
+			gap: 0.9rem;
 		}
 		.answers button {
 			flex: 1;

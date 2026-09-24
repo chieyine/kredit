@@ -7,6 +7,7 @@
 	import { organization, kobo, paymentRow, type PaymentRow } from '$lib/records';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import ShareActions from '$lib/components/ShareActions.svelte';
+	import { productLabel } from '$lib/product-language';
 	type Organization = { id: string; legal_name: string; trading_name?: string };
 	type Summary = {
 		obligation_count: number;
@@ -207,6 +208,14 @@
 	const summaryText = $derived(
 		`Kredit ${sharePeriod === 'today' ? 'today' : 'last 7 days'}: ${shared.count} payment${shared.count === 1 ? '' : 's'} received, ${money(shared.total)} in total. ${money(summary?.outstanding_kobo)} still owed; ${money(summary?.overdue_kobo)} overdue.`
 	);
+	// Oldest last, the way anyone reads an ageing list; the API returns an
+	// object, and object keys come back in whatever order they were written.
+	const bucketOrder = ['current', 'not_due', '1_7', '8_30', '31_60', '61_plus', 'paid'];
+	const orderedBuckets = $derived(
+		Object.entries(buckets).sort(
+			([a], [b]) => (bucketOrder.indexOf(a.toLowerCase()) + 1 || 99) - (bucketOrder.indexOf(b.toLowerCase()) + 1 || 99)
+		)
+	);
 	function bucketName(bucket: string) {
 		return (
 			(
@@ -321,13 +330,13 @@
 		>
 		<div class="actions">
 			<button onclick={exportCSV} disabled={!summary || exporting || loading || Boolean(error)}
-				>{exporting ? 'Preparing…' : 'Download Receivables CSV'}</button
+				>{exporting ? 'Preparing…' : 'Download what you are owed (CSV)'}</button
 			>
 			<button
 				class="secondary-btn"
 				onclick={exportEnterpriseCSV}
 				disabled={!enterprise || exportingEnterprise || loading || Boolean(error)}
-				>{exportingEnterprise ? 'Signing…' : 'Enterprise Report CSV'}</button
+				>{exportingEnterprise ? 'Signing…' : 'Download the full report (CSV)'}</button
 			>
 		</div>
 	</div>
@@ -350,7 +359,7 @@
 			</article>
 			<article>
 				<span>Received</span><strong>{money(paidTotal)}</strong><small
-					>{receivedRate === null ? 'Share unavailable' : `${receivedRate}% of everything Kredit is following`}</small
+					>{receivedRate === null ? 'Share unavailable' : `${receivedRate}% of all money due so far`}</small
 				>
 			</article>
 			<article>
@@ -370,7 +379,7 @@
 				<h2>
 					{receivedRate === null
 						? 'This share could not be worked out.'
-						: `${receivedRate}% of the money Kredit is following has reached you.`}
+						: `You have been paid ${receivedRate}% of the money due to you.`}
 				</h2>
 				<p>
 					This compares money already received with money received plus money still owed. Use it to get a feel for how
@@ -387,57 +396,65 @@
 			<section class="card enterprise-health">
 				<div class="health-header">
 					<div>
-						<p class="eyebrow">Enterprise Risk Analytics</p>
-						<h2>Portfolio Health & Concentration</h2>
+						<p class="eyebrow">Risk</p>
+						<h2>How spread out your credit is</h2>
 					</div>
 					<div class="badge-wrap">
 						<span class={`health-badge badge-${enterprise.portfolio_health.health_rating.toLowerCase()}`}>
-							{enterprise.portfolio_health.health_rating}
+							{(
+								{
+									EXCELLENT: 'Strong',
+									HEALTHY: 'Healthy',
+									WATCH: 'Worth watching',
+									STRESSED: 'Needs attention'
+								} as Record<string, string>
+							)[enterprise.portfolio_health.health_rating.toUpperCase()] ??
+								productLabel(enterprise.portfolio_health.health_rating)}
 						</span>
 					</div>
 				</div>
 				<div class="health-grid">
 					<article>
-						<span>On-Time Collection</span>
+						<span>Paid on time</span>
 						<strong>{((enterprise.portfolio_health.on_time_collection_bps ?? 10000) / 100).toFixed(1)}%</strong>
-						<small>Settled without overdue notice</small>
+						<small>Paid before any late reminder</small>
 					</article>
 					<article>
-						<span>Disputed Ratio</span>
+						<span>Under dispute</span>
 						<strong>{((enterprise.portfolio_health.disputed_ratio_bps ?? 0) / 100).toFixed(1)}%</strong>
-						<small>Open dispute exposure</small>
+						<small>Of what you are owed</small>
 					</article>
 					<article>
-						<span>Concentration Risk</span>
+						<span>Largest customer</span>
 						<strong>{((enterprise.portfolio_health.top_concentration_bps ?? 0) / 100).toFixed(1)}%</strong>
-						<small>Single highest counterparty</small>
+						<small>Share owed by one customer</small>
 					</article>
 					<article>
-						<span>Ledger Integrity</span>
+						<span>Report fingerprint</span>
 						<strong class="hash-code"
 							>{enterprise.integrity_hash ? `${enterprise.integrity_hash.slice(0, 8)}…` : 'Verified'}</strong
 						>
-						<small>SHA-256 state seal</small>
+						<small>Changes if any figure here changes</small>
 					</article>
 				</div>
 			</section>
 
 			{#if enterprise.branch_exposures && enterprise.branch_exposures.length > 0}
 				<section class="card branch-section">
-					<h2>Branch & Territory Exposure</h2>
-					<p>Breakdown of outstanding credit balances and ageing across operating branches.</p>
+					<h2>Credit by branch and territory</h2>
+					<p>What each branch is owed, and how late it is.</p>
 					<div class="table-wrap">
 						<table class="branch-table">
 							<thead>
 								<tr>
-									<th>Branch / Facility</th>
+									<th>Branch</th>
 									<th>Territory</th>
-									<th>Accounts</th>
-									<th>0–30 Days</th>
-									<th>31–60 Days</th>
-									<th>61–90 Days</th>
-									<th>90+ Days</th>
-									<th>Total Outstanding</th>
+									<th>Customers</th>
+									<th>0–30 days</th>
+									<th>31–60 days</th>
+									<th>61–90 days</th>
+									<th>90+ days</th>
+									<th>Total owed</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -464,7 +481,7 @@
 			<h2>How old is the money you are owed?</h2>
 			<p>The longer a debt sits, the harder it usually gets to collect. Chase the old ones first.</p>
 			<dl>
-				{#each Object.entries(buckets) as [bucket, amount], i (i)}<div>
+				{#each orderedBuckets as [bucket, amount], i (i)}<div>
 						<dt>{bucketName(bucket)}</dt>
 						<dd>{money(amount)}</dd>
 					</div>{/each}
@@ -497,10 +514,9 @@
 	.reports h1 {
 		max-width: 15ch;
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 6vw, 5.4rem);
-		font-weight: 500;
-		line-height: 0.92;
-		letter-spacing: -0.055em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.toolbar {
 		display: flex;
@@ -578,8 +594,9 @@
 		display: block;
 		margin: 0.45rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(1.5rem, 2.5vw, 2.2rem);
+		font-size: clamp(1.3rem, 1.9vw, 1.9rem);
 		font-weight: 500;
+		overflow-wrap: anywhere;
 	}
 	.performance {
 		display: grid;
@@ -672,10 +689,7 @@
 		display: inline-block;
 		padding: 0.35rem 0.85rem;
 		font-size: 0.85rem;
-		font-weight: 750;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		border-radius: 2px;
+		font-weight: 650;
 	}
 	.badge-excellent {
 		background: #0d5e36;

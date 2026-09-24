@@ -59,7 +59,7 @@
 <svelte:head><title>Account recovery review — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Recovery</p>
-	<h1>Recovery review queue.</h1>
+	<h1>Account recovery</h1>
 	<p class="lede">
 		To approve one you need independent proof, recent MFA, a different reviewer from whoever raised it, a written reason
 		and a 24-hour cooling-off wait.

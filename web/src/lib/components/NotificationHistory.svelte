@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { recordNotice } from '$lib/activity-language';
 	import { onMount } from 'svelte';
 	import { productLabel } from '$lib/product-language';
 	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
@@ -116,7 +117,7 @@
 <main class="shell workspace messages">
 	<header>
 		<p class="eyebrow">Message history</p>
-		<h1>Know exactly what Kredit sent.<br />Know whether it arrived.</h1>
+		<h1>Messages Kredit sent you</h1>
 		<p class="lede">
 			Every reminder, payment message and account notice, with its latest delivery status. We never show private codes
 			here.
@@ -144,11 +145,15 @@
 				{#each visible as item, i (i)}<article class:failed-card={item.failure_reason}>
 						<div class="message-head">
 							<div>
-								<span class="channel">{channel(item.channel)}</span><strong>{messageName(item.template)}</strong>
+								<span class="channel">{channel(item.channel)}</span><strong
+									>{recordNotice(item.template, item.body)?.title ?? messageName(item.template)}</strong
+								>
 							</div>
 							<span class="state">{productLabel(item.state)}</span>
 						</div>
-						<p class="body">{item.body || 'Kredit sent an account message.'}</p>
+						<p class="body">
+							{recordNotice(item.template, item.body)?.body ?? (item.body || 'Kredit sent an account message.')}
+						</p>
 						<div class="meta">
 							<time>{sentTime(item)}</time>{#if item.recipient_hint}<span>{item.recipient_hint}</span>{/if}
 						</div>
@@ -182,10 +187,9 @@
 	.messages h1 {
 		max-width: 15ch;
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 6vw, 5.2rem);
-		font-weight: 500;
-		line-height: 0.94;
-		letter-spacing: -0.055em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.summary {
 		display: grid;

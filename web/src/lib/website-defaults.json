@@ -2,71 +2,71 @@
 	"home": {
 		"title": "Goods on credit.",
 		"accent": "Paid for on time.",
-		"introduction": "From the manufacturer down to the last shop on the street. Kredit holds the agreement, takes the bank permission up front, and follows the money until it comes back.",
+		"introduction": "Kredit keeps the agreement between you and your customer, gets their bank permission before the goods leave, and tracks every payment until the balance is cleared.",
 		"sections": []
 	},
 	"pricing": {
-		"title": "Nothing to write it down.",
-		"accent": "You pay when it works.",
-		"introduction": "Opening your account costs nothing, and drafting a sale costs nothing. The base fee falls due when the sale becomes active. The collection fee applies only to money Kredit actually collects for you.",
+		"title": "Free to set up.",
+		"accent": "You pay when a sale goes live.",
+		"introduction": "Opening an account costs nothing, and neither does drafting a sale. The base fee is due once a sale becomes active. The collection fee is charged only on money Kredit actually collects for you.",
 		"sections": []
 	},
 	"faq": {
-		"title": "The questions people ask.",
-		"accent": "Answered plainly.",
-		"introduction": "If yours is not here, write to us and we will answer it.",
+		"title": "Questions people ask us.",
+		"accent": "Straight answers.",
+		"introduction": "If your question is not here, write to us and we will reply.",
 		"sections": [
 			{
 				"heading": "Who is Kredit for?",
-				"body": "Manufacturers who give credit to their distributors. Distributors who buy from those manufacturers and sell on to retailers. Retailers who take stock on credit and then serve their own customers. Buying and selling sit in the same business workspace. A consumer buying for himself uses a simpler personal view instead."
+				"body": "Manufacturers who give credit to their distributors. Distributors who buy from manufacturers and sell on to shops. Retailers who take stock on credit and sell to their own customers. Buying and selling happen in the same business account. A person buying for themselves gets a simpler personal account instead."
 			},
 			{
 				"heading": "Do I need a second account to sell to my customers?",
-				"body": "No. The same business workspace handles what you buy and what you sell. You may have a few selling checks left to complete before you can create a live sale. Every customer you deal with keeps his own terms, his own records and his own balance."
+				"body": "No. The same business account handles what you buy and what you sell. You may have a few selling checks to finish before your first live sale. Every customer keeps their own terms, records and balance."
 			},
 			{
 				"heading": "Can my supplier see what I sell to my customers?",
-				"body": "No. Joining a supplier gives him no sight of your downstream sales. What you owe upstream and what you are owed downstream stay apart. The only people with access are your own authorised staff and the two parties to each trade."
+				"body": "No. Joining a supplier does not let them see your sales to your own customers. What you owe upstream and what you are owed downstream are kept apart. Only your own staff, and the two businesses on each sale, can see it."
 			},
 			{
 				"heading": "Do consumers need to register a business?",
-				"body": "No. The consumer opens the private purchase link his retailer sent and signs in to a personal account. His purchases, delivery, payments and any return stay outside every business workspace."
+				"body": "No. They open the private purchase link their retailer sent and sign in to a personal account. Their purchases, deliveries, payments and returns are kept outside every business account."
 			},
 			{
 				"heading": "Does money from my customers automatically pay my supplier?",
-				"body": "No. What your customers owe you and what you owe your supplier are two separate books. A payment that is confirmed is applied to the trade it was made against. It does not quietly settle something else."
+				"body": "No. What your customers owe you and what you owe your supplier are two separate books. A confirmed payment is applied to the sale it was made for, and nothing else."
 			},
 			{
 				"heading": "Who gives the goods on credit?",
-				"body": "You do. Kredit does not lend money to you or to your customer. We keep the sale and the repayment clear for both sides."
+				"body": "You do. Kredit does not lend money to you or to your customer. We keep the record of the sale and its repayment clear for both of you."
 			},
 			{
 				"heading": "Is Kredit a loan app?",
-				"body": "No. The goods are yours and the decision on who gets them is yours. What we keep is the amount, the day it falls due, and every payment made against it."
+				"body": "No. The goods are yours, and so is the decision about who gets them. Kredit keeps the amount, the due dates and every payment made against them."
 			},
 			{
 				"heading": "What if my customer does not pay?",
-				"body": "Reminders go out first. Once the grace days you agreed have passed, Kredit can present the debit to his bank. That needs valid permission, the agreed collection time, and the payment and dispute checks to pass. A dispute report holds the amount in question. Other restrictions on the account may stop further debits. A debit can still fail, and repayment is not guaranteed."
+				"body": "Reminders go out first. Once the grace days you agreed have passed, Kredit can ask your customer’s bank for the payment. That needs a valid bank permission, the agreed collection time, and the payment and dispute checks to pass. If a dispute is open, the disputed amount is not collected. Other account restrictions can also stop a debit. A debit can still fail, and repayment is never guaranteed."
 			},
 			{
 				"heading": "What if money comes in and is then reversed?",
-				"body": "We show the reversal plainly rather than burying it, and the amount goes back onto what the customer still owes."
+				"body": "You will see the reversal clearly on the sale, and the amount is added back to what your customer owes."
 			},
 			{
 				"heading": "Does Kredit show a credit score?",
-				"body": "No. What you see is what happened in your own sales. There is no hidden number deciding anything behind your back."
+				"body": "No. You see what actually happened in your own sales. There is no hidden score making decisions for you."
 			},
 			{
 				"heading": "Must my customer install an app?",
-				"body": "No. He opens a private link in whatever browser is on his phone and reads the sale there."
+				"body": "No. They open a private link in the browser on their phone and read the sale there."
 			},
 			{
 				"heading": "How much does it cost?",
-				"body": "Writing a sale down is free. The seller owes the agreed base fee once the accepted sale becomes active, after the required goods steps are done. If Kredit later collects from the customer's bank, a collection fee applies on the money actually collected. There is no monthly fee. A sale keeps the rates it was agreed on even if our rates change afterwards."
+				"body": "Writing a sale down is free. The seller pays the agreed base fee once an accepted sale becomes active, after the delivery steps are done. If Kredit later collects from your customer’s bank, a collection fee applies to the amount actually collected. There is no monthly fee. A sale keeps the rates it was agreed on, even if our rates change later."
 			},
 			{
 				"heading": "Can other sellers see my business?",
-				"body": "No other seller can open your sales or your bank records. Your own staff see what their role allows, and your customer sees the trades he is party to. Limited trade history may be shared only where the customer has consented and the access controls allow it. Kredit staff may open a record to help you or to look into a problem. A receipt you share hides names and bank details. The privacy notice sets all of this out."
+				"body": "No other seller can open your sales or your bank details. Your staff see what their role allows, and each customer sees only the sales they are part of. Limited trade history is shared only where the customer has agreed and access rules allow it. Kredit staff may open a record to help you or to look into a problem. A receipt you share hides names and bank details. Our privacy notice explains all of this."
 			}
 		]
 	}

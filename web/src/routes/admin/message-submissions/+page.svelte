@@ -115,7 +115,7 @@
 				<legend>Resolve selected message</legend>
 				<label
 					>Provider result<select bind:value={action} onchange={() => (reviewed = false)}
-						><option value="record_reference">Provider accepted it — record the message ID</option><option
+						><option value="record_reference">Provider accepted it: record the message ID</option><option
 							value="close_without_resend">Close this attempt without resending</option
 						></select
 					></label

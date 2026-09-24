@@ -55,7 +55,7 @@ test.describe('real-stack financial journeys', () => {
 
 		await page.goto('/workspace/money/received');
 		await expect(page.getByRole('heading', { name: 'Payments received' })).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'Money received.' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Money received', exact: true })).toBeVisible();
 		await expect(page.getByText('We could not open your payment records.')).toHaveCount(0);
 	});
 

@@ -59,8 +59,8 @@
 
 <header class="playbook-head">
 	<div>
-		<p class="eyebrow">Helpful guides</p>
-		<h1>Advice from people who have been there.</h1>
+		<p class="eyebrow">Guides</p>
+		<h1>Practical guides to selling on credit.</h1>
 	</div>
 	<p>
 		Short guides for sellers, and for the customers who buy from them. How to set a limit, how to check a new customer,
@@ -74,7 +74,7 @@
 		<div class="meta"><span>{featured.date}</span><span>{featured.minutes} minute read</span></div>
 		<h2>{featured.title}</h2>
 		<p>{featured.excerpt}</p>
-		<span class="read">Read guide <b>↗</b></span>
+		<span class="read">Read guide <b>→</b></span>
 	</a>
 </section>
 
@@ -126,7 +126,7 @@
 				<p>{post.excerpt}</p>
 			</div>
 			<span class="post-meta">{post.minutes} min<br />Updated {post.date}</span>
-			<i aria-hidden="true">↗</i>
+			<i aria-hidden="true">→</i>
 		</a>
 	{:else}<div class="no-results">
 			<h2>Nothing matches that.</h2>
@@ -143,7 +143,7 @@
 
 <aside class="playbook-end">
 	<p>Saw a word you do not understand?</p>
-	<a href="/glossary">We explain them here <span>↗</span></a>
+	<a href="/glossary">We explain them here <span aria-hidden="true">→</span></a>
 </aside>
 
 <style>

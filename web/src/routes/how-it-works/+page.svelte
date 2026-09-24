@@ -5,83 +5,87 @@
 
 <main class="network-page shell">
 	<header class="network-hero">
-		<p class="eyebrow">How Kredit works</p>
-		<h1>From the factory to the last shop.</h1>
+		<h1><span class="line">From the factory</span> <span class="line">to the last shop.</span></h1>
 		<p class="network-lede">
-			Start with one customer. Put the terms down, record what was delivered, then follow the money. The same four steps
-			hold whether you have one distributor or forty.
+			Start with one customer. Write down the terms, record what was delivered, then track the payments. It works the
+			same way whether you supply one distributor or forty.
 		</p>
 		<div class="network-actions">
-			<a class="primary" href="/demo">Try the sample journey →</a><a href="/signin?next=%2Fstart">Get started</a>
+			<a class="primary" href="/demo">Try the demo <span aria-hidden="true">→</span></a><a href="/signin?next=%2Fstart"
+				>Get started</a
+			>
 		</div>
 	</header>
 	<NetworkChain />
 	<section class="network-section">
-		<h2>Four steps, every time.</h2>
-		<div class="network-cards four">
-			{#each tradeSteps as [title, body], index (index)}<article>
-					<span class="eyebrow">0{index + 1}</span>
-					<h3>{title}</h3>
-					<p>{body}</p>
-				</article>{/each}
-		</div>
+		<h2>The same four steps for every sale.</h2>
+		<ol class="steps">
+			{#each tradeSteps as [title, body], index (index)}
+				<li>
+					<div>
+						<h3>{title}</h3>
+						<span>{body}</span>
+					</div>
+				</li>
+			{/each}
+		</ol>
 	</section>
 	<section class="network-section">
-		<h2>Today’s customer is tomorrow’s supplier.</h2>
+		<h2>Today’s customer can be tomorrow’s supplier.</h2>
 		<div class="network-cards">
 			<article>
-				<h3>The manufacturer starts it</h3>
+				<h3>The manufacturer starts</h3>
 				<p>
-					Bring in the roster you already have, or invite one distributor and see how it runs. Each one gets his own
-					limit and his own terms.
+					Bring in the distributors you already work with, or invite one and see how it goes. Each distributor gets
+					their own limit and their own terms.
 				</p>
 			</article>
 			<article>
-				<h3>The distributor grows into it</h3>
+				<h3>The distributor sells on</h3>
 				<p>
-					One workspace handles what he buys from the manufacturer and what he sells on to retailers. A few selling
-					checks have to be done before he can give credit himself.
+					The same account handles what they buy from the manufacturer and what they sell to retailers. After a few
+					checks, they can give credit to their own customers.
 				</p>
 			</article>
 			<article>
 				<h3>The retailer serves the street</h3>
 				<p>
-					He follows his stock purchases, sells on to other businesses, and sends an individual customer a personal
-					purchase link. That customer keeps a simpler account.
+					Retailers track their own stock purchases, sell to other businesses, and send a private purchase link to
+					anyone buying for themselves. That person gets a simpler personal account.
 				</p>
 			</article>
 		</div>
 	</section>
 	<section class="network-note">
-		<h2>Every balance sits on its own trade.</h2>
+		<h2>Every sale has its own balance.</h2>
 		<p>
-			What your customers owe you is one book. What you owe your suppliers is another. Nothing is netted off between
-			them, no limit is shared, and repayment is not guaranteed. A bank collection needs the customer’s permission and
-			has to pass the payment checks before it goes out.
+			What your customers owe you and what you owe your suppliers are kept in separate books. Nothing is netted off
+			between them, no limit is shared, and repayment is never guaranteed. Kredit can only request a payment from a
+			customer’s bank with that customer’s permission, and only after the payment checks pass.
 		</p>
 	</section>
 	<section class="network-section">
 		<h2>When something goes wrong.</h2>
 		<div class="network-cards">
 			<article>
-				<h3>The goods were short</h3>
+				<h3>Some goods were missing</h3>
 				<p>
-					Report it against that trade and attach what you have. While it is being looked at, you can see the amount in
-					question and whether collection is still running.
+					Report the shortage on that sale and attach any proof you have. While it is being reviewed, you can see the
+					amount in question and whether collection has been paused.
 				</p>
 			</article>
 			<article>
-				<h3>He paid you directly</h3>
+				<h3>The customer paid you directly</h3>
 				<p>
-					Your customer reports the transfer. You check that the money actually landed, then confirm it. Only then does
-					the balance come down.
+					Your customer records the transfer. You check that the money has actually arrived, then confirm it. Only then
+					does the balance go down.
 				</p>
 			</article>
 			<article>
-				<h3>The money is late</h3>
+				<h3>A payment is late</h3>
 				<p>
-					Reminders go out, then the grace days you agreed run down. With valid permission the debit can be presented to
-					his bank. It can still fail.
+					Reminders go out first, then the grace days you agreed run out. If there is a valid bank permission, Kredit
+					can request the payment from your customer’s bank. That request can still fail.
 				</p>
 			</article>
 		</div>
@@ -89,8 +93,8 @@
 	<section class="network-cta">
 		<div>
 			<h2>Start with one customer.</h2>
-			<p>Get one account running properly before you bring the rest on.</p>
+			<p>Get one account working well before you bring the rest on.</p>
 		</div>
-		<a class="primary" href="/signin?next=%2Fstart">Open Kredit →</a>
+		<a class="primary" href="/signin?next=%2Fstart">Open Kredit <span aria-hidden="true">→</span></a>
 	</section>
 </main>

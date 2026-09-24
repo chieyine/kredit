@@ -86,7 +86,6 @@
 <main class="shell sales-page">
 	<header class="task-heading">
 		<div>
-			<p class="eyebrow">Business → Business</p>
 			<h1>Business sales</h1>
 			<p>
 				Credit sales to your distributors, retailers and other business customers. Open any record to see the terms,
@@ -157,7 +156,6 @@
 		margin: 1rem 0 2rem;
 	}
 	.task-heading h1 {
-		font-family: inherit;
 		font-size: 2rem;
 		margin: 0.3rem 0;
 		line-height: 1.2;

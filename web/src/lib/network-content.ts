@@ -2,101 +2,122 @@ export const network = [
 	{
 		key: 'manufacturers',
 		label: 'Manufacturers',
-		short: 'Make it.',
+		short: 'You make the goods and give distributors time to pay.',
 		title: 'Know what every distributor owes you.',
 		description:
-			'Put the credit you give distributors on record, take the bank mandate before the goods move, and see the outstanding before it turns into a bad debt.',
+			'Record the credit you give each distributor, get the bank mandate before the goods leave your warehouse, and see a late payment while there is still time to act on it.',
 		action: 'Set up your business',
 		href: '/signin?next=%2Fworkspace%2Ftoday',
+		panel: [
+			['Distributors', 'Each one with their own limit and terms'],
+			['Outstanding', 'What is due this week, and what is already late'],
+			['Mandates', 'Which bank permissions are in place before dispatch']
+		],
 		steps: [
 			[
 				'Bring your distributors on',
-				'Import the roster you already have, or invite one business and start there. Each distributor confirms who he is and joins your account.'
+				'Import the list you already keep, or invite one business first and see how it goes. Each distributor confirms who they are before they join.'
 			],
 			[
 				'Put the terms on record',
-				'Set a limit for each customer. Record the goods, the amount and the payment dates. He reads the agreement and accepts it before anything moves.'
+				'Set a limit for each customer, then record the goods, the amount and the payment dates. The distributor reads the agreement and accepts it before anything is loaded.'
 			],
 			[
-				'Follow the trade to the end',
-				'Record dispatch. Confirm what was received. Watch the repayments, and the ones that are late.'
+				'Follow each sale to the end',
+				'Record the dispatch, confirm what was received, and watch the repayments come in. Late ones are flagged on the day they fall due.'
 			]
 		],
-		next: 'Your distributors can sell to their own customers on the same workspace. What they do downstream is their business, not yours to see.'
+		next: 'Your distributors can sell on credit to their own customers from the same account. Those sales belong to them, and you cannot see them.'
 	},
 	{
 		key: 'distributors',
 		label: 'Distributors',
-		short: 'Move it.',
-		title: 'What you owe. What you are owed.',
+		short: 'You buy from manufacturers and sell on to shops.',
+		title: 'What you owe and what you are owed, kept apart.',
 		description:
-			'Handle your supplier purchases and the credit you give retailers from one workspace, without mixing the two.',
-		action: 'Open your workspace',
+			'Track what you owe your suppliers and the credit you give retailers in one account, without the two ever getting mixed up.',
+		action: 'Open your account',
 		href: '/signin?next=%2Fstart',
+		panel: [
+			['You owe', 'Each supplier, with the next payment date'],
+			['Owed to you', 'Each retailer, with what is still outstanding'],
+			['Deliveries', 'What came in, and any shortage you reported']
+		],
 		steps: [
 			[
-				'Join your supplier',
-				'Open the invitation your manufacturer sent. Connect the business you already run, or create it once and keep it.'
+				'Accept your supplier’s invitation',
+				'Open the link your manufacturer sent. Connect the business you already run, or set it up once and keep it.'
 			],
 			[
-				'Stay on top of what you owe',
-				'Check the terms, confirm what arrived, and keep each supplier’s payment dates in front of you.'
+				'Keep track of what you owe',
+				'Read the terms on each purchase, confirm what arrived, and see every supplier’s payment dates in one place.'
 			],
 			[
-				'Start selling on credit yourself',
-				'Finish your selling setup, invite your retailers, and run their credit separately from what you owe upstream.'
+				'Start giving credit yourself',
+				'Finish the selling checks, invite your retailers, and manage their credit separately from what you owe upstream.'
 			]
 		],
-		next: 'Buying and selling are two sides of the same business. Money your customers pay you does not automatically clear what you owe your supplier.'
+		next: 'When a retailer pays you, that money is not used to pay your supplier unless you pay it yourself. The two accounts never net off.'
 	},
 	{
 		key: 'retailers',
 		label: 'Retailers',
-		short: 'Sell it.',
+		short: 'You take stock on credit and sell to the people on your street.',
 		title: 'Keep the shop’s credit straight.',
-		description: 'Follow what you took from your distributor, and what your own customers still owe you.',
-		action: 'Open your workspace',
+		description:
+			'See what you took from your distributor and when it is due, alongside what your own customers still owe you.',
+		action: 'Open your account',
 		href: '/signin?next=%2Fstart',
+		panel: [
+			['Stock on credit', 'What you took, and the day each payment is due'],
+			['Your customers', 'Who still owes you, and how much'],
+			['Receipts', 'A record of every payment on both sides']
+		],
 		steps: [
 			[
 				'Connect to your supplier',
-				'Accept the invitation with your business account and read the terms on each purchase before you agree.'
+				'Accept the invitation with your business account, and read the terms on each purchase before you agree to it.'
 			],
 			[
-				'Keep your stock purchases clear',
-				'Check what came, report a shortage there and then, and see what is still due to each supplier.'
+				'Check every delivery',
+				'Confirm what came, report a shortage straight away, and see what you still owe each supplier.'
 			],
 			[
-				'Serve your own customers',
-				'Business sales for another business, personal purchases for an individual. Each one keeps its own terms and its own record.'
+				'Sell to your own customers',
+				'Record a credit sale to another business, or send a private purchase link to a person buying for themselves. Each sale keeps its own terms.'
 			]
 		],
-		next: 'An individual buying for himself needs a personal purchase account, not a business profile. Send him the private link and let him read it.'
+		next: 'A person buying for themselves does not need a business account. Send them the private purchase link and they can read the terms on their phone.'
 	},
 	{
 		key: 'consumers',
 		label: 'Consumers',
-		short: 'Enjoy it.',
-		title: 'Know the full price before you agree.',
+		short: 'You buy for yourself and pay over time.',
+		title: 'See the full price before you agree.',
 		description:
-			'The seller, the total, the payment dates and the delivery are all in front of you before you accept anything.',
+			'The seller, the total, the payment dates and the delivery are all shown to you before you accept anything.',
 		action: 'View my purchases',
 		href: '/signin?next=%2Fpersonal%2Fpurchases',
+		panel: [
+			['Total to pay', 'Including any charge, shown before you accept'],
+			['Payment dates', 'Each instalment and the day it is due'],
+			['Paid so far', 'Updated when the seller confirms your payment']
+		],
 		steps: [
 			[
 				'Open the link you were sent',
-				'Use the private purchase link from the seller. Sign in with your own email or WhatsApp number.'
+				'Use the private purchase link from the seller, and sign in with your email address or WhatsApp number.'
 			],
 			[
 				'Read it before you accept',
-				'The total, any charge on it, and the dates you are to pay. Bank permission is a separate decision you make yourself.'
+				'Check the total, any charge on it, and the dates you have to pay. Giving bank permission is a separate choice, and it is yours to make.'
 			],
 			[
-				'Follow it afterwards',
-				'Track what you have paid and what is left, report a problem, or ask to return something from the same record.'
+				'Keep track afterwards',
+				'See what you have paid and what is left, report a problem, or ask to return something, all from the same page.'
 			]
 		],
-		next: 'Your personal purchases stay separate from any business workspace. You do not need to register a business to use one.'
+		next: 'Your personal purchases are kept apart from every business account. You do not have to register a business to use Kredit.'
 	}
 ] as const;
 export type NetworkRole = (typeof network)[number]['key'];
@@ -104,15 +125,15 @@ export type NetworkRole = (typeof network)[number]['key'];
 export const tradeSteps = [
 	[
 		'Connect',
-		'Invite the business you trade with. He joins with his own account and confirms the company he represents.'
+		'Invite a business you already trade with. They join with their own account and confirm the company they represent.'
 	],
 	[
 		'Agree',
-		'Record the goods, the price and the dates. Both sides accept the terms, and the bank permission the trade needs is taken then.'
+		'Record the goods, the price and the payment dates. Both sides accept the terms, and any bank permission the sale needs is given at the same time.'
 	],
 	[
 		'Deliver',
-		'Record what was dispatched and what was received. Keep the evidence on the trade, and report a shortage against it.'
+		'Record what was sent and what arrived. Keep the waybill or photo on the sale, and report a shortage against it.'
 	],
-	['Settle', 'Follow the due dates, confirm what has been paid, and reconcile what is left.']
+	['Get paid', 'Watch the due dates, confirm each payment as it lands, and see exactly what is left to collect.']
 ] as const;

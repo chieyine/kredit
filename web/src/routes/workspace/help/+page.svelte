@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
@@ -191,7 +192,7 @@
 			</p>{:else if cases.length}<div class="cases">
 				{#each cases as item (item.id)}<article>
 						<strong>Help number {item.id}</strong><span>{productLabel(item.state)}</span><small
-							>Sent {new Date(item.created_at).toLocaleDateString('en-NG')}</small
+							>Sent {readableDate(item.created_at)}</small
 						>{#if item.state === 'RESOLVED'}<button disabled={busy} onclick={() => updateCase(item, 'CLOSED')}
 								>Close this request</button
 							>{:else if item.state !== 'CLOSED'}<button disabled={busy} onclick={() => updateCase(item, 'RESOLVED')}
@@ -209,8 +210,8 @@
 	}
 	.help h1 {
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 7vw, 5rem);
-		line-height: 0.95;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
 	}
 	.card,
 	form,

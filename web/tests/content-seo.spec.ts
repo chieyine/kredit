@@ -128,7 +128,7 @@ test('bundled legal details render consistently without a published override', a
 
 test('FAQ matches activation fees and conditional collections', async ({ page }) => {
 	await page.goto('/faq');
-	await expect(page.getByText(/seller owes the agreed base fee once the accepted sale becomes active/)).toBeVisible();
-	await expect(page.getByText(/A debit can still fail, and repayment is not guaranteed/)).toBeVisible();
+	await expect(page.getByText(/seller pays the agreed base fee once an accepted sale becomes active/)).toBeVisible();
+	await expect(page.getByText(/A debit can still fail, and repayment is never guaranteed/)).toBeVisible();
 	await expect(page.getByRole('link', { name: 'what it costs', exact: true })).toHaveAttribute('href', '/pricing');
 });

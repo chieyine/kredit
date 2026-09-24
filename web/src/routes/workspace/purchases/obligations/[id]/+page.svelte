@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { workspaceHref } from '$lib/workspace-navigation';
 	import { checkedJSON, LatestRequest, record, rows, text, publicError } from '$lib/api/reliable';
 	import { kobo } from '$lib/records';
@@ -176,11 +177,7 @@
 				<span>Where this stands</span><strong>{productLabel(data.view.obligation.payment_status)}</strong>
 			</article>
 			<article>
-				<span>Pay before</span><strong
-					>{nextDue
-						? new Date(nextDue.due_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })
-						: 'Nothing due right now'}</strong
-				>
+				<span>Pay before</span><strong>{nextDue ? readableDate(nextDue.due_at) : 'Nothing due right now'}</strong>
 			</article>
 		</section>
 		<h2>Your payment days</h2>
@@ -201,13 +198,11 @@
 						{#each data.schedule_items as item (item.id)}
 							{@const debitNotice = data.collection_notices.find((n) => n.schedule_item_id === item.id)}
 							<tr
-								><td>{new Date(item.due_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })}</td><td
-									>{money(item.principal_due_kobo)}</td
-								><td>{money(item.allocated_kobo)}</td><td>{productLabel(item.state)}</td><td
+								><td>{readableDate(item.due_at)}</td><td>{money(item.principal_due_kobo)}</td><td
+									>{money(item.allocated_kobo)}</td
+								><td>{productLabel(item.state)}</td><td
 									>{#if debitNotice}<p>
-											Debit date: {new Date(item.collection_at).toLocaleDateString('en-NG', {
-												timeZone: 'Africa/Lagos'
-											})}. Up to {money(unpaid(item))} still due.
+											Debit date: {readableDate(item.collection_at)}. Up to {money(unpaid(item))} still due.
 										</p>
 										{#if debitNotice.acknowledged}<span>Notice acknowledged</span>{:else}<button
 												class="secondary"

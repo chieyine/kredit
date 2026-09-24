@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { checkedJSON, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
 	let error = $state('');
@@ -92,7 +93,7 @@
 <svelte:head><title>Privacy review — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Privacy</p>
-	<h1>Privacy request queue.</h1>
+	<h1>Privacy requests</h1>
 	<p class="lede">
 		Keep the financial records the law requires. In solo-owner mode, the owner can finish an approved request with a
 		recorded reason. Delegated teams use a different reviewer.
@@ -106,7 +107,7 @@
 				<header>
 					<strong>{productLabel(item.request_type)}</strong><span class="status">{productLabel(item.state)}</span>
 				</header>
-				<p>Due {new Date(item.due_at).toLocaleDateString('en-NG')} · {item.details}</p>
+				<p>Due {readableDate(item.due_at)} · {item.details}</p>
 				<div class="actions">
 					{#if item.state === 'APPROVED' || item.state === 'PARTIALLY_APPROVED'}<button
 							onclick={() => begin(item, 'COMPLETE')}>Record completed work</button

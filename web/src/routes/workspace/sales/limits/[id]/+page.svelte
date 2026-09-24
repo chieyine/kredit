@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { feeDisclosure } from '$lib/fee-terms';
 	import { parseNaira, formatKobo, nairaInput } from '$lib/money';
 	import { checkedJSON, LatestRequest, publicError, record, rows, RequestError } from '$lib/api/reliable';
@@ -38,8 +39,8 @@
 	const stateLabel = (state: string) =>
 		({
 			PENDING_BUYER_CONFIRMATION: 'Waiting for the customer to agree',
-			BUYER_CONFIRMED: 'Customer agreed — you can send the goods',
-			GOODS_RELEASED: 'Goods sent — waiting for them to confirm',
+			BUYER_CONFIRMED: 'Customer agreed. You can send the goods',
+			GOODS_RELEASED: 'Goods sent. Waiting for the customer to confirm',
 			RECEIPT_ISSUE_REPORTED: 'Customer reported a problem',
 			ACTIVATED: 'Payment has started',
 			CANCELLED: 'Cancelled',
@@ -374,7 +375,7 @@
 								<p>{feeDisclosure(drawdown.fee_terms)}</p>
 							</dd>
 							<dt>Pay before</dt>
-							<dd>{drawdown.due_date}</dd>
+							<dd>{readableDate(drawdown.due_date)}</dd>
 							<dt>Bank debit after</dt>
 							<dd>{localTime(drawdown.collection_at)}</dd>
 							<dt>Extra time before that</dt>

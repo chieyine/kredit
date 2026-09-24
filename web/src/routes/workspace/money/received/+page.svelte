@@ -258,7 +258,7 @@
 			<header>
 				<div>
 					<p class="eyebrow">Needs your answer</p>
-					<h2 id="review-title">Check your bank for these.</h2>
+					<h2 id="review-title">Check your bank for these</h2>
 				</div>
 				<span>{pendingClaims.length}</span>
 			</header>
@@ -302,7 +302,7 @@
 			<header>
 				<div>
 					<p class="eyebrow">Your records</p>
-					<h2 id="history-title">Money received.</h2>
+					<h2 id="history-title">Money received</h2>
 				</div>
 				<div class="filters">
 					<label
@@ -389,10 +389,9 @@
 		max-width: 11ch;
 		margin: 0.45rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(3.2rem, 7vw, 6rem);
-		font-weight: 500;
-		line-height: 0.9;
-		letter-spacing: -0.06em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.page-heading label,
 	.filters label {

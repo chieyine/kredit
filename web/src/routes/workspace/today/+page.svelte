@@ -288,10 +288,10 @@
 			{:else}<ResourceNotice resource={summary} label="Balance" retry={loadRequests} />{/if}
 		</section>
 		<WorkspacePurchases {organizationID} />
-		<nav class="network-actions" aria-label="Grow your customer network">
-			<a href="/workspace/partners/invitations{scopeQuery}">Distributor onboarding</a> ·
+		<nav class="shortcut-links" aria-label="Grow your customer network">
+			<a href="/workspace/partners/invitations{scopeQuery}">Distributor onboarding</a>
 			<a href="/workspace/partners/import{scopeQuery}">Import distributors</a>
-			· <a href="/workspace/partners/customers/new{scopeQuery}">Invite a customer</a>
+			<a href="/workspace/partners/customers/new{scopeQuery}">Invite a customer</a>
 		</nav>
 		<section class="attention-section" aria-labelledby="attention-heading">
 			<header class="section-heading">
@@ -355,17 +355,18 @@
 </main>
 
 <style>
-	.network-actions {
+	.shortcut-links {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.5rem;
+		gap: 0.25rem 1.5rem;
+		margin-block: 1.5rem;
 	}
-	.network-actions a {
+	.shortcut-links a {
 		display: inline-flex;
 		align-items: center;
 		min-height: 44px;
-		padding: 0.4rem 0.65rem;
+		color: var(--color-primary);
+		font-weight: 550;
 	}
 
 	.referral-link {
@@ -386,10 +387,8 @@
 	}
 	.task-heading h1 {
 		margin: 0.25rem 0;
-		font-family: inherit;
 		font-size: clamp(1.8rem, 4vw, 2.4rem);
 		line-height: 1.2;
-		letter-spacing: -0.035em;
 	}
 	.task-heading .lede {
 		font-size: 1rem;

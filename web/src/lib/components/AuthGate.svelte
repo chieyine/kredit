@@ -88,10 +88,8 @@
 		margin: clamp(3rem, 15vh, 9rem) auto;
 	}
 	.account-gate h1 {
-		font-family: inherit;
 		font-size: clamp(1.8rem, 4vw, 2.5rem);
 		line-height: 1.2;
-		letter-spacing: -0.03em;
 	}
 	.account-gate p {
 		line-height: 1.6;

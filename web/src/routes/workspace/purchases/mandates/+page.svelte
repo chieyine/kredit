@@ -8,7 +8,7 @@
 	import { MutationIntent } from '$lib/api/mutation';
 	import { kobo } from '$lib/records';
 	import Money from '$lib/components/Money.svelte';
-	import { productLabel } from '$lib/product-language';
+	import { productLabel, providerName } from '$lib/product-language';
 	type BankPermission = {
 		id: string;
 		provider: string;
@@ -100,7 +100,11 @@
 	{#if notice}<p role="status">{notice}</p>{/if}
 	{#if loading}<p role="status">Opening bank debit permissions…</p>{:else if mandates.length}<section class="cards">
 			{#each mandates as mandate (mandate.id)}<article>
-					<div><strong>{mandate.provider}</strong><span>{productLabel(mandate.status)}</span></div>
+					<div>
+						<strong>{providerName(mandate.provider, mandate.provider_adapter)}</strong><span
+							>{productLabel(mandate.status)}</span
+						>
+					</div>
 					<p>Permission limit: <Money amountKobo={mandate.amount_ceiling_kobo} /></p>
 					{#if mandate.cancellation_requested && mandate.status === 'PAUSED'}<p>
 							New debits are stopped. Bank cancellation is awaiting confirmation; you can retry it safely.

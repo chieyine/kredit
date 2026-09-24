@@ -63,7 +63,7 @@ export const investorDeck: Slide[] = [
 		points: [
 			[
 				'The supplier already made the credit decision',
-				'He knows this customer, often for years. He does not need a score. He needs the agreement to hold.'
+				'The seller knows this customer, often for years. They do not need a score. They need the agreement to hold.'
 			],
 			[
 				'The missing piece is the instrument, not the money',
@@ -99,11 +99,11 @@ export const investorDeck: Slide[] = [
 	{
 		kind: 'steps',
 		eyebrow: 'The product',
-		title: 'Connect. Agree. Deliver. Settle.',
+		title: 'Four steps for every sale.',
 		points: [
 			[
 				'Connect',
-				'The supplier invites his customer, who joins with his own account and confirms the business he represents.'
+				'The supplier invites their customer, who joins with their own account and confirms the business they represent.'
 			],
 			[
 				'Agree',
@@ -136,16 +136,16 @@ export const investorDeck: Slide[] = [
 	{
 		kind: 'statement',
 		eyebrow: 'Distribution',
-		title: 'One manufacturer brings his whole book.',
-		lede: 'We do not acquire traders one by one. A manufacturer who adopts Kredit has a commercial reason to put his distributors on it, and each distributor has the same reason to put his retailers on it.',
+		title: 'One manufacturer brings its whole book.',
+		lede: 'We do not acquire traders one by one. A manufacturer who adopts Kredit has a commercial reason to put its distributors on it, and each distributor has the same reason to put its retailers on it.',
 		points: [
 			[
 				'Land upstream',
-				'The manufacturer has the receivables pain, the leverage over his network, and the ability to make it a condition of credit.'
+				'The manufacturer has the receivables pain, the leverage over its network, and the ability to make it a condition of credit.'
 			],
 			[
 				'The network pulls itself down the chain',
-				'A distributor already using it to pay his supplier is one step from using it to get paid by his retailers.'
+				'A distributor already using it to pay its supplier is one step from using it to get paid by its retailers.'
 			],
 			['Each tier is the same product', 'Four tiers, one workspace. No separate build for each segment.']
 		]

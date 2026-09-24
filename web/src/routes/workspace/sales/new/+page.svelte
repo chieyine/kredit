@@ -690,10 +690,9 @@
 	}
 	.page-heading h1 {
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 6vw, 5.2rem);
-		font-weight: 500;
-		line-height: 0.92;
-		letter-spacing: -0.055em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 		margin: 0.5rem 0;
 	}
 	.draft-badge {

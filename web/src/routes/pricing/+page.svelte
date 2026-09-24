@@ -44,7 +44,6 @@
 <main class="pricing-page">
 	<section class="shell pricing-hero">
 		<div>
-			<p class="eyebrow">What it costs</p>
 			<h1>{data.copy.title}<br /><em>{data.copy.accent}</em></h1>
 		</div>
 		<div class="hero-side">
@@ -65,7 +64,7 @@
 					<p>When a sale becomes active</p>
 					<strong>{rates.base_bps / 100}%</strong>
 					<h2>Base fee</h2>
-					<p>The seller pays it, on the value of the sale once it goes live.</p>
+					<p>Paid by the seller, on the value of the sale, once it goes live.</p>
 					{#if rates.min_fee_kobo}<p>
 							Minimum: <Money amountKobo={rates.min_fee_kobo} />, capped at the sale amount.
 						</p>{/if}
@@ -74,20 +73,19 @@
 					<p>On successful bank collections</p>
 					<strong>{rates.collection_bps / 100}%</strong>
 					<h2>Collection fee</h2>
-					<p>Only on money that actually lands. A debit that fails earns us nothing.</p>
+					<p>Charged only on money that actually arrives. If a debit fails, there is no fee.</p>
 				</article>
 			</div>{/if}
 	</section>
 	<section class="calculator-section">
 		<div class="shell calculator-layout">
 			<div>
-				<p class="eyebrow inverse">Work out your fee</p>
 				<h2>Use your own figures.</h2>
 				<p>
-					Put in the real amount of the sale. Then try it both ways: your customer pays on his own, or Kredit has to
-					collect part or all of it.
+					Enter the actual amount of the sale. Then try it both ways: your customer pays you directly, or Kredit has to
+					collect some or all of it.
 				</p>
-				<p>You pay the fee, not your customer. It is not added onto what he owes.</p>
+				<p>The fee is paid by you, not your customer. It is never added to what they owe.</p>
 			</div>
 			<form class="calculator" onsubmit={(event) => event.preventDefault()}>
 				<label
@@ -121,7 +119,7 @@
 							maxlength="40"
 						/></label
 					>
-					<p>Leave it at 0 if your customer pays everything himself.</p>{/if}
+					<p>Leave it at 0 if your customer pays you everything directly.</p>{/if}
 				{#if !validExample}<p class="validation" role="alert">
 						Enter a positive sale amount. The amount collected must be between 0 and the sale amount.
 					</p>{/if}
@@ -173,7 +171,7 @@
 		</details>
 		<details>
 			<summary>Must my customer install an app?</summary>
-			<p>No. He opens a private link in whatever browser is on his phone and reads the sale there.</p>
+			<p>No. They open a private link in the browser on their phone and read the sale there.</p>
 		</details>
 		<a class="primary" href="/signin">Create your account</a>
 	</section>
@@ -267,9 +265,6 @@
 	}
 	.calculator-layout > div > p {
 		line-height: 1.7;
-		color: var(--color-muted);
-	}
-	.inverse {
 		color: var(--color-muted);
 	}
 	.calculator {

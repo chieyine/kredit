@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import SaleProgress from '$lib/components/SaleProgress.svelte';
 	import SaleCosts from '$lib/components/SaleCosts.svelte';
 	import { actualPaymentTime } from '$lib/financial-input';
@@ -554,7 +555,7 @@
 				href={`/workspace/sales/new?organization=${encodeURIComponent(organizationID)}&customer=${encodeURIComponent(view.request.buyer_user_id ?? '')}&goods=${encodeURIComponent(view.request.goods_description)}&amount=${encodeURIComponent(nairaInput(view.request.principal_kobo))}`}
 				>Sell these same goods again</a
 			><a class="repeat" href={`/workspace/sales/${id}/deliveries?organization=${encodeURIComponent(organizationID)}`}
-				>Deliveries & Credit Notes →</a
+				>Deliveries and credit notes →</a
 			><ShareActions
 				compact
 				title="Kredit payment reminder"
@@ -576,7 +577,7 @@
 					</div>
 					<div>
 						<dt>{view.obligation ? 'Original payment day' : 'Pay before'}</dt>
-						<dd>{view.request.due_date}</dd>
+						<dd>{readableDate(view.request.due_date)}</dd>
 					</div>
 					<div>
 						<dt>{view.obligation ? 'Original bank debit date' : 'Bank debit after'}</dt>
@@ -912,8 +913,10 @@
 		content: '\2013';
 	}
 	details.action > summary .hint {
-		font-size: 0.78rem;
-		font-weight: 600;
+		/* the hint reads after its title, not adrift in the middle of the row */
+		margin-right: auto;
+		font-size: 0.82rem;
+		font-weight: 500;
 		color: var(--color-muted, var(--color-foreground));
 	}
 	details.action[open] > summary {
@@ -944,10 +947,16 @@
 		display: inline-flex;
 		align-items: center;
 		min-height: 2.5rem;
-		padding: 0.35rem 0.75rem;
-		border: 1px solid var(--color-border);
-		font-weight: 750;
+		padding: 0.35rem 0.9rem;
+		border: 1px solid var(--color-border-strong);
+		background: var(--color-surface);
+		color: var(--color-foreground);
+		font-weight: 600;
 		text-decoration: none;
+		transition: border-color 160ms ease;
+	}
+	.repeat:hover {
+		border-color: var(--color-primary);
 	}
 	dl div {
 		display: flex;

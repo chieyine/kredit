@@ -27,6 +27,13 @@
 		border-bottom: 1px solid var(--color-border);
 		scrollbar-width: thin;
 	}
+	/* With room to spare every tab stays visible; only a phone scrolls them. */
+	@media (min-width: 761px) {
+		.section-navigation {
+			flex-wrap: wrap;
+			overflow-x: visible;
+		}
+	}
 	.section-navigation a {
 		display: inline-flex;
 		align-items: center;

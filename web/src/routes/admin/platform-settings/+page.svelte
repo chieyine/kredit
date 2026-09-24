@@ -223,7 +223,7 @@
 			);
 			message = editingSetting.requires_restart
 				? 'Connection saved. Check Launch setup for application status; live operation still needs confirmation.'
-				: `${editingSetting.description} — saved.`;
+				: `${editingSetting.description} saved.`;
 			previewDiffModal = false;
 			clearConnector();
 			editingSetting = null;

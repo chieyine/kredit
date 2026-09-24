@@ -5,7 +5,6 @@
 </script>
 
 <main class="shell contact">
-	<p class="eyebrow">Get in touch</p>
 	<h1>{copy.title} <em>{copy.accent}</em></h1>
 	<p class="lede">{copy.introduction}</p>
 	{#if contact}<div class="contacts">

@@ -83,7 +83,17 @@ export function purchase(v: unknown): Purchase {
 export async function read(url: string) {
 	const response = await boundedFetch(url);
 	const data = await response.json();
-	if (!response.ok) throw new RequestError(data.detail || 'Could not load this purchase.', response.status);
+	if (!response.ok) {
+		const code =
+			typeof data.code === 'string' ? data.code : typeof data.title === 'string' ? data.title : 'request_unavailable';
+		throw new RequestError(
+			code === 'step_up_required'
+				? 'Confirm it is you with your authenticator code, then try again.'
+				: data.detail || 'Could not load this purchase.',
+			response.status,
+			code
+		);
+	}
 	return data;
 }
 // Persist request identities/digests, never purchase or banking evidence.

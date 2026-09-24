@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { checkedJSON, record, rows, text, publicError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { formatKobo } from '$lib/money';
@@ -138,7 +139,7 @@
 	{#each items as item (item.id)}<article>
 			<strong>{item.state.replaceAll('_', ' ')}</strong>
 			<p>
-				{formatKobo(item.ceiling_kobo)} maximum in total · ends {new Date(item.ends_at).toLocaleDateString('en-NG')}
+				{formatKobo(item.ceiling_kobo)} maximum in total · ends {readableDate(item.ends_at)}
 			</p>
 			{#if admin}<p>Setup reference: {item.id}</p>{/if}{#if admin}<button
 					disabled={busy || !['customer_pending', 'mandate_pending', 'ready'].includes(item.state)}

@@ -39,6 +39,7 @@
 			.catch(() => {});
 		return () => abort.abort();
 	});
+	let linkGone = $state(false);
 	let preview = $state<Preview | null>(null);
 	let challengeId = $state('');
 	let developmentCode = $state('');
@@ -86,6 +87,7 @@
 			);
 			if (request.current()) preview = result;
 		} catch (cause) {
+			if (request.current()) linkGone = cause instanceof RequestError && [404, 410].includes(cause.status);
 			if (request.current())
 				error =
 					cause instanceof RequestError && [404, 410].includes(cause.status)
@@ -258,7 +260,8 @@
 		</section>
 	{:else}
 		<p class="error" role="alert">{error}</p>
-		<button onclick={loadPreview}>Try again</button>
+		<!-- An expired link will not come back by retrying; only a failed check might. -->
+		{#if !linkGone}<button onclick={loadPreview}>Try again</button>{/if}
 	{/if}
 </main>
 
@@ -270,13 +273,6 @@
 		border: 1px solid var(--color-border);
 		border-radius: 1.25rem;
 		background: var(--color-surface);
-	}
-	.eyebrow {
-		color: var(--color-primary);
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		font-size: 0.78rem;
 	}
 	h1 {
 		font-size: clamp(2rem, 6vw, 4rem);

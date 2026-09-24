@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import RepaymentCustomer from '$lib/components/RepaymentCustomer.svelte';
 	import IdentityChecks from '$lib/components/IdentityChecks.svelte';
@@ -215,7 +216,7 @@
 						></a
 					>{:else if nextPayment}<a class="due-strip" href={workspaceHref('/workspace/purchases/obligations', page.url)}
 						><span>Next: {formatKobo(nextPayment.next_due_kobo)}</span><em
-							>by {new Date(nextPayment.next_due_at ?? '').toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })} →</em
+							>by {readableDate(nextPayment.next_due_at ?? '')} →</em
 						></a
 					>{:else if outstanding > 0n}<a
 						class="due-strip"
@@ -276,13 +277,12 @@
 		<p class="eyebrow">Your business · Purchases</p>
 		<h1>Opening your account…</h1>
 	{/if}
+	<IdentityChecks />
+	{#if portal?.business?.id}<RepaymentCustomer
+			businessID={portal.business.id}
+			businessName={portal.business.legal_name}
+		/>{/if}
 </main>
-
-<IdentityChecks />
-{#if portal?.business?.id}<RepaymentCustomer
-		businessID={portal.business.id}
-		businessName={portal.business.legal_name}
-	/>{/if}
 
 <style>
 	.owe-hero {
@@ -344,13 +344,6 @@
 	.buyer-home {
 		padding-bottom: 6rem;
 	}
-	.eyebrow {
-		color: var(--color-primary);
-		font-weight: 800;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		font-size: 0.72rem;
-	}
 	.buyer-head {
 		display: flex;
 		justify-content: space-between;
@@ -364,10 +357,9 @@
 		max-width: 13ch;
 		margin: 0.5rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(3rem, 7vw, 5.8rem);
-		font-weight: 500;
-		line-height: 0.92;
-		letter-spacing: -0.06em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.buyer-head p {
 		color: var(--color-foreground);

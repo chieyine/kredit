@@ -68,7 +68,7 @@
 <main class="shell workspace money">
 	<header>
 		<p class="eyebrow">Admin / Money</p>
-		<h1>Where the platform money stands.</h1>
+		<h1>Money</h1>
 		<p>Confirmed payments, bank-debit attempts and customer balances. Nothing here is an estimate from a bank alert.</p>
 	</header>
 	{#if error}<section role="alert">
@@ -99,7 +99,7 @@
 		<section class="activity">
 			<div>
 				<p class="eyebrow">Latest activity</p>
-				<h2>Payments and bank debits.</h2>
+				<h2>Payments and bank debits</h2>
 			</div>
 			<div class="table-wrap">
 				<table>
@@ -126,9 +126,8 @@
 		max-width: 15ch;
 		margin: 0.4rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(2.5rem, 6vw, 4.5rem);
-		font-weight: 500;
-		line-height: 0.95;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
 	}
 	.money header p {
 		max-width: 42rem;

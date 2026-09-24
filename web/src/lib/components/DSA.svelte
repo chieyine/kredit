@@ -293,7 +293,7 @@
 	</p>
 	{#if data}
 		<section id="dsa-earnings" class="reward-summary">
-			<p class="eyebrow">Your rewards at a glance</p>
+			<p class="eyebrow">Your rewards</p>
 			<h2>Earnings</h2>
 			<div class="metric-grid">
 				<p>Earned after adjustments<br /><strong>{money(data.wallet.earned_kobo)}</strong></p>
@@ -452,7 +452,7 @@
 				>{/if}
 		</section>
 		<section class="reward-history">
-			<p class="eyebrow">Every adjustment, recorded</p>
+			<p class="eyebrow">Adjustments</p>
 			<h2>Reward history</h2>
 			{#each data.earnings as r, i (i)}<article>
 					<strong>{money(r.amount_kobo)} · {r.kind}</strong>

@@ -8,6 +8,7 @@
 		['Pricing', '/pricing']
 	];
 	let menu: HTMLDetailsElement;
+	let scrolled = $state(false);
 	function closeMobileMenu() {
 		if (menu) menu.open = false;
 	}
@@ -26,14 +27,15 @@
 			{/each}
 		</div>
 		<div class="nav-actions">
-			<a href="/start" onclick={closeMobileMenu}>Open Kredit</a>
-			<a class="header-cta" href="/demo" onclick={closeMobileMenu}>Explore the demo <span aria-hidden="true">↗</span></a
-			>
+			<a href="/start" onclick={closeMobileMenu}>Sign in</a>
+			<a class="header-cta" href="/demo" onclick={closeMobileMenu}>Try the demo <span aria-hidden="true">→</span></a>
 		</div>
 	</div>
 {/snippet}
 
-<header class="site-header">
+<svelte:window onscroll={() => (scrolled = window.scrollY > 8)} />
+
+<header class="site-header" class:is-scrolled={scrolled}>
 	<nav class="shell" aria-label="Main navigation">
 		<a class="wordmark" href="/" aria-label="Kredit home" onclick={closeMobileMenu}><span>K</span><b>Kredit</b></a>
 		<div class="desktop-site-menu">{@render navigation()}</div>

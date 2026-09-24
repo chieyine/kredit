@@ -48,8 +48,10 @@
 	<header>
 		<div>
 			<p class="eyebrow">Kredit admin</p>
-			<h1>Run the whole platform from one place.</h1>
-			<p class="lede">Help users, check businesses and money, settle problems and keep Kredit healthy.</p>
+			<h1>Operations overview</h1>
+			<p class="lede">
+				Help users, check businesses and money, and resolve problems. Work that needs someone is listed first.
+			</p>
 		</div>
 		{#if role}<span class="role">{role.replaceAll('_', ' ')}</span>{/if}
 	</header>
@@ -75,7 +77,7 @@
 		</section>
 		<div class="section-title">
 			<p class="eyebrow">Admin work</p>
-			<h2>Choose what you need to work on.</h2>
+			<h2>Where to go next</h2>
 		</div>
 		<section class="destinations">
 			{#each destinations as item, i (i)}<a href={item[2]}
@@ -102,10 +104,9 @@
 		max-width: 14ch;
 		margin: 0.5rem 0;
 		font-family: var(--font-serif);
-		font-size: clamp(2.6rem, 6vw, 5rem);
-		font-weight: 500;
-		line-height: 0.94;
-		letter-spacing: -0.05em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 	}
 	.role {
 		flex: none;
@@ -148,15 +149,15 @@
 		color: var(--color-foreground);
 	}
 	.section-title {
-		display: flex;
-		align-items: end;
-		justify-content: space-between;
-		border-bottom: 3px solid var(--color-primary);
+		margin-top: 3rem;
+		padding-bottom: 0.9rem;
+		border-bottom: 1px solid var(--color-border-strong);
 	}
 	.section-title h2 {
-		font-family: var(--font-serif);
-		font-size: clamp(1.8rem, 4vw, 3rem);
-		font-weight: 500;
+		margin: 0.25rem 0 0;
+		font-family: var(--font-display);
+		font-size: clamp(1.5rem, 2.6vw, 2rem);
+		font-weight: 450;
 	}
 	.destinations {
 		display: grid;

@@ -126,7 +126,7 @@
 <main class="editor">
 	<header>
 		<p class="eyebrow">Website</p>
-		<h1>Make the words yours.</h1>
+		<h1>Website copy</h1>
 		<p>Save a draft, preview the copy, then publish when it is ready.</p>
 	</header>
 	<VerifyIdentity />
@@ -346,8 +346,8 @@
 		max-width: 48rem;
 	}
 	h1 {
-		font-size: clamp(2.2rem, 5vw, 4rem);
-		line-height: 1.05;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
 		margin: 0.5rem 0 1rem;
 	}
 	h2 {

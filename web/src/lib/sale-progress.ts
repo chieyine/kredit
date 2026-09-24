@@ -61,10 +61,10 @@ export function saleNextStep(view: SaleView): NextStep {
 			action: 'Review receipt'
 		},
 		ACTIVE: {
-			actor: 'Customer / seller',
-			title: 'Follow the current payment schedule',
+			actor: 'Customer',
+			title: 'Payments are due on the agreed dates',
 			detail:
-				'Pay the amount due. The seller confirms reported transfers; a bank request stays pending until its outcome is known.',
+				'The customer pays on each payment date. When they report a transfer, the seller checks it arrived and confirms it. A bank debit shows as pending until the bank answers.',
 			action: 'Review payments'
 		},
 		CANCELLED: {

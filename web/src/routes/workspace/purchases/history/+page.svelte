@@ -236,9 +236,9 @@
 
 <style>
 	h1 {
-		font-size: clamp(2.5rem, 7vw, 5rem);
-		line-height: 1;
-		letter-spacing: -0.055em;
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
 		max-width: 10ch;
 	}
 	.intro {

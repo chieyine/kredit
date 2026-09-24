@@ -163,7 +163,7 @@
 			</p>
 			<p>
 				{item.payment_state === 'reversed'
-					? 'Customer payment reversed — review any bank payout already made.'
+					? 'Customer payment reversed. Check any bank payout already made.'
 					: item.payment_id
 						? 'Customer payment recognized.'
 						: 'Customer payment is not yet recognized.'}

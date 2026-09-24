@@ -10,7 +10,7 @@
 		],
 		[
 			'Your staff see their own work',
-			'What a member of staff can open depends on the role you gave him. Private document links expire.'
+			'What a member of staff can open depends on the role you give them. Private document links expire.'
 		],
 		[
 			'Nothing changes quietly',
@@ -30,7 +30,6 @@
 <main class="trust-page">
 	<section class="trust-hero shell">
 		<div>
-			<p class="eyebrow">Your account and records</p>
 			<h1>What we do to protect you.</h1>
 		</div>
 		<div class="hero-side">
@@ -57,7 +56,6 @@
 
 	<section class="safeguards shell">
 		<div class="section-head">
-			<p class="eyebrow">How we keep it safe</p>
 			<h2>What is in place.</h2>
 		</div>
 		<div class="safeguard-list">
@@ -72,7 +70,7 @@
 	<section class="boundaries-section">
 		<div class="shell boundaries">
 			<article>
-				<span>01 / LINKS YOU SHARE</span>
+				<span>Links you share</span>
 				<h2>Shared receipts hide your details.</h2>
 				<p>
 					A receipt you forward carries no full names, no bank details and no private notes. But a private invitation or
@@ -80,11 +78,11 @@
 				</p>
 			</article>
 			<article>
-				<span>02 / WHEN A DEBIT IS SLOW</span>
+				<span>When a debit is slow</span>
 				<h2>Check before retrying.</h2>
 				<p>
-					If a bank debit is slow, we do not just try again and hope. We go back and ask the bank what happened to the
-					first one.
+					If a bank debit is slow, we do not simply send another one. We first ask the bank what happened to the first
+					one before anything else is sent.
 				</p>
 			</article>
 		</div>
@@ -92,15 +90,14 @@
 
 	<section class="reporting shell">
 		<div>
-			<p class="eyebrow">Tell us about a problem</p>
 			<h2>Seen something you did not do?</h2>
 		</div>
 		<div>
 			<p>
-				Tell us what happened. But never send your password, your one-time code, your recovery code or your bank
-				details. Not to us. Not to anybody who rings you claiming to be us.
+				Tell us what happened. Never send your password, one-time code, recovery code or bank details, to us or to
+				anyone who calls claiming to be from Kredit.
 			</p>
-			<a href="/legal/complaints">Report a problem <span>↗</span></a>
+			<a href="/legal/complaints">Report a problem <span aria-hidden="true">→</span></a>
 		</div>
 	</section>
 

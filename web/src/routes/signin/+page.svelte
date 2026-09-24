@@ -133,7 +133,6 @@
 <svelte:head><title>Start or sign in — Kredit</title></svelte:head>
 <main class="shell auth-page">
 	<section class="auth-copy">
-		<p class="eyebrow">Your Kredit account</p>
 		<h1>Start or sign in.</h1>
 		<p class="lede">
 			One account for business trade and personal purchases. Sign in with a code sent to your email or WhatsApp.

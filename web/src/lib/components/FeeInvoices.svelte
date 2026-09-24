@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { checkedJSON, record, text, publicError } from '$lib/api/reliable';
 	type Line = { fee_id: string; obligation_id: string; type: string; amount_kobo: number; credit_kobo: number };
 	type FeeInvoice = {
@@ -111,9 +112,7 @@
 				<p>Reference: {invoice.id}</p>
 				<p>{invoice.business_name}<br />{invoice.business_address}</p>
 				<p>
-					Issued: {new Date(invoice.issued_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })} · Due: {new Date(
-						invoice.due_at
-					).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })}
+					Issued: {readableDate(invoice.issued_at)} · Due: {readableDate(invoice.due_at)}
 				</p>
 				<div class="table-wrap">
 					<table>

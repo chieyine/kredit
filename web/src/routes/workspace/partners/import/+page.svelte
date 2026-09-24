@@ -451,7 +451,7 @@
 		margin: 0.4rem 0.6rem 0.4rem 0;
 	}
 	h1 {
-		font-size: clamp(2rem, 5vw, 3.5rem);
+		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
 		max-width: 20ch;
 	}
 </style>

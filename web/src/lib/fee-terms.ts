@@ -15,7 +15,8 @@ export function validFeeTerms(value: unknown): value is FeeTerms {
 	);
 }
 export function feeDisclosure(terms?: FeeTerms | null): string {
-	if (!validFeeTerms(terms)) return 'Fee terms are unavailable. Please refresh before accepting.';
+	if (!validFeeTerms(terms))
+		return 'The fee terms for this sale could not be shown. Refresh the page, and do not accept the sale until they appear.';
 	const floor = exactKobo(terms.min_fee_kobo ?? 0);
 	return `The seller pays ${terms.base_bps / 100}% when this sale becomes active${floor && floor > 0n ? `, with a minimum of ${formatKobo(floor)} capped at the sale amount` : ''}, plus ${terms.collection_bps / 100}% on any amount Kredit successfully collects after the permitted collection time. These fees are not added to the buyer’s principal.`;
 }

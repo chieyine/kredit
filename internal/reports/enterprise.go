@@ -74,7 +74,7 @@ func newBranchExposure(id, name, territory string) BranchExposure {
 
 func buildEnterpriseReport(orgID string, receivables Receivables, branches []BranchExposure, assignments map[string]string, buckets map[string]map[string]ledger.Money) (EnterpriseReport, error) {
 	report := EnterpriseReport{OrganizationID: orgID, GeneratedAt: receivables.GeneratedAt, Summary: receivables.Summary, BranchExposures: []BranchExposure{}}
-	branchMap := map[string]BranchExposure{"headquarters": newBranchExposure("headquarters", "Headquarters / Direct Channel", "National")}
+	branchMap := map[string]BranchExposure{"headquarters": newBranchExposure("headquarters", "Main business (no branch)", "National")}
 	for _, b := range branches {
 		if b.BranchID == "" || b.BranchID == "headquarters" {
 			return EnterpriseReport{}, errors.New("invalid branch identity")

@@ -31,7 +31,7 @@
 		><button class="primary" onclick={save}>Save this setting</button>{#if message}<p role="status">{message}</p>{/if}
 	</section>
 	<section class="card">
-		<h2>When your network cuts</h2>
+		<h2>When your connection drops</h2>
 		<p>
 			Keep the page open. Kredit will tell you the moment you go offline. A sale draft is saved on this device only when
 			you choose to keep it. New money actions are not queued offline. An earlier request may still be processing; check

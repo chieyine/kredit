@@ -537,7 +537,9 @@ func (s *Store) VerifySecureLink(path string, expires time.Time, signature strin
 }
 func (s *Store) ListDeliveries(recipient string) []Delivery {
 	if s.pool != nil {
-		rows, err := s.pool.Query(db.WithTenantContext(context.Background(), recipient, ""), `SELECT id::text,event_reference,recipient_id::text,channel,template,template_version,state,COALESCE(provider_message_id,''),body,scheduled_at,sent_at,failed_at,COALESCE(failure_reason,''),COALESCE(secure_link,'') FROM app.notifications WHERE recipient_id=$1::uuid ORDER BY COALESCE(sent_at,scheduled_at) DESC NULLS LAST`, recipient)
+		// An in-app notice is delivered straight into the account and never
+		// "sent"; its delivery time is the one the reader needs to see.
+		rows, err := s.pool.Query(db.WithTenantContext(context.Background(), recipient, ""), `SELECT id::text,event_reference,recipient_id::text,channel,template,template_version,state,COALESCE(provider_message_id,''),body,scheduled_at,COALESCE(sent_at,delivered_at),failed_at,COALESCE(failure_reason,''),COALESCE(secure_link,'') FROM app.notifications WHERE recipient_id=$1::uuid ORDER BY COALESCE(sent_at,delivered_at,scheduled_at,created_at) DESC NULLS LAST`, recipient)
 		if err != nil {
 			return []Delivery{}
 		}

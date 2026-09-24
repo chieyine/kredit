@@ -27,10 +27,10 @@
 		justify-content: space-between;
 		flex-wrap: wrap;
 		gap: 0.75rem;
-		padding: 1rem;
-		background: var(--color-background);
-		border: 1px solid var(--color-warning);
-		border-radius: 0.4rem;
+		/* the same shape as every other notice: a rule on the left, a tint */
+		padding: 0.85rem 1rem;
+		border-left: 2px solid var(--color-warning);
+		background: rgb(138 82 16 / 0.07);
 		color: var(--color-warning);
 		margin: 1rem 0;
 	}
@@ -45,7 +45,6 @@
 		border: 1px solid currentColor;
 		min-height: 2.75rem;
 		padding: 0.55rem 0.8rem;
-		border-radius: 0.3rem;
 		cursor: pointer;
 	}
 </style>
