@@ -36,7 +36,7 @@
 <svelte:head><title>Operations search — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Search</p>
-	<h1>Find an exact reference.</h1>
+	<h1>Search</h1>
 	<p class="lede">
 		Search agreements, payments, collections, cases, disputes, uploaded documents, and the exact support reference from
 		an unconfirmed request. Every lookup is audited.

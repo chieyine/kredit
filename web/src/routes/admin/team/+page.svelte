@@ -191,7 +191,7 @@
 <main class="shell workspace team">
 	<header>
 		<p class="eyebrow">Admin / Team</p>
-		<h1>Who can run Kredit.</h1>
+		<h1>Admin team</h1>
 		<p>
 			Admin access is separate from business accounts. Every change needs recent verification, and every change is
 			recorded permanently.

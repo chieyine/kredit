@@ -76,7 +76,7 @@
 	<header>
 		<div>
 			<p class="eyebrow">Admin / Businesses</p>
-			<h1>Every business on Kredit.</h1>
+			<h1>Businesses</h1>
 			<p>Registered and unregistered businesses appear together, with their real account status and money position.</p>
 		</div>
 		<form

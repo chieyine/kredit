@@ -67,7 +67,7 @@
 	<header>
 		<div>
 			<p class="eyebrow">Admin / Users</p>
-			<h1>Every Kredit user.</h1>
+			<h1>Users</h1>
 			<p>Find an account, understand its status and use protected controls when necessary.</p>
 		</div>
 		<form

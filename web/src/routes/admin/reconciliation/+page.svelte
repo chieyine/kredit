@@ -123,7 +123,7 @@
 <svelte:head><title>Financial reviews — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Financial reviews</p>
-	<h1>Resolve financial differences.</h1>
+	<h1>Financial reviews</h1>
 	<p>
 		Claim a review, investigate the underlying records, and record the outcome. A review can close only after the
 		records agree.

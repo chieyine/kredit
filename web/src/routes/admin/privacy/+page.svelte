@@ -93,7 +93,7 @@
 <svelte:head><title>Privacy review — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Privacy</p>
-	<h1>Privacy request queue.</h1>
+	<h1>Privacy requests</h1>
 	<p class="lede">
 		Keep the financial records the law requires. In solo-owner mode, the owner can finish an approved request with a
 		recorded reason. Delegated teams use a different reviewer.

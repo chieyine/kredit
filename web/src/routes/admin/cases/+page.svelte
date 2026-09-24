@@ -52,7 +52,7 @@
 	<header>
 		<div>
 			<p class="eyebrow">Admin / Support</p>
-			<h1>Help people reach an answer.</h1>
+			<h1>Support cases</h1>
 			<p>Every case carries its own history. Who owns it, and why it was opened.</p>
 		</div>
 		<label

@@ -91,16 +91,16 @@ test('the admin section exposes the main platform work without dead screens', as
 	await expect(page.getByRole('navigation', { name: 'Admin account', exact: true })).toBeVisible();
 
 	await page.goto('/admin/users');
-	await expect(page.getByRole('heading', { name: 'Every Kredit user.' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Users', exact: true })).toBeVisible();
 	await expect(page.getByText('Ada Okafor')).toBeVisible();
 
 	await page.goto('/admin/organizations');
-	await expect(page.getByRole('heading', { name: 'Every business on Kredit.' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Businesses', exact: true })).toBeVisible();
 	await expect(page.getByText('Ada Market Store')).toBeVisible();
 	await expect(page.getByText('unregistered business', { exact: true })).toBeVisible();
 
 	await page.goto('/admin/money');
-	await expect(page.getByRole('heading', { name: 'Where the platform money stands.' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Money', exact: true })).toBeVisible();
 	await expect(page.getByText('₦200,000.00')).toBeVisible();
 });
 
@@ -131,7 +131,7 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 	await expect(more.getByText('Access and control', { exact: true })).toBeVisible();
 	await more.getByRole('link', { name: 'Support cases' }).click();
 	await expect(page).toHaveURL(/\/admin\/cases$/);
-	await expect(page.getByRole('heading', { name: 'Help people reach an answer.' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Support cases', exact: true })).toBeVisible();
 	await expect(more).toHaveCount(0);
 });
 
@@ -159,7 +159,7 @@ test('an administrator can find a person and give access without copying an ID',
 	});
 
 	await page.goto('/admin/team');
-	await expect(page.getByRole('heading', { name: 'Who can run Kredit.' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Admin team', exact: true })).toBeVisible();
 	await page.getByLabel('Find the person').fill('Ada');
 	await page.getByRole('button', { name: 'Find user' }).click();
 	await page.getByRole('button', { name: /Ada Okafor/ }).click();

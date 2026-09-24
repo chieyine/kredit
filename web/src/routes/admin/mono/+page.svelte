@@ -61,7 +61,7 @@
 	<header>
 		<div>
 			<p class="eyebrow">Administration / Integrations</p>
-			<h1>Mono operations.</h1>
+			<h1>Mono</h1>
 			<p class="lede">
 				See exactly what Kredit is configured to do with Mono. Secret values never leave the server; Admin only shows
 				whether they are present.

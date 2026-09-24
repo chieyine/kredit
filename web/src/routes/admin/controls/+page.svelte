@@ -105,7 +105,7 @@
 <svelte:head><title>Protected controls — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Operations / Controls</p>
-	<h1>Protected account and financial controls.</h1>
+	<h1>Protected controls</h1>
 	<p>
 		Before any action here goes through, all of this must be true: you signed in with MFA recently, you hold the exact
 		permission, the record is on its current version, you gave a clear reason, you looked at the impact preview and the

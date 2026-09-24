@@ -258,7 +258,7 @@
 			<header>
 				<div>
 					<p class="eyebrow">Needs your answer</p>
-					<h2 id="review-title">Check your bank for these.</h2>
+					<h2 id="review-title">Check your bank for these</h2>
 				</div>
 				<span>{pendingClaims.length}</span>
 			</header>
@@ -302,7 +302,7 @@
 			<header>
 				<div>
 					<p class="eyebrow">Your records</p>
-					<h2 id="history-title">Money received.</h2>
+					<h2 id="history-title">Money received</h2>
 				</div>
 				<div class="filters">
 					<label

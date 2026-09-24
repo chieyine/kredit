@@ -126,7 +126,7 @@
 <main class="editor">
 	<header>
 		<p class="eyebrow">Website</p>
-		<h1>Make the words yours.</h1>
+		<h1>Website copy</h1>
 		<p>Save a draft, preview the copy, then publish when it is ready.</p>
 	</header>
 	<VerifyIdentity />
