@@ -209,7 +209,7 @@ I could not compile or run anything: `proxy.golang.org` is blocked by the egress
 
 ## Commands to run on your Mac
 
-From `/Users/macbookpro/Documents/Kredit.com`.
+From `the repository root`.
 
 ### The full gate
 

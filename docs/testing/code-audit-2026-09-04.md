@@ -6,7 +6,7 @@
 
 This was a **code audit**, not an audit of agents or prior work. Application behavior, database constraints, role boundaries, API contracts, provider handoffs, frontend routes, SEO, UI/accessibility code, product policy, deployment configuration, tests, and documentation were inspected as repository artifacts. No application code or configuration was changed. This report and its accompanying register are the only durable audit outputs.
 
-The [file register](</Users/macbookpro/Documents/Kredit.com/docs/testing/code-audit-2026-09-04-files.csv>) accounts for **687 repository-owned files** in the audited snapshot, with path, section, line count, review method, status, linked finding IDs, and SHA-256. Dependencies, Git internals, caches, generated build output, Playwright output, and `web/node_modules` are excluded. A blank finding column means that no separate actionable finding was recorded under the stated review method; it is not a proof that every possible runtime path is defect-free.
+The [file register](code-audit-2026-09-04-files.csv) accounts for **687 repository-owned files** in the audited snapshot, with path, section, line count, review method, status, linked finding IDs, and SHA-256. Dependencies, Git internals, caches, generated build output, Playwright output, and `web/node_modules` are excluded. A blank finding column means that no separate actionable finding was recorded under the stated review method; it is not a proof that every possible runtime path is defect-free.
 
 ## Scope by section
 

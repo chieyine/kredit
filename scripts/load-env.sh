@@ -33,6 +33,8 @@ load_env_defaults() {
 			value="${value:1:${#value}-2}"
 		fi
 		printf -v "$key" '%s' "$value"
+		# Export the variable whose name is held in key, not key itself.
+		# shellcheck disable=SC2163
 		export "$key"
 	done < "$env_file"
 }

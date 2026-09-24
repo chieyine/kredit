@@ -6,7 +6,7 @@ This was an audit only, performed without subagents. No application implementati
 
 ## Scope and how to read this report
 
-The accompanying [file-by-file register](</Users/macbookpro/Documents/Kredit.com/docs/testing/code-audit-2026-09-03-files.csv>) accounts for **664 repository-owned files**. It contains each file’s path, line count, review method, validation status, associated findings and SHA-256. The original application/support inventory contained 663 files; the final register additionally includes `Claude outputs/ci.yml`, an archived workflow draft that is not the active GitHub workflow. Dependencies, Git internals, caches and generated build output are excluded.
+The accompanying [file-by-file register](code-audit-2026-09-03-files.csv) accounts for **664 repository-owned files**. It contains each file’s path, line count, review method, validation status, associated findings and SHA-256. The original application/support inventory contained 663 files; the final register additionally includes `Claude outputs/ci.yml`, an archived workflow draft that is not the active GitHub workflow. Dependencies, Git internals, caches and generated build output are excluded.
 
 Handwritten backend behavior, frontend logic/components/routes, persistence boundaries, permissions, financial flows, providers, notifications, deployment scripts and supporting contracts were reviewed through source reads and cross-file traces. Generated source was checked through the compiler/type/contract tools rather than manually inspecting every generated line. SQL received schema-wide searches and targeted query/constraint/policy review; it was not executed. Test files received package execution where possible and focused coverage inspection, not an assertion-by-assertion proof. Documentation and editorial content received structural/reference checks, not legal or financial fact checking. The register preserves these distinctions instead of marking every file “passed.”
 
@@ -73,7 +73,7 @@ The original repository checker fingerprint was `9d6de06341af952f8ba998d1557a46f
 
 ### A01 · P1 · API and worker do not compile
 
-**Locations:** [internal/web/runtime.go:371](</Users/macbookpro/Documents/Kredit.com/internal/web/runtime.go:371>); [internal/reports/store.go:34](</Users/macbookpro/Documents/Kredit.com/internal/reports/store.go:34>)
+**Locations:** [internal/web/runtime.go:371](../../internal/web/runtime.go#L371); [internal/reports/store.go:34](../../internal/reports/store.go#L34)
 
 The runtime assigns paymentStore.List, which returns ([]payments.Payment, error), to reports.Source.Payments, which accepts only a slice-returning function. Both report-store constructions fail compilation. This prevents building or starting the API and worker and prevents all internal/web tests from running. Carry the error-aware contract through the report boundary; do not discard payment-read errors to silence the compiler.
 
@@ -83,7 +83,7 @@ The runtime assigns paymentStore.List, which returns ([]payments.Payment, error)
 
 ### A02 · P1 · Cancellation authorizes a URL trade line but mutates an unrelated drawdown
 
-**Locations:** [internal/web/credit_handlers.go:978](</Users/macbookpro/Documents/Kredit.com/internal/web/credit_handlers.go:978>); [internal/web/credit_handlers.go:1004](</Users/macbookpro/Documents/Kredit.com/internal/web/credit_handlers.go:1004>); [internal/tradelines/store.go:563](</Users/macbookpro/Documents/Kredit.com/internal/tradelines/store.go:563>); [internal/tradelines/postgres.go:231](</Users/macbookpro/Documents/Kredit.com/internal/tradelines/postgres.go:231>); [db/migrations/034_trade_line_runtime_policy.sql:4](</Users/macbookpro/Documents/Kredit.com/db/migrations/034_trade_line_runtime_policy.sql:4>)
+**Locations:** [internal/web/credit_handlers.go:978](../../internal/web/credit_handlers.go#L978); [internal/web/credit_handlers.go:1004](../../internal/web/credit_handlers.go#L1004); [internal/tradelines/store.go:563](../../internal/tradelines/store.go#L563); [internal/tradelines/postgres.go:231](../../internal/tradelines/postgres.go#L231); [db/migrations/034_trade_line_runtime_policy.sql:4](../../db/migrations/034_trade_line_runtime_policy.sql#L4)
 
 Both cancellation handlers validate the lineID supplied in the URL, then mutate drawdownID without proving that it belongs to that line. CancelDrawdown only requires a nonempty actor; the PostgreSQL adapter loads the actual line from the drawdown. A user with their own authorized line and a different pending/confirmed drawdown ID can therefore cancel that other sale, release its reservation, and receive its returned data. The runtime-wide table policy does not supply the missing ownership check. Enforce the authorized line and actor within the mutation transaction.
 
@@ -93,7 +93,7 @@ Both cancellation handlers validate the lineID supplied in the URL, then mutate 
 
 ### A03 · P1 · Suspended members retain organization access
 
-**Locations:** [internal/organizations/postgres.go:167](</Users/macbookpro/Documents/Kredit.com/internal/organizations/postgres.go:167>); [internal/web/organization_handlers.go:210](</Users/macbookpro/Documents/Kredit.com/internal/web/organization_handlers.go:210>)
+**Locations:** [internal/organizations/postgres.go:167](../../internal/organizations/postgres.go#L167); [internal/web/organization_handlers.go:210](../../internal/web/organization_handlers.go#L210)
 
 PostgreSQL Membership returns every status except removed, including suspended and invited. requireOrganizationAccess checks only the returned role. Suspending a member therefore leaves their existing role permissions usable through direct API requests; any separate MFA requirement still applies. The memory adapter requires active membership, so its tests do not represent this production behavior. Require active status at both the repository and authorization boundary.
 
@@ -103,7 +103,7 @@ PostgreSQL Membership returns every status except removed, including suspended a
 
 ### A04 · P1 · An administrator can demote the business owner
 
-**Locations:** [internal/organizations/postgres.go:317](</Users/macbookpro/Documents/Kredit.com/internal/organizations/postgres.go:317>); [internal/organizations/store.go:250](</Users/macbookpro/Documents/Kredit.com/internal/organizations/store.go:250>)
+**Locations:** [internal/organizations/postgres.go:317](../../internal/organizations/postgres.go#L317); [internal/organizations/store.go:250](../../internal/organizations/store.go#L250)
 
 ChangeRole rejects assigning the owner role and changing the actor’s own role, but does not protect a target who already is the owner. An administrator with team-management permission can change the owner to viewer. The UI hides the owner controls and ChangeStatus protects owners, but neither protects this API mutation. Check the target’s current role atomically before changing it.
 
@@ -113,7 +113,7 @@ ChangeRole rejects assigning the owner role and changing the actor’s own role,
 
 ### A05 · P1 · Generated collection dates can precede the accepted debit date
 
-**Locations:** [internal/credit/postgres.go:392](</Users/macbookpro/Documents/Kredit.com/internal/credit/postgres.go:392>); [internal/schedules/store.go:199](</Users/macbookpro/Documents/Kredit.com/internal/schedules/store.go:199>); [internal/web/runtime.go:224](</Users/macbookpro/Documents/Kredit.com/internal/web/runtime.go:224>)
+**Locations:** [internal/credit/postgres.go:392](../../internal/credit/postgres.go#L392); [internal/schedules/store.go:199](../../internal/schedules/store.go#L199); [internal/web/runtime.go:224](../../internal/web/runtime.go#L224)
 
 Activation takes the calendar date from DueDate and only the hour/minute from the accepted CollectionAt, then schedule creation adds GraceHours again. It discards the accepted collection calendar date. For a 10 September due date, accepted collection on 11 September at 05:00 Lagos and six grace hours, the generated collection time is 10 September at 11:00: eighteen hours early. Collection eligibility uses the generated schedule; other notice/provider gates may still delay an actual debit. Preserve the accepted timestamp and derive installment dates from an explicit, consistent rule.
 
@@ -123,7 +123,7 @@ Activation takes the calendar date from DueDate and only the hour/minute from th
 
 ### A06 · P1 · A reusable upload URL can replace a document after it passes scanning
 
-**Locations:** [internal/documents/s3.go:67](</Users/macbookpro/Documents/Kredit.com/internal/documents/s3.go:67>); [internal/documents/scanner.go:77](</Users/macbookpro/Documents/Kredit.com/internal/documents/scanner.go:77>); [internal/documents/store.go:225](</Users/macbookpro/Documents/Kredit.com/internal/documents/store.go:225>); [internal/web/document_upload_slot_handlers.go:68](</Users/macbookpro/Documents/Kredit.com/internal/web/document_upload_slot_handlers.go:68>)
+**Locations:** [internal/documents/s3.go:67](../../internal/documents/s3.go#L67); [internal/documents/scanner.go:77](../../internal/documents/scanner.go#L77); [internal/documents/store.go:225](../../internal/documents/store.go#L225); [internal/web/document_upload_slot_handlers.go:68](../../internal/web/document_upload_slot_handlers.go#L68)
 
 The direct-upload URL authorizes PUT to one mutable object key for ten minutes. Neither the signature nor scan metadata binds the accepted bytes to an immutable object version or required checksum. A client can upload clean bytes, allow scanning to mark the document CLEAN, then overwrite the same key before the PUT URL expires. SignedDownload checks the old CLEAN state but serves the new object. Finalize uploads into an immutable/version-bound object and bind the scan and download to those exact bytes.
 
@@ -133,7 +133,7 @@ The direct-upload URL authorizes PUT to one mutable object key for ten minutes. 
 
 ### A07 · P1 · PostgreSQL buyer invitations omit a required token hash
 
-**Locations:** [internal/buyers/postgres.go:102](</Users/macbookpro/Documents/Kredit.com/internal/buyers/postgres.go:102>); [db/migrations/003_milestone2_buyers_identity.sql:94](</Users/macbookpro/Documents/Kredit.com/db/migrations/003_milestone2_buyers_identity.sql:94>)
+**Locations:** [internal/buyers/postgres.go:102](../../internal/buyers/postgres.go#L102); [db/migrations/003_milestone2_buyers_identity.sql:94](../../db/migrations/003_milestone2_buyers_identity.sql#L94)
 
 CreateInvitation generates a raw token but omits token_hash from its INSERT and parameters. The schema requires a non-null unique token_hash and supplies no default; no subsequent migration removes this requirement. Every creation through this durable adapter fails before returning a usable invitation. Persist the hash of the generated token in the same transaction. The similarly named generated SQL query includes the hash, but it is not the implementation used here.
 
@@ -143,7 +143,7 @@ CreateInvitation generates a raw token but omits token_hash from its INSERT and 
 
 ### A08 · P1 · Repayments do not restore trade-line capacity
 
-**Locations:** [internal/tradelines/store.go:593](</Users/macbookpro/Documents/Kredit.com/internal/tradelines/store.go:593>); [internal/tradelines/postgres.go:253](</Users/macbookpro/Documents/Kredit.com/internal/tradelines/postgres.go:253>); [internal/payments/postgres.go:36](</Users/macbookpro/Documents/Kredit.com/internal/payments/postgres.go:36>)
+**Locations:** [internal/tradelines/store.go:593](../../internal/tradelines/store.go#L593); [internal/tradelines/postgres.go:253](../../internal/tradelines/postgres.go#L253); [internal/payments/postgres.go:36](../../internal/payments/postgres.go#L36)
 
 Drawdown activation increases current exposure, but no production caller invokes UpdateOutstanding when payments, reversals, write-offs or dispute adjustments change the obligation balance. Cross-repository searches found no repayment-driven SQL/trigger updating trade-line exposure either. A fully repaid drawdown therefore continues consuming capacity and inflates utilization until some separate correction is made. Update the linked line’s exposure atomically with balance changes, accounting for the previous outstanding value on repeated partial payments.
 
@@ -153,7 +153,7 @@ Drawdown activation increases current exposure, but no production caller invokes
 
 ### A09 · P2 · Lowering a trade-line limit violates the persisted balance constraint
 
-**Locations:** [internal/tradelines/postgres.go:445](</Users/macbookpro/Documents/Kredit.com/internal/tradelines/postgres.go:445>); [internal/tradelines/store.go:657](</Users/macbookpro/Documents/Kredit.com/internal/tradelines/store.go:657>); [db/migrations/007_milestone6_trade_lines.sql:24](</Users/macbookpro/Documents/Kredit.com/db/migrations/007_milestone6_trade_lines.sql:24>)
+**Locations:** [internal/tradelines/postgres.go:445](../../internal/tradelines/postgres.go#L445); [internal/tradelines/store.go:657](../../internal/tradelines/store.go#L657); [db/migrations/007_milestone6_trade_lines.sql:24](../../db/migrations/007_milestone6_trade_lines.sql#L24)
 
 ReduceLimit changes ApprovedLimitKobo and AvailableLimitKobo in memory. The persistence UPSERT updates available_limit_kobo but omits approved_limit_kobo from its conflict-update clause. On an existing line, a genuine reduction leaves the old approved limit in PostgreSQL and violates the available = approved − exposure − reserved constraint, rolling back the operation. Persist both changed values together.
 
@@ -163,7 +163,7 @@ ReduceLimit changes ApprovedLimitKobo and AvailableLimitKobo in memory. The pers
 
 ### A10 · P2 · Dispute adjustments leave the repayment schedule overstated
 
-**Locations:** [internal/disputes/postgres.go:147](</Users/macbookpro/Documents/Kredit.com/internal/disputes/postgres.go:147>); [internal/operations/postgres.go:287](</Users/macbookpro/Documents/Kredit.com/internal/operations/postgres.go:287>)
+**Locations:** [internal/disputes/postgres.go:147](../../internal/disputes/postgres.go#L147); [internal/operations/postgres.go:287](../../internal/operations/postgres.go#L287)
 
 The durable dispute adjustment posts a ledger entry and reduces the obligation/snapshot balance without reducing the unpaid schedule items. For a 100-unit obligation adjusted down by 20, the schedule still asks for 100; paying the remaining 80 leaves a residual schedule amount despite a paid obligation. The collection engine’s outstanding cap limits collection, but does not repair the contradictory schedule or reconciliation result. Apply the same transactionally consistent schedule reduction required for other principal adjustments.
 
@@ -173,7 +173,7 @@ The durable dispute adjustment posts a ledger entry and reduces the obligation/s
 
 ### A11 · P2 · Deemed acceptance is implemented but never invoked by the running app
 
-**Locations:** [internal/credit/postgres.go:900](</Users/macbookpro/Documents/Kredit.com/internal/credit/postgres.go:900>); [internal/credit/store.go:743](</Users/macbookpro/Documents/Kredit.com/internal/credit/store.go:743>)
+**Locations:** [internal/credit/postgres.go:900](../../internal/credit/postgres.go#L900); [internal/credit/store.go:743](../../internal/credit/store.go#L743)
 
 AutoActivateMatured has no production call site in the API, worker or jobs; only tests invoke it. Consequently a released sale awaiting the configured deemed-acceptance timeout remains pending without a buyer action. The PostgreSQL method additionally searches only the process-local request map, so simply adding a timer would miss unloaded requests after a restart. Schedule durable processing that queries eligible rows and performs the normal guarded activation.
 
@@ -183,7 +183,7 @@ AutoActivateMatured has no production call site in the API, worker or jobs; only
 
 ### A12 · P2 · One revoked Mono mandate suspends unrelated trade lines for the same buyer
 
-**Locations:** [internal/web/mono_handlers.go:93](</Users/macbookpro/Documents/Kredit.com/internal/web/mono_handlers.go:93>)
+**Locations:** [internal/web/mono_handlers.go:93](../../internal/web/mono_handlers.go#L93)
 
 The revoked/blocked mandate path iterates every buyer line and suspends it without checking which mandate the line uses. A buyer with two supplier-specific mandates loses access to both lines when only one mandate is cancelled. It also attempts to set each line’s mandate state using the provider reference, while ignoring errors. Restrict the mutation to lines bound to the affected internal mandate and handle persistence failures.
 
@@ -193,7 +193,7 @@ The revoked/blocked mandate path iterates every buyer line and suspends it witho
 
 ### A13 · P2 · Changing finance MFA readiness clears valid owner MFA readiness
 
-**Locations:** [internal/onboarding/store.go:291](</Users/macbookpro/Documents/Kredit.com/internal/onboarding/store.go:291>)
+**Locations:** [internal/onboarding/store.go:291](../../internal/onboarding/store.go#L291)
 
 When financeMFA changes while ownerMFA remains true and already has a timestamp, SyncSecurity enters the mutation, skips the “ownerMFA and timestamp is zero” branch, and clears the timestamp in else. This incorrectly marks an already protected owner as incomplete and can temporarily block onboarding readiness. Preserve an existing timestamp whenever ownerMFA is true; clear it only when ownerMFA is false.
 
@@ -203,7 +203,7 @@ When financeMFA changes while ownerMFA remains true and already has a timestamp,
 
 ### A14 · P2 · Unrelated onboarding edits overwrite who accepted terms and privacy
 
-**Locations:** [internal/onboarding/postgres.go:140](</Users/macbookpro/Documents/Kredit.com/internal/onboarding/postgres.go:140>)
+**Locations:** [internal/onboarding/postgres.go:140](../../internal/onboarding/postgres.go#L140)
 
 The shared profile UPDATE sets terms_accepted_by and privacy_accepted_by to the current mutation actor whenever the corresponding existing acceptance timestamp is non-null. Editing settlement or security after another person accepted the documents therefore attributes the old acceptance to the new actor, or can clear it for a non-UUID system actor. Preserve the original acceptor unless recording a new explicit consent event.
 
@@ -213,7 +213,7 @@ The shared profile UPDATE sets terms_accepted_by and privacy_accepted_by to the 
 
 ### A15 · P2 · Production recovery never delivers its required continuation credentials
 
-**Locations:** [internal/web/user_control_handlers.go:86](</Users/macbookpro/Documents/Kredit.com/internal/web/user_control_handlers.go:86>); [internal/web/user_control_handlers.go:212](</Users/macbookpro/Documents/Kredit.com/internal/web/user_control_handlers.go:212>); [internal/notifications/store.go:503](</Users/macbookpro/Documents/Kredit.com/internal/notifications/store.go:503>); [web/src/routes/recover/+page.svelte:7](</Users/macbookpro/Documents/Kredit.com/web/src/routes/recover/+page.svelte:7>)
+**Locations:** [internal/web/user_control_handlers.go:86](../../internal/web/user_control_handlers.go#L86); [internal/web/user_control_handlers.go:212](../../internal/web/user_control_handlers.go#L212); [internal/notifications/store.go:503](../../internal/notifications/store.go#L503); [web/src/routes/recover/+page.svelte:7](../../web/src/routes/recover/+page.svelte#L7)
 
 The request ID is returned only in development. On approval, the raw completion token is likewise returned only in development, then disappears after its hash is stored. The notification helper sends neither a continuation URL nor the token, and the recovery templates do not even interpolate the reference. The public screen needs the request ID to submit evidence and the completion token to finish, so the standard production flow cannot progress. Deliver short-lived, recipient-bound recovery continuations through the verified channel.
 
@@ -223,7 +223,7 @@ The request ID is returned only in development. On approval, the raw completion 
 
 ### A16 · P2 · Completing recovery leaves the lost authenticator as the required factor
 
-**Locations:** [internal/usercontrol/store.go:349](</Users/macbookpro/Documents/Kredit.com/internal/usercontrol/store.go:349>); [internal/web/user_control_handlers.go:173](</Users/macbookpro/Documents/Kredit.com/internal/web/user_control_handlers.go:173>); [internal/auth/postgres.go:387](</Users/macbookpro/Documents/Kredit.com/internal/auth/postgres.go:387>)
+**Locations:** [internal/usercontrol/store.go:349](../../internal/usercontrol/store.go#L349); [internal/web/user_control_handlers.go:173](../../internal/web/user_control_handlers.go#L173); [internal/auth/postgres.go:387](../../internal/auth/postgres.go#L387)
 
 Completion changes the recovery request state and revokes backup codes; the handler then revokes sessions. Neither step retires the inaccessible MFA method nor grants a controlled replacement enrollment. A user recovering from a lost authenticator still needs that same authenticator for protected actions, and the active-method uniqueness rule prevents starting another enrollment. Tie successful recovery to a tightly scoped factor-replacement flow and make its state changes recoverable on partial failure.
 
@@ -233,7 +233,7 @@ Completion changes the recovery request state and revokes backup codes; the hand
 
 ### A17 · P2 · An abandoned TOTP enrollment cannot be restarted
 
-**Locations:** [internal/auth/postgres.go:407](</Users/macbookpro/Documents/Kredit.com/internal/auth/postgres.go:407>); [db/migrations/002_milestone1_auth_org.sql:73](</Users/macbookpro/Documents/Kredit.com/db/migrations/002_milestone1_auth_org.sql:73>)
+**Locations:** [internal/auth/postgres.go:407](../../internal/auth/postgres.go#L407); [db/migrations/002_milestone1_auth_org.sql:73](../../db/migrations/002_milestone1_auth_org.sql#L73)
 
 BeginTOTPEnrollment always inserts an unrevoked method. The unique index covers unverified methods too. Starting enrollment, losing the displayed secret and retrying therefore hits a uniqueness violation, which is misleadingly returned as “user not found.” Provide a safe resume or replacement path for unverified enrollment without weakening protection for already verified factors.
 
@@ -243,7 +243,7 @@ BeginTOTPEnrollment always inserts an unrevoked method. The unique index covers 
 
 ### A18 · P2 · Notification preferences cannot be saved from the settings page
 
-**Locations:** [web/src/routes/app/settings/notifications/+page.svelte:7](</Users/macbookpro/Documents/Kredit.com/web/src/routes/app/settings/notifications/+page.svelte:7>); [internal/web/user_control_handlers.go:26](</Users/macbookpro/Documents/Kredit.com/internal/web/user_control_handlers.go:26>); [internal/web/http_helpers.go:18](</Users/macbookpro/Documents/Kredit.com/internal/web/http_helpers.go:18>)
+**Locations:** `web/src/routes/app/settings/notifications/+page.svelte:7`; [internal/web/user_control_handlers.go:26](../../internal/web/user_control_handlers.go#L26); [internal/web/http_helpers.go:18](../../internal/web/http_helpers.go#L18)
 
 The page spreads the entire GET preferences object into its PUT body, including opted_out and version, while preferenceUpdate accepts neither field. The strict decoder rejects the request before saving. Construct the write payload from the accepted fields, using expected_version for concurrency.
 
@@ -253,7 +253,7 @@ The page spreads the entire GET preferences object into its PUT body, including 
 
 ### A19 · P2 · Protected operations previews omit a required idempotency key
 
-**Locations:** [web/src/routes/admin/controls/+page.svelte:17](</Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/controls/+page.svelte:17>); [web/src/routes/admin/jobs/+page.svelte:8](</Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/jobs/+page.svelte:8>); [web/src/routes/admin/provider-events/+page.svelte:6](</Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/provider-events/+page.svelte:6>); [internal/web/server.go:220](</Users/macbookpro/Documents/Kredit.com/internal/web/server.go:220>)
+**Locations:** [web/src/routes/admin/controls/+page.svelte:17](../../web/src/routes/admin/controls/+page.svelte#L17); [web/src/routes/admin/jobs/+page.svelte:8](../../web/src/routes/admin/jobs/+page.svelte#L8); [web/src/routes/admin/provider-events/+page.svelte:6](../../web/src/routes/admin/provider-events/+page.svelte#L6); [internal/web/server.go:220](../../internal/web/server.go#L220)
 
 The controls, jobs and provider-event screens POST to /ops/commands/preview without Idempotency-Key. The middleware matches /ops/commands and requires the header; its special preview exemption covers only business-policy previews. The request is rejected before the preview handler, so preview-dependent actions cannot proceed. Make the preview contract consistent between client and middleware.
 
@@ -263,7 +263,7 @@ The controls, jobs and provider-event screens POST to /ops/commands/preview with
 
 ### A20 · P2 · Editing a draft silently shifts its collection time
 
-**Locations:** [web/src/routes/app/credit/[id]/+page.svelte:26](</Users/macbookpro/Documents/Kredit.com/web/src/routes/app/credit/[id]/+page.svelte:26>); [web/src/routes/app/credit/[id]/+page.svelte:36](</Users/macbookpro/Documents/Kredit.com/web/src/routes/app/credit/[id]/+page.svelte:36>)
+**Locations:** [web/src/routes/app/credit/[id]/+page.svelte:26](<web/src/routes/app/credit/[id]/+page.svelte:26>); [web/src/routes/app/credit/[id]/+page.svelte:36](<web/src/routes/app/credit/[id]/+page.svelte:36>)
 
 The draft editor fills datetime-local using a UTC ISO string with its timezone stripped. Saving then interprets that value as browser-local time. In Lagos, an unchanged 09:00 collection becomes 08:00 local after one save; repeating the edit repeats the drift. Format the form value in the intended local timezone and serialize that same timezone consistently.
 
@@ -273,7 +273,7 @@ The draft editor fills datetime-local using a UTC ISO string with its timezone s
 
 ### A21 · P2 · Correcting a rejected form reuses a key tied to the old payload
 
-**Locations:** [web/src/routes/app/credit/new/+page.svelte:28](</Users/macbookpro/Documents/Kredit.com/web/src/routes/app/credit/new/+page.svelte:28>); [web/src/routes/buyer-invitations/[token]/+page.svelte:50](</Users/macbookpro/Documents/Kredit.com/web/src/routes/buyer-invitations/[token]/+page.svelte:50>); [internal/web/server.go:199](</Users/macbookpro/Documents/Kredit.com/internal/web/server.go:199>)
+**Locations:** `web/src/routes/app/credit/new/+page.svelte:28`; [web/src/routes/buyer-invitations/[token]/+page.svelte:50](<web/src/routes/buyer-invitations/[token]/+page.svelte:50>); [internal/web/server.go:199](../../internal/web/server.go#L199)
 
 The sale and buyer-invitation forms keep their idempotency keys after a definite server rejection. The server stores completed error responses and binds the key to the body. Correcting a rejected sale or replacing a wrong invitation OTP sends a different body with the old key and receives a conflict, trapping the user until a reset/reload. Preserve the key for an uncertain identical retry, but create a new logical request when a definitively rejected payload is corrected.
 
@@ -283,7 +283,7 @@ The sale and buyer-invitation forms keep their idempotency keys after a definite
 
 ### A22 · P2 · The invoice form allows files too large for its JSON endpoint
 
-**Locations:** [web/src/routes/app/credit/new/+page.svelte:26](</Users/macbookpro/Documents/Kredit.com/web/src/routes/app/credit/new/+page.svelte:26>); [internal/web/http_helpers.go:16](</Users/macbookpro/Documents/Kredit.com/internal/web/http_helpers.go:16>)
+**Locations:** `web/src/routes/app/credit/new/+page.svelte:26`; [internal/web/http_helpers.go:16](../../internal/web/http_helpers.go#L16)
 
 The form accepts invoices up to 2 MiB and base64-encodes them into JSON. The shared decoder caps the entire JSON request at 1 MiB, so even an approximately 768 KiB file plus metadata exceeds the limit. Users can select files explicitly advertised as supported and still receive a server rejection. Use the existing direct-upload flow or align the UI limit with encoded body size and metadata overhead.
 
@@ -293,7 +293,7 @@ The form accepts invoices up to 2 MiB and base64-encodes them into JSON. The sha
 
 ### A23 · P2 · Overdue and near-term totals include future installment principal
 
-**Locations:** [internal/reports/store.go:516](</Users/macbookpro/Documents/Kredit.com/internal/reports/store.go:516>); [internal/reports/store.go:638](</Users/macbookpro/Documents/Kredit.com/internal/reports/store.go:638>); [internal/reports/store.go:648](</Users/macbookpro/Documents/Kredit.com/internal/reports/store.go:648>)
+**Locations:** [internal/reports/store.go:516](../../internal/reports/store.go#L516); [internal/reports/store.go:638](../../internal/reports/store.go#L638); [internal/reports/store.go:648](../../internal/reports/store.go#L648)
 
 Reporting selects the earliest unpaid installment to classify the obligation, then adds the entire outstanding obligation balance to overdue, due-today or due-this-week totals. If only one of two equal installments is overdue, both are reported overdue. Ageing similarly assigns the whole balance to the earliest installment bucket. Calculate these amounts from remaining installment balances in the relevant date window.
 
@@ -303,7 +303,7 @@ Reporting selects the earliest unpaid installment to classify the obligation, th
 
 ### A24 · P2 · An existing buyer cannot accept another supplier invitation
 
-**Locations:** [internal/buyers/postgres.go:206](</Users/macbookpro/Documents/Kredit.com/internal/buyers/postgres.go:206>); [db/migrations/003_milestone2_buyers_identity.sql:4](</Users/macbookpro/Documents/Kredit.com/db/migrations/003_milestone2_buyers_identity.sql:4>)
+**Locations:** [internal/buyers/postgres.go:206](../../internal/buyers/postgres.go#L206); [db/migrations/003_milestone2_buyers_identity.sql:4](../../db/migrations/003_milestone2_buyers_identity.sql#L4)
 
 Accepting an invitation always inserts a new person for the authenticated user. persons.user_id is unique, so a buyer already onboarded through another invitation fails the second acceptance rather than acquiring a relationship with another supplier. Reuse the existing verified person and intentionally select/reuse the appropriate business, preserving tenant relationship boundaries.
 
@@ -313,7 +313,7 @@ Accepting an invitation always inserts a new person for the authenticated user. 
 
 ### A25 · P2 · One audit event without a request ID hides the whole organization audit list
 
-**Locations:** [internal/audit/store.go:150](</Users/macbookpro/Documents/Kredit.com/internal/audit/store.go:150>); [internal/audit/store.go:141](</Users/macbookpro/Documents/Kredit.com/internal/audit/store.go:141>); [internal/web/credit_handlers.go:512](</Users/macbookpro/Documents/Kredit.com/internal/web/credit_handlers.go:512>)
+**Locations:** [internal/audit/store.go:150](../../internal/audit/store.go#L150); [internal/audit/store.go:141](../../internal/audit/store.go#L141); [internal/web/credit_handlers.go:512](../../internal/web/credit_handlers.go#L512)
 
 Append stores an empty RequestID as SQL NULL, and normal credit audit events leave it empty. ListForOrganization selects nullable request_id without COALESCE and scans it into a Go string. The scan fails and the method returns nil for the entire result, so legitimate audit history appears empty. Handle nullable columns explicitly and propagate read failures instead of presenting them as no records.
 
@@ -323,7 +323,7 @@ Append stores an empty RequestID as SQL NULL, and normal credit audit events lea
 
 ### A26 · P2 · Activity screen reads field names the audit endpoint does not emit
 
-**Locations:** [internal/audit/store.go:16](</Users/macbookpro/Documents/Kredit.com/internal/audit/store.go:16>); [internal/web/organization_handlers.go:201](</Users/macbookpro/Documents/Kredit.com/internal/web/organization_handlers.go:201>); [web/src/routes/app/activity/+page.svelte:15](</Users/macbookpro/Documents/Kredit.com/web/src/routes/app/activity/+page.svelte:15>)
+**Locations:** [internal/audit/store.go:16](../../internal/audit/store.go#L16); [internal/web/organization_handlers.go:201](../../internal/web/organization_handlers.go#L201); `web/src/routes/app/activity/+page.svelte:15`
 
 Audit.Event has no JSON tags, so the endpoint emits Action and At. The screen reads item.action and item.created_at. Even when the list is nonempty, the action label is missing and its timestamp becomes Invalid Date. Define a stable response DTO or JSON tags and consume the same contract in the page.
 
@@ -333,7 +333,7 @@ Audit.Event has no JSON tags, so the endpoint emits Action and At. The screen re
 
 ### A27 · P2 · Database readiness accepts a schema older than authentication requires
 
-**Locations:** [internal/db/persistence_contract.go:188](</Users/macbookpro/Documents/Kredit.com/internal/db/persistence_contract.go:188>); [db/migrations/068_session_idle_and_mfa_throttle.sql:1](</Users/macbookpro/Documents/Kredit.com/db/migrations/068_session_idle_and_mfa_throttle.sql:1>); [db/migrations/069_shared_authentication_rate_limits.sql:1](</Users/macbookpro/Documents/Kredit.com/db/migrations/069_shared_authentication_rate_limits.sql:1>)
+**Locations:** [internal/db/persistence_contract.go:188](../../internal/db/persistence_contract.go#L188); [db/migrations/068_session_idle_and_mfa_throttle.sql:1](../../db/migrations/068_session_idle_and_mfa_throttle.sql#L1); [db/migrations/069_shared_authentication_rate_limits.sql:1](../../db/migrations/069_shared_authentication_rate_limits.sql#L1)
 
 The minimum migration remains 66, although the code uses session/MFA additions from 68 and shared authentication-rate-limit capabilities from 69. The required columns/functions list does not cover these additions, so a version-66 database can pass this persistence gate and then fail authentication operations. Require the actual schema floor and explicitly check essential authentication capabilities.
 
@@ -343,7 +343,7 @@ The minimum migration remains 66, although the code uses session/MFA additions f
 
 ### A28 · P2 · Buyers cannot report receipt problems before confirming a normal sale
 
-**Locations:** [web/src/routes/buyer/credit-requests/[requestID]/+page.svelte:58](</Users/macbookpro/Documents/Kredit.com/web/src/routes/buyer/credit-requests/[requestID]/+page.svelte:58>); [internal/web/credit_handlers.go:482](</Users/macbookpro/Documents/Kredit.com/internal/web/credit_handlers.go:482>)
+**Locations:** [web/src/routes/buyer/credit-requests/[requestID]/+page.svelte:58](<web/src/routes/buyer/credit-requests/[requestID]/+page.svelte:58>); [internal/web/credit_handlers.go:482](../../internal/web/credit_handlers.go#L482)
 
 At RECEIPT_CONFIRMATION_PENDING, the page offers only “Yes, I got the goods.” Its problem-report form is rendered only after an obligation exists, which requires receipt confirmation. The backend supports a receipt-issue state, but this screen never submits it. A buyer with missing/damaged goods must either stop or falsely confirm receipt to reach the later dispute form. Expose the receipt-issue action and reason before activation, as the trade-line receipt screen already does.
 
@@ -353,7 +353,7 @@ At RECEIPT_CONFIRMATION_PENDING, the page offers only “Yes, I got the goods.�
 
 ### A29 · P2 · Seller-specific reminder withdrawal is not enforced during delivery
 
-**Locations:** [web/src/routes/buyer/permissions/+page.svelte:7](</Users/macbookpro/Documents/Kredit.com/web/src/routes/buyer/permissions/+page.svelte:7>); [internal/relationships/store.go:33](</Users/macbookpro/Documents/Kredit.com/internal/relationships/store.go:33>); [internal/notifications/store.go:316](</Users/macbookpro/Documents/Kredit.com/internal/notifications/store.go:316>); [internal/web/outbox_notifications.go:84](</Users/macbookpro/Documents/Kredit.com/internal/web/outbox_notifications.go:84>)
+**Locations:** `web/src/routes/buyer/permissions/+page.svelte:7`; [internal/relationships/store.go:33](../../internal/relationships/store.go#L33); [internal/notifications/store.go:316](../../internal/notifications/store.go#L316); [internal/web/outbox_notifications.go:84](../../internal/web/outbox_notifications.go#L84)
 
 The permissions screen persists a seller-specific payment_reminders consent and says that seller can no longer send optional reminders. Delivery checks only the user’s global preferences; neither the outbox translation nor notification service consults relationship consents. Optional upcoming-payment reminders can therefore continue despite the displayed withdrawal. Apply the latest supplier/buyer consent before scheduling or delivering optional reminders, while retaining the intended treatment of required notices.
 
@@ -363,7 +363,7 @@ The permissions screen persists a seller-specific payment_reminders consent and 
 
 ### A30 · P2 · The invoice “Open” link opens JSON instead of the document
 
-**Locations:** [web/src/routes/app/credit/[id]/+page.svelte:74](</Users/macbookpro/Documents/Kredit.com/web/src/routes/app/credit/[id]/+page.svelte:74>); [internal/web/document_handlers.go:81](</Users/macbookpro/Documents/Kredit.com/internal/web/document_handlers.go:81>)
+**Locations:** [web/src/routes/app/credit/[id]/+page.svelte:74](<web/src/routes/app/credit/[id]/+page.svelte:74>); [internal/web/document_handlers.go:81](../../internal/web/document_handlers.go#L81)
 
 The credit detail page navigates directly to the document download API in a new tab. That endpoint returns a JSON object containing the signed URL rather than redirecting or streaming the file. The user sees metadata/JSON instead of the invoice. Fetch the authorized URL and navigate to it, or provide a deliberately redirecting endpoint with the same access and scan checks.
 

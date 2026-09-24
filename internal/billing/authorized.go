@@ -99,7 +99,12 @@ func (s *FeeService) Start(ctx context.Context, org, actor string, in FeeCustome
 			return SavedAuthorization{}, err
 		}
 	}
-	start := time.Now().UTC().Truncate(24 * time.Hour)
+	// The mandate starts on today's Lagos date, stored as UTC midnight of that
+	// date so its UTC formatting sent to the provider names the same day that
+	// sameFeeDay compares. Truncating the UTC clock instead would name
+	// yesterday between 00:00 and 01:00 in Lagos.
+	year, month, day := time.Now().In(time.FixedZone("Africa/Lagos", 3600)).Date()
+	start := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(1, 0, 0)
 	var id string
 	err = tx.QueryRow(ctx, `INSERT INTO app.fee_authorizations(organization_id,provider,state,ceiling_kobo,starts_at,ends_at,identity_fingerprint,consent_version,created_by) VALUES($1::uuid,$2,'customer_pending',$3,$4,$5,$6,$7,$8::uuid) RETURNING id::text`, org, p.Name(), ceiling, start, end, s.Fingerprint(in.BVN), consent, actor).Scan(&id)
