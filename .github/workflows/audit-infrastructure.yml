@@ -16,8 +16,8 @@ jobs:
           persist-credentials: false
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
         with:
-          # Exercise the module's declared 1.8 compatibility, not a live cluster.
-          terraform_version: 1.8.5
+          # Exercise the module's declared minimum (>= 1.11.0), not a live cluster.
+          terraform_version: 1.11.0
           terraform_wrapper: false
       - name: Verify committed HCL formatting
         run: terraform -chdir=infra/environments fmt -check -diff

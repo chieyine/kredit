@@ -155,8 +155,10 @@ func ReverseSplitTx(ctx context.Context, tx pgx.Tx, payment string, at time.Time
 		return err
 	}
 	if reversed {
-		// Validate the prior journal's exact intent without subtracting twice.
-		_, err = splitFeeLedger().PostSplitFeeTx(ctx, tx, payment, total, true, at)
+		// Validate the prior journal's exact postings without subtracting twice.
+		// A zero date reuses the recorded one: a replay arrives at a later clock
+		// reading and must not conflict with the original reversal date.
+		_, err = splitFeeLedger().PostSplitFeeTx(ctx, tx, payment, total, true, time.Time{})
 		return err
 	}
 	for _, p := range parts {
