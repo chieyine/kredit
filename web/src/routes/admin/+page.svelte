@@ -2,7 +2,7 @@
 	import { checkedJSON, publicError, record, text } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
 	import AdminAttention from '$lib/components/AdminAttention.svelte';
-	let overview = $state<any>(null),
+	let overview = $state<Record<string, unknown> | null>(null),
 		role = $state(''),
 		error = $state(''),
 		loading = $state(true);
@@ -58,7 +58,7 @@
 			<button type="button" onclick={load}>Try again</button>
 		</section>{:else}<AdminAttention />
 		<section class="health" aria-label="Work needing attention">
-			{#each Object.entries(overview ?? {}) as [key, value]}<a
+			{#each Object.entries(overview ?? {}) as [key, value] (key)}<a
 					href={key.includes('job')
 						? '/admin/jobs'
 						: key.includes('provider') || key.includes('outbox')
@@ -78,7 +78,7 @@
 			<h2>Choose what you need to work on.</h2>
 		</div>
 		<section class="destinations">
-			{#each destinations as item}<a href={item[2]}
+			{#each destinations as item, i (i)}<a href={item[2]}
 					><b>{item[3]}</b>
 					<div>
 						<h3>{item[0]}</h3>

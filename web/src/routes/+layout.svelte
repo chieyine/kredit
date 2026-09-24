@@ -20,8 +20,8 @@
 		page.url.pathname.length > 1 ? page.url.pathname.replace(/\/$/, '') : page.url.pathname
 	);
 	const canonical = $derived(SITE_URL + normalizedPath);
-	const routeArticle = $derived((page.data as any)?.article);
-	const routeSEO = $derived((page.data as any)?.seo);
+	const routeArticle = $derived(page.data.article);
+	const routeSEO = $derived(page.data.seo);
 	const seo = $derived(
 		routeArticle
 			? {
@@ -35,7 +35,7 @@
 				}
 			: (routeSEO ?? seoForPath(normalizedPath))
 	);
-	const legalApproved = $derived((page.data as any)?.legal?.active === true);
+	const legalApproved = $derived(page.data.legal?.active === true);
 	const indexable = $derived(
 		!privateShell &&
 			!isUnlistedRoute(normalizedPath) &&

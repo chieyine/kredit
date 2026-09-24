@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
-	import { checkedJSON, LatestRequest, record, rows, text, publicError } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, optionalText, record, rows, text, publicError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { productLabel, privacyRequestChoices, privacyRequestLabel } from '$lib/product-language';
-	let requests: any[] = $state([]),
+	let requests: PrivacyRequest[] = $state([]),
 		request_type = $state('ACCESS'),
 		details = $state(''),
 		message = $state(''),
@@ -14,7 +14,19 @@
 		downloading = $state('');
 	const reads = new LatestRequest(),
 		intent = new MutationIntent('privacy-self-service', '/api/v1/me/privacy-requests');
-	function privacyRecord(value: unknown) {
+	type PrivacyRequest = {
+		id: string;
+		request_type: string;
+		state: string;
+		due_at: string;
+		version: number;
+		completion_reason: string;
+		decision_reason: string;
+		retention_outcome: string;
+		export_reference: string;
+		export_expires_at: string;
+	};
+	function privacyRecord(value: unknown): PrivacyRequest {
 		const row = record(value);
 		for (const key of ['id', 'request_type', 'state', 'due_at'])
 			if (!text(row[key])) throw new Error('Incomplete request');
@@ -29,7 +41,18 @@
 			(typeof row.export_expires_at !== 'string' || !Number.isFinite(Date.parse(row.export_expires_at)))
 		)
 			throw new Error('Unverified export');
-		return row;
+		return {
+			id: text(row.id),
+			request_type: text(row.request_type),
+			state: text(row.state),
+			due_at: text(row.due_at),
+			version: Number(row.version),
+			completion_reason: optionalText(row.completion_reason),
+			decision_reason: optionalText(row.decision_reason),
+			retention_outcome: optionalText(row.retention_outcome),
+			export_reference: optionalText(row.export_reference),
+			export_expires_at: optionalText(row.export_expires_at)
+		};
 	}
 	async function load() {
 		const read = reads.begin();
@@ -109,7 +132,8 @@
 		<h2>Tell us what you want</h2>
 		<label
 			>What do you want us to do?<select disabled={loading || busy || Boolean(loadError)} bind:value={request_type}
-				>{#each privacyRequestChoices as choice}<option value={choice.value}>{choice.label}</option>{/each}</select
+				>{#each privacyRequestChoices as choice (choice.value)}<option value={choice.value}>{choice.label}</option
+					>{/each}</select
 			></label
 		><label
 			>Tell us more<textarea
@@ -130,7 +154,7 @@
 			</p>
 			<button onclick={load} disabled={busy}>Try again</button>{:else if requests.length === 0}<p>
 				You have not sent any request.
-			</p>{:else}{#each requests as r}<article>
+			</p>{:else}{#each requests as r (r.id)}<article>
 					<strong>{privacyRequestLabel(r.request_type)}</strong><span>{productLabel(r.state)}</span>
 					<p>We aim to finish by {new Date(r.due_at).toLocaleDateString('en-NG')}</p>
 					{#if r.completion_reason}<p>

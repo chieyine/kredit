@@ -1,13 +1,23 @@
 <script lang="ts">
-	import { checkedJSON, publicError, record, rows } from '$lib/api/reliable';
+	import { checkedJSON, optionalNumber, publicError, record, rows, text } from '$lib/api/reliable';
 	let error = $state('');
 	import { onMount } from 'svelte';
 	import { idempotencyKey } from '$lib/api/client';
 	import { adminPost } from '$lib/admin-client';
 	let actionKey = '';
 	import ProtectedActionDialog from '$lib/components/ProtectedActionDialog.svelte';
-	let items = $state<any[]>([]),
-		selected = $state<any>(null),
+	type RecoveryRequest = { id: string; independent_factor_count: number; version: number };
+	function recoveryRequest(value: unknown): RecoveryRequest {
+		const item = record(value);
+		if (!Number.isSafeInteger(item.version)) throw new Error('Unverified recovery request');
+		return {
+			id: text(item.id),
+			independent_factor_count: optionalNumber(item.independent_factor_count),
+			version: Number(item.version)
+		};
+	}
+	let items = $state<RecoveryRequest[]>([]),
+		selected = $state<RecoveryRequest | null>(null),
 		decision = $state(''),
 		message = $state(''),
 		dialogOpen = $state(false),
@@ -16,23 +26,24 @@
 		loading = true;
 		error = '';
 		try {
-			items = await checkedJSON('/api/v1/ops/account-recovery?state=PENDING_REVIEW', rows('requests', record));
+			items = await checkedJSON('/api/v1/ops/account-recovery?state=PENDING_REVIEW', rows('requests', recoveryRequest));
 		} catch (cause) {
 			error = publicError(cause, 'recovery requests');
 		} finally {
 			loading = false;
 		}
 	}
-	function begin(item: any, nextDecision: string) {
+	function begin(item: RecoveryRequest, nextDecision: string) {
 		selected = item;
 		decision = nextDecision;
 		actionKey = '';
 		dialogOpen = true;
 	}
 	async function confirm(reason: string) {
+		if (!selected) throw new Error('Choose a request first.');
 		actionKey ||= idempotencyKey();
 		await adminPost(
-			`/api/v1/ops/account-recovery/${selected.id}/review`,
+			`/api/v1/ops/account-recovery/${encodeURIComponent(selected.id)}/review`,
 			{ decision, reason, expected_version: selected.version },
 			'POST',
 			actionKey
@@ -56,7 +67,9 @@
 	{#if message}<p class="notice" role="status">{message}</p>{/if}{#if error}<section role="alert">
 			<p class="error">{error}</p>
 			<button type="button" onclick={load}>Try again</button>
-		</section>{:else if loading}<p role="status">Loading recovery requests…</p>{:else}{#each items as item}<article>
+		</section>{:else if loading}<p role="status">
+			Loading recovery requests…
+		</p>{:else}{#each items as item (item.id)}<article>
 				<header><strong>Recovery {item.id}</strong><span class="status">pending review</span></header>
 				<p>{item.independent_factor_count} independent factors · version {item.version}</p>
 				<div class="actions">

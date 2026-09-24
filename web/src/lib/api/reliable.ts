@@ -27,6 +27,14 @@ export function text(value: unknown): string {
 	if (typeof value !== 'string') throw new RequestError('The response was incomplete.', 0, 'invalid_response');
 	return value;
 }
+/** A string field that may be absent: missing or non-string values read as ''. */
+export function optionalText(value: unknown): string {
+	return typeof value === 'string' ? value : '';
+}
+/** A numeric field that may be absent: missing or non-finite values read as 0. */
+export function optionalNumber(value: unknown): number {
+	return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
 export function rows<T>(key: string, decode: Decoder<T>): Decoder<T[]> {
 	return (value) => {
 		const list = record(value)[key];

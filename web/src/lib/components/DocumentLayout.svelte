@@ -33,7 +33,7 @@
 </script>
 
 {#snippet links()}
-	{#each sections as section}<a
+	{#each sections as section (section.id)}<a
 			href={`#${section.id}`}
 			aria-current={active === section.id ? 'location' : undefined}
 			onclick={() => {

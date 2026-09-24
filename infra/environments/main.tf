@@ -342,11 +342,13 @@ resource "kubernetes_service_v1" "web" {
 }
 resource "kubernetes_ingress_v1" "web" {
   metadata {
-    name        = "web"
-    namespace   = kubernetes_namespace_v1.kredit.metadata[0].name
-    annotations = { "kubernetes.io/ingress.class" = var.ingress_class }
+    name      = "web"
+    namespace = kubernetes_namespace_v1.kredit.metadata[0].name
   }
   spec {
+    # spec.ingressClassName replaces the kubernetes.io/ingress.class
+    # annotation, deprecated since Kubernetes 1.18.
+    ingress_class_name = var.ingress_class
     tls {
       hosts       = [var.host]
       secret_name = var.tls_secret_name

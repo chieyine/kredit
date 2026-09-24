@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -395,7 +396,7 @@ func (s *Server) requireFreshMFA(w http.ResponseWriter, session auth.Session) bo
 func (s *Server) finishOnboardingChange(w http.ResponseWriter, r *http.Request, user auth.User, orgID, action string, p onboarding.Profile, sum onboarding.Summary, err error) {
 	if err != nil {
 		code := 422
-		if strings.Contains(err.Error(), "version conflict") {
+		if errors.Is(err, onboarding.ErrVersionConflict) {
 			code = 409
 		}
 		writeProblem(w, code, "onboarding_update_failed", err.Error())

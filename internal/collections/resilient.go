@@ -20,8 +20,8 @@ type HealthStatus struct {
 	Healthy             bool      `json:"healthy"`
 	ConsecutiveFailures int       `json:"consecutive_failures"`
 	LastError           string    `json:"last_error,omitempty"`
-	LastFailureAt       time.Time `json:"last_failure_at,omitempty"`
-	OpenUntil           time.Time `json:"open_until,omitempty"`
+	LastFailureAt       time.Time `json:"last_failure_at,omitzero"`
+	OpenUntil           time.Time `json:"open_until,omitzero"`
 }
 
 type HealthProvider interface{ Health() HealthStatus }

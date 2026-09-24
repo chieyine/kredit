@@ -4,14 +4,14 @@
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, publicError, record, rows } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { organization, customer } from '$lib/records';
-	import { tradeLine } from '$lib/trade-line-records';
+	import { organization, customer, type Customer, type Organization } from '$lib/records';
+	import { tradeLine, type TradeLine } from '$lib/trade-line-records';
 	import { lagosISO } from '$lib/admin-client';
 	import { productLabel } from '$lib/product-language';
-	let organizations: any[] = $state([]),
+	let organizations: Organization[] = $state([]),
 		organizationID = $state(''),
-		lines: any[] = $state([]),
-		customers: any[] = $state([]),
+		lines: TradeLine[] = $state([]),
+		customers: Customer[] = $state([]),
 		loading = $state(true),
 		busy = $state(false),
 		error = $state(''),
@@ -29,6 +29,7 @@
 	let canCreateLimit = $state(false);
 	const money = formatKobo,
 		reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
 	async function load() {
 		const request = reads.begin();
@@ -159,7 +160,8 @@
 	</header>
 	{#if organizations.length > 1}<label class="org"
 			>Business<select bind:value={organizationID} disabled={busy || loading} onchange={switchBusiness}
-				>{#each organizations as org}<option value={org.id}>{org.trading_name || org.legal_name}</option>{/each}</select
+				>{#each organizations as org (org.id)}<option value={org.id}>{org.trading_name || org.legal_name}</option
+					>{/each}</select
 			></label
 		>{/if}
 	{#if error}<p class="error" role="alert">{error} <button onclick={load}>Refresh</button></p>{/if}{#if notice}<p
@@ -178,7 +180,7 @@
 			<form onsubmit={create}>
 				<label
 					>Customer<select disabled={busy} bind:value={buyerUserID} onchange={selectCustomer} required
-						><option value="">Choose a customer</option>{#each customers as customer}<option
+						><option value="">Choose a customer</option>{#each customers as customer, i (i)}<option
 								value={customer.buyer_user_id}>{customer.legal_name || customer.trading_name}</option
 							>{/each}</select
 					></label
@@ -242,7 +244,7 @@
 		{#if loading}<p role="status">Opening your limits…</p>{:else if loadError}<p>
 				Customer limits could not be verified.
 			</p>{:else if lines.length}<div class="lines">
-				{#each lines as line}<article>
+				{#each lines as line (line.id)}<article>
 						<header>
 							<strong>{money(line.available_limit_kobo)} still available</strong><span class="status"
 								>{productLabel(line.state)}</span

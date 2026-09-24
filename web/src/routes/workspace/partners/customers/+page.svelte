@@ -1,5 +1,13 @@
 <script lang="ts">
+	import type { KoboValue } from '$lib/money';
 	import WorkspacePage from '$lib/components/WorkspacePage.svelte';
+	type CustomerRow = {
+		buyer_business_id: string;
+		legal_name?: string;
+		trading_name?: string;
+		state?: string;
+		outstanding_kobo?: KoboValue;
+	};
 </script>
 
 <WorkspacePage
@@ -13,7 +21,7 @@
 	emptyTitle="No customers yet"
 	emptyCopy="Add a customer before you record a sale."
 	searchPlaceholder="Customer name"
-	rowTitle={(c) => c.trading_name || c.legal_name || 'Customer'}
+	rowTitle={(c: CustomerRow) => c.trading_name || c.legal_name || 'Customer'}
 	rowDetail={(c) => (c.trading_name && c.legal_name && c.trading_name !== c.legal_name ? c.legal_name : '')}
 	rowStatus={(c) => c.state ?? ''}
 	rowAmount={(c) => c.outstanding_kobo ?? null}

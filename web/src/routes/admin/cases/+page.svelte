@@ -1,8 +1,16 @@
 <script lang="ts">
-	import { checkedJSON, publicError, record, text, rows, LatestRequest } from '$lib/api/reliable';
+	import { checkedJSON, optionalText, publicError, record, text, rows, LatestRequest } from '$lib/api/reliable';
 	const requests = new LatestRequest();
 	import { onMount } from 'svelte';
-	let items = $state<any[]>([]),
+	type SupportCase = {
+		id: string;
+		state: string;
+		subject_type: string;
+		subject_id: string;
+		break_glass: boolean;
+		updated_at: string;
+	};
+	let items = $state<SupportCase[]>([]),
 		stateFilter = $state(''),
 		loading = $state(true),
 		error = $state('');
@@ -13,10 +21,16 @@
 		try {
 			const result = await checkedJSON(
 				`/api/v1/ops/cases?state=${encodeURIComponent(stateFilter)}`,
-				rows('cases', (value) => {
+				rows('cases', (value): SupportCase => {
 					const item = record(value);
-					for (const key of ['id', 'state', 'subject_type']) text(item[key]);
-					return item;
+					return {
+						id: text(item.id),
+						state: text(item.state),
+						subject_type: text(item.subject_type),
+						subject_id: optionalText(item.subject_id),
+						break_glass: item.break_glass === true,
+						updated_at: optionalText(item.updated_at)
+					};
 				}),
 				{ signal: request.signal }
 			);
@@ -53,7 +67,7 @@
 			<p class="error">{error}</p>
 			<button type="button" onclick={load}>Try again</button>
 		</section>{:else if loading}<p>Loading support cases…</p>{:else}<section>
-			{#each items as item}<a href={`/admin/cases/${encodeURIComponent(item.id)}`}
+			{#each items as item (item.id)}<a href={`/admin/cases/${encodeURIComponent(item.id)}`}
 					><span class:urgent={item.break_glass}>{item.break_glass ? 'Urgent access' : 'Support case'}</span>
 					<div>
 						<h2>{item.subject_type.replaceAll('_', ' ')}</h2>

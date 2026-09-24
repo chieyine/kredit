@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { record, text } from '$lib/api/reliable';
+	import { dispute, type Dispute } from '$lib/disputes';
 	import { onMount } from 'svelte';
 	import { adminGet, localTime } from '$lib/admin-client';
 	import Money from '$lib/components/Money.svelte';
-	let items = $state<any[]>([]),
+	let items = $state<Dispute[]>([]),
 		stateFilter = $state(''),
 		loading = $state(true),
 		error = $state('');
@@ -18,10 +18,8 @@
 			if (current !== generation) return;
 			if (!Array.isArray(data.disputes)) throw new Error('Disputes could not be verified.');
 			items = data.disputes.map((value: unknown) => {
-				const item = record(value);
-				text(item.id);
-				text(item.state);
-				text(item.reason);
+				const item = dispute(value);
+				if (!item.reason) throw new Error('Disputes could not be verified.');
 				return item;
 			});
 		} catch (e) {
@@ -55,7 +53,7 @@
 			<p class="error">{error}</p>
 			<button onclick={load}>Try again</button>
 		</section>{:else if loading}<p>Loading disputes…</p>{:else}<section>
-			{#each items as item}<a href={`/admin/disputes/${encodeURIComponent(item.id)}`}
+			{#each items as item (item.id)}<a href={`/admin/disputes/${encodeURIComponent(item.id)}`}
 					><div>
 						<span>{item.state.replaceAll('_', ' ')}</span>
 						<h2>{item.reason}</h2>

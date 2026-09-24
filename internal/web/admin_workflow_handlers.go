@@ -85,7 +85,7 @@ func (s *Server) adminInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result []byte
-	err = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(item ORDER BY due_at,id,kind),'[]'::jsonb) FROM (SELECT q.id,q.kind,COALESCE(a.due_at,q.due_at) due_at,to_jsonb(q)||jsonb_build_object('owner_id',a.owner_id,'owner',CASE WHEN a.owner_id IS NOT NULL THEN app.admin_actor_name(a.owner_id) END,'due_at',COALESCE(a.due_at,q.due_at),'author',app.admin_actor_name(q.author_id)) item FROM app.admin_review_queue q LEFT JOIN app.admin_review_assignments a ON a.kind=q.kind AND a.resource_id=q.id WHERE q.kind=ANY($1::text[]) AND ($2='' OR q.title ILIKE '%'||$2||'%' OR q.id::text=$2) ORDER BY COALESCE(a.due_at,q.due_at),q.id,q.kind LIMIT 201 OFFSET $3) page`, kinds, strings.TrimSpace(r.URL.Query().Get("q")), adminOffset(r)).Scan(&result)
+	err = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(item ORDER BY due_at,id,kind),'[]'::jsonb) FROM (SELECT q.id,q.kind,COALESCE(a.due_at,q.due_at) due_at,to_jsonb(q)||jsonb_build_object('owner_id',a.owner_id,'owner',CASE WHEN a.owner_id IS NOT NULL THEN app.admin_actor_name(a.owner_id) END,'due_at',COALESCE(a.due_at,q.due_at),'author',app.admin_actor_name(q.author_id)) item FROM app.admin_review_queue q LEFT JOIN app.admin_review_assignments a ON a.kind=q.kind AND a.resource_id=q.id WHERE q.kind=ANY($1::text[]) AND ($2='' OR strpos(lower(q.title),lower($2))>0 OR q.id::text=$2) ORDER BY COALESCE(a.due_at,q.due_at),q.id,q.kind LIMIT 201 OFFSET $3) page`, kinds, strings.TrimSpace(r.URL.Query().Get("q")), adminOffset(r)).Scan(&result)
 	if err != nil {
 		writeProblem(w, 503, "inbox_unavailable", "Inbox could not be loaded")
 		return
@@ -327,7 +327,7 @@ func (s *Server) adminHistory(w http.ResponseWriter, r *http.Request) {
 		allowed = append(allowed, "assignment")
 	}
 	var result []byte
-	err = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(to_jsonb(h) ORDER BY h.created_at DESC,h.id DESC),'[]'::jsonb) FROM (SELECT * FROM app.admin_change_history WHERE kind=ANY($1::text[]) AND ($2='' OR reason ILIKE '%'||$2||'%' OR proposer ILIKE '%'||$2||'%' OR approver ILIKE '%'||$2||'%' OR id::text=$2) AND ($3='' OR kind=$3) AND (kind<>'assignment' OR after_values->>'kind'=ANY($5::text[])) ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $4)h`, allowed, strings.TrimSpace(r.URL.Query().Get("q")), r.URL.Query().Get("kind"), adminOffset(r), kinds).Scan(&result)
+	err = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(to_jsonb(h) ORDER BY h.created_at DESC,h.id DESC),'[]'::jsonb) FROM (SELECT * FROM app.admin_change_history WHERE kind=ANY($1::text[]) AND ($2='' OR strpos(lower(reason),lower($2))>0 OR strpos(lower(proposer),lower($2))>0 OR strpos(lower(approver),lower($2))>0 OR id::text=$2) AND ($3='' OR kind=$3) AND (kind<>'assignment' OR after_values->>'kind'=ANY($5::text[])) ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $4)h`, allowed, strings.TrimSpace(r.URL.Query().Get("q")), r.URL.Query().Get("kind"), adminOffset(r), kinds).Scan(&result)
 	if err != nil {
 		writeProblem(w, 503, "history_unavailable", "Change history could not be loaded")
 		return

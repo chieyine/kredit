@@ -3,7 +3,7 @@
 	import { record, text } from '$lib/api/reliable';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	const intent = new MutationIntent('admin-controls', '/api/v1/ops/commands');
-	import { adminPost, lagosISO } from '$lib/admin-client';
+	import { adminPost, commandPreview, lagosISO, type CommandPreview } from '$lib/admin-client';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	let form: HTMLFormElement;
@@ -16,7 +16,7 @@
 		reason = $state('');
 	let command = $state('suspend_user');
 	let reviewed: ReturnType<typeof payload> | null = $state(null);
-	let preview: any = $state(null),
+	let preview: CommandPreview | null = $state(null),
 		message = $state(''),
 		ready = $state(false),
 		busy = $state(false);
@@ -52,14 +52,12 @@
 		message = '';
 		try {
 			const candidate = payload();
-			const data = await adminPost('/api/v1/ops/commands/preview', candidate);
-			if (!data.command?.impact_preview || typeof data.command.impact_preview.effect !== 'string')
-				throw new Error('Preview unavailable');
-			if (!Number.isSafeInteger(data.command.current_version) || data.command.current_version < 1)
+			const verified = commandPreview(await adminPost('/api/v1/ops/commands/preview', candidate));
+			if (!Number.isSafeInteger(verified.current_version) || verified.current_version < 1)
 				throw new Error('Preview version unavailable');
-			version = data.command.current_version;
+			version = verified.current_version;
 			reviewed = { ...candidate, expected_version: version };
-			preview = data.command;
+			preview = verified;
 			message = 'Read the impact below before you apply this.';
 		} catch {
 			preview = null;

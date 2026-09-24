@@ -28,7 +28,7 @@ type Invitation struct {
 	Status               string    `json:"status"`
 	ExpiresAt            time.Time `json:"expires_at"`
 	CreatedAt            time.Time `json:"created_at"`
-	AcceptedAt           time.Time `json:"accepted_at,omitempty"`
+	AcceptedAt           time.Time `json:"accepted_at,omitzero"`
 	AcceptedByUserID     string    `json:"accepted_by_user_id,omitempty"`
 }
 
@@ -115,8 +115,8 @@ type VerificationCase struct {
 	Reasons           []string          `json:"reasons,omitempty"`
 	SafeResult        map[string]string `json:"safe_result,omitempty"`
 	StartedAt         time.Time         `json:"started_at"`
-	CompletedAt       time.Time         `json:"completed_at,omitempty"`
-	ExpiresAt         time.Time         `json:"expires_at,omitempty"`
+	CompletedAt       time.Time         `json:"completed_at,omitzero"`
+	ExpiresAt         time.Time         `json:"expires_at,omitzero"`
 }
 
 type Consent struct {

@@ -114,6 +114,7 @@
 		>
 	>({});
 	const reads = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
 	async function load() {
 		loading = true;
@@ -205,7 +206,7 @@
 				)
 					continue;
 				results[key] = { state: 'processing', link: '' };
-				const path = `/api/v1/organizations/${encodeURIComponent(owner)}/distributor-imports/${current}/rows/${n + 1}`;
+				const path = `/api/v1/organizations/${encodeURIComponent(owner)}/distributor-imports/${encodeURIComponent(current)}/rows/${n + 1}`;
 				const scope = owner + ':' + current + ':' + key;
 				if (!intents.has(scope)) intents.set(scope, new MutationIntent(scope, path));
 				try {
@@ -310,7 +311,7 @@
 				bind:value={business}
 				disabled={loading || running || saving}
 				onchange={() => chooseWorkspace(business)}
-				>{#each businesses as item}<option value={item.id}>{item.name}</option>{/each}</select
+				>{#each businesses as item (item.id)}<option value={item.id}>{item.name}</option>{/each}</select
 			></label
 		>
 		{#if organizationError}<p role="alert">{organizationError}</p>
@@ -343,7 +344,8 @@
 			cancelled.
 		</p>
 		{#if batchLoading}<p role="status">Loading saved imports…</p>{:else if batchError}<p role="alert">{batchError}</p>
-			<button onclick={loadBatches}>Retry saved imports</button>{:else if batches.length}{#each batches as item}<p>
+			<button onclick={loadBatches}>Retry saved imports</button
+			>{:else if batches.length}{#each batches as item (item.id)}<p>
 					<button disabled={running || saving} onclick={() => openBatch(item.id)}
 						>Open {item.row_count}-contact import · {item.source_hash.slice(0, 8)}</button
 					>
@@ -358,7 +360,7 @@
 			<div class="table-scroll">
 				<table>
 					<thead><tr><th>Reference</th><th>Business</th><th>Contact</th><th>Progress</th></tr></thead><tbody
-						>{#each roster as row, n}<tr
+						>{#each roster as row, n (n)}<tr
 								><td>{row.source_reference.replace(/^roster:/, '')}</td><td
 									>{row.legal_name}<small>{row.business_address}</small></td
 								><td>{row.target}</td><td

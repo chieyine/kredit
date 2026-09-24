@@ -76,14 +76,37 @@ func Defaults(c config.Config) Values {
 	}
 	return Values{CollectionsEnabled: true, AutomaticCollection: c.AutomaticCollectionEnabled, AutomaticRetry: c.AutomaticRetryEnabled, PaymentClaims: c.OffPlatformPaymentClaims, NoticeHours: h, MaxRetries: retries, MaxSuppliers: c.PilotMaxSupplierOrganizations, MaxBuyers: c.PilotMaxBuyerBusinesses, MaxPrincipal: c.PilotMaxPrincipalKobo, MaxExposure: c.PilotMaxActiveExposureKobo, MaxDrawdowns: c.PilotMaxDrawdownsPerLineDay, EnhancedReview: c.PilotEnhancedReviewKobo, CorrectionThreshold: 1000000, BaseFeeBPS: 50, CollectionFeeBPS: 50, AllowedIndustries: c.PilotAllowedIndustries, UpcomingNoticeDays: 3, MandateNoticeDays: 7}
 }
+
+// numericValues maps each numeric catalog key to its value. Comparing int64
+// values directly avoids the float64 rounding a JSON round trip would apply
+// to kobo amounts near the catalog ceilings.
+func (v Values) numericValues() map[string]int64 {
+	return map[string]int64{
+		"notice_hours":              v.NoticeHours,
+		"max_retries":               v.MaxRetries,
+		"max_suppliers":             v.MaxSuppliers,
+		"max_buyers":                v.MaxBuyers,
+		"max_principal_kobo":        v.MaxPrincipal,
+		"max_exposure_kobo":         v.MaxExposure,
+		"max_drawdowns_per_day":     v.MaxDrawdowns,
+		"enhanced_review_kobo":      v.EnhancedReview,
+		"correction_threshold_kobo": v.CorrectionThreshold,
+		"base_fee_bps":              v.BaseFeeBPS,
+		"collection_fee_bps":        v.CollectionFeeBPS,
+		"upcoming_notice_days":      v.UpcomingNoticeDays,
+		"mandate_notice_days":       v.MandateNoticeDays,
+	}
+}
+
 func (v Values) Validate() error {
-	data, _ := json.Marshal(v)
-	var fields map[string]any
-	_ = json.Unmarshal(data, &fields)
+	values := v.numericValues()
 	for _, f := range Catalog() {
 		if f.Kind == "number" || f.Kind == "money" {
-			n := fields[f.Key].(float64)
-			if n < float64(f.Min) || n > float64(f.Max) {
+			n, ok := values[f.Key]
+			if !ok {
+				return fmt.Errorf("%s has no validated value", f.Label)
+			}
+			if n < f.Min || n > f.Max {
 				return fmt.Errorf("%s must be between %d and %d", f.Label, f.Min, f.Max)
 			}
 		}
@@ -123,10 +146,18 @@ func (v Values) ValidateDeployment(c config.Config) error {
 		if strings.TrimSpace(v.AllowedIndustries) == "" {
 			return errors.New("deployment requires an industry allowlist")
 		}
+		listed := 0
 		for _, industry := range strings.Split(v.AllowedIndustries, ",") {
+			if strings.TrimSpace(industry) == "" {
+				continue
+			}
+			listed++
 			if !AllowsIndustry(c.PilotAllowedIndustries, industry) {
 				return errors.New("industry is outside deployment approval")
 			}
+		}
+		if listed == 0 {
+			return errors.New("deployment requires an industry allowlist")
 		}
 	}
 	return nil

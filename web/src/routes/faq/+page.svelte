@@ -26,7 +26,7 @@
 	<h1>{data.copy.title}<br />{data.copy.accent}</h1>
 	<p>{data.copy.introduction}</p>
 	<dl class="faq">
-		{#each faqs as item}<div>
+		{#each faqs as item, i (i)}<div>
 				<dt>{item.q}</dt>
 				<dd>{item.a}</dd>
 			</div>{/each}

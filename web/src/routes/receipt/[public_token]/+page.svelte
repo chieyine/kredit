@@ -3,7 +3,9 @@
 	import Money from '$lib/components/Money.svelte';
 	import { checkedJSON, LatestRequest, publicError, record, RequestError, text } from '$lib/api/reliable';
 	import { kobo, timeLabel } from '$lib/records';
-	let receipt: any = $state(null),
+	import type { KoboValue } from '$lib/money';
+	type Receipt = { reference: string; amount_kobo: KoboValue; state: 'recognized' | 'reversed'; paid_at: string };
+	let receipt: Receipt | null = $state(null),
 		error = $state('');
 	const requests = new LatestRequest();
 	async function load(token: string) {
@@ -13,16 +15,17 @@
 		try {
 			const result = await checkedJSON(
 				`/api/v1/public/receipts/${encodeURIComponent(token)}`,
-				(value) => {
+				(value): Receipt => {
 					const row = record(record(value).receipt);
-					if (!['recognized', 'reversed'].includes(text(row.state)))
+					const state = text(row.state);
+					if (state !== 'recognized' && state !== 'reversed')
 						throw new RequestError('Receipt status could not be verified.');
 					if (!text(row.reference).trim() || !Number.isFinite(Date.parse(text(row.paid_at))))
 						throw new RequestError('Receipt date could not be verified.');
 					return {
 						reference: text(row.reference),
 						amount_kobo: kobo(row.amount_kobo),
-						state: row.state,
+						state,
 						paid_at: text(row.paid_at)
 					};
 				},

@@ -47,7 +47,7 @@
 			? '/api/v1/buyer/purchases'
 			: mode === 'admin'
 				? '/api/v1/ops/consumer-sales'
-				: `/api/v1/organizations/${org}/consumer-sales`
+				: `/api/v1/organizations/${encodeURIComponent(org)}/consumer-sales`
 	);
 	function href(s: Purchase) {
 		return mode === 'buyer'
@@ -240,7 +240,7 @@
 			>{/if}{/if}{#if message}<p role="status" class="message">{message}</p>{/if}
 	{#if mode === 'seller'}<label
 			>Retailer business<select bind:value={org} onchange={() => chooseWorkspace(org)} disabled={busy}
-				>{#each businesses as b}<option value={b.id}>{b.trading_name || b.legal_name}</option>{/each}</select
+				>{#each businesses as b (b.id)}<option value={b.id}>{b.trading_name || b.legal_name}</option>{/each}</select
 			></label
 		>
 		<details>
@@ -380,7 +380,7 @@
 			>Refresh list</button
 		>{#if busy}<p>Loading…</p>{:else if !loaded}<p>
 				Choose a business or retry loading the list.
-			</p>{:else}{#each matching as sale}<a class="sale record-row" href={href(sale)}
+			</p>{:else}{#each matching as sale, i (i)}<a class="sale record-row" href={href(sale)}
 					><strong>{sale.terms.item}</strong><span
 						>{sale.customer_name || sale.target} · {label(sale.state)}{sale.case_state
 							? ` · Return ${label(sale.case_state)}`

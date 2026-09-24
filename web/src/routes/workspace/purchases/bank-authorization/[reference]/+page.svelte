@@ -2,11 +2,27 @@
 	import { workspaceHref } from '$lib/workspace-navigation';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { checkedJSON, record, text, publicError } from '$lib/api/reliable';
+	import { checkedJSON, optionalNumber, optionalText, record, text, publicError } from '$lib/api/reliable';
+	import { kobo } from '$lib/records';
+	import type { KoboValue } from '$lib/money';
 	import { MutationIntent } from '$lib/api/mutation';
 	import Money from '$lib/components/Money.svelte';
-	let enrollment: any = $state(null),
-		mandate: any = $state(null),
+	type Transfer = {
+		amount_kobo: KoboValue;
+		bank_name: string;
+		account_name: string;
+		account_number: string;
+		expires_at: string;
+	};
+	type Enrollment = {
+		state: 'DRAFT' | 'STARTED' | 'CONFIRMED' | 'CANCELLED';
+		version: number;
+		result: { transfer: Transfer | null; authorization_url: string };
+	};
+	type Mandate = { id: string; status: string; amount_ceiling_kobo: KoboValue };
+	const enrollmentStates = ['DRAFT', 'STARTED', 'CONFIRMED', 'CANCELLED'] as const;
+	let enrollment: Enrollment | null = $state(null),
+		mandate: Mandate | null = $state(null),
 		busy = $state(false),
 		error = $state('');
 	let banks: { code: string; name: string }[] = $state([]);
@@ -18,15 +34,42 @@
 		accountNumber = $state(''),
 		consent = $state(false);
 	const path = $derived(`/api/v1/buyer/bank-authorization/${encodeURIComponent(page.params.reference ?? '')}`);
+	function transfer(value: unknown): Transfer | null {
+		if (value == null) return null;
+		// These are the bank details a customer sends money to, so every field
+		// must be present exactly; a partial instruction is never shown.
+		const t = record(value);
+		const expires = text(t.expires_at);
+		if (!Number.isFinite(Date.parse(expires))) throw new Error('Incomplete transfer instructions');
+		return {
+			amount_kobo: kobo(t.amount_kobo),
+			bank_name: text(t.bank_name),
+			account_name: text(t.account_name),
+			account_number: text(t.account_number),
+			expires_at: expires
+		};
+	}
 	function decode(value: unknown) {
 		const data = record(value),
 			e = record(data.enrollment),
 			m = record(data.mandate);
-		if (!['DRAFT', 'STARTED', 'CONFIRMED', 'CANCELLED'].includes(text(e.state)) || !text(m.id))
-			throw new Error('Incomplete bank permission');
+		const state = enrollmentStates.find((candidate) => candidate === text(e.state));
+		if (!state || !text(m.id)) throw new Error('Incomplete bank permission');
+		const result = e.result && typeof e.result === 'object' ? record(e.result) : {};
+		const verified: { enrollment: Enrollment; mandate: Mandate } = {
+			enrollment: {
+				state,
+				version: optionalNumber(e.version),
+				result: { transfer: transfer(result.transfer), authorization_url: optionalText(result.authorization_url) }
+			},
+			mandate: {
+				id: text(m.id),
+				status: optionalText(m.status),
+				amount_ceiling_kobo: m.amount_ceiling_kobo == null ? null : kobo(m.amount_ceiling_kobo)
+			}
+		};
 		return {
-			enrollment: e,
-			mandate: m,
+			...verified,
 			banks: Array.isArray(data.banks)
 				? data.banks.map((value) => {
 						const b = record(value);
@@ -55,7 +98,7 @@
 		busy = true;
 		error = '';
 		try {
-			const data = await new MutationIntent(`bank-authorization-${enrollment.version}`, path).run(
+			const data = await new MutationIntent(`bank-authorization-${enrollment?.version ?? 0}`, path).run(
 				{ name, email, phone, address, bank_code: bankCode, account_number: accountNumber, consent },
 				decode
 			);
@@ -135,8 +178,8 @@
 					/></label
 				><label
 					>Bank<select bind:value={bankCode} required
-						><option value="" disabled>Choose your bank</option>{#each banks as bank}<option value={bank.code}
-								>{bank.name}</option
+						><option value="" disabled>Choose your bank</option>{#each banks as bank (bank.code)}<option
+								value={bank.code}>{bank.name}</option
 							>{/each}</select
 					></label
 				><label

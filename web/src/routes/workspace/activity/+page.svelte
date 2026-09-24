@@ -5,13 +5,20 @@
 	import { MutationIntent } from '$lib/api/mutation';
 	import { productLabel } from '$lib/product-language';
 	import Money from '$lib/components/Money.svelte';
-	let organizations: any[] = $state([]),
+	import type { KoboValue } from '$lib/money';
+	import { organization, type Organization } from '$lib/records';
+	type ActivityEvent = { action: string; created_at: string };
+	type OperatorAction = { id: string; action_type: string; reason: string; created_at: string; amount_kobo: KoboValue };
+	type Correction = { id: string; subject_type: string; state: string; reason: string; created_at: string };
+	type ProviderStatus = { name: string; feature_enabled: boolean; health: { healthy: boolean } };
+	type Readiness = { ready: boolean; state: string };
+	let organizations: Organization[] = $state([]),
 		organizationID = $state(''),
-		events: any[] = $state([]),
-		actions: any[] = $state([]),
-		corrections: any[] = $state([]),
-		provider: any = $state(null),
-		readiness: any = $state(null);
+		events: ActivityEvent[] = $state([]),
+		actions: OperatorAction[] = $state([]),
+		corrections: Correction[] = $state([]),
+		provider: ProviderStatus | null = $state(null),
+		readiness: Readiness | null = $state(null);
 	let loading = $state(true),
 		error = $state(''),
 		notice = $state(''),
@@ -19,42 +26,48 @@
 		decisionReasons = $state<Record<string, string>>({}),
 		unavailable: string[] = $state([]);
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
-	const names = ['audit-events', 'operations', 'corrections', 'provider-status', 'onboarding'];
-	const labels = [
-		'Business activity',
-		'Corrections you made',
-		'Correction requests',
-		'Payment provider',
-		'Setup status'
-	];
-	function item(value: unknown, fields: string[]) {
+	const decodeEvents = rows('events', (value): ActivityEvent => {
 		const row = record(value);
-		for (const field of fields) text(row[field]);
-		return row;
+		return { action: text(row.action), created_at: text(row.created_at) };
+	});
+	const decodeActions = rows('actions', (value): OperatorAction => {
+		const row = record(value);
+		if (
+			!(typeof row.amount_kobo === 'string' && /^-?\d+$/.test(row.amount_kobo)) &&
+			!(typeof row.amount_kobo === 'number' && Number.isSafeInteger(row.amount_kobo))
+		)
+			throw new Error('Invalid amount');
+		return {
+			id: text(row.id),
+			action_type: text(row.action_type),
+			reason: text(row.reason),
+			created_at: text(row.created_at),
+			amount_kobo: row.amount_kobo
+		};
+	});
+	const decodeCorrections = rows('corrections', (value): Correction => {
+		const row = record(value);
+		return {
+			id: text(row.id),
+			subject_type: text(row.subject_type),
+			state: text(row.state),
+			reason: text(row.reason),
+			created_at: text(row.created_at)
+		};
+	});
+	function decodeProvider(value: unknown): ProviderStatus {
+		const result = record(value);
+		const healthy = record(result.health).healthy;
+		if (typeof result.feature_enabled !== 'boolean' || typeof healthy !== 'boolean')
+			throw new Error('Incomplete provider status');
+		return { name: text(result.name), feature_enabled: result.feature_enabled, health: { healthy } };
 	}
-	function decode(index: number, value: unknown): any {
-		if (index === 0) return rows('events', (v) => item(v, ['action', 'created_at']))(value);
-		if (index === 1)
-			return rows('actions', (v) => {
-				const row = item(v, ['id', 'action_type', 'reason', 'created_at']);
-				if (
-					!(typeof row.amount_kobo === 'string' && /^-?\d+$/.test(row.amount_kobo)) &&
-					!(typeof row.amount_kobo === 'number' && Number.isSafeInteger(row.amount_kobo))
-				)
-					throw new Error('Invalid amount');
-				return row;
-			})(value);
-		if (index === 2)
-			return rows('corrections', (v) => item(v, ['id', 'subject_type', 'state', 'reason', 'created_at']))(value);
-		const result = index === 4 ? record(record(value).readiness) : record(value);
-		if (index === 3) {
-			text(result.name);
-			if (typeof result.feature_enabled !== 'boolean' || typeof record(result.health).healthy !== 'boolean')
-				throw new Error('Incomplete provider status');
-		} else if (typeof result.ready !== 'boolean' || typeof result.state !== 'string')
-			throw new Error('Incomplete readiness');
-		return result;
+	function decodeReadiness(value: unknown): Readiness {
+		const result = record(record(value).readiness);
+		if (typeof result.ready !== 'boolean' || typeof result.state !== 'string') throw new Error('Incomplete readiness');
+		return { ready: result.ready, state: result.state };
 	}
 	async function load() {
 		const request = reads.begin();
@@ -68,21 +81,30 @@
 		readiness = null;
 		try {
 			if (!organizationID) return;
-			const result = await Promise.allSettled(
-				names.map((name, index) =>
-					checkedJSON(
-						`/api/v1/organizations/${encodeURIComponent(organizationID)}/${name}`,
-						(value) => decode(index, value),
-						{ signal: request.signal }
-					)
-				)
-			);
+			const base = `/api/v1/organizations/${encodeURIComponent(organizationID)}`;
+			const init = { signal: request.signal };
+			const result = await Promise.allSettled([
+				checkedJSON(`${base}/audit-events`, decodeEvents, init),
+				checkedJSON(`${base}/operations`, decodeActions, init),
+				checkedJSON(`${base}/corrections`, decodeCorrections, init),
+				checkedJSON(`${base}/provider-status`, decodeProvider, init),
+				checkedJSON(`${base}/onboarding`, decodeReadiness, init)
+			] as const);
 			if (!request.current()) return;
+			const labels = [
+				'Business activity',
+				'Corrections you made',
+				'Correction requests',
+				'Payment provider',
+				'Setup status'
+			];
 			unavailable = result.flatMap((entry, index) => (entry.status === 'rejected' ? [labels[index]] : []));
-			const values = result.map((entry) => (entry.status === 'fulfilled' ? entry.value : null));
-			[events, actions, corrections] = values.slice(0, 3).map((value) => value ?? []);
-			provider = values[3];
-			readiness = values[4];
+			const [eventResult, actionResult, correctionResult, providerResult, readinessResult] = result;
+			events = eventResult.status === 'fulfilled' ? eventResult.value : [];
+			actions = actionResult.status === 'fulfilled' ? actionResult.value : [];
+			corrections = correctionResult.status === 'fulfilled' ? correctionResult.value : [];
+			provider = providerResult.status === 'fulfilled' ? providerResult.value : null;
+			readiness = readinessResult.status === 'fulfilled' ? readinessResult.value : null;
 		} finally {
 			if (request.current()) loading = false;
 		}
@@ -92,11 +114,9 @@
 		loading = true;
 		error = '';
 		try {
-			const result = await checkedJSON(
-				'/api/v1/organizations',
-				rows('organizations', (value) => ({ id: text(record(value).id), legal_name: text(record(value).legal_name) })),
-				{ signal: request.signal }
-			);
+			const result = await checkedJSON('/api/v1/organizations', rows('organizations', organization), {
+				signal: request.signal
+			});
 			if (!request.current()) return;
 			organizations = result;
 			organizationID = requestedWorkspace(result);
@@ -108,7 +128,7 @@
 			}
 		}
 	}
-	async function decide(item: any, outcome: string) {
+	async function decide(item: Correction, outcome: string) {
 		if (busy) return;
 		const reason = (decisionReasons[item.id] ?? '').trim();
 		if (outcome !== 'UNDER_REVIEW' && reason.length < 8) {
@@ -157,7 +177,7 @@
 				disabled={!!busy || loading}
 				bind:value={organizationID}
 				onchange={() => chooseWorkspace(organizationID)}
-				>{#each organizations as item}<option value={item.id}>{item.trading_name || item.legal_name}</option
+				>{#each organizations as item (item.id)}<option value={item.id}>{item.trading_name || item.legal_name}</option
 					>{/each}</select
 			></label
 		>{/if}{#if error}<p class="error" role="alert">
@@ -201,7 +221,7 @@
 			{#if unavailable.includes('Correction requests')}<p>
 					Correction requests could not be loaded.
 				</p>{:else if corrections.length}<div class="corrections">
-					{#each corrections as item}<article>
+					{#each corrections as item (item.id)}<article>
 							<div>
 								<strong>{productLabel(item.subject_type)} correction</strong><span>{productLabel(item.state)}</span>
 							</div>
@@ -229,7 +249,7 @@
 				{#if unavailable.includes('Corrections you made')}<p>
 						Money changes could not be loaded.
 					</p>{:else if actions.length}<ul>
-						{#each actions as item}<li>
+						{#each actions as item, i (i)}<li>
 								<strong>{productLabel(item.action_type)}</strong> · <Money amountKobo={item.amount_kobo} /><small
 									>{item.reason} · {new Date(item.created_at).toLocaleString('en-NG')}</small
 								>
@@ -241,7 +261,7 @@
 				{#if unavailable.includes('Business activity')}<p>
 						Business activity could not be loaded.
 					</p>{:else if events.length}<ul>
-						{#each events.slice(0, 30) as item}<li>
+						{#each events.slice(0, 30) as item, i (i)}<li>
 								<strong>{productLabel(item.action)}</strong><small
 									>{new Date(item.created_at).toLocaleString('en-NG')}</small
 								>

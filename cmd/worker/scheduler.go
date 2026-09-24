@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -47,7 +48,7 @@ func startWorkerSchedule(ctx context.Context, logger *slog.Logger, tasks []*peri
 				task.started, task.running = time.Now(), true
 				task.mu.Unlock()
 				runCtx, cancel := context.WithTimeout(ctx, task.budget)
-				err := task.work(runCtx)
+				err := task.run(runCtx)
 				if err == nil {
 					err = runCtx.Err()
 				}
@@ -74,6 +75,19 @@ func startWorkerSchedule(ctx context.Context, logger *slog.Logger, tasks []*peri
 		close(schedule.done)
 	}()
 	return schedule
+}
+
+// run executes one pass of the activity. A panic is contained to this pass and
+// reported as an error: activities share a process, so an unrecovered panic in
+// one of them would otherwise stop every other activity with it. A critical
+// activity that keeps failing still fails Ready, so the fault stays visible.
+func (t *periodicTask) run(ctx context.Context) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("activity panicked: %v\n%s", recovered, debug.Stack())
+		}
+	}()
+	return t.work(ctx)
 }
 
 // Ready reports local scheduling progress, not completion of queued River jobs

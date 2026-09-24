@@ -187,7 +187,7 @@ type GoodsRelease struct {
 	// presenting one as the other would corrupt the release evidence trail.
 	WaybillNumber    string    `json:"waybill_number,omitempty"`
 	ReleasedAt       time.Time `json:"released_at"`
-	DeemedAcceptedAt time.Time `json:"deemed_accepted_at,omitempty"`
+	DeemedAcceptedAt time.Time `json:"deemed_accepted_at,omitzero"`
 }
 
 type ReceiptConfirmation struct {

@@ -130,6 +130,7 @@ jobs:
             -v demote_owner=false \
             -f infra/postgres/development-logins.sql
           DATABASE_URL="$ADMIN_DATABASE_URL" DATABASE_DIRECT_URL="$ADMIN_DATABASE_URL" go run ./cmd/seed
+          # Seed a second time: the demo seed must be idempotent.
           DATABASE_URL="$ADMIN_DATABASE_URL" DATABASE_DIRECT_URL="$ADMIN_DATABASE_URL" go run ./cmd/seed
       - name: Start real API and web stack
         run: |
@@ -137,7 +138,7 @@ jobs:
           echo $! > /tmp/kredit-api.pid
           pnpm --dir web dev --host 127.0.0.1 > /tmp/kredit-web.log 2>&1 &
           echo $! > /tmp/kredit-web.pid
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8080/readyz >/dev/null && curl -fsS http://127.0.0.1:5173 >/dev/null; then
               exit 0
             fi

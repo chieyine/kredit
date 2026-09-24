@@ -1,13 +1,35 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { formatKobo } from '$lib/money';
-	import { organization, kobo } from '$lib/records';
-	import { checkedJSON, LatestRequest, record, rows, text, publicError, RequestError } from '$lib/api/reliable';
+	import { formatKobo, type KoboValue } from '$lib/money';
+	import { organization, kobo, customer } from '$lib/records';
+	import {
+		checkedJSON,
+		LatestRequest,
+		optionalText,
+		record,
+		rows,
+		text,
+		publicError,
+		RequestError
+	} from '$lib/api/reliable';
 	import { productLabel } from '$lib/product-language';
 	import ShareActions from '$lib/components/ShareActions.svelte';
 	import { readLocal, writeLocal } from '$lib/product-tools';
-	let history = $state<Record<string, any> | null>(null),
-		statement = $state<Record<string, any> | null>(null);
+	type PaymentHistory = {
+		current_active_principal_kobo: KoboValue;
+		active_obligations: number;
+		completed_obligations: number;
+		on_time_percentage: number;
+	};
+	type StatementLine = {
+		credit_request_id: string;
+		buyer_name: string;
+		payment_status: string;
+		outstanding_kobo: KoboValue;
+	};
+	type Statement = { buyer_id: string; obligations: StatementLine[] };
+	let history = $state<PaymentHistory | null>(null),
+		statement = $state<Statement | null>(null);
 	let businessName = $state(''),
 		buyerUserID = $state('');
 	let error = $state(''),
@@ -16,9 +38,8 @@
 		noteMessage = $state('');
 	const requests = new LatestRequest(),
 		money = formatKobo;
-	function decodeHistory(value: unknown) {
+	function decodeHistory(value: unknown): PaymentHistory {
 		const row = record(value);
-		kobo(row.current_active_principal_kobo);
 		for (const key of ['active_obligations', 'completed_obligations'])
 			if (!Number.isSafeInteger(row[key]) || Number(row[key]) < 0) throw new Error('Invalid sale count');
 		if (
@@ -28,19 +49,27 @@
 			row.on_time_percentage > 100
 		)
 			throw new Error('Invalid payment history');
-		return row;
+		return {
+			current_active_principal_kobo: kobo(row.current_active_principal_kobo),
+			active_obligations: Number(row.active_obligations),
+			completed_obligations: Number(row.completed_obligations),
+			on_time_percentage: row.on_time_percentage
+		};
 	}
-	function decodeStatement(value: unknown) {
+	function decodeStatement(value: unknown): Statement {
 		const row = record(value);
-		text(row.buyer_id);
-		rows('obligations', (value) => {
-			const sale = record(value);
-			text(sale.credit_request_id);
-			text(sale.payment_status);
-			kobo(sale.outstanding_kobo);
-			return sale;
-		})(row);
-		return row;
+		return {
+			buyer_id: text(row.buyer_id),
+			obligations: rows('obligations', (value): StatementLine => {
+				const sale = record(value);
+				return {
+					credit_request_id: text(sale.credit_request_id),
+					buyer_name: optionalText(sale.buyer_name),
+					payment_status: text(sale.payment_status),
+					outstanding_kobo: kobo(sale.outstanding_kobo)
+				};
+			})(row)
+		};
 	}
 	async function loadCustomer(customerID = page.params.id, selected = page.url.searchParams.get('organization')) {
 		const request = requests.begin();
@@ -60,28 +89,22 @@
 			if (!org) throw new RequestError('This business workspace is not available.', 404);
 			const customers = await checkedJSON(
 				`/api/v1/organizations/${encodeURIComponent(org.id)}/customers`,
-				rows('customers', (value) => {
-					const item = record(value);
-					text(item.buyer_user_id);
-					text(item.buyer_business_id);
-					text(item.legal_name);
-					return item;
-				}),
+				rows('customers', customer),
 				{ signal: request.signal }
 			);
-			const customer = customers.find((item) => item.buyer_business_id === customerID);
-			if (!customer) throw new RequestError('This customer business is not connected to your workspace.', 404);
-			const base = `/api/v1/organizations/${encodeURIComponent(org.id)}/customers/${encodeURIComponent(String(customer.buyer_user_id))}`;
+			const match = customers.find((item) => item.buyer_business_id === customerID);
+			if (!match) throw new RequestError('This customer business is not connected to your workspace.', 404);
+			const base = `/api/v1/organizations/${encodeURIComponent(org.id)}/customers/${encodeURIComponent(match.buyer_user_id)}`;
 			const query = `?buyer_business_id=${encodeURIComponent(customerID ?? '')}`;
 			const [h, statementResult] = await Promise.all([
 				checkedJSON(`${base}/history${query}`, decodeHistory, { signal: request.signal }),
 				checkedJSON(`${base}/statement${query}`, decodeStatement, { signal: request.signal })
 			]);
 			if (!request.current()) return;
-			if (statementResult.buyer_id !== customer.buyer_user_id) throw new Error('Wrong customer statement');
+			if (statementResult.buyer_id !== match.buyer_user_id) throw new Error('Wrong customer statement');
 			organizationID = org.id;
-			buyerUserID = String(customer.buyer_user_id);
-			businessName = String(customer.trading_name || customer.legal_name);
+			buyerUserID = match.buyer_user_id;
+			businessName = match.trading_name || match.legal_name;
 			history = h;
 			statement = statementResult;
 			const saved = readLocal<unknown>(`kredit:customer-note:${org.id}:${customerID}`, '');
@@ -159,7 +182,7 @@
 		<section class="card">
 			<h2>Sales with you</h2>
 			{#if statement?.obligations?.length}<div class="table">
-					{#each statement.obligations as obligation}<a
+					{#each statement.obligations as obligation, i (i)}<a
 							href={`/workspace/sales/${encodeURIComponent(obligation.credit_request_id)}?organization=${encodeURIComponent(organizationID)}`}
 							><span>{obligation.buyer_name || 'Credit sale'}</span><strong>{money(obligation.outstanding_kobo)}</strong
 							><small>{productLabel(obligation.payment_status)}</small></a

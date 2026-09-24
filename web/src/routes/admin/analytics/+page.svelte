@@ -1,44 +1,96 @@
 <script lang="ts">
-	import { checkedJSON, publicError, record, rows, text, LatestRequest } from '$lib/api/reliable';
+	import { checkedJSON, optionalText, publicError, record, rows, text, LatestRequest } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
-	let scorecard: any = null;
+	type Metric = {
+		key: string;
+		label: string;
+		unit: string;
+		definition: string;
+		source: string;
+		value: number;
+		target_status: string;
+	};
+	type Feedback = Record<'total' | 'yes' | 'partly' | 'no' | 'seller' | 'buyer' | 'clear_percent', number>;
+	type ReconciliationRow = { event: string; status: string; source_count: number; event_count: number };
+	type Scorecard = {
+		generated_at: string;
+		from: string;
+		to: string;
+		refresh_mode: string;
+		reconciliation_ok: boolean;
+		kpis: Metric[];
+		drivers: Metric[];
+		guardrails: Metric[];
+		feedback: Feedback;
+		reconciliation: ReconciliationRow[];
+	};
+	let scorecard: Scorecard | null = null;
 	let error = '';
 	let loading = true;
 	let to = new Date().toISOString().slice(0, 10);
 	let from = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 	let organization = '';
 	const reads = new LatestRequest();
-	function decodeScorecard(value: unknown) {
-		const card = record(record(value).scorecard);
-		for (const key of ['generated_at', 'from', 'to']) {
-			if (!Number.isFinite(Date.parse(text(card[key])))) throw new Error('Invalid scorecard date');
-		}
-		text(card.refresh_mode);
-		if (typeof card.reconciliation_ok !== 'boolean') throw new Error('Missing reconciliation result');
-		for (const group of ['kpis', 'drivers', 'guardrails'])
-			rows(group, (value) => {
-				const metric = record(value);
-				for (const key of ['key', 'label', 'unit', 'definition', 'source']) text(metric[key]);
-				if (typeof metric.value !== 'number' || !Number.isFinite(metric.value)) throw new Error('Invalid metric');
-				return metric;
-			})(card);
-		const feedback = record(card.feedback);
-		for (const key of ['total', 'yes', 'partly', 'no', 'seller', 'buyer', 'clear_percent']) {
-			if (typeof feedback[key] !== 'number' || !Number.isFinite(feedback[key]) || feedback[key] < 0)
-				throw new Error('Invalid feedback');
-		}
-		rows('reconciliation', (value) => {
-			const row = record(value);
-			text(row.event);
-			text(row.status);
-			for (const key of ['source_count', 'event_count']) {
-				if (typeof row[key] !== 'number' || !Number.isFinite(row[key])) throw new Error('Invalid reconciliation count');
-			}
-			return row;
-		})(card);
-		return card;
+	const finite = (value: unknown, message: string) => {
+		if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(message);
+		return value;
+	};
+	function metric(value: unknown): Metric {
+		const item = record(value);
+		return {
+			key: text(item.key),
+			label: text(item.label),
+			unit: text(item.unit),
+			definition: text(item.definition),
+			source: text(item.source),
+			value: finite(item.value, 'Invalid metric'),
+			target_status: optionalText(item.target_status)
+		};
 	}
-	const format = (metric: any) =>
+	function decodeScorecard(value: unknown): Scorecard {
+		const card = record(record(value).scorecard);
+		const date = (key: string) => {
+			const raw = text(card[key]);
+			if (!Number.isFinite(Date.parse(raw))) throw new Error('Invalid scorecard date');
+			return raw;
+		};
+		if (typeof card.reconciliation_ok !== 'boolean') throw new Error('Missing reconciliation result');
+		const answers = record(card.feedback);
+		const count = (key: keyof Feedback) => {
+			const n = finite(answers[key], 'Invalid feedback');
+			if (n < 0) throw new Error('Invalid feedback');
+			return n;
+		};
+		return {
+			generated_at: date('generated_at'),
+			from: date('from'),
+			to: date('to'),
+			refresh_mode: text(card.refresh_mode),
+			reconciliation_ok: card.reconciliation_ok,
+			kpis: rows('kpis', metric)(card),
+			drivers: rows('drivers', metric)(card),
+			guardrails: rows('guardrails', metric)(card),
+			feedback: {
+				total: count('total'),
+				yes: count('yes'),
+				partly: count('partly'),
+				no: count('no'),
+				seller: count('seller'),
+				buyer: count('buyer'),
+				clear_percent: count('clear_percent')
+			},
+			reconciliation: rows('reconciliation', (value): ReconciliationRow => {
+				const row = record(value);
+				return {
+					event: text(row.event),
+					status: text(row.status),
+					source_count: finite(row.source_count, 'Invalid reconciliation count'),
+					event_count: finite(row.event_count, 'Invalid reconciliation count')
+				};
+			})(card)
+		};
+	}
+	const format = (metric: Metric) =>
 		metric.target_status === 'no_data'
 			? 'No data yet'
 			: metric.unit === 'percent'
@@ -50,7 +102,7 @@
 						: `${metric.value.toFixed(metric.unit === 'hours' || metric.unit === 'days' ? 1 : 0)} ${metric.unit}`;
 	const findMetric = (key: string) =>
 		[...(scorecard?.kpis ?? []), ...(scorecard?.drivers ?? []), ...(scorecard?.guardrails ?? [])].find(
-			(item: any) => item.key === key
+			(item) => item.key === key
 		);
 	const showMetric = (key: string) => {
 		const item = findMetric(key);
@@ -62,6 +114,7 @@
 		const request = reads.begin();
 		loading = true;
 		error = '';
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built and consumed within one request
 		const params = new URLSearchParams({ from, to });
 		if (organization.trim()) params.set('organization_id', organization.trim());
 		try {
@@ -190,7 +243,7 @@
 			<summary>Open the full product scorecard</summary>
 			<h2>Main product numbers</h2>
 			<section class="metrics" aria-label="Primary pilot KPIs">
-				{#each scorecard.kpis as metric}<article>
+				{#each scorecard.kpis as metric (metric.key)}<article>
 						<strong>{format(metric)}</strong>
 						<h3>{metric.label}</h3>
 						<p>{metric.definition}</p>
@@ -199,7 +252,7 @@
 			</section>
 			<h2>What moves the numbers</h2>
 			<section class="metrics" aria-label="KPI drivers">
-				{#each scorecard.drivers as metric}<article>
+				{#each scorecard.drivers as metric (metric.key)}<article>
 						<strong>{format(metric)}</strong>
 						<h3>{metric.label}</h3>
 						<p>{metric.definition}</p>
@@ -208,7 +261,7 @@
 			</section>
 			<h2>Checks that protect the pilot</h2>
 			<section class="metrics" aria-label="Pilot guardrails">
-				{#each scorecard.guardrails as metric}<article>
+				{#each scorecard.guardrails as metric (metric.key)}<article>
 						<strong>{format(metric)}</strong>
 						<h3>{metric.label}</h3>
 						<p>{metric.definition}</p>
@@ -221,7 +274,7 @@
 					<caption>Product events compared with the main records</caption><thead
 						><tr><th>Event</th><th>Main record</th><th>Events</th><th>Status</th></tr></thead
 					><tbody
-						>{#each scorecard.reconciliation as row}<tr
+						>{#each scorecard.reconciliation as row, i (i)}<tr
 								><th>{row.event}</th><td>{row.source_count}</td><td>{row.event_count}</td><td
 									><span class:ok={row.status === 'reconciled'}>{row.status}</span></td
 								></tr

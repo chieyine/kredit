@@ -3,29 +3,42 @@
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
 	import { MutationIntent } from '$lib/api/mutation';
-	import { checkedJSON, LatestRequest, rows, record, text, publicError } from '$lib/api/reliable';
-	let sellers: any[] = $state([]),
-		consents: any[] = $state([]),
+	import { checkedJSON, LatestRequest, optionalText, rows, record, text, publicError } from '$lib/api/reliable';
+	type Seller = { id: string; name: string };
+	type Consent = {
+		id: string;
+		supplier_organization_id: string;
+		consent_type: string;
+		created_at: string;
+		granted: boolean;
+	};
+	let sellers: Seller[] = $state([]),
+		consents: Consent[] = $state([]),
 		loading = $state(true),
 		error = $state(''),
 		notice = $state(''),
 		busy = $state('');
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
-	function consentRecord(value: unknown) {
+	function consentRecord(value: unknown): Consent {
 		const row = record(value);
 		for (const key of ['id', 'supplier_organization_id', 'consent_type', 'created_at'])
 			if (!text(row[key])) throw new Error('Incomplete consent');
 		if (typeof row.granted !== 'boolean' || !Number.isFinite(Date.parse(String(row.created_at))))
 			throw new Error('Unverified consent');
-		return row;
+		return {
+			id: text(row.id),
+			supplier_organization_id: text(row.supplier_organization_id),
+			consent_type: text(row.consent_type),
+			created_at: text(row.created_at),
+			granted: row.granted
+		};
 	}
 	function current(orgID: string) {
 		return consents
 			.filter((item) => item.supplier_organization_id === orgID && item.consent_type === 'payment_reminders')
-			.sort(
-				(a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || String(b.id).localeCompare(String(a.id))
-			)[0];
+			.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id))[0];
 	}
 	async function load() {
 		const read = reads.begin();
@@ -39,7 +52,7 @@
 					const suppliers = rows('suppliers', (value) => {
 						const supplier = record(value);
 						const id = text(supplier.id),
-							name = text(supplier.trading_name) || text(supplier.legal_name);
+							name = optionalText(supplier.trading_name) || text(supplier.legal_name);
 						if (!id || !name) throw new Error('Incomplete seller directory');
 						return { id, name };
 					})(value);
@@ -59,7 +72,7 @@
 			if (read.current()) loading = false;
 		}
 	}
-	async function save(seller: any, granted: boolean) {
+	async function save(seller: Seller, granted: boolean) {
 		if (busy || loading || error) return;
 		busy = seller.id;
 		notice = '';
@@ -123,7 +136,7 @@
 		</p>{/if}{#if loading}<p role="status">Opening permissions…</p>{:else if error}<button onclick={load}
 			>Try again</button
 		>{:else if sellers.length}<section>
-			{#each sellers as seller}{@const allowed = current(seller.id)?.granted === true}
+			{#each sellers as seller (seller.id)}{@const allowed = current(seller.id)?.granted === true}
 				<article>
 					<div><strong>{seller.name}</strong><span>{allowed ? 'Reminders allowed' : 'Reminders stopped'}</span></div>
 					<button disabled={busy !== ''} onclick={() => save(seller, !allowed)}

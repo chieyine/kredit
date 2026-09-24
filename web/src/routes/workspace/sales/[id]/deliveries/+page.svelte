@@ -239,7 +239,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each lineItems as item}
+							{#each lineItems as item, i (i)}
 								<tr>
 									<td><strong>{item.description}</strong></td>
 									<td><code>{item.sku || '—'}</code></td>
@@ -264,7 +264,7 @@
 			<h2>Shipments & Dispatches</h2>
 			{#if shipments.length}
 				<div class="shipment-list">
-					{#each shipments as s}
+					{#each shipments as s, i (i)}
 						<div class="shipment-item">
 							<div>
 								<strong>{s.carrier}</strong> · <code>{s.tracking_reference || 'No tracking ref'}</code>
@@ -300,7 +300,7 @@
 				</div>
 				{#if lineItems.length}
 					<div class="qty-inputs">
-						{#each lineItems as item}
+						{#each lineItems as item (item.id)}
 							<label>
 								Ship qty for {item.description} (max {item.quantity - item.fulfilled_quantity})
 								<input
@@ -328,7 +328,7 @@
 
 			{#if creditNotes.length}
 				<div class="credit-notes-list">
-					{#each creditNotes as cn}
+					{#each creditNotes as cn, i (i)}
 						<div class="credit-note-item">
 							<div>
 								<strong>{formatKobo(cn.amount_kobo)}</strong> — {cn.reason}

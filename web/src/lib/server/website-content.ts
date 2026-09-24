@@ -4,7 +4,7 @@ export async function loadWebsiteCopy(
 	page: Extract<WebsitePage, 'home' | 'faq' | 'pricing' | 'contact'>
 ) {
 	try {
-		const response = await fetcher(`/api/v1/website/${page}`, {
+		const response = await fetcher(`/api/v1/website/${encodeURIComponent(page)}`, {
 			credentials: 'omit',
 			cache: 'no-store',
 			signal: AbortSignal.timeout(5000)

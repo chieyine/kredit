@@ -7,10 +7,10 @@ import (
 
 	"kredit/internal/access"
 	"kredit/internal/audit"
+	"kredit/internal/credit"
 	"kredit/internal/creditapproval"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (s *Server) businessCreditApprovals(w http.ResponseWriter, r *http.Request) {
@@ -41,9 +41,8 @@ func (s *Server) businessCreditApprovals(w http.ResponseWriter, r *http.Request)
 	}
 	service := creditapproval.Store{Pool: s.runtime.Database.Raw()}
 	fail := func(err error) {
-		var pg *pgconn.PgError
 		switch {
-		case errors.As(err, &pg) && pg.Code == "42501" && strings.Contains(pg.Message, "ceiling exceeded"):
+		case credit.ReviewerCeilingExceeded(err):
 			writeProblem(w, 403, "approval_ceiling_exceeded", "This offer exceeds your current approval limit. Ask a reviewer with sufficient authority.")
 		case errors.Is(err, creditapproval.ErrAuthority):
 			writeProblem(w, 403, "approval_authority_required", "A different authorized owner or finance reviewer must make this decision.")

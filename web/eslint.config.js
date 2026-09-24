@@ -37,13 +37,14 @@ export default ts.config(
 			// this is not, so the rule would cost 312 mechanical edits and buy
 			// nothing. Revisit if a base path is ever introduced.
 			'svelte/no-navigation-without-resolve': 'off',
-			// Real, and worth fixing: an unkeyed each block reuses DOM nodes
-			// across items, which shows the wrong row's state after a reorder.
-			// There are ~200 of them and each needs a correct key chosen by
-			// hand, so it lands as a warning rather than blocking CI today.
-			'svelte/require-each-key': 'warn',
-			// Svelte 5 migration advice, not a defect.
-			'svelte/prefer-svelte-reactivity': 'warn',
+			// An unkeyed each block reuses DOM nodes across items, which shows
+			// the wrong row's state after a reorder. Key by a unique record id;
+			// fall back to the index only for static lists.
+			'svelte/require-each-key': 'error',
+			// A plain Map or Set in a component is fine when it is never
+			// rendered (idempotency caches, local scratch); say so with a
+			// disable comment and a reason so the choice is deliberate.
+			'svelte/prefer-svelte-reactivity': 'error',
 			// A mustache holding a string with an escape sequence is not useless:
 			// written as a plain attribute the \n would become a literal backslash-n.
 			'svelte/no-useless-mustaches': ['error', { ignoreStringEscape: true }],
@@ -51,7 +52,9 @@ export default ts.config(
 				'error',
 				{ argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }
 			],
-			'@typescript-eslint/no-explicit-any': 'warn',
+			// API responses are decoded into named types; `any` would let an
+			// unverified field reach the screen or a money calculation unchecked.
+			'@typescript-eslint/no-explicit-any': 'error',
 			eqeqeq: ['error', 'always', { null: 'ignore' }],
 			'no-console': ['warn', { allow: ['warn', 'error'] }]
 		}

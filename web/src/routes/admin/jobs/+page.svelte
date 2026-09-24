@@ -1,21 +1,34 @@
 <script lang="ts">
-	import { checkedJSON, publicError, record, rows } from '$lib/api/reliable';
+	import { checkedJSON, publicError, record, rows, text } from '$lib/api/reliable';
 	let error = $state('');
 	import { onMount } from 'svelte';
 	import { idempotencyKey } from '$lib/api/client';
-	import { adminPost } from '$lib/admin-client';
+	import { adminPost, commandPreview } from '$lib/admin-client';
 	let actionKey = '';
 	import ProtectedActionDialog from '$lib/components/ProtectedActionDialog.svelte';
-	let jobs = $state<any[]>([]),
+	type Job = { id: number; kind: string; state: string; queue: string; attempt: number; max_attempts: number };
+	function job(value: unknown): Job {
+		const item = record(value);
+		if (![item.id, item.attempt, item.max_attempts].every(Number.isSafeInteger)) throw new Error('Incomplete job');
+		return {
+			id: Number(item.id),
+			kind: text(item.kind),
+			state: text(item.state),
+			queue: text(item.queue),
+			attempt: Number(item.attempt),
+			max_attempts: Number(item.max_attempts)
+		};
+	}
+	let jobs = $state<Job[]>([]),
 		message = $state(''),
 		loading = $state(true),
-		selected = $state<any>(null),
+		selected = $state<Job | null>(null),
 		dialogOpen = $state(false);
 	async function load() {
 		loading = true;
 		error = '';
 		try {
-			jobs = await checkedJSON('/api/v1/ops/jobs', rows('jobs', record));
+			jobs = await checkedJSON('/api/v1/ops/jobs', rows('jobs', job));
 		} catch (cause) {
 			error = publicError(cause, 'background jobs');
 		} finally {
@@ -23,6 +36,7 @@
 		}
 	}
 	function input(reason: string) {
+		if (!selected) throw new Error('Choose a job first.');
 		return {
 			command_type: 'retry_job',
 			target_type: 'job',
@@ -32,11 +46,9 @@
 		};
 	}
 	async function preview(reason: string) {
-		const body = await adminPost('/api/v1/ops/commands/preview', input(reason));
-		if (typeof body.command?.impact_preview?.effect !== 'string')
-			throw new Error('The impact preview could not be verified.');
+		const { impact_preview: impact } = commandPreview(await adminPost('/api/v1/ops/commands/preview', input(reason)));
 		actionKey = idempotencyKey();
-		return body.command.impact_preview.effect;
+		return impact.effect;
 	}
 	async function confirm(reason: string) {
 		actionKey ||= idempotencyKey();
@@ -61,7 +73,7 @@
 	{#if message}<p class="notice" role="status">{message}</p>{/if}{#if error}<section role="alert">
 			<p class="error">{error}</p>
 			<button type="button" onclick={load}>Try again</button>
-		</section>{:else if loading}<p role="status">Loading jobs…</p>{:else}{#each jobs as job}<article>
+		</section>{:else if loading}<p role="status">Loading jobs…</p>{:else}{#each jobs as job (job.id)}<article>
 				<header><strong>{job.kind}</strong><span class="status">{job.state}</span></header>
 				<p>{job.queue} · attempt {job.attempt} of {job.max_attempts}</p>
 				<code>Job {job.id}</code>{#if ['retryable', 'discarded', 'cancelled'].includes(job.state)}<button

@@ -106,18 +106,18 @@ type Drawdown struct {
 	State                    string                     `json:"state"`
 	ReservationID            string                     `json:"reservation_id"`
 	ObligationID             string                     `json:"obligation_id,omitempty"`
-	BuyerConfirmedAt         time.Time                  `json:"buyer_confirmed_at,omitempty"`
+	BuyerConfirmedAt         time.Time                  `json:"buyer_confirmed_at,omitzero"`
 	ReleaseActorID           string                     `json:"release_actor_id,omitempty"`
 	DeliveryMethod           string                     `json:"delivery_method,omitempty"`
 	ReleaseNotes             string                     `json:"release_notes,omitempty"`
 	ReleaseEvidenceReference string                     `json:"release_evidence_reference,omitempty"`
-	ReleasedAt               time.Time                  `json:"released_at,omitempty"`
+	ReleasedAt               time.Time                  `json:"released_at,omitzero"`
 	ReceiptState             string                     `json:"receipt_state,omitempty"`
 	ReceiptActorID           string                     `json:"receipt_actor_id,omitempty"`
 	ReceiptIssueReason       string                     `json:"receipt_issue_reason,omitempty"`
 	ReceiptDisputeID         string                     `json:"receipt_dispute_id,omitempty"`
-	ReceiptAt                time.Time                  `json:"receipt_at,omitempty"`
-	ActivatedAt              time.Time                  `json:"activated_at,omitempty"`
+	ReceiptAt                time.Time                  `json:"receipt_at,omitzero"`
+	ActivatedAt              time.Time                  `json:"activated_at,omitzero"`
 	CreatedAt                time.Time                  `json:"created_at"`
 }
 type Reservation struct {
@@ -371,10 +371,12 @@ func (s *Store) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Reservatio
 		return Drawdown{}, Reservation{}, TradeLine{}, errors.New("trade line not found")
 	}
 	if s.maxDrawdownsPerLineDay > 0 {
-		today := s.now().UTC().Format("2006-01-02")
+		// The cap is per Lagos calendar day, matching the database trigger
+		// that enforces it; a UTC day would roll over an hour early.
+		today := lagosDate(s.now())
 		count := 0
 		for _, drawdownID := range s.byLine[line.ID] {
-			if existing := s.drawdowns[drawdownID]; existing != nil && existing.CreatedAt.UTC().Format("2006-01-02") == today {
+			if existing := s.drawdowns[drawdownID]; existing != nil && lagosDate(existing.CreatedAt) == today {
 				count++
 			}
 		}
@@ -397,7 +399,7 @@ func (s *Store) ReserveDrawdown(input CreateDrawdownInput) (Drawdown, Reservatio
 		return Drawdown{}, Reservation{}, TradeLine{}, errors.New("reservation expiry must be in the future")
 	}
 	if strings.TrimSpace(input.DueDate) == "" {
-		input.DueDate = s.now().AddDate(0, 1, 0).Format("2006-01-02")
+		input.DueDate = s.now().In(lagosLocation()).AddDate(0, 1, 0).Format("2006-01-02")
 	}
 	due, err := time.Parse("2006-01-02", input.DueDate)
 	if err != nil {
@@ -958,3 +960,15 @@ func (s *Store) ApplyObligationDelta(obligationID string, delta ledger.Money, ap
 
 // SetLegalReader is configured before serving requests.
 func (s *Store) SetLegalReader(reader legalpublication.Reader) { s.legalReader = reader }
+
+// lagosLocation is the business calendar for daily limits and default dates.
+func lagosLocation() *time.Location {
+	location, err := time.LoadLocation("Africa/Lagos")
+	if err != nil {
+		// Lagos has observed WAT (UTC+1) without daylight saving since 1919.
+		return time.FixedZone("WAT", 60*60)
+	}
+	return location
+}
+
+func lagosDate(t time.Time) string { return t.In(lagosLocation()).Format("2006-01-02") }

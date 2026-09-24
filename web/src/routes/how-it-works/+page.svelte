@@ -19,7 +19,7 @@
 	<section class="network-section">
 		<h2>Four steps, every time.</h2>
 		<div class="network-cards four">
-			{#each tradeSteps as [title, body], index}<article>
+			{#each tradeSteps as [title, body], index (index)}<article>
 					<span class="eyebrow">0{index + 1}</span>
 					<h3>{title}</h3>
 					<p>{body}</p>

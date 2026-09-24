@@ -14,7 +14,7 @@
 	let faqSchema = $derived({
 		'@context': 'https://schema.org',
 		'@type': 'FAQPage',
-		mainEntity: article.faq.map((item: any) => ({
+		mainEntity: article.faq.map((item) => ({
 			'@type': 'Question',
 			name: item.question,
 			acceptedAnswer: { '@type': 'Answer', text: item.answer }
@@ -51,11 +51,11 @@
 		<p class="lede">{article.intro}</p>
 		<div class="byline"><span>Updated {updatedDate}</span><span>{article.readingMinutes} minute read</span></div>
 	</header>
-	{#each article.sections as section, index}
+	{#each article.sections as section, index (index)}
 		<section>
 			<h2>{section.heading}</h2>
-			{#each section.paragraphs as paragraph}<p>{paragraph}</p>{/each}{#if section.points}<ul>
-					{#each section.points as point}<li>{point}</li>{/each}
+			{#each section.paragraphs as paragraph, i (i)}<p>{paragraph}</p>{/each}{#if section.points}<ul>
+					{#each section.points as point, i (i)}<li>{point}</li>{/each}
 				</ul>{/if}
 		</section>
 		{#if index === 1 || index === 3}
@@ -95,7 +95,7 @@
 	<section class="faq">
 		<p class="eyebrow">Questions people ask</p>
 		<h2>Frequently asked questions</h2>
-		{#each article.faq as item}<details>
+		{#each article.faq as item, i (i)}<details>
 				<summary>{item.question}</summary>
 				<p>{item.answer}</p>
 			</details>{/each}
@@ -103,7 +103,7 @@
 	{#if article.sources.length}<section class="sources">
 			<h2>Further reading</h2>
 			<ul>
-				{#each article.sources as source}<li>
+				{#each article.sources as source, i (i)}<li>
 						<a href={source.url} rel="noreferrer">{source.name}</a><span>{source.note}</span>
 					</li>{/each}
 			</ul>
@@ -122,7 +122,7 @@
 	<p class="eyebrow">Keep learning</p>
 	<h2>Related guides</h2>
 	<div>
-		{#each article.related as item}<a href={`/blog/${item.slug}`}
+		{#each article.related as item (item.slug)}<a href={`/blog/${item.slug}`}
 				><span>{item.category}</span><strong>{item.title}</strong><b>Read guide →</b></a
 			>{/each}
 	</div>

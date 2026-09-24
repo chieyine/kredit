@@ -57,7 +57,7 @@ func (s *Server) updateNotificationPreferences(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		status := 400
 		code := "notification_preference_invalid"
-		if strings.Contains(err.Error(), "version") {
+		if errors.Is(err, notifications.ErrPreferenceVersionConflict) {
 			status = 409
 			code = "notification_preference_conflict"
 		}

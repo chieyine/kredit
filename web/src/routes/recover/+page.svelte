@@ -38,7 +38,7 @@
 	}
 	async function start() {
 		const data = await post('/api/v1/account-recovery/requests', { identifier, channel });
-		if (data?.development_request_id) requestID = data.development_request_id;
+		if (typeof data?.development_request_id === 'string') requestID = data.development_request_id;
 	}
 	async function addRecoveryCode() {
 		const data = await post(`/api/v1/account-recovery/requests/${encodeURIComponent(requestID)}/evidence`, {
@@ -54,8 +54,12 @@
 			purpose: 'recovery'
 		});
 		if (data) {
+			if (typeof data.challenge_id !== 'string' || !data.challenge_id) {
+				error = 'We could not confirm the code was sent. Try again.';
+				return;
+			}
 			challengeID = data.challenge_id;
-			contactCode = data.development_code ?? '';
+			contactCode = typeof data.development_code === 'string' ? data.development_code : '';
 		}
 	}
 	function changeContact() {

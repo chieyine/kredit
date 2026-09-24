@@ -4,7 +4,7 @@
 	import { exactKobo, formatKobo, sumKobo, type KoboValue } from '$lib/money';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
 	import { checkedJSON, LatestRequest, record, rows, publicError } from '$lib/api/reliable';
-	import { organization, kobo, paymentRow } from '$lib/records';
+	import { organization, kobo, paymentRow, type PaymentRow } from '$lib/records';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import ShareActions from '$lib/components/ShareActions.svelte';
 	type Organization = { id: string; legal_name: string; trading_name?: string };
@@ -42,7 +42,7 @@
 	let summary = $state<Summary | null>(null);
 	let buckets = $state<Record<string, KoboValue>>({});
 	let fees = $state<{ total_fees_kobo: KoboValue } | null>(null);
-	let payments = $state<any[]>([]);
+	let payments = $state<PaymentRow[]>([]);
 	let enterprise = $state<EnterpriseReport | null>(null);
 	let sharePeriod = $state('today');
 	let loading = $state(true);
@@ -66,9 +66,7 @@
 	const receivedRate = $derived(percent(paidTotal, trackedValue));
 	const overdueShare = $derived(percent(summary?.overdue_kobo, summary?.outstanding_kobo));
 	const recognizedPayments = $derived(
-		payments.filter((payment) =>
-			['recognized', 'confirmed', 'paid'].includes(String(payment.state ?? payment.status ?? '').toLowerCase())
-		)
+		payments.filter((payment) => ['recognized', 'confirmed', 'paid'].includes(payment.state.toLowerCase()))
 	);
 	const averagePayment = $derived.by(() => {
 		if (!recognizedPayments.length) return null;
@@ -127,17 +125,20 @@
 						const data = record(value);
 						const h = record(data.portfolio_health);
 						const rawB = Array.isArray(data.branch_exposures) ? data.branch_exposures : [];
-						const branches: BranchExposure[] = rawB.map((b: any) => ({
-							branch_id: String(b.branch_id ?? ''),
-							branch_name: String(b.branch_name ?? ''),
-							territory: String(b.territory ?? ''),
-							total_outstanding_kobo: kobo(b.total_outstanding_kobo),
-							ageing_buckets: Object.fromEntries(
-								Object.entries(record(b.ageing_buckets ?? {})).map(([k, v]) => [k, kobo(v)])
-							),
-							customer_count: Number(b.customer_count ?? 0),
-							overdue_count: Number(b.overdue_count ?? 0)
-						}));
+						const branches: BranchExposure[] = rawB.map((value: unknown) => {
+							const b = record(value);
+							return {
+								branch_id: String(b.branch_id ?? ''),
+								branch_name: String(b.branch_name ?? ''),
+								territory: String(b.territory ?? ''),
+								total_outstanding_kobo: kobo(b.total_outstanding_kobo),
+								ageing_buckets: Object.fromEntries(
+									Object.entries(record(b.ageing_buckets ?? {})).map(([k, v]) => [k, kobo(v)])
+								),
+								customer_count: Number(b.customer_count ?? 0),
+								overdue_count: Number(b.overdue_count ?? 0)
+							};
+						});
 						return {
 							organization_id: String(data.organization_id ?? ''),
 							generated_at: String(data.generated_at ?? ''),
@@ -198,7 +199,7 @@
 	const shared = $derived.by(() => {
 		const start = lagosDayStart(sharePeriod === 'today' ? 0 : 6);
 		const received = recognizedPayments.filter((payment) => {
-			const at = Date.parse(payment.paid_at ?? payment.created_at ?? '');
+			const at = Date.parse(payment.paid_at);
 			return Number.isFinite(at) && at >= start && at <= Date.now();
 		});
 		return { count: received.length, total: sumKobo(received.map((payment) => payment.amount_kobo)) };
@@ -226,13 +227,16 @@
 		exporting = true;
 		exportKey ||= idempotencyKey();
 		try {
-			const response = await fetch(`/api/v1/organizations/${organizationID}/reports/exports?format=csv`, {
-				method: 'POST',
-				signal: AbortSignal.timeout(20000),
-				credentials: 'include',
-				redirect: 'error',
-				headers: { ...csrfHeaders(), 'Idempotency-Key': exportKey }
-			});
+			const response = await fetch(
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/reports/exports?format=csv`,
+				{
+					method: 'POST',
+					signal: AbortSignal.timeout(20000),
+					credentials: 'include',
+					redirect: 'error',
+					headers: { ...csrfHeaders(), 'Idempotency-Key': exportKey }
+				}
+			);
 			if (!response.ok) {
 				error = 'We could not create that file. Please try again.';
 				return;
@@ -258,12 +262,15 @@
 		if (exportingEnterprise || loading || !organizationID) return;
 		exportingEnterprise = true;
 		try {
-			const response = await fetch(`/api/v1/organizations/${organizationID}/reports/enterprise/exports`, {
-				method: 'POST',
-				signal: AbortSignal.timeout(20000),
-				credentials: 'include',
-				headers: { ...csrfHeaders(), 'Idempotency-Key': idempotencyKey() }
-			});
+			const response = await fetch(
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/reports/enterprise/exports`,
+				{
+					method: 'POST',
+					signal: AbortSignal.timeout(20000),
+					credentials: 'include',
+					headers: { ...csrfHeaders(), 'Idempotency-Key': idempotencyKey() }
+				}
+			);
 			if (!response.ok) {
 				error = 'Could not generate enterprise report. Please try again.';
 				return;
@@ -307,7 +314,7 @@
 				disabled={exporting || exportingEnterprise}
 				bind:value={organizationID}
 				onchange={() => chooseWorkspace(organizationID)}
-				>{#each organizations as organization}<option value={organization.id}
+				>{#each organizations as organization (organization.id)}<option value={organization.id}
 						>{organization.trading_name || organization.legal_name}</option
 					>{/each}</select
 			></label
@@ -434,7 +441,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each enterprise.branch_exposures as branch}
+								{#each enterprise.branch_exposures as branch, i (i)}
 									<tr>
 										<td><strong>{branch.branch_name || branch.branch_id}</strong></td>
 										<td>{branch.territory || 'National'}</td>
@@ -457,7 +464,7 @@
 			<h2>How old is the money you are owed?</h2>
 			<p>The longer a debt sits, the harder it usually gets to collect. Chase the old ones first.</p>
 			<dl>
-				{#each Object.entries(buckets) as [bucket, amount]}<div>
+				{#each Object.entries(buckets) as [bucket, amount], i (i)}<div>
 						<dt>{bucketName(bucket)}</dt>
 						<dd>{money(amount)}</dd>
 					</div>{/each}

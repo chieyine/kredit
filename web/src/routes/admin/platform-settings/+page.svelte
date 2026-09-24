@@ -4,9 +4,9 @@
 	import OwnerDialog from '$lib/components/OwnerDialog.svelte';
 	import PlatformSettingHistory from '$lib/components/PlatformSettingHistory.svelte';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { record, text } from '$lib/api/reliable';
+	import { record, rows, text } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
-	import { adminGet, localTime } from '$lib/admin-client';
+	import { adminGet, adminRoles, errorMessage, governanceMode, localTime } from '$lib/admin-client';
 
 	import type { Setting, Governance, SettingHistory } from '$lib/admin/platform-settings';
 
@@ -68,7 +68,7 @@
 	}
 
 	let editingSetting: Setting | null = $state(null);
-	let editDraftValue: any = $state(null);
+	let editDraftValue: unknown = $state(null);
 	let editReason = $state('');
 	let previewDiffModal = $state(false);
 
@@ -102,11 +102,12 @@
 				adminGet('/api/v1/ops/capabilities'),
 				adminGet('/api/v1/ops/platform-settings')
 			]);
-			if (!Array.isArray(caps.roles) || caps.roles.some((role: unknown) => typeof role !== 'string'))
-				throw new Error('Admin permissions could not be verified.');
-			isOwner = caps.roles.includes('platform_owner');
-			if (!Array.isArray(res.settings) || !['solo_owner', 'delegated_team'].includes(res.governance?.mode))
+			const roles = adminRoles(caps);
+			isOwner = roles.includes('platform_owner');
+			const mode = governanceMode(res);
+			if (!Array.isArray(res.settings) || !mode)
 				throw new Error('Settings and approval rules could not be verified. Try again.');
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this function, never rendered
 			const keys = new Set<string>();
 			settings = res.settings.map((value: unknown) => {
 				const item = record(value);
@@ -139,15 +140,19 @@
 					openEdit(target);
 				}
 			}
-			if (res.governance) {
-				governance = res.governance;
-				newGovMode = res.governance?.mode;
-			}
-		} catch (e: any) {
+			const verifiedGovernance = record(res.governance);
+			governance = {
+				mode,
+				updated_at: typeof verifiedGovernance.updated_at === 'string' ? verifiedGovernance.updated_at : '',
+				updated_by: typeof verifiedGovernance.updated_by === 'string' ? verifiedGovernance.updated_by : undefined,
+				reason: typeof verifiedGovernance.reason === 'string' ? verifiedGovernance.reason : ''
+			};
+			newGovMode = mode;
+		} catch (e) {
 			governance = null;
 			isOwner = false;
 			settings = [];
-			error = e.message || 'We could not open the settings. Try again.';
+			error = errorMessage(e, 'We could not open the settings. Try again.');
 		} finally {
 			loading = false;
 		}
@@ -223,8 +228,8 @@
 			clearConnector();
 			editingSetting = null;
 			await load();
-		} catch (e: any) {
-			error = e.message || 'That change was not saved.';
+		} catch (e) {
+			error = errorMessage(e, 'That change was not saved.');
 		} finally {
 			busy = false;
 		}
@@ -239,11 +244,24 @@
 		try {
 			const res = await adminGet(`/api/v1/ops/platform-settings/history?key=${encodeURIComponent(key)}`);
 			if (generation !== historyGeneration || historySettingKey !== key) return;
-			if (!Array.isArray(res.history)) throw new Error('History could not be verified.');
-			historyEntries = res.history;
-		} catch (e: any) {
+			historyEntries = rows('history', (value): SettingHistory => {
+				const entry = record(value);
+				if (!Number.isSafeInteger(entry.version)) throw new Error('History could not be verified.');
+				return {
+					id: text(entry.id),
+					key: text(entry.key),
+					old_value: entry.old_value,
+					new_value: entry.new_value,
+					version: Number(entry.version),
+					action: text(entry.action),
+					actor_id: typeof entry.actor_id === 'string' ? entry.actor_id : undefined,
+					reason: text(entry.reason),
+					recorded_at: text(entry.recorded_at)
+				};
+			})(res);
+		} catch (e) {
 			if (generation === historyGeneration && historySettingKey === key)
-				historyError = e.message || 'We could not open the history for this setting.';
+				historyError = errorMessage(e, 'We could not open the history for this setting.');
 		} finally {
 			if (generation === historyGeneration) historyLoading = false;
 		}
@@ -274,8 +292,8 @@
 			governanceModal = false;
 			govReason = '';
 			await load();
-		} catch (e: any) {
-			error = e.message || 'That change was not saved.';
+		} catch (e) {
+			error = errorMessage(e, 'That change was not saved.');
 		} finally {
 			busy = false;
 		}
@@ -313,8 +331,8 @@
 			transferReason = '';
 			transferConfirmed = false;
 			await load();
-		} catch (e: any) {
-			error = e.message || 'Ownership was not handed over.';
+		} catch (e) {
+			error = errorMessage(e, 'Ownership was not handed over.');
 		} finally {
 			busy = false;
 		}
@@ -396,7 +414,7 @@
 			<input type="search" placeholder="Search settings" bind:value={searchQuery} aria-label="Search settings" />
 		</div>
 		<div class="category-tabs">
-			{#each categories as cat}
+			{#each categories as cat (cat.id)}
 				<button
 					class="tab-btn {selectedCategory === cat.id ? 'active' : ''}"
 					onclick={() => (selectedCategory = cat.id)}
@@ -734,7 +752,7 @@
 					{#if editingSetting.requires_restart}
 						<div class="diff-preview">
 							<h3>Fields being changed</h3>
-							{#each editingSetting.connection_fields || [] as field}
+							{#each editingSetting.connection_fields || [] as field (field.key)}
 								{#if field.kind === 'password' ? clearRuntimeSecrets || runtimeDraft[field.key] !== '' : runtimeDraft[field.key] !== editingSetting.connection_values?.[field.key]}
 									<p>
 										<strong>{field.label}:</strong>

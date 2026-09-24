@@ -37,7 +37,7 @@ type RecoveryRequest struct {
 	IndependentFactorCount int               `json:"independent_factor_count"`
 	ReviewerUserID         string            `json:"reviewer_user_id,omitempty"`
 	ReviewReason           string            `json:"review_reason,omitempty"`
-	CoolingOffUntil        time.Time         `json:"cooling_off_until,omitempty"`
+	CoolingOffUntil        time.Time         `json:"cooling_off_until,omitzero"`
 	ExpiresAt              time.Time         `json:"expires_at"`
 	Version                int64             `json:"version"`
 	CreatedAt              time.Time         `json:"created_at"`
@@ -49,7 +49,7 @@ type PrivacyRequest struct {
 	OrganizationID   string    `json:"organization_id,omitempty"`
 	RequestType      string    `json:"request_type"`
 	State            string    `json:"state"`
-	IdentityVerified time.Time `json:"identity_verified_at,omitempty"`
+	IdentityVerified time.Time `json:"identity_verified_at,omitzero"`
 	DueAt            time.Time `json:"due_at"`
 	Details          string    `json:"details,omitempty"`
 	DecisionReason   string    `json:"decision_reason,omitempty"`
@@ -59,9 +59,9 @@ type PrivacyRequest struct {
 	SecondApprovedBy string    `json:"second_approved_by,omitempty"`
 	Version          int64     `json:"version"`
 	CreatedAt        time.Time `json:"created_at"`
-	CompletedAt      time.Time `json:"completed_at,omitempty"`
+	CompletedAt      time.Time `json:"completed_at,omitzero"`
 	ExportReference  string    `json:"export_reference,omitempty"`
-	ExportExpiresAt  time.Time `json:"export_expires_at,omitempty"`
+	ExportExpiresAt  time.Time `json:"export_expires_at,omitzero"`
 	CompletionReason string    `json:"completion_reason,omitempty"`
 }
 

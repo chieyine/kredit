@@ -1,6 +1,15 @@
 <script lang="ts">
+	import type { KoboValue } from '$lib/money';
 	import WorkspacePage from '$lib/components/WorkspacePage.svelte';
 	import { readableDate } from '$lib/datetime';
+	type OverdueSale = {
+		id: string;
+		buyer_legal_name?: string;
+		description?: string;
+		due_date?: string;
+		state?: string;
+		amount_kobo?: KoboValue;
+	};
 </script>
 
 <WorkspacePage
@@ -12,7 +21,7 @@
 	emptyTitle="Nothing is overdue"
 	emptyCopy="A sale appears here once its payment day has passed."
 	searchPlaceholder="Customer or goods"
-	rowTitle={(sale) => sale.buyer_legal_name || 'Customer'}
+	rowTitle={(sale: OverdueSale) => sale.buyer_legal_name || 'Customer'}
 	rowDetail={(sale) =>
 		[sale.description, sale.due_date ? `Payment day was ${readableDate(sale.due_date)}` : '']
 			.filter(Boolean)

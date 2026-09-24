@@ -72,8 +72,7 @@ func TestIndependentApprovalCannotBeBypassedOrReusedAfterRevision(t *testing.T) 
 	}
 	denied := func(e error) {
 		t.Helper()
-		var pg *pgconn.PgError
-		if !errors.As(e, &pg) || pg.Code != "42501" {
+		if !credit.NeedsIndependentApproval(e) {
 			t.Fatalf("expected approval enforcement, got %v", e)
 		}
 	}

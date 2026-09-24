@@ -7,7 +7,16 @@
 	import { kobo } from '$lib/records';
 	import { localTime } from '$lib/admin-client';
 	import { exactKobo, formatKobo } from '$lib/money';
-	let changes: any[] = $state([]),
+	type ProposedDay = { item_id: string; due_at: string; old_due_at: string; unpaid_kobo: bigint };
+	type DateChange = {
+		id: string;
+		obligation_id: string;
+		state: string;
+		reason: string;
+		expires_at: string;
+		dates: ProposedDay[];
+	};
+	let changes: DateChange[] = $state([]),
 		busy = $state(false),
 		loading = $state(true),
 		error = $state(''),
@@ -16,8 +25,9 @@
 		offset = $state(0),
 		more = $state(false);
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
-	function changeRecord(value: unknown) {
+	function changeRecord(value: unknown): DateChange {
 		const change = record(value);
 		for (const key of ['id', 'obligation_id', 'state', 'reason', 'expires_at'])
 			if (!text(change[key])) throw new Error('Incomplete date change');
@@ -27,6 +37,7 @@
 			!Array.isArray(change.dates)
 		)
 			throw new Error('Incomplete date evidence');
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this function, never rendered
 		const items = new Map<string, Record<string, unknown>>();
 		for (const value of change.items) {
 			const item = record(value),
@@ -37,8 +48,9 @@
 			kobo(item.allocated_kobo);
 			items.set(id, item);
 		}
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this function, never rendered
 		const seen = new Set<string>();
-		const dates = change.dates.map((value) => {
+		const dates = change.dates.map((value): ProposedDay => {
 			const date = record(value),
 				id = text(date.item_id),
 				item = items.get(id);
@@ -47,10 +59,17 @@
 			seen.add(id);
 			const unpaid = exactKobo(kobo(item.principal_due_kobo))! - exactKobo(kobo(item.allocated_kobo))!;
 			if (unpaid < 0n) throw new Error('Invalid unpaid balance');
-			return { ...date, unpaid_kobo: unpaid, old_due_at: item.due_at };
+			return { item_id: id, due_at: text(date.due_at), old_due_at: text(item.due_at), unpaid_kobo: unpaid };
 		});
 		if (!dates.length) throw new Error('Missing proposed dates');
-		return { ...change, dates };
+		return {
+			id: text(change.id),
+			obligation_id: text(change.obligation_id),
+			state: text(change.state),
+			reason: text(change.reason),
+			expires_at: text(change.expires_at),
+			dates
+		};
 	}
 	async function load() {
 		const read = reads.begin();
@@ -74,7 +93,7 @@
 			if (read.current()) loading = false;
 		}
 	}
-	async function decide(change: any, action: 'accept' | 'reject') {
+	async function decide(change: DateChange, action: 'accept' | 'reject') {
 		if (busy || loading || change.state !== 'awaiting_buyer' || (action === 'accept' && !consents[change.id])) return;
 		busy = true;
 		error = '';
@@ -120,13 +139,13 @@
 	</p>
 	{#if error}<p role="alert">{error}</p>{/if}{#if message}<p role="status">
 			{message}
-		</p>{/if}{#each changes as c}<article>
+		</p>{/if}{#each changes as c (c.id)}<article>
 			<h2>{c.state.replaceAll('_', ' ')}</h2>
 			<p>{c.reason}</p>
 			<p>Reference: {c.obligation_id} · Expires {localTime(c.expires_at)}</p>
 			<table>
 				<thead><tr><th>Money still unpaid</th><th>Old date</th><th>New date being asked for</th></tr></thead><tbody
-					>{#each c.dates as d}<tr
+					>{#each c.dates as d (d.item_id)}<tr
 							><td>{formatKobo(d.unpaid_kobo)}</td><td>{localTime(d.old_due_at)}</td><td>{localTime(d.due_at)}</td></tr
 						>{/each}</tbody
 				>

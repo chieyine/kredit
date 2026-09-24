@@ -3,13 +3,24 @@
 	import { idempotencyKey } from '$lib/api/client';
 	import { adminPost } from '$lib/admin-client';
 	import { checkedJSON, record, publicError } from '$lib/api/reliable';
-	let p: any = null;
+	type Channel = 'whatsapp' | 'email' | 'sms';
+	type Preferences = {
+		preferred_channel: Channel;
+		fallback_channel: Channel;
+		payment_reminders_enabled: boolean;
+		product_updates_enabled: boolean;
+		quiet_start_hour: number;
+		quiet_end_hour: number;
+		timezone: string;
+		version: number;
+	};
+	let p: Preferences | null = null;
 	let intent: { payload: string; key: string } | null = null;
 	let message = '',
 		error = '',
 		busy = false,
 		loading = true;
-	function preferences(value: unknown) {
+	function preferences(value: unknown): Preferences {
 		const row = record(record(value).preferences),
 			channels = ['whatsapp', 'email', 'sms'];
 		if (
@@ -28,7 +39,16 @@
 				throw new Error('Invalid quiet hours');
 		new Intl.DateTimeFormat('en-NG', { timeZone: row.timezone as string }).format();
 		if (row.preferred_channel === row.fallback_channel) throw new Error('Choose different message channels');
-		return row;
+		return {
+			preferred_channel: row.preferred_channel as Channel,
+			fallback_channel: row.fallback_channel as Channel,
+			payment_reminders_enabled: row.payment_reminders_enabled,
+			product_updates_enabled: row.product_updates_enabled,
+			quiet_start_hour: Number(row.quiet_start_hour),
+			quiet_end_hour: Number(row.quiet_end_hour),
+			timezone: row.timezone,
+			version: Number(row.version)
+		};
 	}
 	async function load() {
 		loading = true;

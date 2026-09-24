@@ -159,7 +159,7 @@
 		<button disabled={busy} onclick={load}>Refresh records</button>{/if}
 	<label
 		>Business<select bind:value={organization} disabled={busy || loading} onchange={() => chooseWorkspace(organization)}
-			>{#each businesses as b}<option value={b.id}>{b.name}</option>{/each}</select
+			>{#each businesses as b (b.id)}<option value={b.id}>{b.name}</option>{/each}</select
 		></label
 	>
 	{#if loading}<p role="status">Loading your network…</p>{:else if !organization && !error}<p>
@@ -197,7 +197,7 @@
 					</fieldset>
 				</form>{/if}
 			{#if !branches.length}<p>No branches yet. You can still manage customers without a branch.</p>{/if}
-			{#each branches as b}<article class="card">
+			{#each branches as b (b.id)}<article class="card">
 					<h3>{b.name}</h3>
 					{#if canManage}<fieldset disabled={busy}>
 							<label>Branch name for {b.name}<input bind:value={b.name} maxlength="100" /></label><label
@@ -213,7 +213,7 @@
 			<h2>Customer assignments</h2>
 			<label
 				>Filter by branch<select bind:value={filter}
-					><option value="">All branches</option>{#each branches as b}<option value={b.id}>{b.name}</option
+					><option value="">All branches</option>{#each branches as b (b.id)}<option value={b.id}>{b.name}</option
 						>{/each}</select
 				></label
 			>
@@ -223,7 +223,7 @@
 						>View invitations</a
 					>.
 				</p>{/if}
-			{#each visible as p}<article class="card">
+			{#each visible as p (p.business_id)}<article class="card">
 					<h3>
 						<a href={`/workspace/partners/customers/${p.business_id}?organization=${encodeURIComponent(organization)}`}
 							>{p.name}</a
@@ -239,7 +239,7 @@
 						<label
 							>Branch for {p.name}<select bind:value={p.branch_id}
 								><option value="">No branch assigned</option
-								>{#each branches.filter((b) => b.active || b.id === p.branch_id) as b}<option
+								>{#each branches.filter((b) => b.active || b.id === p.branch_id) as b (b.id)}<option
 										value={b.id}
 										disabled={!b.active}>{b.name}{b.active ? '' : ' (closed)'}</option
 									>{/each}</select
@@ -249,7 +249,7 @@
 								><option value="">No manager assigned</option
 								>{#if p.manager_id && !managers.some((m) => m.id === p.manager_id)}<option value={p.manager_id} disabled
 										>Previous manager unavailable</option
-									>{/if}{#each managers as m}<option value={m.id}>{m.name}</option>{/each}</select
+									>{/if}{#each managers as m (m.id)}<option value={m.id}>{m.name}</option>{/each}</select
 							></label
 						>{#if canManage}<button onclick={() => assign(p)}>Save assignment for {p.name}</button>{/if}
 					</fieldset>

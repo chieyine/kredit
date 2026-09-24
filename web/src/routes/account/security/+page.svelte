@@ -169,7 +169,7 @@
 			<h2>Write these backup codes down now</h2>
 			<p>Keep them somewhere safe and private. Each code works once, and we cannot show them to you again.</p>
 			<ul>
-				{#each recoveryCodes as recoveryCode}<li><code>{recoveryCode}</code></li>{/each}
+				{#each recoveryCodes as recoveryCode, i (i)}<li><code>{recoveryCode}</code></li>{/each}
 			</ul>
 		</section>{/if}
 </main>

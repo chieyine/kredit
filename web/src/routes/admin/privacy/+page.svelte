@@ -1,6 +1,6 @@
 <script lang="ts">
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
-	import { checkedJSON, publicError, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
 	let error = $state('');
 	import { productLabel } from '$lib/product-language';
 	import { onMount } from 'svelte';
@@ -8,22 +8,35 @@
 	import { adminPost } from '$lib/admin-client';
 	let actionKey = '';
 	import ProtectedActionDialog from '$lib/components/ProtectedActionDialog.svelte';
-	let items = $state<any[]>([]),
-		selected = $state<any>(null),
+	type PrivacyRequest = {
+		id: string;
+		request_type: string;
+		state: string;
+		due_at: string;
+		details: string;
+		decided_by: string;
+		version: number;
+	};
+	let items = $state<PrivacyRequest[]>([]),
+		selected = $state<PrivacyRequest | null>(null),
 		decision = $state(''),
 		message = $state(''),
 		dialogOpen = $state(false),
 		loading = $state(true);
-	function privacyRecord(value: unknown) {
+	function privacyRecord(value: unknown): PrivacyRequest {
 		const item = record(value);
-		for (const key of ['id', 'request_type', 'state', 'due_at']) text(item[key]);
-		if (
-			!Number.isSafeInteger(item.version) ||
-			Number(item.version) < 1 ||
-			!Number.isFinite(Date.parse(String(item.due_at)))
-		)
+		const due = text(item.due_at);
+		if (!Number.isSafeInteger(item.version) || Number(item.version) < 1 || !Number.isFinite(Date.parse(due)))
 			throw new Error('Unverified privacy request');
-		return item;
+		return {
+			id: text(item.id),
+			request_type: text(item.request_type),
+			state: text(item.state),
+			due_at: due,
+			details: optionalText(item.details),
+			decided_by: optionalText(item.decided_by),
+			version: Number(item.version)
+		};
 	}
 	async function load() {
 		loading = true;
@@ -36,30 +49,32 @@
 			loading = false;
 		}
 	}
-	function begin(item: any, nextDecision: string) {
+	function begin(item: PrivacyRequest, nextDecision: string) {
 		selected = item;
 		decision = nextDecision;
 		actionKey = '';
 		dialogOpen = true;
 	}
 	async function confirm(reason: string) {
+		if (!selected) throw new Error('Choose a request first.');
+		const target = selected;
 		actionKey ||= idempotencyKey();
 		const completing = decision === 'COMPLETE';
 		const result = await adminPost(
-			`/api/v1/ops/privacy-requests/${selected.id}/${completing ? 'complete' : 'decide'}`,
+			`/api/v1/ops/privacy-requests/${encodeURIComponent(target.id)}/${completing ? 'complete' : 'decide'}`,
 			completing
-				? { decision_reviewer_id: selected.decided_by, expected_version: selected.version, reason }
-				: { decision, reason, expected_version: selected.version },
+				? { decision_reviewer_id: target.decided_by, expected_version: target.version, reason }
+				: { decision, reason, expected_version: target.version },
 			'POST',
 			actionKey
 		);
 		const saved = privacyRecord(record(result).request);
 		if (
-			saved.id !== selected.id ||
+			saved.id !== target.id ||
 			!(completing
 				? saved.state === 'COMPLETED'
 				: saved.state === decision || (decision === 'APPROVED' && saved.state === 'PARTIALLY_APPROVED')) ||
-			Number(saved.version) <= Number(selected.version)
+			saved.version <= target.version
 		)
 			throw new Error('The result could not be confirmed. Check this request before trying again.');
 		message = completing
@@ -85,7 +100,9 @@
 	<VerifyIdentity />{#if message}<p class="notice" role="status">{message}</p>{/if}{#if error}<section role="alert">
 			<p class="error">{error}</p>
 			<button type="button" onclick={load}>Try again</button>
-		</section>{:else if loading}<p role="status">Loading privacy requests…</p>{:else}{#each items as item}<article>
+		</section>{:else if loading}<p role="status">
+			Loading privacy requests…
+		</p>{:else}{#each items as item (item.id)}<article>
 				<header>
 					<strong>{productLabel(item.request_type)}</strong><span class="status">{productLabel(item.state)}</span>
 				</header>

@@ -35,8 +35,8 @@ type Membership struct {
 	Role           access.Role `json:"role"`
 	Status         string      `json:"status"`
 	InvitedBy      string      `json:"invited_by,omitempty"`
-	InvitedAt      time.Time   `json:"invited_at,omitempty"`
-	AcceptedAt     time.Time   `json:"accepted_at,omitempty"`
+	InvitedAt      time.Time   `json:"invited_at,omitzero"`
+	AcceptedAt     time.Time   `json:"accepted_at,omitzero"`
 	CreatedAt      time.Time   `json:"created_at"`
 }
 

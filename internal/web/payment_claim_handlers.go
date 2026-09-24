@@ -95,14 +95,14 @@ func (s *Server) listBuyerPaymentClaims(w http.ResponseWriter, r *http.Request) 
 	if !scopedOK {
 		return
 	}
-	financialRows1, readErr1 := s.runtime.readPaymentClaimsForBuyer(r.Context(), user.ID)
-	if financialReadError(w, readErr1) {
+	financialRows, readErr := s.runtime.readPaymentClaimsForBuyer(r.Context(), user.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
 	if businessID != "" {
-		financialRows1 = purchasingRows(financialRows1, func(item paymentclaims.Claim) bool { return obligations[item.ObligationID] })
+		financialRows = purchasingRows(financialRows, func(item paymentclaims.Claim) bool { return obligations[item.ObligationID] })
 	}
-	writeJSON(w, 200, map[string]any{"payment_claims": financialRows1})
+	writeJSON(w, 200, map[string]any{"payment_claims": financialRows})
 }
 
 func (s *Server) listPaymentClaims(w http.ResponseWriter, r *http.Request) {
@@ -116,11 +116,11 @@ func (s *Server) listPaymentClaims(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	financialRows2, readErr2 := s.runtime.readPaymentClaimsForObligation(db.WithOrganizationContext(r.Context(), orgID), view.Obligation.ID)
-	if financialReadError(w, readErr2) {
+	financialRows, readErr := s.runtime.readPaymentClaimsForObligation(db.WithOrganizationContext(r.Context(), orgID), view.Obligation.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payment_claims": financialRows2})
+	writeJSON(w, 200, map[string]any{"payment_claims": financialRows})
 }
 
 func (s *Server) listOrganizationPaymentClaims(w http.ResponseWriter, r *http.Request) {
@@ -128,11 +128,11 @@ func (s *Server) listOrganizationPaymentClaims(w http.ResponseWriter, r *http.Re
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	financialRows3, readErr3 := s.runtime.readPaymentClaimsForSupplier(r.Context(), orgID)
-	if financialReadError(w, readErr3) {
+	financialRows, readErr := s.runtime.readPaymentClaimsForSupplier(r.Context(), orgID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payment_claims": financialRows3})
+	writeJSON(w, 200, map[string]any{"payment_claims": financialRows})
 }
 
 func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {

@@ -223,6 +223,7 @@ func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) (auth.Sessi
 		organization = identity.OrganizationID
 	}
 	*r = *r.WithContext(db.WithTenantContext(r.Context(), user.ID, organization))
+	noteRequestIdentity(r.Context(), user.ID, session.AuthenticationLevel)
 	return session, user, true
 }
 

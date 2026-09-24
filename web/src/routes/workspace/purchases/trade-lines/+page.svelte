@@ -4,10 +4,10 @@
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, publicError, record, rows } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { tradeLine, tradeStatement, drawdown as drawdownRecord } from '$lib/trade-line-records';
+	import { tradeLine, tradeStatement, drawdown as drawdownRecord, type TradeStatement } from '$lib/trade-line-records';
 	import { formatKobo } from '$lib/money';
 	import { readableDateTime } from '$lib/datetime';
-	let statements: any[] = $state([]),
+	let statements: TradeStatement[] = $state([]),
 		error = $state(''),
 		notice = $state(''),
 		busy = $state(''),
@@ -15,6 +15,7 @@
 	let issueReason: Record<string, string> = $state({});
 	const money = formatKobo;
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
 	const stateLabel = (state: string) =>
 		({
@@ -104,14 +105,14 @@
 	{#if error}<p class="error" role="alert">{error}</p>{/if}{#if notice}<p class="notice" role="status">{notice}</p>{/if}
 	{#if loading}<p role="status">
 			Opening your customer limits…
-		</p>{:else if statements.length}{#each statements as statement}<section class="line">
+		</p>{:else if statements.length}{#each statements as statement, i (i)}<section class="line">
 				<header>
 					<div><span>You can still take</span><strong>{money(statement.line.available_limit_kobo)}</strong></div>
 					<div><span>You already owe</span><strong>{money(statement.line.current_exposure_kobo)}</strong></div>
 					<div><span>Waiting for the goods</span><strong>{money(statement.line.reserved_pending_kobo)}</strong></div>
 				</header>
 				{#if statement.drawdowns.length}<div class="drawdowns">
-						{#each statement.drawdowns as drawdown}<article>
+						{#each statement.drawdowns as drawdown (drawdown.id)}<article>
 								<div class="title">
 									<strong>{money(drawdown.principal_kobo)}</strong><span class="status"
 										>{stateLabel(drawdown.state)}</span

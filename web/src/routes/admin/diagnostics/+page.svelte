@@ -1,18 +1,43 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { checkedJSON, publicError, record, rows } from '$lib/api/reliable';
-	let data: any = null,
-		error = '';
+	import { checkedJSON, optionalNumber, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
+	type Queue = { queue: string; count: number; oldest_seconds: number };
+	type ProviderHealth = { provider: string; total: number; errors: number; oldest_unprocessed_seconds: number };
+	type Diagnostics = {
+		correlation_id: string;
+		integrity: Record<string, unknown>;
+		queues: Queue[];
+		provider: ProviderHealth[];
+	};
+	let data: Diagnostics | null = $state(null),
+		error = $state('');
 	async function load() {
 		data = null;
 		error = '';
 		try {
 			data = await checkedJSON('/api/v1/ops/diagnostics?window_minutes=60', (value) => {
 				const diagnostics = record(record(value).diagnostics);
-				record(diagnostics.integrity);
-				rows('queues', record)(diagnostics);
-				rows('provider', record)(diagnostics);
-				return diagnostics;
+				return {
+					correlation_id: optionalText(diagnostics.correlation_id),
+					integrity: record(diagnostics.integrity),
+					queues: rows('queues', (value): Queue => {
+						const item = record(value);
+						return {
+							queue: text(item.queue),
+							count: optionalNumber(item.count),
+							oldest_seconds: optionalNumber(item.oldest_seconds)
+						};
+					})(diagnostics),
+					provider: rows('provider', (value): ProviderHealth => {
+						const item = record(value);
+						return {
+							provider: text(item.provider),
+							total: optionalNumber(item.total),
+							errors: optionalNumber(item.errors),
+							oldest_unprocessed_seconds: optionalNumber(item.oldest_unprocessed_seconds)
+						};
+					})(diagnostics)
+				};
 			});
 		} catch (cause) {
 			error = publicError(cause, 'system diagnostics');
@@ -35,16 +60,16 @@
 		</section>{:else if !data}<p>Loading diagnostics…</p>{:else}<p>Correlation: <code>{data.correlation_id}</code></p>
 		<h2>Integrity signals</h2>
 		<section>
-			{#each Object.entries(data.integrity) as [name, value]}<article>
+			{#each Object.entries(data.integrity) as [name, value] (name)}<article>
 					<strong>{value}</strong><span>{name.replaceAll('_', ' ')}</span>
 				</article>{/each}
 		</section>
 		<h2>Queues</h2>
-		{#each data.queues as queue}<p>
+		{#each data.queues as queue (queue.queue)}<p>
 				<strong>{queue.queue}</strong> · {queue.count} waiting · oldest {queue.oldest_seconds}s
 			</p>{:else}<p>No queue backlog.</p>{/each}
 		<h2>Providers</h2>
-		{#each data.provider as item}<p>
+		{#each data.provider as item (item.provider)}<p>
 				<strong>{item.provider}</strong> · {item.total} events · {item.errors} errors · oldest unprocessed {item.oldest_unprocessed_seconds}s
 			</p>{:else}<p>No provider activity in this window.</p>{/each}{/if}
 </main>

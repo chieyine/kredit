@@ -154,7 +154,7 @@ func (c *Client) CreateAuthorizationSession(ctx context.Context, in mandates.Aut
 	if !validReference(reference) {
 		return mandates.Mandate{}, errors.New("valid authorization reference is required")
 	}
-	body := map[string]any{"amount": in.AmountCeiling, "type": "recurring-debit", "method": "mandate", "mandate_type": "sweep", "debit_type": "variable", "allow_partial_sweep": c.partial, "description": "Kredit trade credit repayments", "reference": reference, "redirect_url": c.redirectURL, "customer": map[string]string{"id": customer}, "start_date": start.Format("2006-01-02"), "end_date": end.Format("2006-01-02"), "meta": map[string]string{"kredit_business_id": in.BusinessID}}
+	body := map[string]any{"amount": in.AmountCeiling, "type": "recurring-debit", "method": "mandate", "mandate_type": "sweep", "debit_type": "variable", "allow_partial_sweep": c.partial, "description": "Kredit trade credit repayments", "reference": reference, "redirect_url": c.redirectURL, "customer": map[string]string{"id": customer}, "start_date": lagosDate(start), "end_date": lagosDate(end), "meta": map[string]string{"kredit_business_id": in.BusinessID}}
 	var out envelope[mandateData]
 	if err = c.request(ctx, http.MethodPost, "/v2/payments/initiate", body, &out); err != nil {
 		return mandates.Mandate{}, err
@@ -322,6 +322,13 @@ func successfulEnvelope(status string) bool { return status == "successful" || s
 
 func validReference(value string) bool {
 	return value != "" && len(value) <= 256 && strings.TrimSpace(value) == value && value != "." && value != ".." && !strings.ContainsAny(value, "/\\?#\x00\r\n")
+}
+
+// lagosDate names the calendar day in Nigeria, which is how the provider reads
+// mandate start and end dates. The UTC date is still yesterday between 00:00
+// and 01:00 in Lagos.
+func lagosDate(t time.Time) string {
+	return t.In(time.FixedZone("Africa/Lagos", 3600)).Format("2006-01-02")
 }
 
 func parseMandateDate(value string) (time.Time, error) {

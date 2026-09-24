@@ -235,7 +235,7 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	// that lags lets a partially migrated database pass startup and serve
 	// traffic: at 167 it was 32 versions behind, which included the branch
 	// row-level security added in 189.
-	const requiredMigration = 203
+	const requiredMigration = 205
 	if version < requiredMigration {
 		return fmt.Errorf("database migrations are incomplete: version %d, require at least %d", version, requiredMigration)
 	}

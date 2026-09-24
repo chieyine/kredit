@@ -47,7 +47,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each entries as h}
+					{#each entries as h, i (i)}
 						<tr>
 							<td>v{h.version}</td>
 							<td><span class="action-tag">{h.action}</span></td>

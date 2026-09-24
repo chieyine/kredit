@@ -69,6 +69,7 @@
 		review = $state<{ organizationID: string; claim: Claim; decision: 'confirmed' | 'rejected' } | null>(null);
 	const reads = new LatestRequest(),
 		businesses = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
 	const pendingClaims = $derived(claims.filter((claim) => claim.state === 'pending'));
 	const pendingTotal = $derived(sumKobo(pendingClaims.map((claim) => claim.amount_kobo)));
@@ -219,7 +220,7 @@
 					bind:value={organizationID}
 					disabled={!!busy || !!review}
 					onchange={() => chooseWorkspace(organizationID)}
-					>{#each organizations as organization}<option value={organization.id}
+					>{#each organizations as organization (organization.id)}<option value={organization.id}
 							>{organization.trading_name || organization.legal_name}</option
 						>{/each}</select
 				></label
@@ -262,7 +263,7 @@
 				<span>{pendingClaims.length}</span>
 			</header>
 			{#if pendingClaims.length}<div class="claim-list">
-					{#each pendingClaims as claim}<article>
+					{#each pendingClaims as claim (claim.id)}<article>
 							<div class="claim-amount">
 								<span>Transfer reported</span><strong><Money amountKobo={claim.amount_kobo} /></strong>
 							</div>
@@ -326,7 +327,7 @@
 						><span role="columnheader">Date</span><span role="columnheader">Status</span><span aria-hidden="true"
 						></span>
 					</div>
-					{#each visiblePayments as payment}<div class="payment-row" role="row">
+					{#each visiblePayments as payment (payment.id)}<div class="payment-row" role="row">
 							<div role="cell">
 								<strong>{payment.buyer_legal_name || 'Customer'}</strong><small
 									>{payment.description || payment.reference || 'Sale payment'}</small

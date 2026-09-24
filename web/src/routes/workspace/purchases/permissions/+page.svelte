@@ -197,7 +197,7 @@
 					>Open your team</a
 				>.
 			</p>{/if}
-		{#each grants as g}<section class="card">
+		{#each grants as g (g.user_id)}<section class="card">
 				<h2>{g.name}</h2>
 				<p>
 					{g.active
@@ -206,7 +206,7 @@
 				</p>
 				<fieldset disabled={busy || !owner}>
 					<div class="actions-grid">
-						{#each [['read', 'View business purchases'], ['review', 'Review or decline offers'], ['accept', 'Accept verified purchase terms'], ['receive', 'Confirm delivery or report an issue'], ['drawdown', 'Draw down trade line credit'], ['dispute', 'Open or manage purchase disputes'], ['claim', 'Submit or confirm payment claims'], ['amend', 'Request or review amendments']] as [action, label]}<label
+						{#each [['read', 'View business purchases'], ['review', 'Review or decline offers'], ['accept', 'Accept verified purchase terms'], ['receive', 'Confirm delivery or report an issue'], ['drawdown', 'Draw down trade line credit'], ['dispute', 'Open or manage purchase disputes'], ['claim', 'Submit or confirm payment claims'], ['amend', 'Request or review amendments']] as [action, label] (action)}<label
 								class="check"
 								><input
 									type="checkbox"

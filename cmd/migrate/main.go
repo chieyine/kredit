@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"kredit/internal/db"
 
@@ -21,65 +23,77 @@ import (
 var runtimeRoleBootstrap string
 
 func main() {
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "migrate:", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
 	databaseURL := os.Getenv("DATABASE_DIRECT_URL")
 	if databaseURL == "" {
 		databaseURL = os.Getenv("DATABASE_URL")
 	}
 	if databaseURL == "" {
-		panic("DATABASE_DIRECT_URL or DATABASE_URL is required for migrations")
+		return errors.New("DATABASE_DIRECT_URL or DATABASE_URL is required for migrations")
 	}
 	root, err := os.Getwd()
 	if err != nil {
-		panic(err)
+		return err
 	}
-	db, err := sql.Open("pgx", databaseURL)
+	database, err := sql.Open("pgx", databaseURL)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("open database: %w", err)
 	}
-	defer func() { _ = db.Close() }()
-	if err := db.Ping(); err != nil {
-		panic(err)
+	defer func() { _ = database.Close() }()
+	// A migration run should fail fast when the database is unreachable
+	// rather than hang a deploy step indefinitely.
+	pingCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := database.PingContext(pingCtx); err != nil {
+		return fmt.Errorf("connect to database: %w", err)
 	}
 	if err := goose.SetDialect("postgres"); err != nil {
-		panic(err)
+		return err
 	}
 	migrationsDir := filepath.Join(root, "db", "migrations")
-	if len(os.Args) > 1 {
-		if len(os.Args) != 2 || os.Args[1] != "down" {
-			panic("usage: migrate [down]")
+	if len(args) > 0 {
+		if len(args) != 1 || args[0] != "down" {
+			return errors.New("usage: migrate [down]")
 		}
 		if os.Getenv("ALLOW_DB_ROLLBACK") != "true" || (os.Getenv("APP_ENV") != "development" && os.Getenv("APP_ENV") != "test") {
-			panic("rollback requires explicit authorization in development or test")
+			return errors.New("rollback requires explicit authorization in development or test")
 		}
-		if err := goose.Down(db, migrationsDir); err != nil {
-			panic(err)
+		if err := goose.Down(database, migrationsDir); err != nil {
+			return fmt.Errorf("roll back migration: %w", err)
 		}
 		fmt.Println("one application migration rolled back")
-		return
+		return nil
 	}
 	// Migrations 195 onward grant functions to runtime roles. Provision only
 	// their non-login identities here; schema/table privileges are installed
 	// separately after migrations. Never run the full roles.sql before schema
 	// creation, and never grant runtime roles migration privileges.
-	if _, err := db.ExecContext(context.Background(), runtimeRoleBootstrap); err != nil {
-		panic(fmt.Errorf("bootstrap runtime roles (ask the database administrator to pre-create kredit_app and kredit_worker when using a restricted migrator): %w", err))
+	if _, err := database.ExecContext(context.Background(), runtimeRoleBootstrap); err != nil {
+		return fmt.Errorf("bootstrap runtime roles (ask the database administrator to pre-create kredit_app and kredit_worker when using a restricted migrator): %w", err)
 	}
-	if err := goose.Up(db, migrationsDir); err != nil {
-		panic(err)
+	if err := goose.Up(database, migrationsDir); err != nil {
+		return fmt.Errorf("apply migrations: %w", err)
 	}
 	pool, err := dbpool(context.Background(), databaseURL)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("open job queue connection: %w", err)
 	}
 	defer pool.Close()
 	riverMigrator, err := rivermigrate.New(riverpgxv5.New(pool.Raw()), &rivermigrate.Config{Schema: "jobs"})
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if _, err := riverMigrator.Migrate(context.Background(), rivermigrate.DirectionUp, nil); err != nil {
-		panic(err)
+		return fmt.Errorf("apply job queue migrations: %w", err)
 	}
 	fmt.Println("database migrations are up to date")
+	return nil
 }
 
 func dbpool(ctx context.Context, databaseURL string) (*db.Pool, error) {

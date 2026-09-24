@@ -58,7 +58,7 @@
 <svelte:head><title>{title}</title></svelte:head>
 
 <div class="deck" class:printing>
-	{#each slides as slide, i}
+	{#each slides as slide, i (i)}
 		<!-- Every slide stays in the DOM so browser print gives one page each. -->
 		<section class="slide" class:current={i === index} aria-hidden={i === index || printing ? undefined : 'true'}>
 			<div class="slide-inner" data-kind={slide.kind}>
@@ -74,7 +74,7 @@
 						{#if slide.lede}<p class="lede">{slide.lede}</p>{/if}
 						{#if slide.links}
 							<div class="cover-links">
-								{#each slide.links as [label, href]}
+								{#each slide.links as [label, href], linkIndex (linkIndex)}
 									<a class="cover-link" {href}>{label} <span aria-hidden="true">→</span></a>
 								{/each}
 							</div>
@@ -89,7 +89,7 @@
 
 						{#if slide.figures}
 							<div class="figures" style={`--cols:${slide.figures.length}`}>
-								{#each slide.figures as f}
+								{#each slide.figures as f, figureIndex (figureIndex)}
 									<div class="fig">
 										<p class="fig-label">{f.label}</p>
 										<strong class="fig-value" class:alert={f.tone === 'alert'}>{f.value}</strong>
@@ -102,11 +102,11 @@
 						{#if slide.rows}
 							<div class="rows">
 								<div class="row row-head">
-									{#each slide.rows.columns as c, ci}<span class:num={ci > 0}>{c}</span>{/each}
+									{#each slide.rows.columns as c, ci (ci)}<span class:num={ci > 0}>{c}</span>{/each}
 								</div>
-								{#each slide.rows.data as r}
+								{#each slide.rows.data as r, rowIndex (rowIndex)}
 									<div class="row">
-										{#each r as cell, ci}<span class:num={ci > 0}>{cell}</span>{/each}
+										{#each r as cell, ci (ci)}<span class:num={ci > 0}>{cell}</span>{/each}
 									</div>
 								{/each}
 							</div>
@@ -114,7 +114,7 @@
 
 						{#if slide.points}
 							<ol class="points">
-								{#each slide.points as [head, detail]}
+								{#each slide.points as [head, detail], pointIndex (pointIndex)}
 									<li><strong>{head}</strong><span>{detail}</span></li>
 								{/each}
 							</ol>

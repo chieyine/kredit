@@ -3,15 +3,15 @@
 	import { parseNaira, formatKobo, nairaInput } from '$lib/money';
 	import { checkedJSON, LatestRequest, publicError, record, rows, RequestError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { organization } from '$lib/records';
-	import { tradeLine, drawdown, tradeStatement } from '$lib/trade-line-records';
+	import { organization, type Organization } from '$lib/records';
+	import { tradeLine, drawdown, tradeStatement, type TradeStatement } from '$lib/trade-line-records';
 	import { lagosISO, localTime } from '$lib/admin-client';
 	import { page } from '$app/state';
 	import { onMount, untrack } from 'svelte';
 
-	let organizations: any[] = $state([]),
+	let organizations: Organization[] = $state([]),
 		organizationID = $state(''),
-		statement: any = $state(null);
+		statement: TradeStatement | null = $state(null);
 	let error = $state(''),
 		notice = $state(''),
 		busy = $state(''),
@@ -33,6 +33,7 @@
 	let pendingCommand = $state<PendingCommand | null>(null);
 	let routeGeneration = 0;
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
 	const stateLabel = (state: string) =>
 		({
@@ -159,7 +160,7 @@
 			return;
 		}
 		const saved = await command(
-			`/api/v1/organizations/${organizationID}/trade-lines/${page.params.id}/drawdowns`,
+			`/api/v1/organizations/${encodeURIComponent(organizationID)}/trade-lines/${encodeURIComponent(page.params.id ?? '')}/drawdowns`,
 			{
 				principal_kobo: principalKobo,
 				goods_description: goods,
@@ -186,7 +187,7 @@
 			return;
 		}
 		await command(
-			`/api/v1/organizations/${organizationID}/trade-lines/${page.params.id}`,
+			`/api/v1/organizations/${encodeURIComponent(organizationID)}/trade-lines/${encodeURIComponent(page.params.id ?? '')}`,
 			{ expected_version: statement.line.version, approved_limit_kobo: amount },
 			'limit',
 			'PATCH'
@@ -248,7 +249,7 @@
 <main class="shell workspace">
 	<a href="/workspace/sales/limits">← Customer limits</a>
 	<p class="eyebrow">Customer limit</p>
-	{#if statement}
+	{#if statement}{@const lineID = statement.line.id}
 		<h1>{money(statement.line.available_limit_kobo)} available.</h1>
 		<section class="summary">
 			<article><span>Full limit</span><strong>{money(statement.line.approved_limit_kobo)}</strong></article>
@@ -286,7 +287,7 @@
 					disabled={!!busy || !!pendingCommand || pauseReason.trim().length < 8}
 					onclick={() =>
 						command(
-							`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/suspend`,
+							`/api/v1/organizations/${encodeURIComponent(organizationID)}/trade-lines/${encodeURIComponent(lineID)}/suspend`,
 							{ reason: pauseReason },
 							'suspend'
 						)}>Pause this limit</button
@@ -294,8 +295,11 @@
 					class="primary"
 					disabled={!!busy || !!pendingCommand || loading}
 					onclick={() =>
-						command(`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/resume`, {}, 'resume')}
-					>Use this limit again</button
+						command(
+							`/api/v1/organizations/${encodeURIComponent(organizationID)}/trade-lines/${encodeURIComponent(lineID)}/resume`,
+							{},
+							'resume'
+						)}>Use this limit again</button
 				>{/if}
 		</section>
 		{#if capabilityLoading}<section class="card">
@@ -359,7 +363,7 @@
 		</section>
 		<h2>Sales using this limit</h2>
 		{#if statement.drawdowns.length}<div class="drawdowns">
-				{#each statement.drawdowns as drawdown}<article class="drawdown">
+				{#each statement.drawdowns as drawdown (drawdown.id)}<article class="drawdown">
 						<header>
 							<strong>{money(drawdown.principal_kobo)}</strong><span class="status">{stateLabel(drawdown.state)}</span>
 						</header>
@@ -382,7 +386,7 @@
 							<summary>Technical record (for reference)</summary><code>{drawdown.agreement_hash}</code>
 						</details>
 						<a
-							href={`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/agreement-document`}
+							href={`/api/v1/organizations/${encodeURIComponent(organizationID)}/trade-lines/${encodeURIComponent(lineID)}/drawdowns/${encodeURIComponent(drawdown.id)}/agreement-document`}
 							target="_blank"
 							rel="noreferrer">Print or save a copy of this sale →</a
 						>
@@ -404,7 +408,7 @@
 									disabled={!!busy || !!pendingCommand || loading}
 									onclick={() =>
 										command(
-											`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/release`,
+											`/api/v1/organizations/${encodeURIComponent(organizationID)}/trade-lines/${encodeURIComponent(lineID)}/drawdowns/${encodeURIComponent(drawdown.id)}/release`,
 											{
 												delivery_method: deliveryMethod[drawdown.id],
 												evidence_reference: releaseEvidence[drawdown.id]
@@ -418,7 +422,7 @@
 								disabled={!!busy || !!pendingCommand || loading}
 								onclick={() =>
 									command(
-										`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/cancel`,
+										`/api/v1/organizations/${encodeURIComponent(organizationID)}/trade-lines/${encodeURIComponent(lineID)}/drawdowns/${encodeURIComponent(drawdown.id)}/cancel`,
 										{},
 										drawdown.id
 									)}>Cancel this sale</button
@@ -434,7 +438,7 @@
 									disabled={!!busy || !!pendingCommand || loading}
 									onclick={() =>
 										command(
-											`/api/v1/organizations/${organizationID}/trade-lines/${statement.line.id}/drawdowns/${drawdown.id}/cancel`,
+											`/api/v1/organizations/${encodeURIComponent(organizationID)}/trade-lines/${encodeURIComponent(lineID)}/drawdowns/${encodeURIComponent(drawdown.id)}/cancel`,
 											{},
 											drawdown.id
 										)}>Accept return and cancel this sale</button

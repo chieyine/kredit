@@ -18,7 +18,7 @@
 	<details>
 		<summary>Sale timeline</summary>
 		<ol>
-			{#each events as event}<li><strong>{event.label}</strong><span>{timeLabel(event.at)}</span></li>{:else}<li>
+			{#each events as event, i (i)}<li><strong>{event.label}</strong><span>{timeLabel(event.at)}</span></li>{:else}<li>
 					Recorded dates are unavailable. Refresh the sale before acting.
 				</li>{/each}
 		</ol>

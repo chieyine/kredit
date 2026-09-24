@@ -57,7 +57,7 @@
 	<section class="network-section" aria-labelledby="fits-heading">
 		<h2 id="fits-heading">One platform. A clear place for you.</h2>
 		<div class="network-cards role-cards">
-			{#each network as stage}
+			{#each network as stage (stage.key)}
 				<article>
 					<h3>{stage.label}</h3>
 					<p>{stage.description}</p>
@@ -71,7 +71,7 @@
 		<p class="eyebrow">How a trade works</p>
 		<h2 id="simple-heading">Connect. Agree. Deliver. Settle.</h2>
 		<ol class="steps">
-			{#each tradeSteps as [title, body]}
+			{#each tradeSteps as [title, body], i (i)}
 				<li>
 					<div>
 						<h3>{title}</h3>

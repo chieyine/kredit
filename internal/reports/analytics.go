@@ -14,6 +14,9 @@ import (
 	"kredit/internal/db"
 )
 
+// ErrInvalidScorecardWindow rejects a reporting window that is empty, reversed or longer than a year.
+var ErrInvalidScorecardWindow = errors.New("scorecard window must be positive and no longer than 366 days")
+
 type Metric struct {
 	Key          string  `json:"key"`
 	Label        string  `json:"label"`
@@ -66,7 +69,7 @@ func (s *Store) PilotScorecard(ctx context.Context, from, to time.Time, organiza
 		return PilotScorecard{}, errors.New("pilot scorecard requires the authoritative database")
 	}
 	if from.IsZero() || to.IsZero() || !from.Before(to) || to.Sub(from) > 366*24*time.Hour {
-		return PilotScorecard{}, errors.New("scorecard window must be positive and no longer than 366 days")
+		return PilotScorecard{}, ErrInvalidScorecardWindow
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()

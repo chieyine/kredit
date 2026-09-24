@@ -2,26 +2,46 @@
 	import { page } from '$app/state';
 	import { workspaceHref } from '$lib/workspace-navigation';
 	import { buyerEndpoint } from '$lib/buyer-navigation';
-	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
+	import type { KoboValue } from '$lib/money';
 	import { onMount } from 'svelte';
 	import { kobo } from '$lib/records';
 	import { readableDate, readableDateTime } from '$lib/datetime';
 	import Money from '$lib/components/Money.svelte';
 	import { productLabel } from '$lib/product-language';
-	let claims: any[] = $state([]),
+	type TransferReport = {
+		id: string;
+		state: 'pending' | 'confirmed' | 'rejected' | 'expired';
+		transfer_reference: string;
+		created_at: string;
+		paid_at: string;
+		hold_expires_at: string;
+		amount_kobo: KoboValue;
+		review_reason: string;
+	};
+	const reportStates = ['pending', 'confirmed', 'rejected', 'expired'] as const;
+	let claims: TransferReport[] = $state([]),
 		loading = $state(true),
 		error = $state('');
 	const reads = new LatestRequest();
-	function claimRecord(value: unknown) {
+	function claimRecord(value: unknown): TransferReport {
 		const claim = record(value);
 		for (const key of ['id', 'state', 'transfer_reference', 'created_at', 'paid_at', 'hold_expires_at'])
 			text(claim[key]);
-		if (!claim.id || !['pending', 'confirmed', 'rejected', 'expired'].includes(String(claim.state)))
-			throw new Error('Incomplete transfer report');
+		const state = reportStates.find((candidate) => candidate === claim.state);
+		if (!claim.id || !state) throw new Error('Incomplete transfer report');
 		for (const key of ['created_at', 'paid_at', 'hold_expires_at'])
 			if (!Number.isFinite(Date.parse(String(claim[key])))) throw new Error('Incomplete transfer date');
-		kobo(claim.amount_kobo);
-		return claim;
+		return {
+			id: text(claim.id),
+			state,
+			transfer_reference: text(claim.transfer_reference),
+			created_at: text(claim.created_at),
+			paid_at: text(claim.paid_at),
+			hold_expires_at: text(claim.hold_expires_at),
+			amount_kobo: kobo(claim.amount_kobo),
+			review_reason: optionalText(claim.review_reason)
+		};
 	}
 	async function load() {
 		const read = reads.begin();
@@ -33,8 +53,7 @@
 				rows('payment_claims', claimRecord),
 				{ signal: read.signal }
 			);
-			if (read.current())
-				claims = result.sort((a, b) => Date.parse(String(b.created_at)) - Date.parse(String(a.created_at)));
+			if (read.current()) claims = result.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 		} catch (cause) {
 			if (read.current()) error = publicError(cause, 'your reported transfers');
 		} finally {
@@ -58,7 +77,7 @@
 			<p class="error">{error}</p>
 			<button type="button" onclick={load}>Try again</button>
 		</section>{:else if claims.length}<section>
-			{#each claims as claim}<article>
+			{#each claims as claim (claim.id)}<article>
 					<div><strong><Money amountKobo={claim.amount_kobo} /></strong><span>{productLabel(claim.state)}</span></div>
 					<dl>
 						<div>

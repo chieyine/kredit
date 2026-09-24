@@ -87,7 +87,7 @@
 			</div>
 		</section>
 		<section class="grid" aria-label="Mono configuration status">
-			{#each [['Sweep', mono.sweep_enabled], ['Partial sweep', mono.partial_sweep_enabled], ['Automatic collection', mono.automatic_collection_enabled], ['Automatic retry', mono.automatic_retry_enabled], ['Secret key', mono.secret_key_configured], ['Webhook secret', mono.webhook_secret_configured], ['Redirect URL', mono.redirect_url_configured], ['Provider certification', mono.provider_certification_recorded]] as item}
+			{#each [['Sweep', mono.sweep_enabled], ['Partial sweep', mono.partial_sweep_enabled], ['Automatic collection', mono.automatic_collection_enabled], ['Automatic retry', mono.automatic_retry_enabled], ['Secret key', mono.secret_key_configured], ['Webhook secret', mono.webhook_secret_configured], ['Redirect URL', mono.redirect_url_configured], ['Provider certification', mono.provider_certification_recorded]] as item, i (i)}
 				<article><span>{item[0]}</span><strong>{item[1] ? 'Configured' : 'Not configured'}</strong></article>
 			{/each}
 		</section>
@@ -98,7 +98,7 @@
 		<section class="card">
 			<h2>What still needs attention</h2>
 			{#if mono.blockers.length}<ul>
-					{#each mono.blockers as blocker}<li>{blocker}</li>{/each}
+					{#each mono.blockers as blocker, i (i)}<li>{blocker}</li>{/each}
 				</ul>{:else}<p>No technical configuration blocker is currently reported for this environment.</p>{/if}
 		</section>
 		<section class="actions">

@@ -1,43 +1,78 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { localTime } from '$lib/admin-client';
-	import { formatKobo, exactKobo } from '$lib/money';
-	import { checkedJSON, record, rows, text, publicError, LatestRequest } from '$lib/api/reliable';
+	import { formatKobo, exactKobo, type KoboValue } from '$lib/money';
+	import { checkedJSON, optionalText, record, rows, text, publicError, LatestRequest } from '$lib/api/reliable';
 	const requests = new LatestRequest();
-	function historyItem(value: unknown) {
+	type ScheduleEntry = { id: string; due_at: string; principal_due_kobo: KoboValue; allocated_kobo: KoboValue };
+	type DateEntry = { item_id: string; due_at: string };
+	type HistoryEvent = { occurred_at: string; actor_name: string; action: string; reason: string };
+	type HistoryItem = {
+		id: string;
+		kind: string;
+		state: string;
+		created_at: string;
+		proposer: string;
+		approver: string;
+		reason: string;
+		before_values: Record<string, unknown>;
+		after_values: Record<string, unknown>;
+		/** Present only for schedule amendments: the original days and the proposed ones. */
+		amendment: { items: ScheduleEntry[]; dates: DateEntry[] } | null;
+		events: HistoryEvent[];
+	};
+	const amount = (value: unknown): KoboValue =>
+		typeof value === 'number' || typeof value === 'string' || typeof value === 'bigint' ? value : null;
+	function historyItem(value: unknown): HistoryItem {
 		const item = record(value);
-		for (const key of ['id', 'kind', 'state', 'created_at', 'proposer', 'reason']) text(item[key]);
-		record(item.before_values);
-		record(item.after_values);
-		rows('events', (value) => {
-			const event = record(value);
-			for (const key of ['occurred_at', 'actor_name', 'action', 'reason']) text(event[key]);
-			return event;
-		})(item);
-		if (item.kind === 'schedule_amendment') {
-			const before = record(item.before_values),
-				after = record(item.after_values);
-			rows('items', (value) => {
-				const entry = record(value);
-				text(entry.id);
-				text(entry.due_at);
-				return entry;
-			})(before);
-			rows('dates', (value) => {
-				const entry = record(value);
-				text(entry.item_id);
-				text(entry.due_at);
-				return entry;
-			})(after);
-		}
-		return item;
+		const kind = text(item.kind);
+		const before = record(item.before_values),
+			after = record(item.after_values);
+		return {
+			id: text(item.id),
+			kind,
+			state: text(item.state),
+			created_at: text(item.created_at),
+			proposer: text(item.proposer),
+			approver: optionalText(item.approver),
+			reason: text(item.reason),
+			before_values: before,
+			after_values: after,
+			amendment:
+				kind === 'schedule_amendment'
+					? {
+							items: rows('items', (value): ScheduleEntry => {
+								const entry = record(value);
+								return {
+									id: text(entry.id),
+									due_at: text(entry.due_at),
+									principal_due_kobo: amount(entry.principal_due_kobo),
+									allocated_kobo: amount(entry.allocated_kobo)
+								};
+							})(before),
+							dates: rows('dates', (value): DateEntry => {
+								const entry = record(value);
+								return { item_id: text(entry.item_id), due_at: text(entry.due_at) };
+							})(after)
+						}
+					: null,
+			events: rows('events', (value): HistoryEvent => {
+				const event = record(value);
+				return {
+					occurred_at: text(event.occurred_at),
+					actor_name: text(event.actor_name),
+					action: text(event.action),
+					reason: text(event.reason)
+				};
+			})(item)
+		};
 	}
 	function difference(a: unknown, b: unknown) {
-		const x = exactKobo(a as any),
-			y = exactKobo(b as any);
+		const x = exactKobo(amount(a)),
+			y = exactKobo(amount(b));
 		return formatKobo(x === null || y === null ? null : x - y);
 	}
-	let items: any[] = $state([]),
+	let items: HistoryItem[] = $state([]),
 		q = $state(''),
 		kind = $state(''),
 		offset = $state(0),
@@ -65,9 +100,9 @@
 			if (request.current()) busy = false;
 		}
 	}
-	function value(key: string, v: any): string {
+	function value(key: string, v: unknown): string {
 		if (v === undefined || v === null) return '—';
-		if (key.endsWith('_kobo')) return formatKobo(v);
+		if (key.endsWith('_kobo')) return formatKobo(amount(v));
 		if (key.endsWith('_bps')) return `${Number(v) / 100}%`;
 		if (typeof v === 'object') return JSON.stringify(v, null, 2);
 		return String(v);
@@ -107,7 +142,7 @@
 	<a href={`/api/v1/ops/change-history?${params}&format=csv`}>Export this page as CSV</a>{#if error}<p role="alert">
 			{error}
 		</p>{/if}
-	{#each items as item}<article>
+	{#each items as item (item.id)}<article>
 			<h2>{item.kind.replaceAll('_', ' ')} · {item.state}</h2>
 			<p>
 				{localTime(item.created_at)} · {item.proposer}{#if item.approver}
@@ -121,10 +156,10 @@
 					)}
 				</p>{/if}
 			<details>
-				<summary>Previous and proposed values</summary>{#if item.kind === 'schedule_amendment'}<table>
+				<summary>Previous and proposed values</summary>{#if item.amendment}<table>
 						<thead><tr><th>Unpaid amount</th><th>Previous date</th><th>Proposed date</th></tr></thead><tbody
-							>{#each item.after_values.dates as date}{@const old = item.before_values.items.find(
-									(i: any) => i.id === date.item_id
+							>{#each item.amendment.dates as date, dateIndex (dateIndex)}{@const old = item.amendment.items.find(
+									(i) => i.id === date.item_id
 								)}<tr
 									><td>{difference(old?.principal_due_kobo, old?.allocated_kobo)}</td><td
 										>{localTime(old?.due_at || '')}</td
@@ -133,7 +168,7 @@
 						>
 					</table>{:else}<table>
 						<thead><tr><th>Field</th><th>Previous</th><th>Proposed</th></tr></thead><tbody
-							>{#each [...new Set([...Object.keys(item.before_values), ...Object.keys(item.after_values)])] as key}<tr
+							>{#each [...new Set( [...Object.keys(item.before_values), ...Object.keys(item.after_values)] )] as key (key)}<tr
 									><th>{key.replaceAll('_', ' ')}</th><td><pre>{value(key, item.before_values[key])}</pre></td><td
 										><pre>{value(key, item.after_values[key])}</pre></td
 									></tr
@@ -141,7 +176,7 @@
 						>
 					</table>{/if}
 			</details>
-			{#each item.events as event}<p>
+			{#each item.events as event, i (i)}<p>
 					{localTime(event.occurred_at)} · {event.actor_name} · {event.action}: {event.reason}
 				</p>{/each}
 		</article>{:else}<p>

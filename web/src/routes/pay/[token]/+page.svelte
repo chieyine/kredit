@@ -3,8 +3,15 @@
 	import Money from '$lib/components/Money.svelte';
 	import { checkedJSON, LatestRequest, publicError, record, text } from '$lib/api/reliable';
 	import { kobo } from '$lib/records';
-	import { exactKobo } from '$lib/money';
-	let intent: any = $state(null),
+	import { exactKobo, type KoboValue } from '$lib/money';
+	type PaymentIntent = {
+		reference: string;
+		supplier_name: string;
+		description: string;
+		amount_kobo: KoboValue;
+		provider_action: string;
+	};
+	let intent: PaymentIntent | null = $state(null),
 		error = $state('');
 	const requests = new LatestRequest();
 	async function load(token: string) {
@@ -14,7 +21,7 @@
 		try {
 			const result = await checkedJSON(
 				`/api/v1/public/payment-intents/${encodeURIComponent(token)}`,
-				(value) => {
+				(value): PaymentIntent => {
 					const row = record(record(value).payment_intent);
 					return {
 						reference: text(row.reference),

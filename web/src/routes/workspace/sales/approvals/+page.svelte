@@ -222,7 +222,7 @@
 		<button disabled={busy} onclick={load}>Refresh approvals</button>{/if}
 	<label
 		>Business<select bind:value={organization} disabled={busy || loading} onchange={() => chooseWorkspace(organization)}
-			>{#each businesses as business}<option value={business.id}>{business.name}</option>{/each}</select
+			>{#each businesses as business (business.id)}<option value={business.id}>{business.name}</option>{/each}</select
 		></label
 	>
 	{#if loading}<p role="status">Loading approval records…</p>{:else if !organization && !error}<p>
@@ -252,7 +252,7 @@
 				Limits apply to the full principal of each single-sale offer. A blank limit means no additional ceiling. Set
 				zero to prevent approvals. The independent-review rule still applies.
 			</p>
-			{#each reviewers as reviewer}<div>
+			{#each reviewers as reviewer, i (i)}<div>
 					<strong>{reviewer.name}</strong>
 					<p>
 						{reviewer.role} · {reviewer.ceiling_kobo === null
@@ -291,7 +291,7 @@
 			<h2>Approval records</h2>
 			<p>Up to 100 records, with pending reviews first. Open a saved draft to request a review.</p>
 			{#if !approvals.length}<p>No approval requests yet.</p>{/if}
-			{#each approvals as item}<article class="card">
+			{#each approvals as item (item.id)}<article class="card">
 					<h3>{item.customer_name} · {formatKobo(item.proposal.principal_kobo)}</h3>
 					<p>
 						<span class="badge">{item.kind === 'drawdown' ? 'Trade line drawdown' : 'Single sale'}</span>

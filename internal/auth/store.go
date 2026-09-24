@@ -50,7 +50,7 @@ type User struct {
 	DisplayName         string    `json:"display_name,omitempty"`
 	Status              string    `json:"status"`
 	CreatedAt           time.Time `json:"created_at"`
-	LastAuthenticatedAt time.Time `json:"last_authenticated_at,omitempty"`
+	LastAuthenticatedAt time.Time `json:"last_authenticated_at,omitzero"`
 }
 
 type OTPChallenge struct {
@@ -70,12 +70,12 @@ type Session struct {
 	ID                  string    `json:"id"`
 	UserID              string    `json:"user_id"`
 	AuthenticationLevel string    `json:"authentication_level"`
-	MFAVerifiedAt       time.Time `json:"mfa_verified_at,omitempty"`
+	MFAVerifiedAt       time.Time `json:"mfa_verified_at,omitzero"`
 	DeviceLabel         string    `json:"device_label,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
 	ExpiresAt           time.Time `json:"expires_at"`
-	LastSeenAt          time.Time `json:"last_seen_at,omitempty"`
-	RevokedAt           time.Time `json:"revoked_at,omitempty"`
+	LastSeenAt          time.Time `json:"last_seen_at,omitzero"`
+	RevokedAt           time.Time `json:"revoked_at,omitzero"`
 }
 
 type MFAMethod struct {

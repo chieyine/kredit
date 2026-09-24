@@ -6,7 +6,7 @@ The canonical inventory is rendered from the original `data-inventory.tsv` plus 
 python3 scripts/data-inventory.py > /tmp/kredit-data-inventory.tsv
 ```
 
-The original 1,424 records are preserved byte-for-byte. The manifest records the 212 missing fields observed in the retained synthetic PostgreSQL schema for workflow 35571022032. It does not copy field names dynamically from a live database. The checker compares the complete resolved key set with the actual schema and fails for missing fields, extra fields, duplicates, malformed rows or incomplete metadata. Ordering is presentation, not a reason to omit or duplicate a record.
+The original 1,424 records are preserved byte-for-byte. The manifest records the 212 missing fields observed in the retained synthetic PostgreSQL schema for workflow 35571022032. The nine `app.runtime_process_instances` fields from migration 204 were added the same way, for 221 fields pending review. It does not copy field names dynamically from a live database. The checker compares the complete resolved key set with the actual schema and fails for missing fields, extra fields, duplicates, malformed rows or incomplete metadata. Ordering is presentation, not a reason to omit or duplicate a record.
 
 ## No compliance sign-off is implied
 

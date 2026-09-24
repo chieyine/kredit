@@ -2,11 +2,12 @@
 	import { exactKobo, formatKobo, nairaInput, parseNaira, type KoboValue } from '$lib/money';
 	import { timeLabel } from '$lib/records';
 	import { page } from '$app/state';
-	import { checkedJSON, record, rows, text, LatestRequest, publicError } from '$lib/api/reliable';
+	import { checkedJSON, record, text, LatestRequest, publicError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
-	let dispute = $state<any>(null),
-		evidence: any[] = $state([]),
-		decisions: any[] = $state([]),
+	import { disputeDetail, type Dispute, type DisputeDecision, type DisputeEvidence } from '$lib/disputes';
+	let dispute = $state<Dispute | null>(null),
+		evidence: DisputeEvidence[] = $state([]),
+		decisions: DisputeDecision[] = $state([]),
 		error = $state(''),
 		actionError = $state(''),
 		notice = $state(''),
@@ -30,26 +31,10 @@
 			const data = await checkedJSON(
 				`/api/v1/ops/disputes/${encodeURIComponent(id)}`,
 				(value) => {
-					const body = record(value),
-						item = record(body.dispute);
-					if (text(item.id) !== id) throw new Error('Dispute identity mismatch');
-					text(item.state);
-					text(item.collection_effect);
-					text(item.reason);
-					if (
-						exactKobo(item.total_disputed_kobo as KoboValue) === null ||
-						exactKobo(item.remaining_disputed_kobo as KoboValue) === null
-					)
-						throw new Error('Missing dispute amount');
-					return {
-						dispute: item,
-						evidence: rows('evidence', record)(body),
-						decisions: rows('decisions', (value) => {
-							const item = record(value);
-							text(item.outcome);
-							return item;
-						})(body)
-					};
+					const detail = disputeDetail(value);
+					if (detail.dispute.id !== id) throw new Error('Dispute identity mismatch');
+					if (!detail.dispute.collection_effect || !detail.dispute.reason) throw new Error('Incomplete dispute record');
+					return detail;
 				},
 				{ signal: request.signal }
 			);
@@ -57,15 +42,15 @@
 			dispute = data.dispute;
 			evidence = data.evidence;
 			decisions = data.decisions;
-			remainingNaira = nairaInput(dispute.remaining_disputed_kobo);
-			validNaira = nairaInput(validPrincipal(dispute));
+			remainingNaira = nairaInput(data.dispute.remaining_disputed_kobo);
+			validNaira = nairaInput(validPrincipal(data.dispute));
 		} catch (cause) {
 			if (request.current()) error = publicError(cause, 'this dispute');
 		} finally {
 			if (request.current()) loading = false;
 		}
 	}
-	function validPrincipal(item: any): KoboValue {
+	function validPrincipal(item: Dispute): KoboValue {
 		const total = exactKobo(item.total_disputed_kobo),
 			rest = exactKobo(item.remaining_disputed_kobo);
 		if (total === null || rest === null) return null;
@@ -154,7 +139,7 @@
 		</p>{/if}{#if loading}<p>Loading dispute…</p>{:else if error}<section role="alert">
 			<p class="error">{error}</p>
 			<button onclick={load} disabled={busy}>Reload dispute</button>
-		</section>{:else}<section class="summary">
+		</section>{:else if dispute}<section class="summary">
 			<div><span>Status</span><strong>{dispute.state.replaceAll('_', ' ')}</strong></div>
 			<div><span>Disputed</span><strong>{money(dispute.total_disputed_kobo)}</strong></div>
 			<div><span>Still disputed</span><strong>{money(dispute.remaining_disputed_kobo)}</strong></div>
@@ -168,7 +153,7 @@
 			<section>
 				<h2>Evidence</h2>
 				{#if evidence.length}<ol>
-						{#each evidence as item}<li>
+						{#each evidence as item, i (i)}<li>
 								<p>{item.statement || 'Document evidence'}</p>
 								{#if item.document_id}<button type="button" onclick={() => openDocument(item.document_id)}
 										>Open document</button
@@ -176,7 +161,7 @@
 							</li>{/each}
 					</ol>{:else}<p>No evidence has been recorded.</p>{/if}
 				<h2>Earlier decisions</h2>
-				{#each decisions as item}<div class="decision">
+				{#each decisions as item, i (i)}<div class="decision">
 						<strong>{item.outcome.replaceAll('_', ' ')}</strong>
 						<p>{item.reason}</p>
 						<small>{timeLabel(item.decided_at)}</small>

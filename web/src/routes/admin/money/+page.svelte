@@ -1,9 +1,27 @@
 <script lang="ts">
-	import { checkedJSON, publicError, record, rows } from '$lib/api/reliable';
+	import { checkedJSON, optionalNumber, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
+	import type { KoboValue } from '$lib/money';
+	import { kobo } from '$lib/records';
 	import { onMount } from 'svelte';
 	import Money from '$lib/components/Money.svelte';
-	let summary = $state<any>(null),
-		activity = $state<any[]>([]),
+	type MoneySummary = {
+		received_kobo: KoboValue;
+		payment_count: number;
+		outstanding_kobo: KoboValue;
+		collection_requested_kobo: KoboValue;
+		collection_succeeded_kobo: KoboValue;
+		[key: string]: unknown;
+	};
+	type MoneyActivity = {
+		id: string;
+		kind: string;
+		amount_kobo: KoboValue;
+		state: string;
+		reference: string;
+		occurred_at: string;
+	};
+	let summary = $state<MoneySummary | null>(null),
+		activity = $state<MoneyActivity[]>([]),
 		loading = $state(true),
 		error = $state('');
 	async function load() {
@@ -11,8 +29,29 @@
 		error = '';
 		try {
 			const data = await checkedJSON('/api/v1/ops/money?limit=100', (value) => {
-				const body = record(value);
-				return { summary: record(body.summary), activity: rows('activity', record)(body) };
+				const body = record(value),
+					totals = record(body.summary);
+				return {
+					summary: {
+						...totals,
+						received_kobo: kobo(totals.received_kobo),
+						payment_count: optionalNumber(totals.payment_count),
+						outstanding_kobo: kobo(totals.outstanding_kobo),
+						collection_requested_kobo: kobo(totals.collection_requested_kobo),
+						collection_succeeded_kobo: kobo(totals.collection_succeeded_kobo)
+					},
+					activity: rows('activity', (value): MoneyActivity => {
+						const item = record(value);
+						return {
+							id: text(item.id),
+							kind: text(item.kind),
+							amount_kobo: kobo(item.amount_kobo),
+							state: text(item.state),
+							reference: optionalText(item.reference),
+							occurred_at: optionalText(item.occurred_at)
+						};
+					})(body)
+				};
 			});
 			summary = data.summary;
 			activity = data.activity;
@@ -35,7 +74,7 @@
 	{#if error}<section role="alert">
 			<p class="error">{error}</p>
 			<button type="button" onclick={load}>Try again</button>
-		</section>{:else if loading}<p>Checking the latest money records…</p>{:else}<section class="totals">
+		</section>{:else if loading}<p>Checking the latest money records…</p>{:else if summary}<section class="totals">
 			<article>
 				<span>Money received</span><strong><Money amountKobo={summary.received_kobo} /></strong><small
 					>{summary.payment_count} payment records</small
@@ -65,7 +104,7 @@
 			<div class="table-wrap">
 				<table>
 					<thead><tr><th>Type</th><th>Amount</th><th>Status</th><th>Reference</th><th>Time</th></tr></thead><tbody
-						>{#each activity as item}<tr
+						>{#each activity as item (`${item.kind}:${item.id}`)}<tr
 								><td>{item.kind === 'payment' ? 'Payment' : 'Bank debit'}</td><td
 									><strong><Money amountKobo={item.amount_kobo} /></strong></td
 								><td>{item.state.replaceAll('_', ' ')}</td><td><code>{item.reference}</code></td><td

@@ -393,4 +393,15 @@ GRANT EXECUTE ON FUNCTION app.order_evidence_visible(uuid),app.order_supplier_au
 -- Per-boot heartbeats; RLS limits deletion to this process kind's stale rows.
 GRANT SELECT,INSERT,UPDATE,DELETE ON app.runtime_process_instances TO kredit_app,kredit_worker;
 
+-- Most SECURITY DEFINER functions pin search_path without naming pg_temp, and
+-- PostgreSQL then searches pg_temp first for relations. A session that can
+-- create temporary tables could shadow an unqualified table inside such a
+-- function. No runtime code, job queue or backup uses temporary tables, so
+-- the privilege is withdrawn from every non-owner role instead.
+DO $$
+BEGIN
+    EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC', current_database());
+END
+$$;
+
 COMMIT;

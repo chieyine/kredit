@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"kredit/internal/access"
@@ -68,7 +69,7 @@ func (s *Store) BeginExternalCommand(ctx context.Context, actor string, in Comma
 		return Command{}, false, err
 	}
 	if preview.CurrentVersion != in.ExpectedVersion {
-		return Command{}, false, errors.New("version conflict before provider operation")
+		return Command{}, false, fmt.Errorf("%w before provider operation", ErrVersionConflict)
 	}
 	impact, err := json.Marshal(preview.Impact)
 	if err != nil {

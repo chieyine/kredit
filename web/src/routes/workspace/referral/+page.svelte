@@ -102,7 +102,7 @@
 							Agent: {name}
 						</p>{/if}<label
 						>Business<select bind:value={org} required
-							>{#each businesses as b}<option value={b.id}>{b.legal_name}</option>{/each}</select
+							>{#each businesses as b (b.id)}<option value={b.id}>{b.legal_name}</option>{/each}</select
 						></label
 					><label
 						><input type="checkbox" bind:checked={consent} required />This agent introduced my business to Kredit. I

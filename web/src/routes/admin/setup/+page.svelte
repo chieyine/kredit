@@ -81,6 +81,7 @@
 			for (const value of Object.values(saved))
 				if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error('Saved versions could not be verified.');
 			versions = saved as Record<string, number>;
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this function, never rendered
 			const observedIDs = new Set<string>();
 			processes = data.processes.map((value) => {
 				const item = record(value);
@@ -159,7 +160,7 @@
 			{#if truncated}<p role="alert">
 					Only the 500 most recent instance records are shown. This list is incomplete.
 				</p>{/if}
-			{#each ['api', 'worker'] as name}
+			{#each ['api', 'worker'] as name, i (i)}
 				{@const instances = processes.filter((value) => value.process === name)}
 				<h3>{name === 'api' ? 'Website service' : 'Background worker'}</h3>
 				{#each instances as item (item.instance_id)}

@@ -12,7 +12,7 @@
 </script>
 
 {#if section}<nav class="section-navigation shell" aria-label={section.label}>
-		{#each section.links as [label, href]}<a
+		{#each section.links as [label, href], i (i)}<a
 				href={workspaceHref(href, page.url)}
 				aria-current={page.url.pathname === href ? 'page' : undefined}>{label}</a
 			>{/each}

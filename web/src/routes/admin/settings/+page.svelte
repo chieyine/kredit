@@ -1,10 +1,18 @@
 <script lang="ts">
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { onMount } from 'svelte';
-	import { adminGet, adminPost, localTime, lagosISO } from '$lib/admin-client';
+	import {
+		adminGet,
+		adminPost,
+		adminRoles,
+		governanceMode as readGovernanceMode,
+		localTime,
+		lagosISO
+	} from '$lib/admin-client';
 	import { LatestRequest, record, rows, text } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	const reads = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
 	function write(url: string, payload: unknown, decode: (value: unknown) => unknown) {
 		let intent = intents.get(url);
@@ -70,14 +78,16 @@
 		})(body);
 		return body as Data;
 	}
-	function impactData(value: unknown) {
+	type Impact = { base_revision: number; note: string; effects: string[]; counts: Record<string, number> };
+	function impactData(value: unknown): Impact {
 		const body = record(value);
-		integer(body.base_revision);
-		text(body.note);
 		if (!Array.isArray(body.effects)) throw new Error('Policy effects were incomplete');
-		body.effects.forEach(text);
-		for (const count of Object.values(record(body.counts))) integer(count);
-		return body;
+		return {
+			base_revision: integer(body.base_revision),
+			note: text(body.note),
+			effects: body.effects.map(text),
+			counts: Object.fromEntries(Object.entries(record(body.counts)).map(([key, count]) => [key, integer(count)]))
+		};
 	}
 	import { formatKobo, parseNaira } from '$lib/money';
 	type Values = Record<string, number | boolean | string>;
@@ -107,7 +117,7 @@
 		actors: Record<string, string>;
 		deployment_limits: Values;
 	};
-	let preview: any = $state(null);
+	let preview: Impact | null = $state(null);
 	let units: Record<string, string> = $state({});
 	let data: Data | null = $state(null),
 		draft: Values = $state({}),
@@ -197,19 +207,21 @@
 				adminGet('/api/v1/ops/governance', read.signal)
 			]);
 			if (!read.current()) return;
+			const mode = readGovernanceMode(gov);
 			if (
-				!b.current?.values ||
+				!b.current ||
+				typeof b.current !== 'object' ||
+				!record(b.current).values ||
 				!Array.isArray(b.fields) ||
 				!Array.isArray(b.changes) ||
 				!Array.isArray(b.events) ||
-				!['solo_owner', 'delegated_team'].includes(gov.governance?.mode)
+				!mode
 			)
 				throw new Error('Settings and approval rules could not be verified.');
-			if (!Array.isArray(caps.roles)) throw new Error('Admin roles were incomplete');
-			caps.roles.forEach(text);
+			const roles = adminRoles(caps);
 			data = policyData(b);
-			isPlatformOwner = caps.roles.includes('platform_owner');
-			governanceMode = gov.governance.mode;
+			isPlatformOwner = roles.includes('platform_owner');
+			governanceMode = mode;
 			reset();
 		} catch (e) {
 			if (read.current()) error = e instanceof Error ? e.message : 'Settings could not be loaded';
@@ -342,10 +354,10 @@
 				propose();
 			}}
 		>
-			{#each ['Collections', 'Limits', 'Fees', 'Notices'] as group}
+			{#each ['Collections', 'Limits', 'Fees', 'Notices'] as group, i (i)}
 				<fieldset disabled={busy || blocked || data.can_propose === false}>
 					<legend>{group}</legend>
-					{#each data.fields.filter((f) => f.group === group) as f}
+					{#each data.fields.filter((f) => f.group === group) as f (f.key)}
 						<div class="setting">
 							<label for={f.key}>{label(f)}</label>
 							{#if f.kind === 'boolean'}<select
@@ -402,7 +414,7 @@
 			<fieldset disabled={busy || blocked || data.can_propose === false}>
 				<legend>Review your proposal</legend>
 				{#if changed.length}<ul>
-						{#each changed as f}<li>
+						{#each changed as f (f.key)}<li>
 								<strong>{label(f)}:</strong>
 								{display(f, data.current.values[f.key])} → {display(f, draft[f.key])}
 							</li>{/each}
@@ -433,10 +445,10 @@
 				</p>
 				<p>{preview.note}</p>
 				<ul>
-					{#each preview.effects as effect}<li>{effect}</li>{/each}
+					{#each preview.effects as effect, i (i)}<li>{effect}</li>{/each}
 				</ul>
 				<dl>
-					{#each Object.entries(preview.counts) as [key, value]}<dt>{key.replaceAll('_', ' ')}</dt>
+					{#each Object.entries(preview.counts) as [key, value] (key)}<dt>{key.replaceAll('_', ' ')}</dt>
 						<dd>{String(value)}</dd>{/each}
 				</dl>{/if}
 		</section>
@@ -458,7 +470,7 @@
 					<div class="table-wrap">
 						<table>
 							<thead><tr><th>Setting</th><th>Previous</th><th>Proposed</th></tr></thead><tbody
-								>{#each data.fields as f}<tr
+								>{#each data.fields as f (f.key)}<tr
 										class:changed={c.values[f.key] !== (c.before_values ?? data.current.values)[f.key]}
 										><th>{label(f)}</th><td>{display(f, (c.before_values ?? data.current.values)[f.key])}</td><td
 											>{display(f, c.values[f.key])}</td
@@ -468,7 +480,7 @@
 						</table>
 					</div>
 				</details>
-				{#each data.events.filter((e) => e.change_id === c.id) as event}<p class="history">
+				{#each data.events.filter((e) => e.change_id === c.id) as event, i (i)}<p class="history">
 						{when(event.occurred_at)} · {actor(event.actor_id)} · {event.action}: {event.reason}
 					</p>{/each}
 				{#if c.state === 'pending' || status(c) === 'scheduled'}

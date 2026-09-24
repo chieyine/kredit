@@ -4,7 +4,7 @@
 </script>
 
 <ol class:compact class="network-chain" aria-label="From manufacturer to consumer">
-	{#each network as stage, index}
+	{#each network as stage, index (stage.key)}
 		<li>
 			<span class="step">{String(index + 1).padStart(2, '0')}</span>
 			<a href={`/${stage.key}`}>

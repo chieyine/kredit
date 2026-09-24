@@ -42,10 +42,10 @@ class InventoryTests(unittest.TestCase):
         rows = self.rendered()
         lookup = {inventory.key_of(row): row for row in rows}
         self.assertEqual(len(original), 1424)
-        self.assertEqual(len(rows), 1636)
+        self.assertEqual(len(rows), 1645)
         for row in original:
             self.assertEqual(row, lookup[inventory.key_of(row)])
-        self.assertEqual(sum(row['classification'] == 'restricted_pending_review' for row in rows), 212)
+        self.assertEqual(sum(row['classification'] == 'restricted_pending_review' for row in rows), 221)
         self.assertEqual(rows, self.rendered())
 
     def test_live_schema_cannot_silently_add_or_remove_fields(self):

@@ -141,7 +141,7 @@
 			>
 		</div>
 		{#if visible.length}<section class="list">
-				{#each visible as item}<article class:failed-card={item.failure_reason}>
+				{#each visible as item, i (i)}<article class:failed-card={item.failure_reason}>
 						<div class="message-head">
 							<div>
 								<span class="channel">{channel(item.channel)}</span><strong>{messageName(item.template)}</strong>

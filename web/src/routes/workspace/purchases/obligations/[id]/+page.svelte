@@ -4,56 +4,93 @@
 	import { kobo } from '$lib/records';
 	import { page } from '$app/state';
 	import { csrfHeaders, idempotencyKey } from '$lib/api/client';
-	import { formatKobo } from '$lib/money';
+	import { exactKobo, formatKobo, type KoboValue } from '$lib/money';
 	import { productLabel } from '$lib/product-language';
 
-	let data: any = $state(null);
+	type ScheduleItem = {
+		id: string;
+		state: string;
+		due_at: string;
+		collection_at: string;
+		principal_due_kobo: KoboValue;
+		allocated_kobo: KoboValue;
+	};
+	type CollectionNotice = { schedule_item_id: string; notification_id: string; acknowledged: boolean };
+	type StateRow = { id: string; state: string };
+	type ObligationDetail = {
+		view: {
+			request: { id: string; goods_description: string };
+			obligation: { outstanding_kobo: KoboValue; payment_status: string };
+		};
+		schedule_items: ScheduleItem[];
+		collection_notices: CollectionNotice[];
+		payments: StateRow[];
+		payment_claims: StateRow[];
+	};
+	let data = $state<ObligationDetail | null>(null);
 	let error = $state('');
 	let notice = $state('');
 	let busy = $state('');
 
 	const reads = new LatestRequest();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- retry cache, never rendered
 	const keys = new Map<string, string>();
-	function decode(value: unknown) {
-		const data = record(value),
-			view = record(data.view),
+	const stateRow = (value: unknown): StateRow => {
+		const item = record(value);
+		return { id: text(item.id), state: text(item.state) };
+	};
+	function decode(value: unknown): ObligationDetail {
+		const body = record(value),
+			view = record(body.view),
 			request = record(view.request),
 			obligation = record(view.obligation);
-		text(request.id);
-		text(request.goods_description);
-		kobo(obligation.outstanding_kobo);
-		text(obligation.payment_status);
-		rows('schedule_items', (value) => {
-			const item = record(value);
-			text(item.id);
-			text(item.state);
-			kobo(item.principal_due_kobo);
-			kobo(item.allocated_kobo);
-			for (const key of ['due_at', 'collection_at'])
-				if (!Number.isFinite(Date.parse(text(item[key])))) throw new Error('Invalid payment date');
-			return item;
-		})(data);
-		rows('collection_notices', (value) => {
-			const item = record(value);
-			text(item.schedule_item_id);
-			text(item.notification_id);
-			if (typeof item.acknowledged !== 'boolean') throw new Error('Invalid notice state');
-			return item;
-		})(data);
-		rows('payments', (value) => {
-			const item = record(value);
-			text(item.id);
-			text(item.state);
-			return item;
-		})(data);
-		rows('payment_claims', (value) => {
-			const item = record(value);
-			text(item.id);
-			text(item.state);
-			return item;
-		})(data);
-		return data;
+		return {
+			view: {
+				request: { id: text(request.id), goods_description: text(request.goods_description) },
+				obligation: {
+					outstanding_kobo: kobo(obligation.outstanding_kobo),
+					payment_status: text(obligation.payment_status)
+				}
+			},
+			schedule_items: rows('schedule_items', (value): ScheduleItem => {
+				const item = record(value);
+				const due = text(item.due_at),
+					collection = text(item.collection_at);
+				if (!Number.isFinite(Date.parse(due)) || !Number.isFinite(Date.parse(collection)))
+					throw new Error('Invalid payment date');
+				return {
+					id: text(item.id),
+					state: text(item.state),
+					due_at: due,
+					collection_at: collection,
+					principal_due_kobo: kobo(item.principal_due_kobo),
+					allocated_kobo: kobo(item.allocated_kobo)
+				};
+			})(body),
+			collection_notices: rows('collection_notices', (value): CollectionNotice => {
+				const item = record(value);
+				if (typeof item.acknowledged !== 'boolean') throw new Error('Invalid notice state');
+				return {
+					schedule_item_id: text(item.schedule_item_id),
+					notification_id: text(item.notification_id),
+					acknowledged: item.acknowledged
+				};
+			})(body),
+			payments: rows('payments', stateRow)(body),
+			payment_claims: rows('payment_claims', stateRow)(body)
+		};
 	}
+	/** Unpaid principal on a payment day, computed exactly; null when an amount cannot be verified. */
+	function unpaid(item: ScheduleItem): bigint | null {
+		const due = exactKobo(item.principal_due_kobo),
+			paid = exactKobo(item.allocated_kobo);
+		return due === null || paid === null ? null : due - paid;
+	}
+	const nextDue = $derived(data?.schedule_items.find((i) => i.state !== 'CANCELLED' && (unpaid(i) ?? 0n) > 0n) ?? null);
+	const confirmedPayments = $derived(data?.payments.filter((p) => p.state === 'recognized').length ?? 0);
+	const waitingClaims = $derived(
+		data?.payment_claims.filter((p) => ['pending', 'expired'].includes(p.state)).length ?? 0
+	);
 	async function loadSale(id = page.params.id) {
 		const request = reads.begin();
 		error = '';
@@ -108,9 +145,10 @@
 			}
 			if (page.params.id !== saleID) return;
 			keys.delete(notificationID);
-			data.collection_notices = data.collection_notices.map((item: any) =>
-				item.notification_id === notificationID ? { ...item, acknowledged: true } : item
-			);
+			if (data)
+				data.collection_notices = data.collection_notices.map((item) =>
+					item.notification_id === notificationID ? { ...item, acknowledged: true } : item
+				);
 			notice =
 				'Saved. This only says you saw the notice. It does not mean you have paid, and you can still report a problem.';
 		} catch {
@@ -139,11 +177,8 @@
 			</article>
 			<article>
 				<span>Pay before</span><strong
-					>{data.schedule_items.find((i: any) => i.state !== 'CANCELLED' && i.principal_due_kobo > i.allocated_kobo)
-						? new Date(
-								data.schedule_items.find((i: any) => i.state !== 'CANCELLED' && i.principal_due_kobo > i.allocated_kobo)
-									.due_at
-							).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })
+					>{nextDue
+						? new Date(nextDue.due_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })
 						: 'Nothing due right now'}</strong
 				>
 			</article>
@@ -163,8 +198,8 @@
 							></tr
 						></thead
 					><tbody>
-						{#each data.schedule_items as item}
-							{@const debitNotice = data.collection_notices.find((n: any) => n.schedule_item_id === item.id)}
+						{#each data.schedule_items as item (item.id)}
+							{@const debitNotice = data.collection_notices.find((n) => n.schedule_item_id === item.id)}
 							<tr
 								><td>{new Date(item.due_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })}</td><td
 									>{money(item.principal_due_kobo)}</td
@@ -172,7 +207,7 @@
 									>{#if debitNotice}<p>
 											Debit date: {new Date(item.collection_at).toLocaleDateString('en-NG', {
 												timeZone: 'Africa/Lagos'
-											})}. Up to {money(item.principal_due_kobo - item.allocated_kobo)} still due.
+											})}. Up to {money(unpaid(item))} still due.
 										</p>
 										{#if debitNotice.acknowledged}<span>Notice acknowledged</span>{:else}<button
 												class="secondary"
@@ -190,10 +225,9 @@
 		{:else}<p>You pay this sale once, all at one time.</p>{/if}
 		<h2>What you have paid</h2>
 		<p>
-			{data.payments.filter((p: any) => p.state === 'recognized').length}
-			{data.payments.filter((p: any) => p.state === 'recognized').length === 1 ? 'payment' : 'payments'} confirmed. {data.payment_claims.filter(
-				(p: any) => ['pending', 'expired'].includes(p.state)
-			).length} still waiting for the seller to check their bank.
+			{confirmedPayments}
+			{confirmedPayments === 1 ? 'payment' : 'payments'} confirmed. {waitingClaims} still waiting for the seller to check
+			their bank.
 		</p>
 		<a href={`/workspace/purchases/orders/${encodeURIComponent(data.view.request.id)}`}
 			>Pay this sale, or report a problem →</a

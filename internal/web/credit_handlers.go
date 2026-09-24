@@ -190,11 +190,11 @@ func (s *Server) listCreditRequests(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadOrganization); !ok {
 		return
 	}
-	financialRows1, readErr1 := s.runtime.readCreditForSupplier(r.Context(), orgID)
-	if financialReadError(w, readErr1) {
+	financialRows, readErr := s.runtime.readCreditForSupplier(r.Context(), orgID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"requests": financialRows1})
+	writeJSON(w, 200, map[string]any{"requests": financialRows})
 }
 func (s *Server) getCreditRequest(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
@@ -280,7 +280,7 @@ func (s *Server) sendCreditRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := s.runtime.Credit.Send(id, user.ID)
 	if err != nil {
-		if strings.Contains(err.Error(), "an independent credit approval is required for this offer") || strings.Contains(err.Error(), "reviewer approval ceiling exceeded") {
+		if credit.NeedsIndependentApproval(err) {
 			writeProblem(w, 409, "credit_approval_required", "Request internal approval for these exact terms before sending the offer.")
 			return
 		}
@@ -368,14 +368,14 @@ func (s *Server) listBuyerCreditRequests(w http.ResponseWriter, r *http.Request)
 	if !scopedOK {
 		return
 	}
-	financialRows2, readErr2 := s.runtime.readCreditForBuyer(r.Context(), user.ID)
-	if financialReadError(w, readErr2) {
+	financialRows, readErr := s.runtime.readCreditForBuyer(r.Context(), user.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
 	if businessID != "" {
-		financialRows2 = purchasingRows(financialRows2, func(item credit.View) bool { return item.Request.BuyerBusinessID == businessID })
+		financialRows = purchasingRows(financialRows, func(item credit.View) bool { return item.Request.BuyerBusinessID == businessID })
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"requests": financialRows2})
+	writeJSON(w, http.StatusOK, map[string]any{"requests": financialRows})
 }
 func (s *Server) getBuyerAgreement(w http.ResponseWriter, r *http.Request) {
 	_, user, ok := s.requireAuth(w, r)
@@ -455,6 +455,7 @@ func (s *Server) renderAgreementDocument(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", agreementdocs.ContentSecurityPolicy)
 	w.Header().Set("Content-Disposition", "inline; filename=\"kredit-agreement-"+view.Request.ID+".html\"")
 	w.Header().Set("X-Agreement-Hash", view.Agreement.DocumentHash)
 	w.WriteHeader(http.StatusOK)
@@ -650,11 +651,11 @@ func (s *Server) listPayments(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	financialRows3, readErr3 := s.runtime.readPayments(r.Context(), v.Obligation.ID)
-	if financialReadError(w, readErr3) {
+	financialRows, readErr := s.runtime.readPayments(r.Context(), v.Obligation.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payments": financialRows3, "outstanding_kobo": v.Obligation.OutstandingKobo})
+	writeJSON(w, 200, map[string]any{"payments": financialRows, "outstanding_kobo": v.Obligation.OutstandingKobo})
 }
 
 func (s *Server) reconcilePayments(w http.ResponseWriter, r *http.Request) {
@@ -684,11 +685,11 @@ func (s *Server) reconcilePayments(w http.ResponseWriter, r *http.Request) {
 	if refreshed, refreshErr := s.runtime.getCreditForSupplier(r.Context(), requestID, orgID); refreshErr == nil && refreshed.Obligation != nil {
 		v = refreshed
 	}
-	financialRows4, readErr4 := s.runtime.readPayments(r.Context(), v.Obligation.ID)
-	if financialReadError(w, readErr4) {
+	financialRows, readErr := s.runtime.readPayments(r.Context(), v.Obligation.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	paymentsForObligation := financialRows4
+	paymentsForObligation := financialRows
 	transactions := []ledger.Transaction{}
 	for _, payment := range paymentsForObligation {
 		posted, err := s.runtime.Ledger.GetByReference(payment.ID)
@@ -759,11 +760,11 @@ func (s *Server) listBuyerPayments(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	financialRows5, readErr5 := s.runtime.readPayments(r.Context(), v.Obligation.ID)
-	if financialReadError(w, readErr5) {
+	financialRows, readErr := s.runtime.readPayments(r.Context(), v.Obligation.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payments": financialRows5, "outstanding_kobo": v.Obligation.OutstandingKobo})
+	writeJSON(w, 200, map[string]any{"payments": financialRows, "outstanding_kobo": v.Obligation.OutstandingKobo})
 }
 func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 	_, user, ok := s.requireAuth(w, r)
@@ -781,23 +782,23 @@ func (s *Server) getBuyerObligation(w http.ResponseWriter, r *http.Request) {
 	if financialReadError(w, scheduleErr) {
 		return
 	}
-	financialRows6, readErr6 := s.runtime.readPayments(r.Context(), obligationID)
-	if financialReadError(w, readErr6) {
+	paymentRows, err := s.runtime.readPayments(r.Context(), obligationID)
+	if financialReadError(w, err) {
 		return
 	}
-	financialRows7, readErr7 := s.runtime.readDisputesForObligation(r.Context(), obligationID)
-	if financialReadError(w, readErr7) {
+	obligationDisputes, err := s.runtime.readDisputesForObligation(r.Context(), obligationID)
+	if financialReadError(w, err) {
 		return
 	}
-	financialRows8, readErr8 := s.runtime.readPaymentClaimsForObligation(r.Context(), obligationID)
-	if financialReadError(w, readErr8) {
+	claims, err := s.runtime.readPaymentClaimsForObligation(r.Context(), obligationID)
+	if financialReadError(w, err) {
 		return
 	}
 	notices, noticeErr := s.collectionNotices(r.Context(), user.ID, obligationID)
 	if financialReadError(w, noticeErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"view": view, "payments": financialRows6, "schedule_items": items, "disputes": financialRows7, "payment_claims": financialRows8, "collection_notices": notices})
+	writeJSON(w, 200, map[string]any{"view": view, "payments": paymentRows, "schedule_items": items, "disputes": obligationDisputes, "payment_claims": claims, "collection_notices": notices})
 }
 
 func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request) {
@@ -905,11 +906,11 @@ func (s *Server) listTradeLines(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadOrganization); !ok {
 		return
 	}
-	financialRows9, readErr9 := s.runtime.readTradeLinesForSupplier(r.Context(), orgID)
-	if financialReadError(w, readErr9) {
+	financialRows, readErr := s.runtime.readTradeLinesForSupplier(r.Context(), orgID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"trade_lines": financialRows9})
+	writeJSON(w, 200, map[string]any{"trade_lines": financialRows})
 }
 func (s *Server) getTradeLine(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")
@@ -1329,6 +1330,7 @@ func (s *Server) renderDrawdownAgreementDocument(w http.ResponseWriter, r *http.
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", agreementdocs.ContentSecurityPolicy)
 	w.Header().Set("Content-Disposition", "inline; filename=\"kredit-drawdown-agreement-"+drawdown.ID+".html\"")
 	w.Header().Set("X-Agreement-Hash", drawdown.AgreementHash)
 	w.WriteHeader(http.StatusOK)
@@ -1426,11 +1428,11 @@ func (s *Server) listCollections(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "obligation_not_found", "We could not find that sale.")
 		return
 	}
-	financialRows10, readErr10 := s.runtime.readCollectionsAttemptsContext(db.WithOrganizationContext(r.Context(), orgID), v.Obligation.ID)
-	if financialReadError(w, readErr10) {
+	financialRows, readErr := s.runtime.readCollectionsAttemptsContext(db.WithOrganizationContext(r.Context(), orgID), v.Obligation.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"attempts": financialRows10})
+	writeJSON(w, 200, map[string]any{"attempts": financialRows})
 }
 
 func (s *Server) retryCollection(w http.ResponseWriter, r *http.Request) {
@@ -1613,11 +1615,11 @@ func (s *Server) listDisputes(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial); !ok {
 		return
 	}
-	financialRows11, readErr11 := s.runtime.readDisputesForOrganization(r.Context(), orgID)
-	if financialReadError(w, readErr11) {
+	financialRows, readErr := s.runtime.readDisputesForOrganization(r.Context(), orgID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"disputes": financialRows11})
+	writeJSON(w, 200, map[string]any{"disputes": financialRows})
 }
 func (s *Server) getDispute(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := pathID(r, "organizationID")

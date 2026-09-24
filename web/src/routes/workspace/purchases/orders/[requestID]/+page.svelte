@@ -47,6 +47,7 @@
 		disputeReason = $state(''),
 		disputeExplanation = $state(''),
 		disputeEffect = $state('CONTESTED_ONLY');
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 	const intents = new Map<string, MutationIntent>();
 	const reads = new LatestRequest();
 	const view = $derived(resource.state === 'ready' ? resource.data : null);
@@ -410,7 +411,7 @@
 			</dl>
 			{#if view.request.custom_schedule_items.length}<h3>Payment schedule</h3>
 				<ol>
-					{#each view.request.custom_schedule_items as item}<li>
+					{#each view.request.custom_schedule_items as item, i (i)}<li>
 							<Money amountKobo={item.amount_kobo} /> by {dateLabel(item.due_date)}
 						</li>{/each}
 				</ol>{/if}

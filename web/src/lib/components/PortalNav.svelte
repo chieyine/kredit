@@ -145,13 +145,13 @@
 	<div id={menuID} class="portal-menu" class:open>
 		{#if hasMobileBar}
 			<div class="desktop-primary">
-				{#each mobilePrimary as [linkLabel, href]}
+				{#each mobilePrimary as [linkLabel, href], i (i)}
 					<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>{linkLabel}</a>
 				{/each}
 			</div>
 		{:else}
 			<div class="portal-links">
-				{#each links as [linkLabel, href]}
+				{#each links as [linkLabel, href], i (i)}
 					<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>{linkLabel}</a>
 				{/each}
 			</div>
@@ -186,7 +186,7 @@
 
 {#if hasMobileBar}
 	<div class="mobile-nav" style:--nav-count={mobilePrimary.length} role="navigation" aria-label={`${label} main pages`}>
-		{#each mobilePrimary as [linkLabel, href, icon]}
+		{#each mobilePrimary as [linkLabel, href, icon], i (i)}
 			<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>
 				<span class="mobile-icon" data-icon={icon} aria-hidden="true"></span>
 				<span>{linkLabel}</span>
@@ -213,11 +213,11 @@
 			</header>
 			<div class="sheet-content">
 				<div class="more-links" role="navigation" aria-label="Account menu pages" data-sveltekit-preload-data="tap">
-					{#each menuGroups() as group}
+					{#each menuGroups() as group (group.label)}
 						<section class="menu-group">
 							<h2>{group.label}</h2>
 							<div>
-								{#each group.links as [linkLabel, href]}<a
+								{#each group.links as [linkLabel, href], linkIndex (linkIndex)}<a
 										{href}
 										aria-current={current(href) ? 'page' : undefined}
 										onclick={() => closeMenus()}><span>{linkLabel}</span><span aria-hidden="true">→</span></a

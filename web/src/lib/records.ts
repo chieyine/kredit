@@ -1,8 +1,7 @@
 import { exactKobo, type KoboValue } from './money';
-import { record, text, RequestError } from './api/reliable';
+import { optionalText, record, text, RequestError } from './api/reliable';
 import { validFeeTerms, type FeeTerms } from './fee-terms';
 
-const optionalText = (value: unknown) => (typeof value === 'string' ? value : '');
 export function kobo(value: unknown): KoboValue {
 	if (
 		(typeof value !== 'number' && typeof value !== 'string' && typeof value !== 'bigint') ||

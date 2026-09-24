@@ -50,6 +50,7 @@
 					billing_provider_reference: text(r.billing_provider_reference)
 				};
 			});
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this function, never rendered
 			const seen = new Map<string, string>();
 			for (const business of businesses) {
 				seen.set(business.organization_id, business.legal_name);
@@ -173,7 +174,7 @@
 					receipt = null;
 					selected = null;
 				}}
-				><option value="">Choose a business</option>{#each invoiceBusinesses as item}<option
+				><option value="">Choose a business</option>{#each invoiceBusinesses as item, i (i)}<option
 						value={item.organization_id}>{item.business_name}</option
 					>{/each}</select
 			></label

@@ -4,21 +4,31 @@
 	import { actualPaymentTime } from '$lib/financial-input';
 	import { localInput, lagosISO } from '$lib/admin-client';
 	import { feeDisclosure } from '$lib/fee-terms';
-	import { formatKobo, nairaInput, parseNaira } from '$lib/money';
+	import { exactKobo, formatKobo, nairaInput, parseNaira, type KoboValue } from '$lib/money';
 	import { page } from '$app/state';
 	import { getContext, untrack } from 'svelte';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
-	import { checkedJSON, LatestRequest, readResource, record, rows, text, publicError } from '$lib/api/reliable';
+	import {
+		checkedJSON,
+		LatestRequest,
+		optionalText,
+		readResource,
+		record,
+		rows,
+		text,
+		publicError
+	} from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { saleView, dateLabel, kobo, organization, timeLabel } from '$lib/records';
+	import { saleView, dateLabel, kobo, organization, timeLabel, type SaleView } from '$lib/records';
 	import PaymentReview from '$lib/components/PaymentReview.svelte';
 
 	import Money from '$lib/components/Money.svelte';
 	import ShareActions from '$lib/components/ShareActions.svelte';
 	import { productLabel } from '$lib/product-language';
-	const id = $derived(page.params.id);
+	const id = $derived(page.params.id ?? '');
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
 	const reads = new LatestRequest(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
 		intents = new Map<string, MutationIntent>();
 	let loading = $state(true),
 		paymentError = $state(''),
@@ -26,7 +36,38 @@
 		claimError = $state(''),
 		collectionError = $state(''),
 		eligibilityError = $state('');
-	let review = $state<{ claim: any; decision: 'confirmed' | 'rejected'; reason: string } | null>(null);
+	type SupplierSale = SaleView & { request: SaleView['request'] & { version: number } };
+	type SalePayment = {
+		id: string;
+		amount_kobo: KoboValue;
+		state: string;
+		source_type: string;
+		provider_reference: string;
+	};
+	type ScheduleItem = {
+		id: string;
+		state: string;
+		due_at: string;
+		principal_due_kobo: KoboValue;
+		allocated_kobo: KoboValue;
+	};
+	type PaymentClaim = {
+		id: string;
+		amount_kobo: KoboValue;
+		state: string;
+		transfer_reference: string;
+		paid_at: string;
+		review_reason: string;
+	};
+	type CollectionAttempt = { id: string; requested_amount_kobo: KoboValue; state: string; requested_at: string };
+	type Eligibility = { eligible: boolean; amount_kobo: KoboValue; reasons: string[] };
+	/** A payment day with principal still unpaid, compared exactly in kobo. */
+	function hasUnpaid(item: ScheduleItem) {
+		const due = exactKobo(item.principal_due_kobo),
+			paid = exactKobo(item.allocated_kobo);
+		return item.state !== 'CANCELLED' && due !== null && paid !== null && due > paid;
+	}
+	let review = $state<{ claim: PaymentClaim; decision: 'confirmed' | 'rejected'; reason: string } | null>(null);
 	function intentFor(url: string) {
 		let intent = intents.get(url);
 		if (!intent) {
@@ -40,7 +81,7 @@
 		if (!text(record(result[field]).id)) throw new Error('Missing record reference');
 		return result;
 	}
-	function checkedSale(value: unknown) {
+	function checkedSale(value: unknown): SupplierSale {
 		const result = entity(value, 'request'),
 			sale = record(result.request);
 		text(sale.state);
@@ -57,26 +98,63 @@
 			text(record(result.obligation).id);
 			kobo(record(result.obligation).outstanding_kobo);
 		}
-		return { ...result, timeline: saleView(result).timeline };
+		const verified = saleView(result);
+		return { ...verified, request: { ...verified.request, version: Number(sale.version) } };
 	}
-	function moneyRow(value: unknown, field: string) {
+	function salePayment(value: unknown): SalePayment {
 		const row = record(value);
-		text(row.id);
-		kobo(row[field]);
-		text(row.state);
-		return row;
+		return {
+			id: text(row.id),
+			amount_kobo: kobo(row.amount_kobo),
+			state: text(row.state),
+			source_type: optionalText(row.source_type),
+			provider_reference: optionalText(row.provider_reference)
+		};
+	}
+	function scheduleItem(value: unknown): ScheduleItem {
+		const row = record(value);
+		const due = text(row.due_at);
+		if (!Number.isFinite(Date.parse(due))) throw new Error('Invalid payment date');
+		return {
+			id: text(row.id),
+			state: text(row.state),
+			due_at: due,
+			principal_due_kobo: kobo(row.principal_due_kobo),
+			allocated_kobo: kobo(row.allocated_kobo)
+		};
+	}
+	function paymentClaim(value: unknown): PaymentClaim {
+		const row = record(value);
+		return {
+			id: text(row.id),
+			amount_kobo: kobo(row.amount_kobo),
+			state: text(row.state),
+			transfer_reference: optionalText(row.transfer_reference),
+			paid_at: optionalText(row.paid_at),
+			review_reason: optionalText(row.review_reason)
+		};
+	}
+	function collectionAttempt(value: unknown): CollectionAttempt {
+		const row = record(value);
+		return {
+			id: text(row.id),
+			requested_amount_kobo: kobo(row.requested_amount_kobo),
+			state: text(row.state),
+			requested_at: optionalText(row.requested_at)
+		};
 	}
 
 	let organizationID = $state(''),
-		view: any = $state(null),
-		payments: any[] = $state([]),
+		view = $state<SupplierSale | null>(null),
+		payments: SalePayment[] = $state([]),
 		error = $state(''),
 		busy = $state(false);
-	let scheduleItems: any[] = $state([]),
-		paymentClaims: any[] = $state([]),
-		collectionAttempts: any[] = $state([]),
-		eligibility: any = $state(null),
+	let scheduleItems: ScheduleItem[] = $state([]),
+		paymentClaims: PaymentClaim[] = $state([]),
+		collectionAttempts: CollectionAttempt[] = $state([]),
+		eligibility: Eligibility | null = $state(null),
 		notice = $state('');
+	const nextDueItem = $derived(scheduleItems.find(hasUnpaid));
 	let deliveryMethod = $state('supplier_delivery'),
 		releaseNotes = $state(''),
 		paymentAmount = $state(''),
@@ -131,58 +209,46 @@
 			const result = await checkedJSON(base, checkedSale, { signal: request.signal });
 			if (!request.current()) return;
 			view = result;
-			if (view.request.state === 'DRAFT') {
-				draftPrincipal = nairaInput(view.request.principal_kobo);
-				draftGoods = view.request.goods_description;
-				draftDueDate = view.request.due_date;
-				draftCollectionAt = localInput(view.request.collection_at);
-				draftGraceHours = view.request.grace_hours;
+			if (result.request.state === 'DRAFT') {
+				draftPrincipal = nairaInput(result.request.principal_kobo);
+				draftGoods = result.request.goods_description;
+				draftDueDate = result.request.due_date;
+				draftCollectionAt = localInput(result.request.collection_at);
+				draftGraceHours = result.request.grace_hours;
 			}
-			if (view.obligation) {
+			if (result.obligation) {
 				const [p, s, c, e, a] = await Promise.all([
-					readResource(
-						base,
-						`${base}/payments`,
-						rows('payments', (value) => moneyRow(value, 'amount_kobo')),
-						request.signal,
-						'payment history'
-					),
+					readResource(base, `${base}/payments`, rows('payments', salePayment), request.signal, 'payment history'),
 					readResource(
 						base,
 						`${base}/schedule`,
-						(value) => {
-							const data = record(value);
-							const items = rows('items', (item) => {
-								const row = moneyRow(item, 'principal_due_kobo');
-								kobo(row.allocated_kobo);
-								if (!Number.isFinite(Date.parse(text(row.due_at)))) throw new Error('Invalid payment date');
-								return row;
-							})(data);
-							return { schedule: data.schedule, items };
-						},
+						(value) => ({ items: rows('items', scheduleItem)(value) }),
 						request.signal,
 						'payment dates'
 					),
 					readResource(
 						base,
 						`${base}/payment-claims`,
-						rows('payment_claims', (value) => moneyRow(value, 'amount_kobo')),
+						rows('payment_claims', paymentClaim),
 						request.signal,
 						'reported transfers'
 					),
 					readResource(
 						base,
 						`${base}/collection/eligibility`,
-						(value) => {
+						(value): Eligibility => {
 							const data = record(value);
 							if (typeof data.eligible !== 'boolean') throw new Error('Missing eligibility');
-							if (data.eligible) kobo(data.amount_kobo);
 							if (
 								data.reasons !== undefined &&
 								(!Array.isArray(data.reasons) || !data.reasons.every((value) => typeof value === 'string'))
 							)
 								throw new Error('Invalid eligibility reasons');
-							return data;
+							return {
+								eligible: data.eligible,
+								amount_kobo: data.eligible ? kobo(data.amount_kobo) : null,
+								reasons: (data.reasons as string[] | undefined) ?? []
+							};
 						},
 						request.signal,
 						'bank debit eligibility'
@@ -190,7 +256,7 @@
 					readResource(
 						base,
 						`${base}/collections`,
-						rows('attempts', (value) => moneyRow(value, 'requested_amount_kobo')),
+						rows('attempts', collectionAttempt),
 						request.signal,
 						'bank debit history'
 					)
@@ -253,13 +319,15 @@
 	}
 	async function updateDraft() {
 		error = '';
+		if (!view) return;
+		const expectedVersion = view.request.version;
 		try {
 			const principalKobo = parseNaira(draftPrincipal);
 			if (principalKobo <= 0) throw new Error('Enter a sale amount above zero.');
 			await mutate(
-				`/api/v1/organizations/${organizationID}/credit-requests/${id}`,
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}`,
 				{
-					expected_version: view.request.version,
+					expected_version: expectedVersion,
 					principal_kobo: principalKobo,
 					goods_description: draftGoods,
 					due_date: draftDueDate,
@@ -279,7 +347,7 @@
 			return false;
 		}
 		return mutate(
-			`/api/v1/organizations/${organizationID}/credit-requests/${id}/${path}`,
+			`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/${path}`,
 			body,
 			path === 'payments' ? 'payment' : path === 'disputes' ? 'dispute' : 'request'
 		);
@@ -341,11 +409,19 @@
 	}
 	async function startCollection() {
 		// The API accepts the stable Idempotency-Key header; do not generate a second identity in the body.
-		if (await outsideCommand(`/api/v1/organizations/${organizationID}/credit-requests/${id}/collection`))
+		if (
+			await outsideCommand(
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/collection`
+			)
+		)
 			notice = 'The collection request was accepted. Check its status below; this is not a confirmed payment.';
 	}
-	async function collectionAction(attempt: any, action: string) {
-		if (await outsideCommand(`/api/v1/organizations/${organizationID}/collections/${attempt.id}/${action}`))
+	async function collectionAction(attempt: CollectionAttempt, action: string) {
+		if (
+			await outsideCommand(
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/collections/${encodeURIComponent(attempt.id)}/${action}`
+			)
+		)
 			notice =
 				action === 'retry' ? 'We have asked the bank again.' : 'We checked with the bank. The latest result is below.';
 	}
@@ -356,7 +432,7 @@
 		}
 		if (
 			await outsideCommand(
-				`/api/v1/organizations/${organizationID}/credit-requests/${id}/payments/${reversePaymentID}/reverse`,
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/payments/${encodeURIComponent(reversePaymentID)}/reverse`,
 				{ reason: reverseReason }
 			)
 		) {
@@ -365,7 +441,7 @@
 			reverseReason = '';
 		}
 	}
-	function decidePaymentClaim(claim: any, decision: 'confirmed' | 'rejected') {
+	function decidePaymentClaim(claim: PaymentClaim, decision: 'confirmed' | 'rejected') {
 		if (busy) return;
 		if (!claimReviewReason.trim()) {
 			error = 'Please say why you are accepting or rejecting this.';
@@ -378,10 +454,13 @@
 		if (!review || busy) return;
 		const selected = review;
 		if (
-			await outsideCommand(`/api/v1/organizations/${organizationID}/payment-claims/${selected.claim.id}/decide`, {
-				decision: selected.decision,
-				reason: selected.reason
-			})
+			await outsideCommand(
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/payment-claims/${encodeURIComponent(selected.claim.id)}/decide`,
+				{
+					decision: selected.decision,
+					reason: selected.reason
+				}
+			)
 		) {
 			notice =
 				selected.decision === 'confirmed'
@@ -399,11 +478,14 @@
 		}
 		const path = operationType === 'write-off' ? 'write-off' : 'fee-waiver';
 		if (
-			await outsideCommand(`/api/v1/organizations/${organizationID}/credit-requests/${id}/${path}`, {
-				amount_kobo,
-				reason: operationReason,
-				approved_by: ''
-			})
+			await outsideCommand(
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/${path}`,
+				{
+					amount_kobo,
+					reason: operationReason,
+					approved_by: ''
+				}
+			)
 		) {
 			notice =
 				operationType === 'write-off'
@@ -414,11 +496,12 @@
 		}
 	}
 	async function openInvoice() {
-		if (busy || loading) return;
+		const documentID = view?.request.invoice_document_id;
+		if (busy || loading || !documentID) return;
 		error = '';
 		try {
 			const url = await checkedJSON(
-				`/api/v1/organizations/${encodeURIComponent(organizationID)}/documents/${encodeURIComponent(view.request.invoice_document_id)}/download`,
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/documents/${encodeURIComponent(documentID)}/download`,
 				(value) => {
 					const url = new URL(text(record(value).url), location.origin);
 					if (
@@ -475,7 +558,7 @@
 			><ShareActions
 				compact
 				title="Kredit payment reminder"
-				text={`Hello ${view.request.buyer_legal_name}, this is a reminder that ${formatKobo(view.obligation?.outstanding_kobo ?? view.request.principal_kobo)} is left for ${view.request.goods_description}. Payment day: ${scheduleItems.find((i: any) => i.state !== 'CANCELLED' && i.principal_due_kobo > i.allocated_kobo)?.due_at?.slice(0, 10) ?? (view.obligation ? 'Check your current payment schedule' : view.request.due_date)}.`}
+				text={`Hello ${view.request.buyer_legal_name}, this is a reminder that ${formatKobo(view.obligation?.outstanding_kobo ?? view.request.principal_kobo)} is left for ${view.request.goods_description}. Payment day: ${nextDueItem?.due_at?.slice(0, 10) ?? (view.obligation ? 'Check your current payment schedule' : view.request.due_date)}.`}
 			/>
 		</div>
 		<section class="detail-grid">
@@ -519,7 +602,7 @@
 					</p>
 					<p>
 						<a
-							href={`/api/v1/organizations/${organizationID}/credit-requests/${id}/agreement-document`}
+							href={`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/agreement-document`}
 							target="_blank"
 							rel="noreferrer">Print or save a copy of this sale →</a
 						>
@@ -622,7 +705,7 @@
 					<button onclick={() => load()}>Check payment history again</button>{:else if payments.length}<ul
 						class="plain-list"
 					>
-						{#each payments as payment}<li>
+						{#each payments as payment, i (i)}<li>
 								<span><Money amountKobo={payment.amount_kobo} /> · {productLabel(payment.source_type)}</span><strong
 									>{productLabel(payment.state)}</strong
 								>
@@ -638,7 +721,7 @@
 					>
 						<table>
 							<thead><tr><th>Pay before</th><th>Expected</th><th>Paid</th><th>Now</th></tr></thead><tbody
-								>{#each scheduleItems as item}<tr
+								>{#each scheduleItems as item, i (i)}<tr
 										><td>{dateLabel(item.due_at.slice(0, 10))}</td><td
 											><Money amountKobo={item.principal_due_kobo} /></td
 										><td><Money amountKobo={item.allocated_kobo} /></td><td>{productLabel(item.state)}</td></tr
@@ -660,7 +743,7 @@
 						customer can correct it. The moment you accept it, the balance drops.
 					</p>
 					{#if paymentClaims.length}<div class="claim-list">
-							{#each paymentClaims as claim}<article>
+							{#each paymentClaims as claim, i (i)}<article>
 									<div>
 										<strong><Money amountKobo={claim.amount_kobo} /></strong><span
 											>{productLabel(claim.state)} · {claim.transfer_reference}</span
@@ -705,12 +788,12 @@
 					<button class="primary" disabled={busy || loading} onclick={startCollection}>Ask the bank now</button
 					>{:else}<p>Bank debit cannot start yet.</p>
 					{#if eligibility?.reasons?.length}<ul>
-							{#each eligibility.reasons as reason}<li>{productLabel(reason)}</li>{/each}
+							{#each eligibility.reasons as reason, i (i)}<li>{productLabel(reason)}</li>{/each}
 						</ul>{/if}{/if}{#if collectionError}<p role="alert">
 						{collectionError}
 					</p>{/if}{#if collectionAttempts.length}<h3>What happened with bank debits</h3>
 					<ul class="plain-list">
-						{#each collectionAttempts as attempt}<li>
+						{#each collectionAttempts as attempt, i (i)}<li>
 								<span
 									><Money amountKobo={attempt.requested_amount_kobo} /> · {productLabel(attempt.state)}<small
 										>{timeLabel(attempt.requested_at)}</small
@@ -735,7 +818,7 @@
 				<label
 					>Payment<select disabled={busy || loading} bind:value={reversePaymentID}
 						><option value="">Choose a payment</option
-						>{#each payments.filter((payment) => payment.state?.toUpperCase() === 'RECOGNIZED') as payment}<option
+						>{#each payments.filter((payment) => payment.state?.toUpperCase() === 'RECOGNIZED') as payment (payment.id)}<option
 								value={payment.id}
 								>{formatKobo(payment.amount_kobo)} · {payment.provider_reference ||
 									productLabel(payment.source_type)}</option
