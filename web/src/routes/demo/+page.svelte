@@ -91,7 +91,7 @@
 							Start with the goods, the amount and the day it falls due. What you put here is what your customer reads.
 						</p>
 					{:else if stage === 1}<p>
-							Nothing is buried. He sees the goods, the amount and the day before he agrees to anything.
+							Nothing is hidden. They see the goods, the amount and the due date before they agree to anything.
 						</p>
 					{:else if stage === 2}<p>
 							Accepting the sale does not grant bank permission. In the real service, the customer authorises the
@@ -102,7 +102,7 @@
 							You record the day the goods left, and the delivery note stays attached to that sale.
 						</p>
 					{:else if stage === 4}<p>
-							Your customer confirms what actually arrived. If the count is short, he says so there, before any money
+							Your customer confirms what actually arrived. If the count is short, they say so there, before any money
 							moves.
 						</p>
 					{:else if stage === 5}<p>

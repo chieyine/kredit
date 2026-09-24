@@ -51,7 +51,7 @@ export const pageSEOByPath: Record<string, PageSEO> = {
 	'/how-it-works': {
 		title: 'How Kredit works, from handshake to the last naira',
 		description:
-			'Four steps. Write the sale down. Let your customer accept it. Confirm the goods reached him. Then follow the money until the balance is cleared.'
+			'Four steps. Write the sale down. Let your customer accept it. Confirm the goods arrived. Then follow the money until the balance is cleared.'
 	},
 	'/manufacturers': {
 		title: 'Know what every distributor owes you — Kredit for manufacturers',
@@ -101,7 +101,7 @@ export const pageSEOByPath: Record<string, PageSEO> = {
 	'/blog': {
 		title: 'Guides for people who sell on credit — Kredit',
 		description:
-			'Written for Nigerian traders. How to check a new customer before you load his van, what proof to keep, and what to do when the money is late.'
+			'Written for Nigerian traders. How to check a new customer before you load their van, what proof to keep, and what to do when the money is late.'
 	},
 	'/legal/complaints': {
 		title: 'Something went wrong — Kredit support and complaints',

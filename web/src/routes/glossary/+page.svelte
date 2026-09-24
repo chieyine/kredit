@@ -9,7 +9,7 @@
 		[
 			'D',
 			'Drawdown',
-			'A fresh sale taken against a limit you already gave the customer. He does not have to come back and negotiate terms again.'
+			'A fresh sale taken against a limit you already gave the customer. They do not have to come back and agree terms again.'
 		],
 		[
 			'G',
@@ -19,7 +19,7 @@
 		[
 			'M',
 			'Mandate',
-			'The permission your customer signs so an approved payment company can debit his account, up to an agreed amount and not a naira more.'
+			'The permission your customer signs so an approved payment company can debit their account, up to an agreed amount and not a naira more.'
 		],
 		[
 			'O',
@@ -29,7 +29,7 @@
 		[
 			'P',
 			'Payment claim',
-			'When your customer says he has sent a transfer. You check the money actually landed before the balance comes down. Cash is recorded separately by you.'
+			'When your customer says they have sent a transfer. You check the money actually landed before the balance comes down. Cash is recorded separately by you.'
 		],
 		['P', 'Principal', 'The money for the goods themselves, before any fee is added.'],
 		[

@@ -34,7 +34,7 @@
 		{#if error}<h2>This link is unavailable.</h2>
 			<p role="alert">{error}</p>
 			<a class="secondary" href="/signin">Continue to Kredit</a>{:else if name}<h2>{name} invited you.</h2>
-			<p>He may earn a reward once your business joins and starts using Kredit.</p>
+			<p>They may earn a reward once your business joins and starts using Kredit.</p>
 			<a
 				class="primary"
 				href={`/signin?next=${encodeURIComponent('/workspace/referral?code=' + encodeURIComponent(code))}`}

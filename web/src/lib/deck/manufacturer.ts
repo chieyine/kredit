@@ -86,7 +86,7 @@ export const manufacturerDeck: Slide[] = [
 		kind: 'statement',
 		eyebrow: 'The gap',
 		title: 'The credit is already there. The paperwork is not.',
-		lede: 'Most of this trade runs on a phone call and a long memory. He will pay. He is a regular. That holds until the month it does not.',
+		lede: 'Most of this trade runs on a phone call and a long memory. They always pay. They are a regular. That holds until the month it does not.',
 		points: [
 			['The terms are in a chat', 'When the balance is disputed there is nothing neutral to open.'],
 			[
@@ -116,9 +116,12 @@ export const manufacturerDeck: Slide[] = [
 	{
 		kind: 'steps',
 		eyebrow: 'How a trade runs',
-		title: 'Connect. Agree. Deliver. Settle.',
+		title: 'Four steps for every sale.',
 		points: [
-			['Connect', 'You invite a distributor. He joins with his own account and confirms the business he represents.'],
+			[
+				'Connect',
+				'You invite a distributor. They join with their own account and confirm the business they represent.'
+			],
 			[
 				'Agree',
 				'Goods, price and payment dates go on record. Your customer reads it, accepts it, and gives the bank permission the trade requires.'
@@ -135,7 +138,7 @@ export const manufacturerDeck: Slide[] = [
 		eyebrow: 'The agreement',
 		title: 'Both parties are looking at the same page.',
 		points: [
-			['No second version', 'Your distributor sees the terms he accepted. You see the same ones.'],
+			['No second version', 'Your distributor sees the terms they accepted. You see the same ones.'],
 			[
 				'Sealed',
 				'Each accepted agreement carries a cryptographic hash and the terms version in force the day it was signed.'
@@ -145,7 +148,7 @@ export const manufacturerDeck: Slide[] = [
 				'Invoice reference, dispatch, delivery confirmation, and any problem reported against the trade.'
 			]
 		],
-		note: 'Six months later, when a distributor disputes what he collected in March, the record answers it. Not whoever kept better notes.'
+		note: 'Six months later, when a distributor disputes what they collected in March, the record answers it. Not whoever kept better notes.'
 	},
 	{
 		kind: 'statement',
@@ -170,12 +173,12 @@ export const manufacturerDeck: Slide[] = [
 		kind: 'statement',
 		eyebrow: 'Your network',
 		title: 'Your customer list stays your customer list.',
-		lede: 'A distributor can run his own credit to retailers on Kredit. That does not open his book to you, and it does not open yours to anybody upstream.',
+		lede: 'A distributor can run their own credit to retailers on Kredit. That does not open their book to you, and it does not open yours to anybody upstream.',
 		points: [
 			['A trade is visible to the two businesses in it', 'Nobody else, ourselves included. We do not sell around you.'],
 			[
 				'Balances stay separate',
-				'What a distributor collects downstream does not automatically clear what he owes you.'
+				'What a distributor collects downstream does not automatically clear what they owe you.'
 			]
 		]
 	},

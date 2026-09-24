@@ -19,7 +19,9 @@
 		'.motion-scope .process-grid > article',
 		'.motion-scope .capability-list > article',
 		'.motion-scope .control-list > article',
-		'.motion-scope .journey > article'
+		'.motion-scope .journey > article',
+		// Any element can opt in; its own styles decide what "revealed" means.
+		'.motion-scope [data-reveal]'
 	].join(',');
 
 	function prepare() {
@@ -27,10 +29,16 @@
 		const items = Array.from(document.querySelectorAll<HTMLElement>(selector));
 		items.forEach((item, index) => {
 			if (item.dataset.motionReveal !== undefined) return;
+			// The first block of a page is the first screen. It has its own entrance
+			// and must never wait on a scroll to become visible.
+			if (item.parentElement?.tagName === 'MAIN' && item === item.parentElement.firstElementChild) return;
 			item.dataset.motionReveal = '';
 			item.style.setProperty('--motion-order', String(index % 4));
 			const rect = item.getBoundingClientRect();
-			if (rect.top < window.innerHeight * 0.88) item.classList.add('is-revealed');
+			// Already on screen: reveal on the next frame, so the first state is
+			// painted and the transition actually runs.
+			if (rect.top < window.innerHeight * 0.88)
+				requestAnimationFrame(() => requestAnimationFrame(() => item.classList.add('is-revealed')));
 			else observer?.observe(item);
 		});
 	}

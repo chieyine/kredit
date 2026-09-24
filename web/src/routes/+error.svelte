@@ -16,7 +16,6 @@
 
 <main class="error-page">
 	<div class="mark" aria-hidden="true">{notFound ? '404' : '!'}</div>
-	<p class="eyebrow">{notFound ? 'Page not found' : `Problem ${page.status}`}</p>
 	<h1>{title}</h1>
 	<p class="lede">{detail}</p>
 	<div class="actions">

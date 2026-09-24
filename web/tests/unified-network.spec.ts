@@ -55,7 +55,7 @@ test('public network reads clearly on mobile and the consumer demo completes', a
 	}
 	await page.getByRole('link', { name: 'Consumers', exact: true }).first().click();
 	await expect(page).toHaveURL(/\/consumers$/);
-	await page.locator('main').getByRole('link', { name: 'Explore the demo', exact: true }).click();
+	await page.locator('main').getByRole('link', { name: 'Try the demo', exact: true }).click();
 	await expect(page).toHaveURL(/\/demo\/consumer$/);
 	for (const name of ['Accept sample terms', 'Complete sample payments', 'Confirm sample delivery'])
 		await page.getByRole('button', { name: new RegExp(name) }).click();

@@ -7,7 +7,7 @@ test('public homepage renders the product promise', async ({ page }) => {
 	// what they do — open an account, or try the sample — rather than promising a
 	// sale they cannot record until they have signed in.
 	await expect(page.getByRole('link', { name: /Get started/i }).first()).toBeVisible();
-	await expect(page.getByRole('link', { name: /Explore the demo/i }).first()).toBeVisible();
+	await expect(page.getByRole('link', { name: /Try the demo/i }).first()).toBeVisible();
 });
 
 test('public product routes expose clear conversion and trust content', async ({ page }) => {

@@ -30,13 +30,15 @@ test('public navigation is clear, complete and closes after a mobile choice', as
 	await expect(footer.getByRole('link', { name: 'Account safety' })).toBeVisible();
 });
 
-test('homepage explains both sides of trade and the full business-to-consumer network', async ({ page }) => {
+test('homepage shows a whole sale on credit and the full business-to-consumer network', async ({ page }) => {
 	await page.goto('/');
-	await expect(page.getByLabel('How your workspace is organised')).toContainText('What customers owe you');
-	await expect(page.getByLabel('How your workspace is organised')).toContainText('What you owe suppliers');
+	const record = page.getByRole('figure', { name: 'An example sale record' });
+	await expect(record).toContainText('Example sale');
+	await expect(record).toContainText('Terms accepted by both sides');
+	await expect(record).toContainText('Settled');
 	await expect(page.getByLabel('From manufacturer to consumer')).toContainText('Manufacturers');
 	await expect(page.getByLabel('From manufacturer to consumer')).toContainText('Consumers');
-	await expect(page.getByText('Separate balances. Clear responsibilities.')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Your customers stay yours.' })).toBeVisible();
 });
 
 test('both sale-creation entry points preserve authentication and the intended destination', async ({ request }) => {

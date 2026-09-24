@@ -171,6 +171,17 @@ body {
 	text-rendering: optimizeLegibility;
 }
 
+/* The sticky header is translucent. On a page that shows it, the ground behind
+   the first screen has to be ink too, or the header reads as a grey band. */
+body:has(.public-route) {
+	background: #0b0d12;
+}
+/* On a light page (sign-in) there is no ink behind the header to show
+   through, so it is solid instead. */
+body:not(:has(.public-route)) .site-header {
+	background: #0b0d12;
+}
+
 html {
 	scroll-behavior: smooth;
 	scroll-padding-top: 6rem;
@@ -367,6 +378,27 @@ p {
 	gap: 2.5rem;
 	padding-top: 0.85rem;
 	padding-bottom: 0.85rem;
+	transition: padding 320ms cubic-bezier(0.16, 0.7, 0.2, 1);
+}
+.site-header {
+	transition:
+		background-color 320ms ease,
+		box-shadow 320ms ease;
+}
+/* Once the page is scrolled the header tightens and lifts off the content. */
+.site-header.is-scrolled {
+	background: rgb(11 13 18 / 0.92);
+	box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+.site-header.is-scrolled nav {
+	padding-top: 0.55rem;
+	padding-bottom: 0.55rem;
+}
+.wordmark span {
+	transition: transform 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+.wordmark:hover span {
+	transform: rotate(-8deg);
 }
 
 /*
@@ -885,6 +917,9 @@ th {
 }
 /* The emphasised line is set in the accent — the headline's own second voice,
    not a highlight laid over it. */
+.network-page h1 .line {
+	display: block;
+}
 .network-page h1 em,
 .pricing-hero h1 em {
 	font-style: normal;
@@ -933,12 +968,19 @@ th {
 	font-weight: 500;
 	font-size: 0.93rem;
 	text-decoration: none;
-	border-bottom: 1px solid var(--color-border-strong);
-	padding-bottom: 1px;
+	/* two underlines: a quiet one always, and an accent one that draws over it */
+	background:
+		linear-gradient(var(--color-accent-ink), var(--color-accent-ink)) left bottom / 0 1px no-repeat,
+		linear-gradient(var(--color-border-strong), var(--color-border-strong)) left bottom / 100% 1px no-repeat;
+	transition:
+		background-size 380ms cubic-bezier(0.65, 0, 0.35, 1),
+		color 220ms ease;
 }
 .network-actions a:not(.primary):hover,
 .network-text-link:hover {
-	border-bottom-color: var(--color-accent-ink);
+	background-size:
+		100% 1px,
+		100% 1px;
 	color: var(--color-accent-ink);
 }
 .network-caption {
@@ -1954,14 +1996,89 @@ th {
 	animation: route-enter 520ms cubic-bezier(0.16, 0.7, 0.2, 1) both;
 }
 .motion-ready [data-motion-reveal] {
-	opacity: 1;
-	transform: translateY(18px);
-	transition: transform 620ms cubic-bezier(0.16, 0.7, 0.2, 1);
-	transition-delay: calc(var(--motion-order, 0) * 60ms);
+	opacity: 0;
+	transform: translateY(22px);
+	transition:
+		opacity 700ms ease,
+		transform 760ms cubic-bezier(0.16, 0.7, 0.2, 1);
+	transition-delay: calc(var(--motion-order, 0) * 80ms);
 }
 .motion-ready [data-motion-reveal].is-revealed {
 	opacity: 1;
 	transform: translateY(0);
+}
+
+/*
+ * The first screen arrives in order: headline line by line, then the reason,
+ * then what to do. It is CSS only, so it starts before the page is interactive
+ * and the resting style is the finished page.
+ */
+.network-hero h1 .line,
+.pricing-hero h1 {
+	animation: line-rise 900ms cubic-bezier(0.16, 0.7, 0.2, 1) both;
+}
+.network-hero h1 .line:nth-child(2) {
+	animation-delay: 110ms;
+}
+.network-hero .network-lede {
+	animation: line-rise 900ms cubic-bezier(0.16, 0.7, 0.2, 1) 220ms both;
+}
+.network-hero .network-actions,
+.network-hero .network-caption {
+	animation: line-rise 900ms cubic-bezier(0.16, 0.7, 0.2, 1) 330ms both;
+}
+
+/* An arrow in a button leans the way it points. */
+:is(.primary, .header-cta, .network-text-link, .network-cta a) span[aria-hidden='true'] {
+	display: inline-block;
+	transition: transform 320ms cubic-bezier(0.16, 0.7, 0.2, 1);
+}
+:is(.primary, .header-cta, .network-text-link, .network-cta a):hover span[aria-hidden='true'] {
+	transform: translateX(4px);
+}
+
+/* Each step is ruled off by a line that draws across as it comes into view. */
+.public-route .steps li {
+	position: relative;
+}
+.public-route .steps li::after {
+	content: '';
+	position: absolute;
+	top: -1px;
+	left: 0;
+	width: 5.5rem;
+	height: 1px;
+	background: var(--color-accent-ink);
+	transform-origin: left;
+	transition: transform 900ms cubic-bezier(0.65, 0, 0.35, 1) 200ms;
+}
+.motion-ready .public-route .steps li[data-motion-reveal]:not(.is-revealed)::after {
+	transform: scaleX(0);
+}
+
+/* A card shows it is a way in: its top edge lights from the left. */
+.network-cards article {
+	position: relative;
+}
+.network-cards article::before {
+	content: '';
+	position: absolute;
+	top: -1px;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background: var(--color-accent-ink);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform 520ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+.network-cards article + article::before {
+	left: 0;
+}
+@media (hover: hover) {
+	.network-cards article:hover::before {
+		transform: scaleX(1);
+	}
 }
 
 button,
@@ -2034,6 +2151,12 @@ textarea {
 	to {
 		opacity: 1;
 		transform: translateY(0);
+	}
+}
+@keyframes line-rise {
+	from {
+		opacity: 0;
+		transform: translateY(0.45em);
 	}
 }
 @keyframes meter-grow {

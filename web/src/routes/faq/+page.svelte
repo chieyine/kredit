@@ -22,7 +22,6 @@
 </svelte:head>
 
 <main class="shell prose-page">
-	<p class="eyebrow">Common questions</p>
 	<h1>{data.copy.title}<br />{data.copy.accent}</h1>
 	<p>{data.copy.introduction}</p>
 	<dl class="faq">
