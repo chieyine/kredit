@@ -45,6 +45,7 @@
     {"schema":"app","table":"purchasing_delegation_history","purpose":"retain_purchasing_authority_change_evidence","fields":["organization_id","user_id","version","actor_id","recorded_at","evidence"]},
     {"schema":"app","table":"purchasing_delegations","purpose":"current_membership_bound_purchasing_actions_and_limits","fields":["organization_id","user_id","actions","ceiling_kobo","expires_at","version","updated_by","updated_at","membership_id","membership_authority_version","drawdown_ceiling_kobo"]},
     {"schema":"app","table":"trade_lines","purpose":"canonical_buyer_binding_for_repeat_goods_credit","fields":["buyer_organization_id"]},
-    {"schema":"app","table":"tradeline_drawdown_approvals","purpose":"independent_version_bound_goods_credit_drawdown_review","fields":["id","organization_id","drawdown_id","drawdown_version","fingerprint","proposal","requested_by","state","decided_by","reason","created_at","decided_at"]}
+    {"schema":"app","table":"tradeline_drawdown_approvals","purpose":"independent_version_bound_goods_credit_drawdown_review","fields":["id","organization_id","drawdown_id","drawdown_version","fingerprint","proposal","requested_by","state","decided_by","reason","created_at","decided_at"]},
+    {"schema":"app","table":"runtime_process_instances","purpose":"per_boot_runtime_version_and_restart_state_reporting","fields":["boot_id","process","instance_name","version","revision","versions","state","started_at","updated_at"]}
   ]
 }
