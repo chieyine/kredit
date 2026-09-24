@@ -90,6 +90,7 @@ const labels: Record<string, string> = {
 
 	// What a help request is about
 	BUSINESS_ACCOUNT: 'Business account',
+	ORGANIZATION: 'Business',
 	OBLIGATION: 'An amount owed',
 
 	// Roles. A role is a name, not a description of the job.
@@ -180,7 +181,20 @@ export function providerName(value: string, adapter = '') {
 	);
 }
 
-/** A short, readable handle for a long record ID, such as "3F2A91C0". */
+/**
+ * A short, readable handle for a long record ID, such as "3F2A91C0". It is the
+ * end of the ID: record IDs begin with their creation time, so records made on
+ * the same day share their first characters.
+ */
 export function shortReference(id: string) {
-	return id.replaceAll('-', '').slice(0, 8).toUpperCase();
+	return id.replaceAll('-', '').slice(-8).toUpperCase();
+}
+
+/**
+ * A reason somebody gave. Usually their own words, shown as written; when it is
+ * a stored code such as "short_delivery", it is shown as words instead.
+ */
+export function reasonText(value: string, fallback = 'Problem reported') {
+	if (!value.trim()) return fallback;
+	return /^[a-z]+(_[a-z]+)+$/.test(value) ? productLabel(value) : value;
 }

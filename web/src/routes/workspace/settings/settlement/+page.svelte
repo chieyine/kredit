@@ -44,7 +44,7 @@
 						})
 					);
 				} catch (cause) {
-					bankError = publicError(cause, 'Banks could not be loaded.');
+					bankError = publicError(cause, 'the list of banks');
 				}
 			}
 		} catch (cause) {

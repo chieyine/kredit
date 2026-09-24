@@ -129,7 +129,7 @@
 		records agree.
 	</p>
 	<VerifyIdentity />
-	<label
+	<label class="filter"
 		>Show reviews<select bind:value={filter}
 			><option value="all">All open reviews</option><option value="mine">Assigned to me</option><option
 				value="unassigned">Awaiting an owner</option
@@ -189,6 +189,12 @@
 </main>
 
 <style>
+	.filter {
+		display: grid;
+		gap: 0.35rem;
+		max-width: 20rem;
+		margin-block: 1rem;
+	}
 	article {
 		padding: 1.5rem;
 		border: 1px solid var(--color-border);

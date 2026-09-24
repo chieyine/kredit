@@ -213,7 +213,7 @@
 						: readiness.ready
 							? 'Ready'
 							: productLabel(readiness.state, 'Check setup')}</strong
-				><a href="/workspace/onboarding">Finish setting up →</a>
+				><a href="/workspace/onboarding">{readiness?.ready ? 'See your setup →' : 'Finish setting up →'}</a>
 			</article>
 		</section>
 		<section class="card">

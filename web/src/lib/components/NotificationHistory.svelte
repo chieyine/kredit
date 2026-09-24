@@ -263,6 +263,7 @@
 		margin-top: 2rem;
 	}
 	.list article {
+		min-width: 0;
 		padding: 1rem 1.1rem;
 		border: 1px solid var(--color-border);
 		border-left: 4px solid var(--color-primary);
@@ -292,6 +293,8 @@
 		font-weight: 750;
 	}
 	.body {
+		/* message bodies carry full links, which must wrap on a phone */
+		overflow-wrap: anywhere;
 		margin: 0.75rem 0;
 		color: var(--color-foreground);
 		line-height: 1.6;
@@ -338,8 +341,11 @@
 		.toolbar {
 			align-items: stretch;
 		}
+		/* size each filter to its word and let the row wrap, so a long name
+		   such as WhatsApp never runs into its neighbour */
 		.toolbar button {
-			flex: 1;
+			flex: 1 1 auto;
+			padding-inline: 0.6rem;
 		}
 		.toolbar a {
 			width: 100%;

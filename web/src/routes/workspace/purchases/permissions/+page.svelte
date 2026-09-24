@@ -124,13 +124,13 @@
 			}
 
 			if (!/^\d+(\.\d{1,2})?$/.test(g.drawdown_limit)) {
-				error = 'Enter a drawdown limit in naira with at most two decimal places.';
+				error = 'Enter the credit-limit amount in naira, with at most two decimal places.';
 				return;
 			}
 			const [dWhole, dFraction = ''] = g.drawdown_limit.split('.');
 			ddKobo = Number(dWhole) * 100 + Number(dFraction.padEnd(2, '0'));
 			if (!Number.isSafeInteger(ddKobo) || ddKobo < 0) {
-				error = 'Enter a valid drawdown limit.';
+				error = 'Enter a valid credit-limit amount.';
 				return;
 			}
 
@@ -176,8 +176,8 @@
 	<p class="eyebrow">Purchases</p>
 	<h1>Choose who can buy for your business</h1>
 	<p>
-		Give current team members specific purchasing permissions, a limit for each accepted purchase and drawdown, and an
-		expiry date. Personal purchases stay private.
+		Choose what each team member may do, the most they can agree to at once, and when their permission ends. Personal
+		purchases stay private.
 	</p>
 	<VerifyIdentity />
 	{#if error}<p role="alert">{error}</p>
@@ -207,7 +207,7 @@
 				</p>
 				<fieldset disabled={busy || !owner}>
 					<div class="actions-grid">
-						{#each [['read', 'View business purchases'], ['review', 'Review or decline offers'], ['accept', 'Accept verified purchase terms'], ['receive', 'Confirm delivery or report an issue'], ['drawdown', 'Draw down trade line credit'], ['dispute', 'Open or manage purchase disputes'], ['claim', 'Submit or confirm payment claims'], ['amend', 'Request or review amendments']] as [action, label] (action)}<label
+						{#each [['read', 'View business purchases'], ['review', 'Review or decline offers'], ['accept', 'Accept verified purchase terms'], ['receive', 'Confirm delivery or report an issue'], ['drawdown', 'Buy against a credit limit'], ['dispute', 'Open or manage purchase disputes'], ['claim', 'Submit or confirm payment claims'], ['amend', 'Request or review amendments']] as [action, label] (action)}<label
 								class="check"
 								><input
 									type="checkbox"
@@ -224,7 +224,7 @@
 						/></label
 					>
 					<label
-						>Maximum per trade line drawdown (₦)<input
+						>Most for one buy on a credit limit (₦)<input
 							bind:value={g.drawdown_limit}
 							inputmode="decimal"
 							autocomplete="off"

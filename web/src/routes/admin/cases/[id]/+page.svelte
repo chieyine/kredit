@@ -118,8 +118,9 @@
 				<h2>Case history</h2>
 				<ol>
 					{#each timeline as event, i (i)}<li>
-							<strong>{event.action.replaceAll('_', ' ')}</strong><span>{localTime(event.created_at)}</span
-							>{#if event.note}<p>{event.note}</p>{/if}
+							<strong>{productLabel(event.action)}</strong><span>{localTime(event.created_at)}</span>{#if event.note}<p>
+									{event.note}
+								</p>{/if}
 						</li>{/each}
 				</ol>
 			</section>

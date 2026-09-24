@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { adminGet, localTime } from '$lib/admin-client';
 	import Money from '$lib/components/Money.svelte';
+	import { productLabel, reasonText } from '$lib/product-language';
 	let items = $state<Dispute[]>([]),
 		stateFilter = $state(''),
 		loading = $state(true),
@@ -55,8 +56,8 @@
 		</section>{:else if loading}<p>Loading disputes…</p>{:else}<section>
 			{#each items as item (item.id)}<a href={`/admin/disputes/${encodeURIComponent(item.id)}`}
 					><div>
-						<span>{item.state.replaceAll('_', ' ')}</span>
-						<h2>{item.reason}</h2>
+						<span>{productLabel(item.state)}</span>
+						<h2>{reasonText(item.reason)}</h2>
 						<small>Opened {localTime(item.opened_at)}</small>
 					</div>
 					<dl>

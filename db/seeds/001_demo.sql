@@ -77,9 +77,9 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO app.verification_cases (id, subject_type, subject_id, provider, provider_reference, verification_level, state, safe_result, completed_at, expires_at)
 VALUES
-    ('00000000-0000-7000-8000-000000000023', 'person', '00000000-0000-7000-8000-000000000020', 'mock-identity', 'demo-person-verification', 2, 'verified', '{"name_match":true}'::jsonb, NOW(), NOW() + INTERVAL '1 year'),
-    ('00000000-0000-7000-8000-000000000024', 'business', '00000000-0000-7000-8000-000000000021', 'mock-identity', 'demo-business-verification', 2, 'verified', '{"registration_match":true}'::jsonb, NOW(), NOW() + INTERVAL '1 year'),
-    ('00000000-0000-7000-8000-000000000025', 'authority', '00000000-0000-7000-8000-000000000022', 'mock-identity', 'demo-authority-verification', 2, 'verified', '{"authority_match":true}'::jsonb, NOW(), NOW() + INTERVAL '1 year')
+    ('00000000-0000-7000-8000-000000000023', 'person', '00000000-0000-7000-8000-000000000020', 'mock-identity', 'demo-person-verification', 2, 'verified', '{"name_match":"true"}'::jsonb, NOW(), NOW() + INTERVAL '1 year'),
+    ('00000000-0000-7000-8000-000000000024', 'business', '00000000-0000-7000-8000-000000000021', 'mock-identity', 'demo-business-verification', 2, 'verified', '{"registration_match":"true"}'::jsonb, NOW(), NOW() + INTERVAL '1 year'),
+    ('00000000-0000-7000-8000-000000000025', 'authority', '00000000-0000-7000-8000-000000000022', 'mock-identity', 'demo-authority-verification', 2, 'verified', '{"authority_match":"true"}'::jsonb, NOW(), NOW() + INTERVAL '1 year')
 ON CONFLICT (provider, provider_reference) DO NOTHING;
 
 INSERT INTO app.identity_consents (id, user_id, consent_type, version, evidence_hash)

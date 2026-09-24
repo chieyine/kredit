@@ -4,7 +4,7 @@
 	import { MutationIntent } from '$lib/api/mutation';
 	import { checkedJSON, LatestRequest, publicError, record, text } from '$lib/api/reliable';
 	import { formatKobo, nairaInput, parseNaira, type KoboValue } from '$lib/money';
-	import { productLabel } from '$lib/product-language';
+	import { productLabel, reasonText } from '$lib/product-language';
 	import { timeLabel } from '$lib/records';
 	import { disputeDetail, type Dispute, type DisputeDecision, type DisputeEvidence } from '$lib/disputes';
 	let { endpoint, backHref, canDecide = false }: { endpoint: string; backHref: string; canDecide?: boolean } = $props();
@@ -207,7 +207,7 @@
 		<article><span>What happens to bank debit</span><strong>{productLabel(dispute.collection_effect)}</strong></article>
 	</section>
 	<article class="card">
-		<h2>{dispute.reason}</h2>
+		<h2>{reasonText(dispute.reason)}</h2>
 		<p>{dispute.explanation || 'No other details were added.'}</p>
 		<small>Reported {timeLabel(dispute.opened_at)}</small>
 	</article>

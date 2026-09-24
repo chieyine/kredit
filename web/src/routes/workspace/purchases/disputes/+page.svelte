@@ -2,7 +2,7 @@
 	import type { KoboValue } from '$lib/money';
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import WorkspacePage from '$lib/components/WorkspacePage.svelte';
-	import { productLabel } from '$lib/product-language';
+	import { reasonText } from '$lib/product-language';
 	import { readableDate } from '$lib/datetime';
 	type Problem = {
 		id: string;
@@ -24,7 +24,7 @@
 	emptyTitle="No open problems"
 	emptyCopy="If goods arrive short, damaged or wrong, report it from the sale and it will appear here."
 	searchPlaceholder="Reason"
-	rowTitle={(problem: Problem) => productLabel(problem.reason, 'Problem reported')}
+	rowTitle={(problem: Problem) => reasonText(problem.reason ?? '')}
 	rowDetail={(problem) => [problem.explanation, readableDate(problem.opened_at)].filter(Boolean).join(' · ')}
 	rowStatus={(problem) => problem.state ?? ''}
 	rowAmount={(problem) => problem.remaining_disputed_kobo ?? problem.total_disputed_kobo ?? null}

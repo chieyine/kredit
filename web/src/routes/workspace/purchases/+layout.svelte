@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, publicError, record, RequestError, rows, text } from '$lib/api/reliable';
 	let { children } = $props();
 	type Business = { id: string; workspaceID: string; name: string };
 	let businesses = $state<Business[]>([]),
@@ -89,7 +89,13 @@
 					await goto(url.pathname + url.search + url.hash, { replaceState: true, noScroll: true });
 			}
 		} catch (cause) {
-			if (request.current()) error = publicError(cause, 'your purchasing businesses');
+			if (!request.current()) return;
+			// A record link that is wrong, expired or someone else's is not a
+			// connection problem; say what actually happened.
+			error =
+				cause instanceof RequestError && [403, 404].includes(cause.status)
+					? 'We could not find this in your purchases. Open it again from your list.'
+					: publicError(cause, 'your purchasing businesses');
 		} finally {
 			if (request.current()) loading = false;
 		}

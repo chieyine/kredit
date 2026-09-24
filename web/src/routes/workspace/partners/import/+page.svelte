@@ -2,7 +2,7 @@
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
-	import { checkedJSON, LatestRequest, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, record, RequestError, rows, text } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { distributorTemplate, parseDistributorCSV, type DistributorRow } from '$lib/distributor-import';
 	let businesses = $state<
@@ -233,10 +233,9 @@
 			}
 			batch = await checkedJSON(`${endpoint()}/${current}`, decodeBatch);
 		} catch (cause) {
-			error =
-				cause instanceof Error
-					? cause.message
-					: 'The invitation result is uncertain. Reopen the saved batch before continuing.';
+			// Stop at the first contact whose result is not certain, and say so:
+			// sending on could invite somebody twice.
+			error = `${cause instanceof RequestError ? cause.message + ' ' : ''}Sending stopped at this contact, so check the saved list before continuing.`;
 		} finally {
 			running = false;
 			await loadBatches();

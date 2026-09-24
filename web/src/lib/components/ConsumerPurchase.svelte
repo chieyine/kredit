@@ -2,7 +2,7 @@
 	import { readableDate } from '$lib/datetime';
 	import { nairaInput } from '$lib/money';
 	import { onMount } from 'svelte';
-	import { purchase, read, Mutation, money, label, kobo, type Purchase } from '$lib/consumer';
+	import { purchase, read, Mutation, money, label, actionLabel, kobo, type Purchase } from '$lib/consumer';
 	let { id, organization = '', admin = false }: { id: string; organization?: string; admin?: boolean } = $props();
 	let sale = $state<Purchase | null>(null),
 		error = $state(''),
@@ -124,7 +124,7 @@
 			? '/admin/consumer-sales'
 			: organization
 				? `/workspace/sales/consumers?organization=${organization}`
-				: '/personal/purchases'}>← Purchases</a
+				: '/personal/purchases'}>{buyer ? '← Your purchases' : '← Consumer sales'}</a
 	>
 	{#if error}<p role="alert" class="error">{error}</p>
 		{#if mutation.pending}<button onclick={retry} disabled={busy}>Retry the same unconfirmed action</button
@@ -133,7 +133,9 @@
 		<button onclick={load} disabled={busy}>Try again</button>{:else}
 		<header class="feature-heading purchase-heading">
 			<div>
-				<p class="eyebrow">Personal purchase <span class="status">{label(sale.state)}</span></p>
+				<p class="eyebrow">
+					{buyer ? 'Your purchase' : 'Consumer sale'} <span class="status">{label(sale.state)}</span>
+				</p>
 				<h1>{sale.terms.item}</h1>
 				<p>Sold by {sale.terms.seller_name} · Quantity {sale.terms.quantity}</p>
 			</div>
@@ -275,7 +277,7 @@
 					void submit();
 				}}
 			>
-				<h2>{label(action)}</h2>
+				<h2>{actionLabel(action)}</h2>
 				<fieldset disabled={busy}>
 					{#if action === 'accept'}<label
 							>Full name<input bind:value={fullName} required maxlength="200" autocomplete="name" /></label
@@ -329,7 +331,7 @@
 							></textarea></label
 						>{/if}
 					{#if action === 'refund'}<p>This records a refund you have already paid. It does not send money.</p>{/if}
-					<button class="primary" type="submit">Confirm {label(action)}</button>
+					<button class="primary" type="submit">Confirm</button>
 				</fieldset>
 			</form>{/if}
 		<section>

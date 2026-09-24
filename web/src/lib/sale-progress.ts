@@ -64,7 +64,7 @@ export function saleNextStep(view: SaleView): NextStep {
 			actor: 'Customer',
 			title: 'Payments are due on the agreed dates',
 			detail:
-				'The customer pays on each payment date. When they report a transfer, the seller checks it arrived and confirms it. A bank debit shows as pending until the bank answers.',
+				'Each payment is due on its agreed date. A reported transfer counts once the seller confirms it arrived. A bank debit shows as pending until the bank answers.',
 			action: 'Review payments'
 		},
 		CANCELLED: {

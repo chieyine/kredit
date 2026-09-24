@@ -83,7 +83,7 @@ test('a failed invitation stops the batch before the next contact', async ({ pag
 	await page.getByRole('button', { name: 'Save this roster' }).click();
 	await page.getByRole('checkbox').check();
 	await page.getByRole('button', { name: 'Create and send invitations' }).click();
-	await expect(page.getByRole('alert')).toContainText('not confirmed');
+	await expect(page.getByRole('alert')).toContainText('Sending stopped at this contact');
 	expect(submissions).toBe(1);
 });
 

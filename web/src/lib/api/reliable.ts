@@ -52,6 +52,9 @@ export function publicError(error: unknown, subject = 'these details'): string {
 	if (error instanceof RequestError && error.status === 403)
 		return 'Your account does not have permission to open these details.';
 	if (error instanceof RequestError && error.status === 429) return 'Too many requests. Wait a moment, then try again.';
+	// Callers pass either what was being read ("your team") or, for an action,
+	// the whole sentence to show ("The change is unconfirmed. Refresh…").
+	if (/[.!?]$/.test(subject)) return subject;
 	return `We could not check ${subject}. Check your connection and try again.`;
 }
 export async function boundedFetch(url: string, init: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
@@ -66,6 +69,17 @@ export async function boundedFetch(url: string, init: RequestInit = {}, timeoutM
 		clearTimeout(timer);
 		init.signal?.removeEventListener('abort', abort);
 	}
+}
+function refusal(status: number, code: string): string {
+	if (status === 401) return 'Your session has ended. Sign in again to continue.';
+	if (code === 'step_up_required') return 'Confirm it is you with your authenticator code, then try again.';
+	if (status === 403) return 'Your role in this business does not allow this. Ask the owner if you need it.';
+	if (status === 404 || status === 410)
+		return 'We could not find this. It may have been removed or the link has expired.';
+	if (status === 409) return 'This changed while you were working on it. Refresh the page and try again.';
+	if (status === 429) return 'Too many requests. Wait a moment, then try again.';
+	if (status >= 500) return 'Kredit could not finish this just now. Try again in a moment.';
+	return 'This was not accepted. Check the details and try again.';
 }
 export async function checkedJSON<T>(url: string, decode: Decoder<T>, init: RequestInit = {}): Promise<T> {
 	// Keep this deadline alive through body decoding, not merely until headers arrive.
@@ -100,8 +114,9 @@ export async function checkedJSON<T>(url: string, decode: Decoder<T>, init: Requ
 					: typeof problem.title === 'string'
 						? problem.title
 						: 'request_unavailable';
-			// Storage/provider diagnostics are not safe public copy.
-			throw new RequestError('The request was not confirmed.', response.status, code);
+			// Storage/provider diagnostics are not safe public copy, but many pages
+			// show this message as it stands, so it says what kind of refusal it was.
+			throw new RequestError(refusal(response.status, code), response.status, code);
 		}
 		return decode(payload);
 	} finally {
