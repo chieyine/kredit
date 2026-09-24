@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { productLabel } from '$lib/product-language';
 	import { readableDate } from '$lib/datetime';
-	import { onMount } from 'svelte';
+	import { getContext, onMount } from 'svelte';
+	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
 	import { page } from '$app/state';
 	import { formatKobo, parseNaira, type KoboValue } from '$lib/money';
 	import { checkedJSON, LatestRequest, record, rows, text } from '$lib/api/reliable';
@@ -56,6 +58,7 @@
 		creditReason = $state('');
 
 	const reads = new LatestRequest();
+	const account = getContext<AccountContext | undefined>(ACCOUNT_CONTEXT);
 
 	function decodeLineItem(value: unknown): LineItem {
 		const r = record(value);
@@ -185,6 +188,26 @@
 			await load();
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Credit note could not be created.';
+		} finally {
+			busy = false;
+		}
+	}
+
+	// The second of the two people a credit note needs. Whoever drafted it is
+	// never offered this; the server refuses it too.
+	async function approveCreditNote(note: CreditNote) {
+		busy = true;
+		error = '';
+		message = '';
+		try {
+			await new MutationIntent(
+				`credit-note-approve:${note.id}`,
+				`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-notes/${encodeURIComponent(note.id)}/approve`
+			).run({}, record, 'POST');
+			message = `Credit note approved. What the customer owes has gone down by ${formatKobo(note.amount_kobo)}.`;
+			await load();
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : 'The credit note could not be approved.';
 		} finally {
 			busy = false;
 		}
@@ -320,7 +343,7 @@
 
 		<!-- Section 3: Credit Notes -->
 		<section class="card">
-			<h2>Approved credit notes</h2>
+			<h2>Credit notes</h2>
 			<p class="muted">
 				A credit note reduces what the customer owes, for example after a return or a discount. A second person must
 				approve it: whoever drafts a credit note cannot approve it.
@@ -333,8 +356,22 @@
 							<div>
 								<strong>{formatKobo(cn.amount_kobo)}</strong>: {cn.reason}
 								<p class="muted">Created {readableDate(cn.created_at)}</p>
+								{#if cn.status === 'draft' && account?.userID && cn.issued_by !== account.userID}<button
+										type="button"
+										class="approve"
+										disabled={busy}
+										onclick={() => approveCreditNote(cn)}>Approve this credit note</button
+									>{:else if cn.status === 'draft'}<p class="muted">
+										You drafted this, so someone else in your business must approve it.
+									</p>{/if}
 							</div>
-							<span class={`badge ${cn.status === 'approved' ? 'success' : 'warning'}`}>{cn.status}</span>
+							<span class={`badge ${cn.status === 'approved' ? 'success' : 'warning'}`}
+								>{cn.status === 'approved'
+									? 'Approved'
+									: cn.status === 'draft'
+										? 'Waiting for approval'
+										: productLabel(cn.status)}</span
+							>
 						</div>
 					{/each}
 				</div>
@@ -443,6 +480,9 @@
 		margin-top: 0.5rem;
 	}
 	.shipment-list,
+	.approve {
+		margin-top: 0.6rem;
+	}
 	.credit-notes-list {
 		display: flex;
 		flex-direction: column;
@@ -501,8 +541,11 @@
 		border: none;
 		align-self: flex-start;
 	}
+	/* same neutral as every other disabled button, not a faded brand colour */
 	button:disabled {
-		opacity: 0.6;
+		opacity: 1;
+		background: var(--color-surface-muted);
+		color: var(--color-muted);
 		cursor: not-allowed;
 	}
 	.alert {

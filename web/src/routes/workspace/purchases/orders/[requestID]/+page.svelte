@@ -18,7 +18,7 @@
 	} from '$lib/api/reliable';
 	import { MutationError, MutationIntent } from '$lib/api/mutation';
 	import { saleView, paymentRow, kobo, dateLabel, timeLabel, type PaymentRow, type SaleView } from '$lib/records';
-	import { feeDisclosure, validFeeTerms } from '$lib/fee-terms';
+	import { validFeeTerms } from '$lib/fee-terms';
 	import {
 		acceptanceMessage,
 		collectionBoundary,
@@ -314,7 +314,7 @@
 				return result;
 			},
 			() => {
-				message = `Problem reported. ${disputeEffectCopy(disputeEffect, amount)}`;
+				message = `Problem reported. ${disputeEffectCopy(disputeEffect, amount, true)}`;
 			}
 		);
 	}
@@ -344,7 +344,11 @@
 		<div>
 			<p class="eyebrow">Your credit sale</p>
 			<h1>{accepted ? 'Your sale record' : 'Review this sale'}</h1>
-			<p>Check the goods, amount and payment date before agreeing.</p>
+			<p>
+				{accepted
+					? 'What you agreed to, what has arrived and what is left to pay.'
+					: 'Check the goods, amount and payment date before agreeing.'}
+			</p>
 		</div>
 		<a href="/legal/complaints">Get help</a>
 	</header>
@@ -416,7 +420,6 @@
 						</li>{/each}
 				</ol>{/if}
 			{#if view.request.invoice_document_id}<button type="button" onclick={openInvoice}>Open invoice</button>{/if}
-			<p class="fee-note">{feeDisclosure(view.request.fee_terms)}</p>
 			<p class="field-help">{collectionBoundary}</p>
 			{#if view.agreement?.terms_version && view.agreement?.privacy_version}<p>
 					Documents for this sale: <a href={`/legal/terms?version=${encodeURIComponent(view.agreement.terms_version)}`}
@@ -710,7 +713,6 @@
 		font-size: 1.7rem;
 		font-variant-numeric: tabular-nums;
 	}
-	.fee-note,
 	.field-help {
 		font-size: 0.9rem;
 		color: var(--color-muted);

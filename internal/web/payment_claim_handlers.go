@@ -132,7 +132,31 @@ func (s *Server) listOrganizationPaymentClaims(w http.ResponseWriter, r *http.Re
 	if financialReadError(w, readErr) {
 		return
 	}
-	writeJSON(w, 200, map[string]any{"payment_claims": financialRows})
+	// A reported transfer is only answerable if the seller can tell whose it
+	// is, so each claim carries the customer and the sale it was made against.
+	sales, err := s.runtime.readCreditForSupplier(r.Context(), orgID)
+	if financialReadError(w, err) {
+		return
+	}
+	type saleContext struct{ requestID, buyer, goods string }
+	byObligation := make(map[string]saleContext, len(sales))
+	for _, view := range sales {
+		if view.Obligation != nil {
+			byObligation[view.Obligation.ID] = saleContext{view.Request.ID, view.Request.BuyerLegalName, view.Request.GoodsDescription}
+		}
+	}
+	type claimRow struct {
+		paymentclaims.Claim
+		CreditRequestID  string `json:"credit_request_id,omitempty"`
+		BuyerLegalName   string `json:"buyer_legal_name,omitempty"`
+		GoodsDescription string `json:"goods_description,omitempty"`
+	}
+	rows := make([]claimRow, 0, len(financialRows))
+	for _, claim := range financialRows {
+		sale := byObligation[claim.ObligationID]
+		rows = append(rows, claimRow{Claim: claim, CreditRequestID: sale.requestID, BuyerLegalName: sale.buyer, GoodsDescription: sale.goods})
+	}
+	writeJSON(w, 200, map[string]any{"payment_claims": rows})
 }
 
 func (s *Server) decidePaymentClaim(w http.ResponseWriter, r *http.Request) {

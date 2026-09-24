@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDateTime } from '$lib/datetime';
 	import { checkedJSON, optionalNumber, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
 	import type { KoboValue } from '$lib/money';
 	import { kobo } from '$lib/records';
@@ -108,7 +109,7 @@
 								><td>{item.kind === 'payment' ? 'Payment' : 'Bank debit'}</td><td
 									><strong><Money amountKobo={item.amount_kobo} /></strong></td
 								><td>{item.state.replaceAll('_', ' ')}</td><td><code>{item.reference}</code></td><td
-									>{new Date(item.occurred_at).toLocaleString('en-NG')}</td
+									>{readableDateTime(item.occurred_at)}</td
 								></tr
 							>{/each}</tbody
 					>

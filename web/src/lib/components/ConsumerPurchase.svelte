@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { readableDate } from '$lib/datetime';
+	import { readableDate, readableDateTime } from '$lib/datetime';
 	import { nairaInput } from '$lib/money';
-	import { onMount } from 'svelte';
-	import { purchase, read, Mutation, money, label, actionLabel, kobo, type Purchase } from '$lib/consumer';
+	import { onMount, tick } from 'svelte';
+	import { purchase, read, Mutation, money, label, actionLabel, eventLabel, kobo, type Purchase } from '$lib/consumer';
 	let { id, organization = '', admin = false }: { id: string; organization?: string; admin?: boolean } = $props();
 	let sale = $state<Purchase | null>(null),
 		error = $state(''),
@@ -50,8 +50,47 @@
 			busy = false;
 		}
 	}
+	// What just happened, said to whoever did it.
+	function doneMessage(kind: string) {
+		const said: Record<string, string> = {
+			accept: 'You accepted. The retailer can see your details and the payment dates are set.',
+			decline: 'You declined this offer. Nothing is owed.',
+			cancel: 'Cancelled. Any confirmed payment is now refundable.',
+			claim: 'Payment reported. The retailer checks it arrived before your balance changes.',
+			payment: 'Payment confirmed. The balance has been updated.',
+			reject_claim: 'Marked as not found. The customer can see this.',
+			reverse_payment: 'Payment corrected. The balance has been updated.',
+			release: 'Dispatch recorded. The customer is asked to confirm they received the goods.',
+			received: 'Thank you. The goods are recorded as received.',
+			request_return: 'Your request is with the retailer. You will see their answer here.',
+			approve_return: 'Return approved. Record the refund once you have paid it.',
+			reject_return: 'Return declined. The customer can ask Kredit support to review it.',
+			escalate: 'Sent to Kredit support. They will look at the retailer’s decision.',
+			reduce_price: 'Price reduced. Any overpayment is now refundable.',
+			refund: 'Refund recorded.'
+		};
+		return said[kind] ?? 'Saved. The record below has been updated.';
+	}
+	// A prompt for the evidence box, in the words of whoever is filling it in.
+	function hint(kind: string) {
+		if (buyer)
+			return kind === 'request_return'
+				? 'For example: the screen has a crack along the bottom edge. I noticed it when I unpacked it on Friday.'
+				: 'Say what happened in your own words.';
+		if (kind === 'release') return 'For example: delivered by our van, driver Musa, waybill WB-7781.';
+		if (['payment', 'reverse_payment', 'reject_claim', 'refund'].includes(kind))
+			return 'What you checked: for example the bank statement line or the signed cash receipt.';
+		return 'Describe what happened and the evidence you checked.';
+	}
+	// The form opens at the end of the page; take the reader to it, or the
+	// button seems to do nothing.
 	function choose(kind: string) {
 		action = kind;
+		void tick().then(() => {
+			const heading = document.querySelector<HTMLElement>('.action-form h2');
+			heading?.scrollIntoView({ block: 'start' });
+			heading?.focus({ preventScroll: true });
+		});
 		amount = '';
 		reference = '';
 		related = '';
@@ -91,7 +130,7 @@
 			}
 			const data = await mutation.send(endpoint, body);
 			sale = purchase(data);
-			message = 'Saved. The record below has been updated.';
+			message = doneMessage(action);
 			action = '';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'The action was not confirmed.';
@@ -134,7 +173,9 @@
 		<header class="feature-heading purchase-heading">
 			<div>
 				<p class="eyebrow">
-					{buyer ? 'Your purchase' : 'Consumer sale'} <span class="status">{label(sale.state)}</span>
+					{buyer ? 'Your purchase' : 'Consumer sale'}
+					<span class="status">{buyer && sale.state === 'offered' ? 'Waiting for your answer' : label(sale.state)}</span
+					>
 				</p>
 				<h1>{sale.terms.item}</h1>
 				<p>Sold by {sale.terms.seller_name} · Quantity {sale.terms.quantity}</p>
@@ -192,8 +233,8 @@
 			<p>Manage optional payment reminders in <a href="/account/notifications">notification settings</a>.</p>
 			<p>Payments go directly to this retailer. They do not automatically pay any wholesaler debt.</p>
 			<div class="table">
-				<table>
-					<thead><tr><th>Date</th><th>Scheduled</th><th>Confirmed towards this payment</th></tr></thead><tbody
+				<table class="schedule">
+					<thead><tr><th>Date</th><th>Scheduled</th><th>Paid</th></tr></thead><tbody
 						>{#each sale.schedule_progress as due, i (i)}<tr
 								><td>{readableDate(due.date)}</td><td>{money(due.amount_kobo)}</td><td>{money(due.paid_kobo)}</td></tr
 							>{/each}</tbody
@@ -214,10 +255,12 @@
 			{#if sale.accepted_at && buyer}<button onclick={() => choose('claim')} disabled={busy}
 					>Report a payment I made</button
 				>{/if}
-			{#if sale.accepted_at && !buyer}<button onclick={() => choose('payment')} disabled={busy}
-					>Confirm money received</button
-				><button onclick={() => choose('reverse_payment')} disabled={busy || !payments.length}
-					>Correct a recorded receipt</button
+			{#if sale.accepted_at && !buyer && sale.state !== 'cancelled'}<button
+					onclick={() => choose('payment')}
+					disabled={busy}>Confirm money received</button
+				>{/if}{#if sale.accepted_at && !buyer}<button
+					onclick={() => choose('reverse_payment')}
+					disabled={busy || !payments.length}>Correct a recorded receipt</button
 				>{/if}
 			{#if pendingClaims.length}<h3>Payments awaiting review</h3>
 				{#each pendingClaims as claim, i (i)}<p>
@@ -247,8 +290,9 @@
 					disabled={busy}
 					onclick={() => choose('received')}>Confirm I received the goods</button
 				>{/if}
-			{#if !sale.released_at && sale.state !== 'cancelled'}<button disabled={busy} onclick={() => choose('cancel')}
-					>Cancel purchase</button
+			{#if !sale.released_at && !['cancelled', 'declined'].includes(sale.state) && !(buyer && sale.state === 'offered')}<button
+					disabled={busy}
+					onclick={() => choose('cancel')}>{buyer ? 'Cancel purchase' : 'Cancel this sale'}</button
 				>{/if}
 			{#if buyer && sale.released_at && sale.state !== 'cancelled' && !['requested', 'escalated'].includes(sale.case_state)}<button
 					disabled={busy}
@@ -277,7 +321,7 @@
 					void submit();
 				}}
 			>
-				<h2>{actionLabel(action)}</h2>
+				<h2 tabindex="-1">{actionLabel(action)}</h2>
 				<fieldset disabled={busy}>
 					{#if action === 'accept'}<label
 							>Full name<input bind:value={fullName} required maxlength="200" autocomplete="name" /></label
@@ -322,25 +366,42 @@
 						>{#if !related}<label>When money moved<input type="datetime-local" bind:value={occurred} required /></label
 							>{/if}{/if}
 					{#if !['accept', 'received', 'decline'].includes(action)}<label
-							>Reason and evidence<textarea
+							>{buyer ? 'What happened' : 'Reason and evidence'}<textarea
 								bind:value={note}
 								required
 								minlength="20"
 								maxlength="2000"
-								placeholder="Describe what happened, the bank or delivery evidence you checked, and any agreed return arrangements."
+								placeholder={hint(action)}
 							></textarea></label
 						>{/if}
 					{#if action === 'refund'}<p>This records a refund you have already paid. It does not send money.</p>{/if}
 					<button class="primary" type="submit">Confirm</button>
 				</fieldset>
 			</form>{/if}
-		<section>
+		<section class="history">
 			<h2>Purchase history</h2>
 			{#each sale.events as event, i (i)}<article>
-					<strong>{label(event.action)}{event.amount_kobo > 0 ? ` · ${money(event.amount_kobo)}` : ''}</strong>
+					<strong>{eventLabel(event.action)}{event.amount_kobo > 0 ? ` · ${money(event.amount_kobo)}` : ''}</strong>
 					<p>{event.note}</p>
-					<small>{new Date(event.occurred_at).toLocaleString('en-NG')} · {event.reference}</small>
+					<small
+						>{readableDateTime(event.occurred_at)}{event.reference && !/^version-\d+$/.test(event.reference)
+							? ` · ${event.reference}`
+							: ''}</small
+					>
 				</article>{:else}<p>No actions recorded yet.</p>{/each}
 		</section>
 	{/if}
 </main>
+
+<style>
+	/* three short columns fit a phone; the page-wide minimum width would only
+	   make this one scroll sideways */
+	table.schedule {
+		min-width: 0;
+	}
+	/* history notes and references carry agreement hashes, which must wrap */
+	.history p,
+	.history small {
+		overflow-wrap: anywhere;
+	}
+</style>

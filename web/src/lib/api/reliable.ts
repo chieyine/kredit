@@ -70,12 +70,20 @@ export async function boundedFetch(url: string, init: RequestInit = {}, timeoutM
 		init.signal?.removeEventListener('abort', abort);
 	}
 }
+/**
+ * Problems whose detail the API writes for the person acting (for example a
+ * consumer-sale rule such as "payment time must be after acceptance"). Every
+ * other detail is treated as internal and never shown.
+ */
+export const userCopyProblems = new Set(['purchase_action_invalid', 'purchase_invalid']);
 function refusal(status: number, code: string): string {
 	if (status === 401) return 'Your session has ended. Sign in again to continue.';
 	if (code === 'step_up_required') return 'Confirm it is you with your authenticator code, then try again.';
 	if (status === 403) return 'Your role in this business does not allow this. Ask the owner if you need it.';
 	if (status === 404 || status === 410)
 		return 'We could not find this. It may have been removed or the link has expired.';
+	if (status === 423)
+		return 'Changes like this are paused on this account right now. Contact Kredit support if you are not sure why.';
 	if (status === 409) return 'This changed while you were working on it. Refresh the page and try again.';
 	if (status === 429) return 'Too many requests. Wait a moment, then try again.';
 	if (status >= 500) return 'Kredit could not finish this just now. Try again in a moment.';
@@ -116,7 +124,8 @@ export async function checkedJSON<T>(url: string, decode: Decoder<T>, init: Requ
 						: 'request_unavailable';
 			// Storage/provider diagnostics are not safe public copy, but many pages
 			// show this message as it stands, so it says what kind of refusal it was.
-			throw new RequestError(refusal(response.status, code), response.status, code);
+			const written = userCopyProblems.has(code) && typeof problem.detail === 'string' ? problem.detail : '';
+			throw new RequestError(written || refusal(response.status, code), response.status, code);
 		}
 		return decode(payload);
 	} finally {

@@ -589,9 +589,7 @@
 		border: 1px solid var(--color-border);
 		border-radius: 0.5rem;
 	}
-	button:disabled {
-		opacity: 0.55;
-	}
+
 	.table-wrap {
 		overflow: auto;
 	}

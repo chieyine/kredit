@@ -20,44 +20,44 @@ export function saleNextStep(view: SaleView): NextStep {
 		SENT: {
 			actor: 'Customer',
 			title: 'Read the agreement and decide',
-			detail: 'The customer needs to accept or decline the exact sale sent by the seller.',
+			detail: 'The customer reads the sale exactly as it was sent, then accepts or declines it.',
 			action: 'Review agreement'
 		},
 		BUYER_REVIEWING: {
 			actor: 'Customer',
 			title: 'Read the agreement and decide',
-			detail: 'Acceptance records the sale agreement. Bank-debit permission is a separate step.',
+			detail: 'Accepting agrees to the sale. Allowing a bank debit is a separate step that comes after.',
 			action: 'Review agreement'
 		},
 		VERIFICATION_PENDING: {
 			actor: 'Customer',
 			title: 'Complete the account checks',
-			detail: 'Identity, business and authority checks must be current before acceptance.',
+			detail: 'The customer confirms who they are and that they may buy for the business, then accepts.',
 			action: 'Review account checks'
 		},
 		BUYER_ACCEPTED: {
 			actor: 'Customer / bank',
 			title: 'Finish bank-debit permission',
-			detail: 'The sale is accepted. Complete the secure bank step, then check its status before goods are released.',
+			detail: 'The sale is accepted. Next the customer allows the bank debit; the goods go out once the bank confirms.',
 			action: 'Review bank permission'
 		},
 		READY_TO_RELEASE: {
 			actor: 'Seller',
 			title: 'Arrange and record delivery',
-			detail: 'The customer has accepted and bank permission is ready. Record when the goods actually leave.',
+			detail: 'The customer has accepted and the bank has confirmed. Record the dispatch when the goods leave.',
 			action: 'Review delivery'
 		},
 		GOODS_RELEASED: {
 			actor: 'Customer',
 			title: 'Confirm the goods arrived',
-			detail: 'Confirm receipt or report a delivery problem. The dispatch record alone does not prove receipt.',
+			detail: 'The seller has recorded that the goods left. The customer confirms they arrived, or reports a problem.',
 			action: 'Review receipt'
 		},
 		RECEIPT_CONFIRMATION_PENDING: {
 			actor: 'Customer',
 			title: 'Confirm the goods arrived',
 			detail:
-				'Confirm receipt or report a problem. Any automatic recognition requires its own recorded delivery and waiting-period evidence.',
+				'The customer confirms the goods arrived, or reports a problem. If nobody answers within the agreed waiting time, the delivery record stands.',
 			action: 'Review receipt'
 		},
 		ACTIVE: {

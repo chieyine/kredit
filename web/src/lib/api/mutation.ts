@@ -1,4 +1,12 @@
-import { checkedJSON, csrfHeader, randomKey, RequestError, UserFacingError, type Decoder } from './reliable';
+import {
+	checkedJSON,
+	csrfHeader,
+	randomKey,
+	RequestError,
+	UserFacingError,
+	userCopyProblems,
+	type Decoder
+} from './reliable';
 
 type StoredIntent = { version: 1; key: string; fingerprint: string; createdAt: string };
 export class MutationError extends UserFacingError {
@@ -162,7 +170,7 @@ export class MutationIntent {
 				sent &&
 				error instanceof RequestError &&
 				error.status === 409 &&
-				['approval_changed', 'network_changed', 'purchasing_changed'].includes(error.code)
+				['approval_changed', 'network_changed', 'purchasing_changed', 'purchase_changed'].includes(error.code)
 			) {
 				this.clear();
 				throw new MutationError('The record changed. Refresh it before making another change.', 'rejected');
@@ -202,7 +210,9 @@ export class MutationIntent {
 							? error.code === 'step_up_required'
 								? 'Confirm your identity with your authenticator code, then try again.'
 								: 'Your account cannot perform this action. Check your permissions.'
-							: 'The request was not accepted. Check the details and try again.';
+							: userCopyProblems.has(error.code)
+								? error.message
+								: 'The request was not accepted. Check the details and try again.';
 				throw new MutationError(message, 'rejected');
 			}
 			throw new MutationError(

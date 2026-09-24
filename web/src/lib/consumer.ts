@@ -78,23 +78,43 @@ const words: Record<string, string> = {
 const sentence = (v: string) => v.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase());
 /** A consumer sale's state or return case in plain words. */
 export const label = (v: string) => words[v] ?? sentence(v);
+// Each form's heading matches the button that opened it.
 const actions: Record<string, string> = {
-	accept: 'Accept this purchase',
-	decline: 'Decline this purchase',
-	cancel: 'Cancel this sale',
-	release: 'Send the goods',
+	accept: 'Review and accept',
+	decline: 'Decline this offer',
+	cancel: 'Cancel',
+	release: 'Record dispatch or handover',
 	received: 'Confirm you received the goods',
-	payment: 'Record a payment',
+	payment: 'Confirm money received',
 	claim: 'Report a payment you made',
-	reject_claim: 'Reject a reported payment',
-	reverse_payment: 'Reverse a payment',
-	reduce_price: 'Reduce the price',
-	refund: 'Record a refund',
-	request_return: 'Ask to return the goods',
-	approve_return: 'Approve the return',
-	reject_return: 'Refuse the return',
-	escalate: 'Ask Kredit support to look at this'
+	reject_claim: 'Review an unmatched payment',
+	reverse_payment: 'Correct a recorded receipt',
+	reduce_price: 'Reduce the sale price',
+	refund: 'Record a refund paid to the customer',
+	request_return: 'Report a problem or ask to return it',
+	approve_return: 'Approve the return and full refund',
+	reject_return: 'Decline the return',
+	escalate: 'Ask Kredit to review the decision'
 };
+const events: Record<string, string> = {
+	accept: 'Accepted',
+	decline: 'Declined',
+	cancel: 'Cancelled',
+	release: 'Goods sent',
+	received: 'Goods received',
+	payment: 'Payment recorded',
+	claim: 'Payment reported',
+	reject_claim: 'Reported payment not found',
+	reverse_payment: 'Payment reversed',
+	reduce_price: 'Price reduced',
+	refund: 'Refund recorded',
+	request_return: 'Return requested',
+	approve_return: 'Return approved',
+	reject_return: 'Return refused',
+	escalate: 'Sent to Kredit support'
+};
+/** A recorded step in a consumer sale's history, in the past tense. */
+export const eventLabel = (v: string) => events[v] ?? sentence(v);
 /** What a button on a consumer sale does, as a heading for its form. */
 export const actionLabel = (v: string) => actions[v] ?? sentence(v);
 export function kobo(v: string) {

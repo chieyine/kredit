@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDateTime } from '$lib/datetime';
 	import { checkedJSON, optionalText, publicError, record, text, rows, LatestRequest } from '$lib/api/reliable';
 	const requests = new LatestRequest();
 	import { onMount } from 'svelte';
@@ -73,7 +74,7 @@
 					<div>
 						<h2>{productLabel(item.subject_type)}</h2>
 						<p>Reference {shortReference(item.subject_id)}</p>
-						<small>Updated {new Date(item.updated_at).toLocaleString('en-NG')}</small>
+						<small>Updated {readableDateTime(item.updated_at)}</small>
 					</div>
 					<strong>{productLabel(item.state)}</strong><b>→</b></a
 				>{:else}<div class="empty-state">

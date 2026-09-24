@@ -26,7 +26,11 @@
 <svelte:head><title>Problem details — Kredit</title></svelte:head>
 <main class="shell workspace">
 	<p class="eyebrow">Reported problem</p>
-	<h1>Resolve this dispute</h1>
+	<h1>A problem your customer reported</h1>
+	<p class="lede">
+		Add your side and any proof below. If the customer is right, reduce what they owe with a credit note from the sale’s
+		“Deliveries and credit notes” page. Kredit support reviews the problem and records the decision.
+	</p>
 	{#if organizationID}<DisputeDetail
 			endpoint={`/api/v1/organizations/${encodeURIComponent(organizationID)}/disputes/${encodeURIComponent(page.params.id ?? '')}`}
 			backHref={`/workspace/disputes?organization=${encodeURIComponent(organizationID)}`}

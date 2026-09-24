@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { getContext, onMount } from 'svelte';
-	import { sumKobo } from '$lib/money';
+	import { formatKobo, sumKobo } from '$lib/money';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
 	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
@@ -28,6 +28,9 @@
 		transfer_reference: string;
 		paid_at: string;
 		hold_expires_at: string;
+		credit_request_id: string;
+		buyer_legal_name: string;
+		goods_description: string;
 	};
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
 	const optional = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -53,12 +56,16 @@
 			amount_kobo: kobo(row.amount_kobo),
 			transfer_reference: text(row.transfer_reference),
 			paid_at: text(row.paid_at),
-			hold_expires_at: optional(row.hold_expires_at)
+			hold_expires_at: optional(row.hold_expires_at),
+			credit_request_id: optional(row.credit_request_id),
+			buyer_legal_name: optional(row.buyer_legal_name),
+			goods_description: optional(row.goods_description)
 		};
 	};
 	let organizations = $state<Organization[]>([]),
 		payments = $state<Payment[]>([]),
-		claims = $state<Claim[]>([]);
+		claims = $state<Claim[]>([]),
+		done = $state('');
 	let organizationID = $state(''),
 		error = $state(''),
 		busy = $state(''),
@@ -136,6 +143,7 @@
 	}
 	function decide(claim: Claim, decision: 'confirmed' | 'rejected') {
 		if (busy || claim.state !== 'pending') return;
+		done = '';
 		reviewError = '';
 		review = { organizationID, claim, decision };
 	}
@@ -167,6 +175,10 @@
 				}
 			);
 			review = null;
+			done =
+				selected.decision === 'confirmed'
+					? `${formatKobo(selected.claim.amount_kobo)} recorded as received. The customer's balance has gone down.`
+					: 'Marked as not received. The customer is told and their balance stays the same.';
 			if (organizationID === selected.organizationID) await load();
 		} catch (cause) {
 			reviewError =
@@ -239,6 +251,7 @@
 			<h2>Add your business first</h2>
 			<a href="/workspace/today">Add business details</a>
 		</section>{:else if !error}
+		{#if done}<p class="notice" role="status">{done}</p>{/if}
 		<section class="money-summary" aria-label="Payment summary">
 			<article class="total">
 				<span>Money received</span><strong><Money amountKobo={receivedTotal} /></strong><small
@@ -265,8 +278,17 @@
 			{#if pendingClaims.length}<div class="claim-list">
 					{#each pendingClaims as claim (claim.id)}<article>
 							<div class="claim-amount">
-								<span>Transfer reported</span><strong><Money amountKobo={claim.amount_kobo} /></strong>
+								<span>{claim.buyer_legal_name || 'A customer'} says they sent</span><strong
+									><Money amountKobo={claim.amount_kobo} /></strong
+								>
 							</div>
+							{#if claim.goods_description}<p class="claim-sale">
+									For {claim.goods_description}{#if claim.credit_request_id}<span class="sep" aria-hidden="true">·</span
+										><a
+											href={`/workspace/sales/${encodeURIComponent(claim.credit_request_id)}?organization=${encodeURIComponent(organizationID)}`}
+											>Open sale</a
+										>{/if}
+								</p>{/if}
 							<dl>
 								<div>
 									<dt>Transfer number</dt>
@@ -370,6 +392,14 @@
 	/>{/if}
 
 <style>
+	.claim-sale .sep {
+		margin-inline: 0.35rem;
+	}
+	.claim-sale {
+		margin: 0.4rem 0 0;
+		color: var(--color-muted);
+		font-size: 0.9rem;
+	}
 	.payments-page {
 		max-width: 76rem;
 		padding-bottom: 5rem;
@@ -522,14 +552,13 @@
 		box-shadow: 6px 6px 0 var(--color-border);
 	}
 	.claim-amount {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
+		display: grid;
+		gap: 0.3rem;
 		padding-bottom: 1rem;
 		border-bottom: 2px solid var(--color-primary);
 	}
 	.claim-amount span {
-		max-width: 10rem;
+		color: var(--color-muted);
 	}
 	.claim-amount strong {
 		font-family: var(--font-serif);

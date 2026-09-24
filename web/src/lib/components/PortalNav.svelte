@@ -607,6 +607,22 @@
 		color: var(--color-on-primary);
 	}
 
+	/* Between a phone and a full desktop the bar holds five links, the menu and
+	   search. Sign out is also in the menu sheet, and the shortcut hint is for
+	   keyboards, so both leave the bar here rather than crowd the links. */
+	@media (min-width: 761px) and (max-width: 1100px) {
+		nav {
+			gap: 0.7rem;
+		}
+		.portal-actions .sign-out,
+		.search kbd {
+			display: none;
+		}
+		.portal-links a {
+			padding-inline: 0.5rem;
+		}
+	}
+
 	@media (max-width: 760px) {
 		nav {
 			position: sticky;

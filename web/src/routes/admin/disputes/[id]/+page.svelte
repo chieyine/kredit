@@ -170,6 +170,10 @@
 			</section>
 			{#if !['RESOLVED', 'WITHDRAWN'].includes(dispute.state)}<section class="action">
 					<h2>Record a decision</h2>
+					<p class="help">
+						Check the sale first: if the seller has already approved a credit note for this problem, it has already come
+						off the balance, so do not take it off twice.
+					</p>
 					<form onsubmit={decide}>
 						<fieldset disabled={busy}>
 							<label
@@ -178,9 +182,14 @@
 										value="PARTIAL_ADJUSTMENT">Make a partial adjustment</option
 									><option value="FULL_ADJUSTMENT">Remove the disputed amount</option></select
 								></label
-							><label>Correct sale amount (₦)<input inputmode="decimal" maxlength="40" bind:value={validNaira} /></label
 							><label
-								>Amount to remove from the balance (₦)<input
+								>Of the disputed money, the part that is owed after all (₦)<input
+									inputmode="decimal"
+									maxlength="40"
+									bind:value={validNaira}
+								/></label
+							><label
+								>Amount to take off what the customer owes (₦)<input
 									inputmode="decimal"
 									maxlength="40"
 									bind:value={adjustmentNaira}
@@ -247,6 +256,12 @@
 	}
 	.decision {
 		margin: 0.7rem 0;
+	}
+	.action .help {
+		margin: 0.4rem 0 1rem;
+		font-size: 0.9rem;
+		line-height: 1.5;
+		opacity: 0.85;
 	}
 	.action {
 		align-self: start;

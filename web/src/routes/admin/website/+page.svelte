@@ -388,7 +388,6 @@
 		cursor: pointer;
 	}
 	button:disabled {
-		opacity: 0.55;
 		cursor: not-allowed;
 	}
 	button:focus-visible,

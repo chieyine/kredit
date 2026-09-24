@@ -530,9 +530,7 @@
 		font-weight: 800;
 		cursor: pointer;
 	}
-	.card button:disabled {
-		opacity: 0.55;
-	}
+
 	.row {
 		display: grid;
 		grid-template-columns: 8rem 1fr;
