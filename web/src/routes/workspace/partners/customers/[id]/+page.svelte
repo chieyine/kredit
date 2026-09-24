@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { page } from '$app/state';
 	import { formatKobo, type KoboValue } from '$lib/money';
 	import { organization, kobo, customer } from '$lib/records';
@@ -24,6 +25,7 @@
 	type StatementLine = {
 		credit_request_id: string;
 		buyer_name: string;
+		due_date: string;
 		payment_status: string;
 		outstanding_kobo: KoboValue;
 	};
@@ -65,6 +67,7 @@
 				return {
 					credit_request_id: text(sale.credit_request_id),
 					buyer_name: optionalText(sale.buyer_name),
+					due_date: optionalText(sale.due_date),
 					payment_status: text(sale.payment_status),
 					outstanding_kobo: kobo(sale.outstanding_kobo)
 				};
@@ -184,7 +187,8 @@
 			{#if statement?.obligations?.length}<div class="table">
 					{#each statement.obligations as obligation, i (i)}<a
 							href={`/workspace/sales/${encodeURIComponent(obligation.credit_request_id)}?organization=${encodeURIComponent(organizationID)}`}
-							><span>{obligation.buyer_name || 'Credit sale'}</span><strong>{money(obligation.outstanding_kobo)}</strong
+							><span>{obligation.due_date ? `Due ${readableDate(obligation.due_date)}` : 'Credit sale'}</span><strong
+								>{money(obligation.outstanding_kobo)}</strong
 							><small>{productLabel(obligation.payment_status)}</small></a
 						>{/each}
 				</div>{:else}<p>This customer has no open sale with you right now.</p>{/if}

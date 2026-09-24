@@ -6,7 +6,7 @@
 	import { MutationIntent } from '$lib/api/mutation';
 	import { tradeLine, tradeStatement, drawdown as drawdownRecord, type TradeStatement } from '$lib/trade-line-records';
 	import { formatKobo } from '$lib/money';
-	import { readableDateTime } from '$lib/datetime';
+	import { readableDate, readableDateTime } from '$lib/datetime';
 	let statements: TradeStatement[] = $state([]),
 		error = $state(''),
 		notice = $state(''),
@@ -121,7 +121,7 @@
 								<h2>{drawdown.goods_description}</h2>
 								<dl>
 									<dt>Pay before</dt>
-									<dd>{drawdown.due_date}</dd>
+									<dd>{readableDate(drawdown.due_date)}</dd>
 									<dt>Kredit may debit your bank after</dt>
 									<dd>{readableDateTime(drawdown.collection_at)}</dd>
 									<dt>Extra time before that</dt>

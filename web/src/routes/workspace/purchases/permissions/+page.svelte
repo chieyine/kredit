@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { nairaInput } from '$lib/money';
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, record, rows, text } from '$lib/api/reliable';
@@ -201,7 +202,7 @@
 				<h2>{g.name}</h2>
 				<p>
 					{g.active
-						? 'Delegated access expires ' + new Date(g.expires_at).toLocaleDateString('en-NG')
+						? 'Delegated access expires ' + readableDate(g.expires_at)
 						: 'No current delegated purchasing access'}
 				</p>
 				<fieldset disabled={busy || !owner}>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { nairaInput } from '$lib/money';
 	import { onMount } from 'svelte';
 	import { purchase, read, Mutation, money, label, kobo, type Purchase } from '$lib/consumer';
@@ -192,7 +193,7 @@
 				<table>
 					<thead><tr><th>Date</th><th>Scheduled</th><th>Confirmed towards this payment</th></tr></thead><tbody
 						>{#each sale.schedule_progress as due, i (i)}<tr
-								><td>{due.date}</td><td>{money(due.amount_kobo)}</td><td>{money(due.paid_kobo)}</td></tr
+								><td>{readableDate(due.date)}</td><td>{money(due.amount_kobo)}</td><td>{money(due.paid_kobo)}</td></tr
 							>{/each}</tbody
 					>
 				</table>
@@ -235,7 +236,7 @@
 							: 'Goods have not been released.'}
 			</p>
 			{#if sale.delivery_due_at && !sale.received_at}<p>
-					Delivery deadline: {new Date(sale.delivery_due_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })}
+					Delivery deadline: {readableDate(sale.delivery_due_at)}
 				</p>{/if}{#if sale.case_state}<p>Return case: {label(sale.case_state)}</p>{/if}
 			{#if !buyer && sale.release_eligible}<button disabled={busy} onclick={() => choose('release')}
 					>Record dispatch or handover</button

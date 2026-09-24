@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { recordNotice } from '$lib/activity-language';
 	import { onMount } from 'svelte';
 	import { productLabel } from '$lib/product-language';
 	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
@@ -144,11 +145,15 @@
 				{#each visible as item, i (i)}<article class:failed-card={item.failure_reason}>
 						<div class="message-head">
 							<div>
-								<span class="channel">{channel(item.channel)}</span><strong>{messageName(item.template)}</strong>
+								<span class="channel">{channel(item.channel)}</span><strong
+									>{recordNotice(item.template, item.body)?.title ?? messageName(item.template)}</strong
+								>
 							</div>
 							<span class="state">{productLabel(item.state)}</span>
 						</div>
-						<p class="body">{item.body || 'Kredit sent an account message.'}</p>
+						<p class="body">
+							{recordNotice(item.template, item.body)?.body ?? (item.body || 'Kredit sent an account message.')}
+						</p>
 						<div class="meta">
 							<time>{sentTime(item)}</time>{#if item.recipient_hint}<span>{item.recipient_hint}</span>{/if}
 						</div>

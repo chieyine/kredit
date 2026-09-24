@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import RepaymentCustomer from '$lib/components/RepaymentCustomer.svelte';
 	import IdentityChecks from '$lib/components/IdentityChecks.svelte';
@@ -215,7 +216,7 @@
 						></a
 					>{:else if nextPayment}<a class="due-strip" href={workspaceHref('/workspace/purchases/obligations', page.url)}
 						><span>Next: {formatKobo(nextPayment.next_due_kobo)}</span><em
-							>by {new Date(nextPayment.next_due_at ?? '').toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })} →</em
+							>by {readableDate(nextPayment.next_due_at ?? '')} →</em
 						></a
 					>{:else if outstanding > 0n}<a
 						class="due-strip"
@@ -276,13 +277,12 @@
 		<p class="eyebrow">Your business · Purchases</p>
 		<h1>Opening your account…</h1>
 	{/if}
+	<IdentityChecks />
+	{#if portal?.business?.id}<RepaymentCustomer
+			businessID={portal.business.id}
+			businessName={portal.business.legal_name}
+		/>{/if}
 </main>
-
-<IdentityChecks />
-{#if portal?.business?.id}<RepaymentCustomer
-		businessID={portal.business.id}
-		businessName={portal.business.legal_name}
-	/>{/if}
 
 <style>
 	.owe-hero {

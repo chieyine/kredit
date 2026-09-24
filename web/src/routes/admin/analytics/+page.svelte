@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { checkedJSON, optionalText, publicError, record, rows, text, LatestRequest } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
 	type Metric = {
@@ -168,9 +169,7 @@
 				<div>
 					<p class="eyebrow">Application snapshot</p>
 					<h2 id="application-title">
-						Evidence for {new Date(scorecard.from).toLocaleDateString()} to {new Date(
-							scorecard.to
-						).toLocaleDateString()}
+						Evidence for {readableDate(scorecard.from)} to {readableDate(scorecard.to)}
 					</h2>
 				</div>
 				<button type="button" onclick={() => window.print()}>Print or save as PDF</button>

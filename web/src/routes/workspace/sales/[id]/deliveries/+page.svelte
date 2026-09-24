@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { formatKobo, parseNaira, type KoboValue } from '$lib/money';
@@ -202,14 +203,14 @@
 <main class="shell workspace deliveries-page">
 	<div class="header-nav">
 		<a href={`/workspace/sales/${orderID}?organization=${encodeURIComponent(organizationID)}`} class="back-link">
-			← Back to Sale Order
+			← Back to the sale
 		</a>
 	</div>
 
 	<p class="eyebrow">Sales · Deliveries</p>
 	<h1>Deliveries and credit notes</h1>
 	<p class="lede">
-		Track partial shipments, signed delivery receipts, and approved credit adjustments with dual-control governance.
+		Record each shipment, what the customer confirmed receiving, and any credit note that reduces what they owe.
 	</p>
 
 	{#if message}<p role="status" class="alert success">{message}</p>{/if}
@@ -222,9 +223,7 @@
 		<section class="card">
 			<h2>Items on this order</h2>
 			{#if !lineItems.length}
-				<p class="empty-note">
-					This order is tracked at the whole-contract level, or line items have not yet been broken down.
-				</p>
+				<p class="empty-note">This sale is recorded as one total, without a list of separate items.</p>
 			{:else}
 				<div class="table-container">
 					<table>
@@ -268,7 +267,7 @@
 						<div class="shipment-item">
 							<div>
 								<strong>{s.carrier}</strong> · <code>{s.tracking_reference || 'No tracking ref'}</code>
-								<p class="muted">Dispatched {s.dispatched_at.slice(0, 10)}</p>
+								<p class="muted">Dispatched {readableDate(s.dispatched_at)}</p>
 							</div>
 							<span class={`badge ${s.status === 'delivered' ? 'success' : 'info'}`}>{s.status}</span>
 						</div>
@@ -285,17 +284,18 @@
 				}}
 				class="dispatch-form"
 			>
-				<h3>Dispatch New Shipment</h3>
+				<h3>Record a shipment</h3>
 				<div class="form-row">
 					<label
-						>Carrier<input
+						>Who is carrying the goods<input
 							bind:value={newCarrier}
-							placeholder="e.g. Kredit Logistics Fleet"
+							placeholder="For example: our own van"
 							required
 							disabled={busy}
 						/></label
 					>
-					<label>Tracking Reference<input bind:value={newTracking} placeholder="e.g. TRK-4819" disabled={busy} /></label
+					<label
+						>Waybill or tracking number<input bind:value={newTracking} placeholder="Optional" disabled={busy} /></label
 					>
 				</div>
 				{#if lineItems.length}
@@ -314,7 +314,7 @@
 						{/each}
 					</div>
 				{/if}
-				<button type="submit" disabled={busy || !newCarrier.trim()}>Record Dispatch</button>
+				<button type="submit" disabled={busy || !newCarrier.trim()}>Save shipment</button>
 			</form>
 		</section>
 
@@ -322,8 +322,8 @@
 		<section class="card">
 			<h2>Approved credit notes</h2>
 			<p class="muted">
-				Credit notes reduce outstanding receivable balances. Under maker-checker dual control, the issuer cannot approve
-				their own credit note.
+				A credit note reduces what the customer owes, for example after a return or a discount. A second person must
+				approve it: whoever drafts a credit note cannot approve it.
 			</p>
 
 			{#if creditNotes.length}
@@ -332,7 +332,7 @@
 						<div class="credit-note-item">
 							<div>
 								<strong>{formatKobo(cn.amount_kobo)}</strong>: {cn.reason}
-								<p class="muted">Created {cn.created_at.slice(0, 10)}</p>
+								<p class="muted">Created {readableDate(cn.created_at)}</p>
 							</div>
 							<span class={`badge ${cn.status === 'approved' ? 'success' : 'warning'}`}>{cn.status}</span>
 						</div>
@@ -349,7 +349,7 @@
 				}}
 				class="credit-form"
 			>
-				<h3>Issue Credit Note Draft</h3>
+				<h3>Draft a credit note</h3>
 				<div class="form-row">
 					<label
 						>Amount (₦)<input
@@ -363,13 +363,13 @@
 					<label
 						>Reason<input
 							bind:value={creditReason}
-							placeholder="e.g. Volume discount / goods return"
+							placeholder="For example: 5 cartons returned damaged"
 							required
 							disabled={busy}
 						/></label
 					>
 				</div>
-				<button type="submit" disabled={busy || !creditAmount || !creditReason.trim()}>Create Credit Note Draft</button>
+				<button type="submit" disabled={busy || !creditAmount || !creditReason.trim()}>Save draft</button>
 			</form>
 		</section>
 	{/if}

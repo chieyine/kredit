@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
-	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { productLabel } from '$lib/product-language';
+	import { activityLabel } from '$lib/activity-language';
 	import Money from '$lib/components/Money.svelte';
 	import type { KoboValue } from '$lib/money';
 	import { organization, type Organization } from '$lib/records';
-	type ActivityEvent = { action: string; created_at: string };
+	type ActivityEvent = { action: string; resource_type: string; created_at: string };
 	type OperatorAction = { id: string; action_type: string; reason: string; created_at: string; amount_kobo: KoboValue };
 	type Correction = { id: string; subject_type: string; state: string; reason: string; created_at: string };
 	type ProviderStatus = { name: string; feature_enabled: boolean; health: { healthy: boolean } };
@@ -30,7 +31,11 @@
 		intents = new Map<string, MutationIntent>();
 	const decodeEvents = rows('events', (value): ActivityEvent => {
 		const row = record(value);
-		return { action: text(row.action), created_at: text(row.created_at) };
+		return {
+			action: text(row.action),
+			resource_type: optionalText(row.resource_type),
+			created_at: text(row.created_at)
+		};
 	});
 	const decodeActions = rows('actions', (value): OperatorAction => {
 		const row = record(value);
@@ -262,7 +267,7 @@
 						Business activity could not be loaded.
 					</p>{:else if events.length}<ul>
 						{#each events.slice(0, 30) as item, i (i)}<li>
-								<strong>{productLabel(item.action)}</strong><small
+								<strong>{activityLabel(item.action, item.resource_type)}</strong><small
 									>{new Date(item.created_at).toLocaleString('en-NG')}</small
 								>
 							</li>{/each}

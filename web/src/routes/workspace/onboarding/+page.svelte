@@ -387,9 +387,8 @@
 				>
 			</section>
 		</div>{/if}
+	<IdentityChecks subjectID={orgID} personalOnly={businessType === 'unregistered_business'} />
 </main>
-
-<IdentityChecks subjectID={orgID} personalOnly={businessType === 'unregistered_business'} />
 
 <style>
 	.onboarding header {

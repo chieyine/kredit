@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { checkedJSON, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
 	let error = $state('');
@@ -106,7 +107,7 @@
 				<header>
 					<strong>{productLabel(item.request_type)}</strong><span class="status">{productLabel(item.state)}</span>
 				</header>
-				<p>Due {new Date(item.due_at).toLocaleDateString('en-NG')} · {item.details}</p>
+				<p>Due {readableDate(item.due_at)} · {item.details}</p>
 				<div class="actions">
 					{#if item.state === 'APPROVED' || item.state === 'PARTIALLY_APPROVED'}<button
 							onclick={() => begin(item, 'COMPLETE')}>Record completed work</button

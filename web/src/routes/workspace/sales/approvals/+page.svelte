@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { onMount } from 'svelte';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { checkedJSON, LatestRequest, record, rows, text } from '$lib/api/reliable';
@@ -298,7 +299,8 @@
 						{item.proposal.goods_description}
 					</p>
 					<p>
-						{item.proposal.due_date ? `Due ${item.proposal.due_date.slice(0, 10)} · ` : ''}<strong>{item.state}</strong>
+						{item.proposal.due_date ? `Due ${readableDate(item.proposal.due_date)} · ` : ''}<strong>{item.state}</strong
+						>
 					</p>
 					<a
 						href={item.kind === 'drawdown'

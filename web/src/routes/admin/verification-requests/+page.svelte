@@ -127,9 +127,8 @@
 				>
 			</fieldset>
 		</form>{/if}
+	<IdentityChecks review />
 </main>
-
-<IdentityChecks review />
 
 <style>
 	main {

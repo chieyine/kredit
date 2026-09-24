@@ -149,3 +149,21 @@ export function productLabel(value: unknown, fallback = 'Not available') {
 			.replace(/^./, (letter) => letter.toUpperCase())
 	);
 }
+
+const providerNames: Record<string, string> = {
+	mono: 'Mono',
+	'mono-sweep': 'Mono',
+	paystack: 'Paystack',
+	flutterwave: 'Flutterwave',
+	monnify: 'Monnify'
+};
+
+/** A payment company's name as its customers know it, not its internal adapter key. */
+export function providerName(value: string, adapter = '') {
+	const key = value.toLowerCase();
+	return (
+		providerNames[key] ??
+		providerNames[adapter.toLowerCase()] ??
+		(key.startsWith('mock') ? 'Test bank' : productLabel(value))
+	);
+}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { feeDisclosure } from '$lib/fee-terms';
 	import { parseNaira, formatKobo, nairaInput } from '$lib/money';
 	import { checkedJSON, LatestRequest, publicError, record, rows, RequestError } from '$lib/api/reliable';
@@ -374,7 +375,7 @@
 								<p>{feeDisclosure(drawdown.fee_terms)}</p>
 							</dd>
 							<dt>Pay before</dt>
-							<dd>{drawdown.due_date}</dd>
+							<dd>{readableDate(drawdown.due_date)}</dd>
 							<dt>Bank debit after</dt>
 							<dd>{localTime(drawdown.collection_at)}</dd>
 							<dt>Extra time before that</dt>

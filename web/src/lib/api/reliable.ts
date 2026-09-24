@@ -46,6 +46,9 @@ export function publicError(error: unknown, subject = 'these details'): string {
 	if (error instanceof UserFacingError) return error.message;
 	if (error instanceof RequestError && error.status === 401)
 		return 'Your session has ended. Sign in again to continue.';
+	// A missing second step is not a missing permission: say what to do.
+	if (error instanceof RequestError && error.code === 'step_up_required')
+		return 'Confirm it is you with your authenticator code, then try again.';
 	if (error instanceof RequestError && error.status === 403)
 		return 'Your account does not have permission to open these details.';
 	if (error instanceof RequestError && error.status === 429) return 'Too many requests. Wait a moment, then try again.';

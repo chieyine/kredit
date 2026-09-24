@@ -39,6 +39,7 @@
 			.catch(() => {});
 		return () => abort.abort();
 	});
+	let linkGone = $state(false);
 	let preview = $state<Preview | null>(null);
 	let challengeId = $state('');
 	let developmentCode = $state('');
@@ -86,6 +87,7 @@
 			);
 			if (request.current()) preview = result;
 		} catch (cause) {
+			if (request.current()) linkGone = cause instanceof RequestError && [404, 410].includes(cause.status);
 			if (request.current())
 				error =
 					cause instanceof RequestError && [404, 410].includes(cause.status)
@@ -258,7 +260,8 @@
 		</section>
 	{:else}
 		<p class="error" role="alert">{error}</p>
-		<button onclick={loadPreview}>Try again</button>
+		<!-- An expired link will not come back by retrying; only a failed check might. -->
+		{#if !linkGone}<button onclick={loadPreview}>Try again</button>{/if}
 	{/if}
 </main>
 

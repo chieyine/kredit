@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { readableDate } from '$lib/datetime';
 	import { onMount } from 'svelte';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { checkedJSON, LatestRequest, optionalText, record, rows, text, publicError } from '$lib/api/reliable';
@@ -156,14 +157,14 @@
 				You have not sent any request.
 			</p>{:else}{#each requests as r (r.id)}<article>
 					<strong>{privacyRequestLabel(r.request_type)}</strong><span>{productLabel(r.state)}</span>
-					<p>We aim to finish by {new Date(r.due_at).toLocaleDateString('en-NG')}</p>
+					<p>We aim to finish by {readableDate(r.due_at)}</p>
 					{#if r.completion_reason}<p>
 							<strong>Completed work:</strong>
 							{r.completion_reason}
 						</p>{/if}{#if r.decision_reason}<p>{r.decision_reason}</p>{/if}{#if r.retention_outcome}<p>
 							{r.retention_outcome}
 						</p>{/if}{#if r.export_reference}<p>
-							Your protected copy is ready until {new Date(r.export_expires_at).toLocaleDateString('en-NG')}.
+							Your protected copy is ready until {readableDate(r.export_expires_at)}.
 						</p>
 						<button disabled={Boolean(downloading)} onclick={() => download(r.id)}
 							>{downloading === r.id ? 'Opening your copy…' : 'Download my information'}</button
