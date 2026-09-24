@@ -23,19 +23,19 @@ func (s *Server) listOrganizationPayments(w http.ResponseWriter, r *http.Request
 	}
 	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, organizationID))
 	items := []map[string]any{}
-	financialRows1, readErr1 := s.runtime.readCreditForSupplier(r.Context(), organizationID)
-	if financialReadError(w, readErr1) {
+	sales, err := s.runtime.readCreditForSupplier(r.Context(), organizationID)
+	if financialReadError(w, err) {
 		return
 	}
-	for _, view := range financialRows1 {
+	for _, view := range sales {
 		if view.Obligation == nil {
 			continue
 		}
-		financialRows2, readErr2 := s.runtime.readPayments(r.Context(), view.Obligation.ID)
-		if financialReadError(w, readErr2) {
+		salePayments, err := s.runtime.readPayments(r.Context(), view.Obligation.ID)
+		if financialReadError(w, err) {
 			return
 		}
-		for _, payment := range financialRows2 {
+		for _, payment := range salePayments {
 			items = append(items, map[string]any{
 				"id": view.Request.ID, "payment_id": payment.ID, "reference": payment.ProviderReference,
 				"buyer_legal_name": view.Request.BuyerLegalName, "description": view.Request.GoodsDescription,
@@ -55,19 +55,19 @@ func (s *Server) listOrganizationCollections(w http.ResponseWriter, r *http.Requ
 	}
 	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, organizationID))
 	items := []map[string]any{}
-	financialRows3, readErr3 := s.runtime.readCreditForSupplier(r.Context(), organizationID)
-	if financialReadError(w, readErr3) {
+	sales, err := s.runtime.readCreditForSupplier(r.Context(), organizationID)
+	if financialReadError(w, err) {
 		return
 	}
-	for _, view := range financialRows3 {
+	for _, view := range sales {
 		if view.Obligation == nil {
 			continue
 		}
-		financialRows4, readErr4 := s.runtime.readCollectionsAttemptsContext(r.Context(), view.Obligation.ID)
-		if financialReadError(w, readErr4) {
+		attempts, err := s.runtime.readCollectionsAttemptsContext(r.Context(), view.Obligation.ID)
+		if financialReadError(w, err) {
 			return
 		}
-		for _, attempt := range financialRows4 {
+		for _, attempt := range attempts {
 			items = append(items, map[string]any{
 				"id": view.Request.ID, "attempt_id": attempt.ID, "buyer_legal_name": view.Request.BuyerLegalName,
 				"description": view.Request.GoodsDescription, "amount_kobo": attempt.RequestedAmountKobo,
@@ -85,11 +85,11 @@ func (s *Server) listOrganizationOverdue(w http.ResponseWriter, r *http.Request)
 	}
 	now := time.Now().UTC()
 	items := []map[string]any{}
-	financialRows5, readErr5 := s.runtime.readCreditForSupplier(r.Context(), organizationID)
-	if financialReadError(w, readErr5) {
+	financialRows, readErr := s.runtime.readCreditForSupplier(r.Context(), organizationID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	for _, view := range financialRows5 {
+	for _, view := range financialRows {
 		if view.Obligation == nil || view.Obligation.OutstandingKobo <= 0 {
 			continue
 		}
@@ -214,11 +214,11 @@ func (s *Server) listBuyerMandates(w http.ResponseWriter, r *http.Request) {
 	}
 	items := []any{}
 	seen := map[string]bool{}
-	financialRows7, readErr7 := s.runtime.readCreditForBuyer(r.Context(), user.ID)
-	if financialReadError(w, readErr7) {
+	financialRows, readErr := s.runtime.readCreditForBuyer(r.Context(), user.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
-	for _, view := range financialRows7 {
+	for _, view := range financialRows {
 		if (businessID == "" || view.Request.BuyerBusinessID == businessID) && view.Mandate != nil && !seen[view.Mandate.ID] {
 			seen[view.Mandate.ID] = true
 			items = append(items, *view.Mandate)
@@ -237,20 +237,20 @@ func (s *Server) listBuyerTradeLines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspaceID := strings.TrimSpace(r.URL.Query().Get("organization"))
-	var financialRows8 []tradelines.TradeLine
-	var readErr8 error
+	var financialRows []tradelines.TradeLine
+	var readErr error
 	if workspaceID != "" {
-		financialRows8, readErr8 = s.runtime.readTradeLinesForBuyerOrganization(r.Context(), workspaceID)
+		financialRows, readErr = s.runtime.readTradeLinesForBuyerOrganization(r.Context(), workspaceID)
 	} else {
-		financialRows8, readErr8 = s.runtime.readTradeLinesForBuyer(r.Context(), user.ID)
+		financialRows, readErr = s.runtime.readTradeLinesForBuyer(r.Context(), user.ID)
 	}
-	if financialReadError(w, readErr8) {
+	if financialReadError(w, readErr) {
 		return
 	}
 	if businessID != "" {
-		financialRows8 = purchasingRows(financialRows8, func(item tradelines.TradeLine) bool { return item.BuyerBusinessID == businessID })
+		financialRows = purchasingRows(financialRows, func(item tradelines.TradeLine) bool { return item.BuyerBusinessID == businessID })
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"trade_lines": financialRows8})
+	writeJSON(w, http.StatusOK, map[string]any{"trade_lines": financialRows})
 }
 
 func (s *Server) listBuyerDisputes(w http.ResponseWriter, r *http.Request) {
@@ -266,12 +266,12 @@ func (s *Server) listBuyerDisputes(w http.ResponseWriter, r *http.Request) {
 	if !scopedOK {
 		return
 	}
-	financialRows9, readErr9 := s.runtime.readDisputesForBuyer(r.Context(), user.ID)
-	if financialReadError(w, readErr9) {
+	financialRows, readErr := s.runtime.readDisputesForBuyer(r.Context(), user.ID)
+	if financialReadError(w, readErr) {
 		return
 	}
 	if businessID != "" {
-		financialRows9 = purchasingRows(financialRows9, func(item disputes.Dispute) bool { return obligations[item.ObligationID] })
+		financialRows = purchasingRows(financialRows, func(item disputes.Dispute) bool { return obligations[item.ObligationID] })
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"disputes": financialRows9})
+	writeJSON(w, http.StatusOK, map[string]any{"disputes": financialRows})
 }

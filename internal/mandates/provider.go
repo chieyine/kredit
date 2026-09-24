@@ -54,13 +54,13 @@ type Mandate struct {
 	Status                 Status    `json:"status"`
 	AmountCeiling          int64     `json:"amount_ceiling_kobo"`
 	AuthorizationURL       string    `json:"authorization_url,omitempty"`
-	StartsAt               time.Time `json:"starts_at,omitempty"`
-	EndsAt                 time.Time `json:"ends_at,omitempty"`
+	StartsAt               time.Time `json:"starts_at,omitzero"`
+	EndsAt                 time.Time `json:"ends_at,omitzero"`
 	Variable               bool      `json:"variable"`
 	MultiAccount           bool      `json:"multi_account_recovery"`
 	PartialRecovery        bool      `json:"partial_recovery"`
 	CreatedAt              time.Time `json:"created_at"`
-	ActivatedAt            time.Time `json:"activated_at,omitempty"`
+	ActivatedAt            time.Time `json:"activated_at,omitzero"`
 }
 
 type Provider interface {

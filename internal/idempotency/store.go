@@ -14,6 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// ErrKeyReused means an idempotency key arrived again with a different request body.
+var ErrKeyReused = errors.New("idempotency key was reused for a different request")
+
 type Record struct {
 	Scope        string
 	Key          string
@@ -64,7 +67,7 @@ func (s *MemoryStore) Reserve(ctx context.Context, scope, key, requestHash strin
 			delete(s.records, index)
 		} else {
 			if existing.RequestHash != requestHash {
-				return Record{}, false, errors.New("idempotency key was reused for a different request")
+				return Record{}, false, ErrKeyReused
 			}
 			existing.ResponseBody = append([]byte(nil), existing.ResponseBody...)
 			return existing, true, nil
@@ -140,7 +143,7 @@ func (s *PostgresStore) Reserve(ctx context.Context, scope, key, requestHash str
 		return Record{}, false, err
 	}
 	if record.RequestHash != requestHash {
-		return Record{}, false, errors.New("idempotency key was reused for a different request")
+		return Record{}, false, ErrKeyReused
 	}
 	record.ResponseBody = response
 	if completed != nil {

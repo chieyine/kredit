@@ -106,18 +106,18 @@ type Drawdown struct {
 	State                    string                     `json:"state"`
 	ReservationID            string                     `json:"reservation_id"`
 	ObligationID             string                     `json:"obligation_id,omitempty"`
-	BuyerConfirmedAt         time.Time                  `json:"buyer_confirmed_at,omitempty"`
+	BuyerConfirmedAt         time.Time                  `json:"buyer_confirmed_at,omitzero"`
 	ReleaseActorID           string                     `json:"release_actor_id,omitempty"`
 	DeliveryMethod           string                     `json:"delivery_method,omitempty"`
 	ReleaseNotes             string                     `json:"release_notes,omitempty"`
 	ReleaseEvidenceReference string                     `json:"release_evidence_reference,omitempty"`
-	ReleasedAt               time.Time                  `json:"released_at,omitempty"`
+	ReleasedAt               time.Time                  `json:"released_at,omitzero"`
 	ReceiptState             string                     `json:"receipt_state,omitempty"`
 	ReceiptActorID           string                     `json:"receipt_actor_id,omitempty"`
 	ReceiptIssueReason       string                     `json:"receipt_issue_reason,omitempty"`
 	ReceiptDisputeID         string                     `json:"receipt_dispute_id,omitempty"`
-	ReceiptAt                time.Time                  `json:"receipt_at,omitempty"`
-	ActivatedAt              time.Time                  `json:"activated_at,omitempty"`
+	ReceiptAt                time.Time                  `json:"receipt_at,omitzero"`
+	ActivatedAt              time.Time                  `json:"activated_at,omitzero"`
 	CreatedAt                time.Time                  `json:"created_at"`
 }
 type Reservation struct {

@@ -16,6 +16,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// ErrVersionConflict means the command target changed since it was previewed.
+var ErrVersionConflict = errors.New("version conflict")
+
 type CommandInput struct {
 	PreflightVersion int64          `json:"-"`
 	Type             string         `json:"command_type"`
@@ -27,7 +30,7 @@ type CommandInput struct {
 	IdempotencyKey   string         `json:"-"`
 	CorrelationID    string         `json:"-"`
 	Scope            string         `json:"scope,omitempty"`
-	ExpiresAt        time.Time      `json:"expires_at,omitempty"`
+	ExpiresAt        time.Time      `json:"expires_at,omitzero"`
 	Resolution       string         `json:"resolution,omitempty"`
 	ExternalResult   map[string]any `json:"-"`
 }
@@ -43,7 +46,7 @@ type Command struct {
 	State          string         `json:"state,omitempty"`
 	Result         map[string]any `json:"result,omitempty"`
 	CorrelationID  string         `json:"correlation_id,omitempty"`
-	CreatedAt      time.Time      `json:"created_at,omitempty"`
+	CreatedAt      time.Time      `json:"created_at,omitzero"`
 }
 
 var commandTypes = map[string]bool{
@@ -92,7 +95,7 @@ func (s *Store) PreflightCommand(ctx context.Context, in CommandInput) (Command,
 		return Command{}, err
 	}
 	if preview.CurrentVersion != in.ExpectedVersion {
-		return Command{}, errors.New("version conflict before provider operation")
+		return Command{}, fmt.Errorf("%w before provider operation", ErrVersionConflict)
 	}
 	return preview, nil
 }
@@ -303,7 +306,7 @@ func (s *Store) ExecuteCommand(ctx context.Context, actorID string, in CommandIn
 		preview.CurrentVersion = in.ExpectedVersion
 	}
 	if preview.CurrentVersion != in.ExpectedVersion {
-		return Command{}, fmt.Errorf("version conflict: current version is %d", preview.CurrentVersion)
+		return Command{}, fmt.Errorf("%w: current version is %d", ErrVersionConflict, preview.CurrentVersion)
 	}
 	impactJSON, _ := json.Marshal(preview.Impact)
 	result := map[string]any{}

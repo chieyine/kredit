@@ -70,7 +70,7 @@ type CollectionReservation struct {
 type Attempt struct {
 	SettlementRoute      *SettlementRoute `json:"settlement_route,omitempty"`
 	MandateReference     string           `json:"mandate_reference,omitempty"`
-	NextRetryAt          time.Time        `json:"next_retry_at,omitempty"`
+	NextRetryAt          time.Time        `json:"next_retry_at,omitzero"`
 	ID                   string           `json:"id"`
 	ReservationID        string           `json:"reservation_id"`
 	ObligationID         string           `json:"obligation_id"`
@@ -84,7 +84,7 @@ type Attempt struct {
 	RetryClassification  string           `json:"retry_classification,omitempty"`
 	FailureCode          string           `json:"failure_code,omitempty"`
 	RequestedAt          time.Time        `json:"requested_at"`
-	FinalAt              time.Time        `json:"final_at,omitempty"`
+	FinalAt              time.Time        `json:"final_at,omitzero"`
 	SettlementState      string           `json:"settlement_state,omitempty"`
 	SettlementReference  string           `json:"settlement_reference,omitempty"`
 }

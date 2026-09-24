@@ -18,6 +18,7 @@ import (
 	"kredit/internal/ledger"
 	"kredit/internal/notifications"
 	"kredit/internal/platformops"
+	"kredit/internal/reports"
 	"kredit/internal/support"
 
 	"github.com/google/uuid"
@@ -125,7 +126,7 @@ func (s *Server) operationsAnalyticsScorecard(w http.ResponseWriter, r *http.Req
 	}
 	result, err := s.runtime.Reports.PilotScorecard(r.Context(), from, to, organizationID)
 	if err != nil {
-		if strings.Contains(err.Error(), "window") {
+		if errors.Is(err, reports.ErrInvalidScorecardWindow) {
 			writeProblem(w, http.StatusBadRequest, "invalid_scorecard_window", err.Error())
 			return
 		}
@@ -263,7 +264,7 @@ func (s *Server) executeOperationsCommand(w http.ResponseWriter, r *http.Request
 			return
 		}
 		status := http.StatusUnprocessableEntity
-		if strings.Contains(err.Error(), "version conflict") {
+		if errors.Is(err, platformops.ErrVersionConflict) {
 			status = http.StatusConflict
 		}
 		writeProblem(w, status, "operations_command_failed", err.Error())

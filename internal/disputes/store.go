@@ -42,7 +42,7 @@ type Dispute struct {
 	CollectionEffect       string       `json:"collection_effect"`
 	AssignedReviewer       string       `json:"assigned_reviewer,omitempty"`
 	OpenedAt               time.Time    `json:"opened_at"`
-	ResolvedAt             time.Time    `json:"resolved_at,omitempty"`
+	ResolvedAt             time.Time    `json:"resolved_at,omitzero"`
 }
 type Evidence struct {
 	ID          string    `json:"id"`

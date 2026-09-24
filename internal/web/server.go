@@ -237,7 +237,7 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 		}
 		record, existing, err := s.runtime.Idempotency.Reserve(r.Context(), scope, key, idempotency.HashRequest(r.Method, r.URL.Path, body, runtimeDomainKey(s.config.TokenHashKey, s.config.SessionSigningKey, "idempotency-request")))
 		if err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "different request") {
+			if errors.Is(err, idempotency.ErrKeyReused) {
 				writeProblem(w, http.StatusConflict, "idempotency_conflict", "idempotency key was reused for a different request")
 				return
 			}
@@ -1011,8 +1011,10 @@ func (s *Server) withRequestContext(next http.Handler) http.Handler {
 		traceID := traceIDFromRequest(r)
 		w.Header().Set("X-Request-ID", requestID)
 		w.Header().Set("X-Trace-ID", traceID)
+		identity := &requestIdentity{}
 		ctx := context.WithValue(r.Context(), requestIDKey, requestID)
 		ctx = context.WithValue(ctx, traceIDKey, traceID)
+		ctx = context.WithValue(ctx, requestIdentityKey, identity)
 		ctx = observability.ExtractTraceContext(ctx, map[string]string{"traceparent": r.Header.Get("traceparent")})
 		ctx, span := s.runtime.Tracer.Start(ctx, "http.request", attribute.String("http.method", r.Method))
 		r = r.WithContext(ctx)
@@ -1036,10 +1038,11 @@ func (s *Server) withRequestContext(next http.Handler) http.Handler {
 		span.SetAttributes(attribute.String("http.route", safeRequestPath(route)), attribute.Int("http.status_code", status), attribute.Int64("http.duration_ms", duration.Milliseconds()))
 		span.End()
 		attributes := []any{"method", r.Method, "path", safeRequestPath(r.URL.RequestURI()), "request_id", requestID, "trace_id", traceID, "status", status, "duration_ms", duration.Milliseconds()}
-		if token := sessionTokenFromRequest(r); token != "" {
-			if session, user, err := s.runtime.Auth.SessionFromToken(token); err == nil {
-				attributes = append(attributes, "user_id", user.ID, "authentication_level", session.AuthenticationLevel)
-			}
+		// The identity was resolved by the handler's own authentication check;
+		// looking the session up again here would cost a database round trip
+		// on every authenticated request just to write a log line.
+		if identity.userID != "" {
+			attributes = append(attributes, "user_id", identity.userID, "authentication_level", identity.authenticationLevel)
 		}
 		s.logger.Info("http request", attributes...)
 	})
@@ -1064,9 +1067,25 @@ func validRequestID(value string) bool {
 type contextKey string
 
 const (
-	requestIDKey contextKey = "request_id"
-	traceIDKey   contextKey = "trace_id"
+	requestIDKey       contextKey = "request_id"
+	traceIDKey         contextKey = "trace_id"
+	requestIdentityKey contextKey = "request_identity"
 )
+
+// requestIdentity carries the authenticated caller from the handler back out
+// to the request logger. It is written at most once per request, by
+// requireAuth, on the goroutine serving that request.
+type requestIdentity struct {
+	userID              string
+	authenticationLevel string
+}
+
+func noteRequestIdentity(ctx context.Context, userID, authenticationLevel string) {
+	if identity, ok := ctx.Value(requestIdentityKey).(*requestIdentity); ok && identity != nil {
+		identity.userID = userID
+		identity.authenticationLevel = authenticationLevel
+	}
+}
 
 func requestIDFromContext(ctx context.Context) string {
 	requestID, _ := ctx.Value(requestIDKey).(string)

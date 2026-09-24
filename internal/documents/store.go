@@ -44,11 +44,11 @@ type Document struct {
 	ScanState         ScanState `json:"scan_state"`
 	RetentionClass    string    `json:"retention_class"`
 	CreatedAt         time.Time `json:"created_at"`
-	ScannedAt         time.Time `json:"scanned_at,omitempty"`
-	UploadCompletedAt time.Time `json:"upload_completed_at,omitempty"`
-	UploadExpiresAt   time.Time `json:"upload_expires_at,omitempty"`
+	ScannedAt         time.Time `json:"scanned_at,omitzero"`
+	UploadCompletedAt time.Time `json:"upload_completed_at,omitzero"`
+	UploadExpiresAt   time.Time `json:"upload_expires_at,omitzero"`
 	ScanAttempts      int       `json:"scan_attempts"`
-	ScanLeaseUntil    time.Time `json:"scan_lease_until,omitempty"`
+	ScanLeaseUntil    time.Time `json:"scan_lease_until,omitzero"`
 }
 
 type ObjectStore interface {

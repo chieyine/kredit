@@ -292,11 +292,11 @@ func (s *Server) openCorrection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if lookupType == "obligation" || lookupType == "credit_request" {
-		financialRows1, readErr1 := s.runtime.readCreditForBuyer(r.Context(), user.ID)
-		if financialReadError(w, readErr1) {
+		financialRows, readErr := s.runtime.readCreditForBuyer(r.Context(), user.ID)
+		if financialReadError(w, readErr) {
 			return
 		}
-		for _, v := range financialRows1 {
+		for _, v := range financialRows {
 			if (lookupType == "credit_request" && v.Request.ID == lookupID) || (lookupType == "obligation" && v.Obligation != nil && v.Obligation.ID == lookupID) {
 				orgID = v.Request.SupplierOrganizationID
 				break
@@ -370,8 +370,8 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"correction": updated})
 		return
 	}
-	financialRows2, readErr2 := s.runtime.readCreditForSupplier(r.Context(), orgID)
-	if financialReadError(w, readErr2) {
+	financialRows, readErr := s.runtime.readCreditForSupplier(r.Context(), orgID)
+	if financialReadError(w, readErr) {
 		return
 	}
 	updated, decision, err := s.runtime.ScopedCorrections(r.Context()).Decide(id, user.ID, in.Outcome, in.Reason)
@@ -386,7 +386,7 @@ func (s *Server) decideCorrection(w http.ResponseWriter, r *http.Request) {
 			lookupType, lookupID = "obligation", payment.ObligationID
 		}
 	}
-	for _, view := range financialRows2 {
+	for _, view := range financialRows {
 		if (lookupType == "credit_request" && view.Request.ID == lookupID) || (lookupType == "obligation" && view.Obligation != nil && view.Obligation.ID == lookupID) {
 			_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "correction-notice-" + id, Type: "history.correction.updated", RecipientID: view.Request.BuyerUserID, OrganizationID: orgID, Priority: notifications.PriorityRoutine, Reference: id, NextAction: "Review your factual history"})
 			break

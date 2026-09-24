@@ -11,6 +11,9 @@ import (
 	"kredit/internal/legalpublication"
 )
 
+// ErrVersionConflict means the profile changed since the caller last read it.
+var ErrVersionConflict = errors.New("onboarding profile version conflict")
+
 const (
 	CurrentTermsVersion   = legalpublication.TermsVersion
 	CurrentPrivacyVersion = legalpublication.PrivacyVersion
@@ -24,14 +27,14 @@ type Profile struct {
 	Version                       int64     `json:"version"`
 	AuthorizedRepresentativeName  string    `json:"authorized_representative_name"`
 	AuthorizedRepresentativeTitle string    `json:"authorized_representative_title"`
-	OwnerEmailVerifiedAt          time.Time `json:"owner_email_verified_at,omitempty"`
-	OwnerPhoneVerifiedAt          time.Time `json:"owner_phone_verified_at,omitempty"`
+	OwnerEmailVerifiedAt          time.Time `json:"owner_email_verified_at,omitzero"`
+	OwnerPhoneVerifiedAt          time.Time `json:"owner_phone_verified_at,omitzero"`
 	KYBState                      string    `json:"kyb_state"`
 	KYBProviderReference          string    `json:"kyb_provider_reference,omitempty"`
 	KYBReasonCode                 string    `json:"kyb_reason_code,omitempty"`
-	KYBSubmittedAt                time.Time `json:"kyb_submitted_at,omitempty"`
-	KYBDecidedAt                  time.Time `json:"kyb_decided_at,omitempty"`
-	KYBExpiresAt                  time.Time `json:"kyb_expires_at,omitempty"`
+	KYBSubmittedAt                time.Time `json:"kyb_submitted_at,omitzero"`
+	KYBDecidedAt                  time.Time `json:"kyb_decided_at,omitzero"`
+	KYBExpiresAt                  time.Time `json:"kyb_expires_at,omitzero"`
 	SettlementState               string    `json:"settlement_state"`
 	SettlementProvider            string    `json:"settlement_provider,omitempty"`
 	SettlementProviderReference   string    `json:"settlement_provider_reference,omitempty"`
@@ -39,21 +42,21 @@ type Profile struct {
 	SettlementAccountName         string    `json:"settlement_account_name,omitempty"`
 	SettlementAccountLast4        string    `json:"settlement_account_last4,omitempty"`
 	SettlementReasonCode          string    `json:"settlement_reason_code,omitempty"`
-	SettlementChangedAt           time.Time `json:"settlement_changed_at,omitempty"`
+	SettlementChangedAt           time.Time `json:"settlement_changed_at,omitzero"`
 	BillingState                  string    `json:"billing_state"`
 	BillingMethod                 string    `json:"billing_method,omitempty"`
 	BillingProviderReference      string    `json:"billing_provider_reference,omitempty"`
 	BillingCycle                  string    `json:"billing_cycle,omitempty"`
-	BillingChangedAt              time.Time `json:"billing_changed_at,omitempty"`
+	BillingChangedAt              time.Time `json:"billing_changed_at,omitzero"`
 	DefaultCreditLimitKobo        int64     `json:"default_credit_limit_kobo,omitempty"`
 	DefaultPaymentDays            int       `json:"default_payment_days,omitempty"`
 	DefaultGraceHours             int       `json:"default_grace_hours,omitempty"`
-	DefaultCreditPolicyUpdatedAt  time.Time `json:"default_credit_policy_updated_at,omitempty"`
+	DefaultCreditPolicyUpdatedAt  time.Time `json:"default_credit_policy_updated_at,omitzero"`
 	TermsVersion                  string    `json:"terms_version,omitempty"`
-	TermsAcceptedAt               time.Time `json:"terms_accepted_at,omitempty"`
+	TermsAcceptedAt               time.Time `json:"terms_accepted_at,omitzero"`
 	PrivacyVersion                string    `json:"privacy_version,omitempty"`
-	PrivacyAcceptedAt             time.Time `json:"privacy_accepted_at,omitempty"`
-	OwnerMFAVerifiedAt            time.Time `json:"owner_mfa_verified_at,omitempty"`
+	PrivacyAcceptedAt             time.Time `json:"privacy_accepted_at,omitzero"`
+	OwnerMFAVerifiedAt            time.Time `json:"owner_mfa_verified_at,omitzero"`
 	FinanceMFAComplete            bool      `json:"finance_mfa_complete"`
 	ReadinessState                string    `json:"readiness_state"`
 	ReadinessChangedAt            time.Time `json:"readiness_changed_at"`
@@ -185,7 +188,7 @@ func (s *Store) mutate(org, actor, change string, expected int64, fn func(*Profi
 		return Profile{}, Summary{}, errors.New("onboarding profile not found")
 	}
 	if expected > 0 && p.Version != int64(expected) {
-		return Profile{}, Summary{}, errors.New("onboarding profile version conflict")
+		return Profile{}, Summary{}, ErrVersionConflict
 	}
 	candidate := *p
 	if err := fn(&candidate, versions); err != nil {

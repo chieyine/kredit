@@ -24,6 +24,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// ErrPreferenceVersionConflict means the preferences changed since the caller last read them.
+var ErrPreferenceVersionConflict = errors.New("notification preference version conflict")
+
 const (
 	ChannelWhatsApp  = "whatsapp"
 	ChannelEmail     = "email"
@@ -76,9 +79,9 @@ type Delivery struct {
 	State             string    `json:"state"`
 	ProviderMessageID string    `json:"provider_message_id,omitempty"`
 	Body              string    `json:"body"`
-	ScheduledAt       time.Time `json:"scheduled_at,omitempty"`
-	SentAt            time.Time `json:"sent_at,omitempty"`
-	FailedAt          time.Time `json:"failed_at,omitempty"`
+	ScheduledAt       time.Time `json:"scheduled_at,omitzero"`
+	SentAt            time.Time `json:"sent_at,omitzero"`
+	FailedAt          time.Time `json:"failed_at,omitzero"`
 	FailureReason     string    `json:"failure_reason,omitempty"`
 	SecureLink        string    `json:"secure_link,omitempty"`
 }
@@ -321,7 +324,7 @@ func (s *Store) UpdatePreferences(ctx context.Context, recipient string, prefs P
 		var out Preferences
 		err = tx.QueryRow(ctx, `UPDATE app.notification_preferences SET preferred_channel=$2,fallback_channel=$3,opted_out=$4,payment_reminders_enabled=$5,product_updates_enabled=$6,quiet_start_hour=$7,quiet_end_hour=$8,timezone=$9,version=version+1,updated_at=now() WHERE recipient_id=$1::uuid AND version=$10 RETURNING preferred_channel,fallback_channel,opted_out,payment_reminders_enabled,product_updates_enabled,quiet_start_hour,quiet_end_hour,timezone,version`, recipient, prefs.PreferredChannel, prefs.FallbackChannel, prefs.OptedOut, prefs.PaymentRemindersEnabled, prefs.ProductUpdatesEnabled, prefs.QuietStart, prefs.QuietEnd, prefs.Timezone, expectedVersion).Scan(&out.PreferredChannel, &out.FallbackChannel, &out.OptedOut, &out.PaymentRemindersEnabled, &out.ProductUpdatesEnabled, &out.QuietStart, &out.QuietEnd, &out.Timezone, &out.Version)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Preferences{}, errors.New("notification preference version conflict")
+			return Preferences{}, ErrPreferenceVersionConflict
 		}
 		if err != nil {
 			return Preferences{}, err
@@ -339,7 +342,7 @@ func (s *Store) UpdatePreferences(ctx context.Context, recipient string, prefs P
 		current = DefaultPreferences()
 	}
 	if expectedVersion != current.Version {
-		return Preferences{}, errors.New("notification preference version conflict")
+		return Preferences{}, ErrPreferenceVersionConflict
 	}
 	prefs.Version = current.Version + 1
 	s.preferences[recipient] = prefs
