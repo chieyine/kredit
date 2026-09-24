@@ -2,7 +2,7 @@
 	import { actualPaymentTime } from '$lib/financial-input';
 	import SaleProgress from '$lib/components/SaleProgress.svelte';
 	import SaleCosts from '$lib/components/SaleCosts.svelte';
-	import { getContext, untrack } from 'svelte';
+	import { getContext, tick, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
 	import {
@@ -34,6 +34,10 @@
 	const root = $derived(`/api/v1/buyer/credit-requests/${encodeURIComponent(requestID)}`);
 	let resource = $state<Resource<SaleView>>({ state: 'loading', scope: '' });
 	let paymentResource = $state<Resource<PaymentRow[]>>({ state: 'loading', scope: '' });
+	// Accepting is a binding agreement and declining ends the offer, so each
+	// asks once more, with the terms in view, before it is sent.
+	let confirming = $state<'' | 'accept' | 'decline'>(''),
+		understood = $state(false);
 	let busy = $state(''),
 		message = $state(''),
 		actionError = $state(''),
@@ -186,8 +190,14 @@
 			busy = '';
 		}
 	}
+	async function openConfirm(kind: 'accept' | 'decline') {
+		confirming = kind;
+		understood = false;
+		await tick();
+		document.getElementById(`confirm-${kind}`)?.focus();
+	}
 	async function acceptSale() {
-		if (!view || !mayAccept) return;
+		if (!view || !mayAccept || !understood) return;
 		await perform(
 			'accept',
 			{
@@ -198,6 +208,7 @@
 			saleView,
 			(result) => {
 				message = acceptanceMessage(result.request.state);
+				confirming = '';
 			}
 		);
 	}
@@ -451,19 +462,69 @@
 				{#if !mayAccept}<p role="alert">
 						The complete agreement or fees could not be verified. Refresh before accepting.
 					</p>{/if}
-				<div class="actions">
-					<button class="primary" disabled={!mayAccept || blocked('accept')} onclick={acceptSale}
-						>{busy === 'accept' ? 'Recording your decision…' : 'Accept sale for'}
-						{#if busy !== 'accept'}<Money amountKobo={view.request.principal_kobo} />{/if}</button
-					><button
-						class="secondary"
-						disabled={blocked('decline')}
-						onclick={() =>
-							perform('decline', undefined, saleView, () => {
-								message = 'You declined this sale.';
-							})}>Decline sale</button
-					>
-				</div>
+				{#if confirming === 'accept'}<div class="confirm" role="group" aria-labelledby="confirm-accept">
+						<h3 id="confirm-accept" tabindex="-1">Check before you accept</h3>
+						<dl>
+							<div>
+								<dt>Seller</dt>
+								<dd>{view.request.supplier_legal_name || 'Seller name unavailable'}</dd>
+							</div>
+							<div>
+								<dt>Goods</dt>
+								<dd>{view.request.goods_description}</dd>
+							</div>
+							<div>
+								<dt>You agree to pay</dt>
+								<dd class="amount"><Money amountKobo={view.request.principal_kobo} /></dd>
+							</div>
+							<div>
+								<dt>First payment date</dt>
+								<dd>{dateLabel(view.request.due_date)}</dd>
+							</div>
+							<div>
+								<dt>Bank debit may be considered from</dt>
+								<dd>{timeLabel(view.request.collection_at)}</dd>
+							</div>
+						</dl>
+						<label class="agree"
+							><input type="checkbox" bind:checked={understood} disabled={busy === 'accept'} />I have read the agreement
+							and accept it for {view.request.buyer_legal_name}. I understand this commits the business to pay on these
+							dates.</label
+						>
+						<div class="actions">
+							<button class="primary" disabled={!understood || !mayAccept || blocked('accept')} onclick={acceptSale}
+								>{busy === 'accept' ? 'Recording your decision…' : 'Yes, accept this sale'}</button
+							><button
+								class="secondary"
+								disabled={busy === 'accept'}
+								onclick={() => {
+									confirming = '';
+									understood = false;
+								}}>Go back</button
+							>
+						</div>
+					</div>{:else if confirming === 'decline'}<div class="confirm" role="group" aria-labelledby="confirm-decline">
+						<h3 id="confirm-decline" tabindex="-1">Decline this sale?</h3>
+						<p>The seller is told you declined. To trade on different terms, they will need to send a new offer.</p>
+						<div class="actions">
+							<button
+								class="danger"
+								disabled={blocked('decline')}
+								onclick={() =>
+									perform('decline', undefined, saleView, () => {
+										message = 'You declined this sale.';
+										confirming = '';
+									})}>{busy === 'decline' ? 'Recording your decision…' : 'Yes, decline it'}</button
+							><button class="secondary" disabled={busy === 'decline'} onclick={() => (confirming = '')}>Go back</button
+							>
+						</div>
+					</div>{:else}<div class="actions">
+						<button class="primary" disabled={!mayAccept || blocked('accept')} onclick={() => openConfirm('accept')}
+							>Accept sale for <Money amountKobo={view.request.principal_kobo} /></button
+						><button class="secondary" disabled={blocked('decline')} onclick={() => openConfirm('decline')}
+							>Decline sale</button
+						>
+					</div>{/if}
 			</section>
 		{/if}
 		{#if accepted && !['PAID', 'COMPLETED'].includes(view.request.state)}
@@ -618,6 +679,58 @@
 </main>
 
 <style>
+	.confirm {
+		display: grid;
+		gap: 1rem;
+		padding: 1.1rem 1.2rem;
+		border: 1px solid var(--color-primary);
+		background: var(--color-background);
+	}
+	.confirm h3 {
+		margin: 0;
+		font-size: 1.1rem;
+	}
+	.confirm p {
+		margin: 0;
+	}
+	.confirm dl {
+		display: grid;
+		gap: 0.6rem;
+		margin: 0;
+	}
+	.confirm dl div {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+	.confirm dt {
+		color: var(--color-muted);
+	}
+	.confirm dd {
+		margin: 0;
+		font-weight: 650;
+		text-align: right;
+	}
+	.confirm .danger {
+		border: 1px solid var(--color-overdue);
+		background: transparent;
+		color: var(--color-overdue);
+		font-weight: 650;
+	}
+	.agree {
+		font-weight: 400;
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.7rem;
+		align-items: start;
+		line-height: 1.5;
+	}
+	.agree input {
+		width: 1.25rem;
+		height: 1.25rem;
+		min-height: 0;
+		margin-top: 0.15rem;
+	}
 	.buyer-sale {
 		max-width: 48rem;
 		padding-bottom: 3rem;

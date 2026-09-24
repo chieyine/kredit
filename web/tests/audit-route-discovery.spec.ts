@@ -47,6 +47,8 @@ test('invalid fractional slide references never hide every slide', async ({ page
 
 test('focused deck controls keep native keyboard activation', async ({ page }) => {
 	await page.goto('/deck/investor');
+	// A key pressed before the controls are live is not a keyboard failure.
+	await expect(page.locator('.deck[data-ready]')).toBeAttached();
 	const next = page.getByRole('button', { name: 'Next slide', exact: true });
 	await next.focus();
 	await next.press('Space');

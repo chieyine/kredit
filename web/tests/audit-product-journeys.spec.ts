@@ -123,6 +123,12 @@ test('accepting a sale does not automatically grant bank permission or announce 
 	});
 	await page.goto('/workspace/purchases/orders/sale-1');
 	await page.getByRole('button', { name: /Accept sale for/ }).click();
+	// Accepting is binding: the terms are shown again and nothing is sent until
+	// the buyer confirms they have read them.
+	const confirm = page.getByRole('button', { name: 'Yes, accept this sale' });
+	await expect(confirm).toBeDisabled();
+	await page.getByLabel(/I have read the agreement/).check();
+	await confirm.click();
 	await expect(page.getByText('Bank permission must be ready before the seller can release the goods.')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Set up bank permission' })).toBeVisible();
 	expect(mandateCalls).toBe(0);
