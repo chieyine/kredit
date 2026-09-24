@@ -288,7 +288,7 @@ test('prices retain exact kobo, fee floors and caps', () => {
 	);
 	expect(baseFeeForKobo(100, { policy_revision: 1, base_bps: 50, collection_bps: 50, min_fee_kobo: 1000 })).toBe(100n);
 	expect(feeForKobo('9007199254740993', 50)).toBe(45035996273704n);
-	expect(feeDisclosure(undefined)).toContain('unavailable');
+	expect(feeDisclosure(undefined)).toContain('could not be shown');
 	expect(feeForKobo(-1, 50)).toBeNull();
 	expect(feeForKobo(100, 1001)).toBeNull();
 });

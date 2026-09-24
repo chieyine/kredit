@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { checkedJSON, LatestRequest, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { productLabel } from '$lib/product-language';
+	import { productLabel, providerName } from '$lib/product-language';
 	import { activityLabel } from '$lib/activity-language';
 	import Money from '$lib/components/Money.svelte';
 	import type { KoboValue } from '$lib/money';
@@ -204,7 +204,7 @@
 						: provider.feature_enabled && provider.health.healthy
 							? 'Working'
 							: 'Needs checking'}</strong
-				><small>{provider?.name || 'Provider status could not be checked'}</small>
+				><small>{provider?.name ? providerName(provider.name) : 'Provider status could not be checked'}</small>
 			</article>
 			<article>
 				<span>Is your account ready?</span><strong
