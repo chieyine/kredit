@@ -280,7 +280,7 @@ func (s *Server) sendCreditRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := s.runtime.Credit.Send(id, user.ID)
 	if err != nil {
-		if strings.Contains(err.Error(), "an independent credit approval is required for this offer") || strings.Contains(err.Error(), "reviewer approval ceiling exceeded") {
+		if credit.NeedsIndependentApproval(err) {
 			writeProblem(w, 409, "credit_approval_required", "Request internal approval for these exact terms before sending the offer.")
 			return
 		}
