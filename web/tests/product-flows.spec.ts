@@ -467,6 +467,10 @@ test('buyer can decline exact terms without creating an obligation', async ({ pa
 	});
 	await page.goto('/workspace/purchases/orders/request-2');
 	await page.getByRole('button', { name: 'Decline sale', exact: true }).click();
+	// Declining ends the offer, so it asks once more before anything is sent.
+	await expect(page.getByRole('heading', { name: 'Decline this sale?' })).toBeFocused();
+	expect(declined).toBe(false);
+	await page.getByRole('button', { name: 'Yes, decline it', exact: true }).click();
 	await expect(page.getByText('You declined this sale.')).toBeVisible();
 	await expect.poll(() => declined).toBe(true);
 });
