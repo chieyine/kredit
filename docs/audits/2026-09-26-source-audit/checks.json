@@ -1,0 +1,162 @@
+{
+  "policy": {
+    "tests_run": false,
+    "tests_written": false,
+    "agents_used": false,
+    "migration_applied": false,
+    "deployment_performed": false,
+    "committed": false
+  },
+  "environment": {
+    "go": "go1.27.1 darwin/amd64",
+    "repository_go": "1.26.8",
+    "node": "v24.11.0",
+    "repository_node_engine": ">=24.20.0 <25",
+    "pnpm": "11.17.0",
+    "note": "The installed Go and Node versions differ from the declared production/toolchain versions; these checks do not verify the deployment toolchain."
+  },
+  "checks": [
+    {
+      "name": "Go application build",
+      "command": "GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOCACHE=/private/tmp/kredit-source-audit-go-cache go build ./cmd/...",
+      "status": "passed",
+      "exit_code": 0,
+      "scope": "All command entrypoints and their production dependencies; all final Go edits included."
+    },
+    {
+      "name": "Frontend type and Svelte diagnostics",
+      "command": "pnpm --dir web check",
+      "status": "passed",
+      "exit_code": 0,
+      "result": "0 errors and 0 warnings; repeated after the final source edits.",
+      "evidence": "frontend-check.log"
+    },
+    {
+      "name": "Frontend lint",
+      "command": "pnpm --dir web exec eslint src --format json",
+      "status": "passed",
+      "exit_code": 0,
+      "files": 259,
+      "errors": 0,
+      "warnings": 0,
+      "evidence": "frontend-lint.json",
+      "note": "Final two changed files were linted again after formatting; their results replace the earlier file entries."
+    },
+    {
+      "name": "Backend static lint",
+      "command": "GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOCACHE=/private/tmp/kredit-source-audit-go-cache GOLANGCI_LINT_CACHE=/private/tmp/kredit-source-audit-lint-cache GOMAXPROCS=2 golangci-lint run --tests=false --disable unused --timeout 15m ./cmd/... ./internal/...",
+      "status": "passed",
+      "exit_code": 0,
+      "result": "0 issues.",
+      "evidence": "backend-lint.log",
+      "note": "No test packages loaded. Unused analysis excluded because of declarations referenced only by excluded tests. A preceding final-pass attempt timed out (exit 4) after reporting 0 issues and cache-write warnings; this completed run used a writable cache and bounded concurrency."
+    },
+    {
+      "name": "Shell, Python, JSON and YAML syntax",
+      "status": "passed",
+      "files": 75,
+      "evidence": "syntax-checks.json",
+      "note": "bash -n, ast.parse, json.loads and yaml.safe_load; no script behavior or SQL was executed."
+    },
+    {
+      "name": "OpenAPI validation",
+      "command": "REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true redocly lint api/openapi.yaml --format json --max-problems 1000",
+      "status": "passed_with_warnings",
+      "exit_code": 0,
+      "errors": 0,
+      "warnings": 434,
+      "ignored": 0,
+      "warning_categories": {
+        "info-license": 1,
+        "no-ambiguous-paths": 1,
+        "operation-description": 243,
+        "operation-4xx-response": 133,
+        "operation-summary": 53,
+        "operation-2xx-response": 1,
+        "no-unused-components": 2
+      },
+      "evidence": "openapi-lint.json"
+    },
+    {
+      "name": "Go formatting",
+      "command": "gofmt -l <changed Go files>",
+      "status": "passed",
+      "exit_code": 0,
+      "result": "No unformatted changed files."
+    },
+    {
+      "name": "Frontend formatting",
+      "status": "passed",
+      "note": "All changed frontend source formatted with project Prettier; final two edits formatted again."
+    },
+    {
+      "name": "Patch whitespace",
+      "command": "git diff --check",
+      "status": "passed",
+      "exit_code": 0
+    },
+    {
+      "name": "SQL migrations, infrastructure and browser/provider flows",
+      "status": "source_review_only",
+      "note": "Migrations 207\u2013212 are unapplied. No database, Docker, Caddy, Terraform apply, browser or provider operation was executed."
+    }
+  ],
+  "coverage": {
+    "reviewed": 866,
+    "partial": 0,
+    "pending": 0,
+    "baseline_files": 859,
+    "new_files": 7
+  },
+  "open_findings": [],
+  "fixed_findings": [
+    "A01",
+    "A02",
+    "A03",
+    "A04",
+    "A05",
+    "A06",
+    "A07",
+    "A08",
+    "A09",
+    "A10",
+    "A11",
+    "A12",
+    "A13",
+    "A14",
+    "A15",
+    "A16",
+    "A17",
+    "A18",
+    "A19",
+    "A20",
+    "A21",
+    "A22",
+    "A23",
+    "A24",
+    "A25",
+    "A26",
+    "A27",
+    "A28",
+    "A29",
+    "A30",
+    "A31",
+    "A32",
+    "A33"
+  ],
+  "completed_at": "2026-09-26T17:43:10.683318+00:00",
+  "scope_exclusions": [
+    "Test sources, fixtures and test-support files (test runner/workflow configuration was read without invoking tests)",
+    "Third-party dependency implementations and lockfile contents",
+    "Generated/build output and historical audit/release evidence snapshots",
+    "Actual secrets and local environment files (committed examples were reviewed)",
+    "Prose documentation and static media except configuration and directly relevant deployment guidance"
+  ],
+  "open_maintenance_items": [
+    "434 OpenAPI documentation warnings, broken down in the report and openapi-lint.json"
+  ],
+  "integrity": {
+    "coverage_sha256": "711e0b31e1d97cb3ae1f592f5778f7aa8b1fc6f84bade29fd8fbec92c972cdae",
+    "report_sha256": "210912f2401106c793ef77429bbcf0cbcc28ce68134888072aa7c867a3707341"
+  }
+}

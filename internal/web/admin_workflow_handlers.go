@@ -268,7 +268,8 @@ func (s *Server) adminChanges(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result []byte
-	err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(to_jsonb(c)||jsonb_build_object('proposer',app.admin_actor_name(c.proposed_by),'approver',CASE WHEN c.approved_by IS NOT NULL THEN app.admin_actor_name(c.approved_by) END) ORDER BY c.created_at DESC),'[]'::jsonb) FROM (SELECT * FROM app.admin_change_requests WHERE ($1='' OR id::text=$1 OR obligation_id::text=$1) ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2)c`, r.URL.Query().Get("q"), adminOffset(r)).Scan(&result)
+	scoped := &db.ScopedDatabase{Pool: s.runtime.Database.Raw()}
+	err := scoped.QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(to_jsonb(c)||jsonb_build_object('proposer',app.admin_actor_name(c.proposed_by),'approver',CASE WHEN c.approved_by IS NOT NULL THEN app.admin_actor_name(c.approved_by) END) ORDER BY c.created_at DESC),'[]'::jsonb) FROM (SELECT * FROM app.admin_change_requests WHERE ($1='' OR id::text=$1 OR obligation_id::text=$1) ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2)c`, r.URL.Query().Get("q"), adminOffset(r)).Scan(&result)
 	if err != nil {
 		writeProblem(w, 503, "workflow_unavailable", "Financial changes could not be loaded")
 		return
@@ -297,7 +298,8 @@ func (s *Server) buyerChanges(w http.ResponseWriter, r *http.Request) {
 		allowed = append(allowed, id)
 	}
 	var result []byte
-	err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(jsonb_build_object('id',c.id,'obligation_id',c.obligation_id,'state',c.state,'reason',c.reason,'expires_at',c.expires_at,'items',c.before_values->'items','dates',c.proposed_values->'dates') ORDER BY c.created_at DESC),'[]'::jsonb) FROM (SELECT * FROM app.admin_change_requests WHERE buyer_id=$1::uuid AND kind='schedule_amendment' AND state<>'pending' AND ($3='' OR obligation_id=ANY($4::uuid[])) ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2)c`, user.ID, adminOffset(r), businessID, allowed).Scan(&result)
+	scoped := &db.ScopedDatabase{Pool: s.runtime.Database.Raw()}
+	err := scoped.QueryRow(r.Context(), `SELECT COALESCE(jsonb_agg(jsonb_build_object('id',c.id,'obligation_id',c.obligation_id,'state',c.state,'reason',c.reason,'expires_at',c.expires_at,'items',c.before_values->'items','dates',c.proposed_values->'dates') ORDER BY c.created_at DESC),'[]'::jsonb) FROM (SELECT * FROM app.admin_change_requests WHERE buyer_id=$1::uuid AND kind='schedule_amendment' AND state<>'pending' AND ($3='' OR obligation_id=ANY($4::uuid[])) ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2)c`, user.ID, adminOffset(r), businessID, allowed).Scan(&result)
 	if err != nil {
 		writeProblem(w, 503, "workflow_unavailable", "Changes could not be loaded")
 		return

@@ -102,15 +102,17 @@ func SafeError(err error) string {
 		return ""
 	}
 	detail := Redact(err.Error())
+	// Driver errors need not name PostgreSQL or pgx. Invalid-input errors can
+	// include the submitted value, so never retain their free-form message.
+	if state := sqlStatePattern.FindStringSubmatch(detail); state != nil {
+		if constraint := constraintPattern.FindStringSubmatch(detail); constraint != nil {
+			return "database error SQLSTATE " + state[1] + " on " + constraint[1]
+		}
+		return "database error SQLSTATE " + state[1]
+	}
 	lower := strings.ToLower(detail)
 	for _, marker := range []string{"postgres", "pgx", "provider", "response body", "webhook body", "authorization", "cookie", "secret", "password", "token", "stack trace"} {
 		if strings.Contains(lower, marker) {
-			if state := sqlStatePattern.FindStringSubmatch(detail); state != nil {
-				if constraint := constraintPattern.FindStringSubmatch(detail); constraint != nil {
-					return "database error SQLSTATE " + state[1] + " on " + constraint[1]
-				}
-				return "database error SQLSTATE " + state[1]
-			}
 			return "operation failed"
 		}
 	}

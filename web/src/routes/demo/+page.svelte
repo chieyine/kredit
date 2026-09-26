@@ -322,7 +322,7 @@
 		letter-spacing: 0.1em;
 	}
 	.journey-top strong {
-		color: var(--color-on-primary);
+		color: var(--color-foreground);
 	}
 	.progress {
 		height: 3px;
@@ -385,7 +385,7 @@
 		--color-muted: var(--color-on-primary);
 	}
 	.journey li.active {
-		color: var(--color-on-primary);
+		color: var(--color-foreground);
 	}
 	.journey li.active > span {
 		border-color: var(--color-accent-ink);
@@ -407,7 +407,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		color: var(--color-on-primary);
+		color: var(--color-foreground);
 	}
 	.demo-stage > header div {
 		display: flex;
@@ -446,7 +446,7 @@
 		gap: 1.5rem;
 		align-items: start;
 		margin: 2.2rem 0;
-		color: var(--color-on-primary);
+		color: var(--color-foreground);
 	}
 	.stage-number {
 		margin: 0.4rem 0;

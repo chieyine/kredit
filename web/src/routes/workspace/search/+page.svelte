@@ -25,7 +25,7 @@
 	};
 	type Payment = {
 		id: string;
-		payment_id?: string;
+		payment_id: string;
 		buyer_legal_name?: string;
 		reference?: string;
 		description?: string;
@@ -152,8 +152,8 @@
 				checkedJSON(
 					base + '/payments',
 					rows('payments', (value) =>
-						decodeItem<Payment>(value, 'id', [
-							'payment_id',
+						decodeItem<Payment>(value, 'payment_id', [
+							'id',
 							'buyer_legal_name',
 							'reference',
 							'description',
@@ -276,7 +276,7 @@
 		{#if paymentResults.length}<section>
 				<h2>Payments</h2>
 				<div class="results">
-					{#each paymentResults as payment (payment.id)}<a
+					{#each paymentResults as payment (payment.payment_id)}<a
 							href={`/workspace/money/received?organization=${organizationID}&q=${encodeURIComponent(payment.reference || payment.provider_reference || payment.external_reference || payment.id)}`}
 							><div>
 								<strong

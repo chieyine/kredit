@@ -8,6 +8,8 @@ ssh
 infra/environments/certs
 infra/environments/db-certs
 .tmp
+source.tar.gz
+rollback
 node_modules
 web/node_modules
 web/.svelte-kit

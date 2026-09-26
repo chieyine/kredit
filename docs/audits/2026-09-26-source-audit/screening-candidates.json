@@ -1,0 +1,2643 @@
+{
+  "baseline_commit": "62fe2ebe92de5f985b05d7b7ff710e891b6fb356",
+  "status": "Unvalidated pattern candidates; not findings or review coverage. Baseline line numbers may precede audit edits.",
+  "files": [
+    {
+      "file": "cmd/api/main.go",
+      "candidates": [
+        {
+          "line": 34,
+          "pattern": "background_context"
+        },
+        {
+          "line": 62,
+          "pattern": "background_context"
+        },
+        {
+          "line": 107,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "cmd/backup-r2/main.go",
+      "candidates": [
+        {
+          "line": 30,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "cmd/bootstrap-owner/main.go",
+      "candidates": [
+        {
+          "line": 43,
+          "pattern": "background_context"
+        },
+        {
+          "line": 57,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "cmd/configcheck/main.go",
+      "candidates": [
+        {
+          "line": 25,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "cmd/migrate/main.go",
+      "candidates": [
+        {
+          "line": 51,
+          "pattern": "background_context"
+        },
+        {
+          "line": 77,
+          "pattern": "background_context"
+        },
+        {
+          "line": 83,
+          "pattern": "background_context"
+        },
+        {
+          "line": 92,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "cmd/provider-simulator/main.go",
+      "candidates": [
+        {
+          "line": 357,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "cmd/reconcile/main.go",
+      "candidates": [
+        {
+          "line": 19,
+          "pattern": "background_context"
+        },
+        {
+          "line": 24,
+          "pattern": "background_context"
+        },
+        {
+          "line": 27,
+          "pattern": "background_context"
+        },
+        {
+          "line": 30,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "cmd/seed/main.go",
+      "candidates": [
+        {
+          "line": 18,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "cmd/worker/main.go",
+      "candidates": [
+        {
+          "line": 74,
+          "pattern": "background_context"
+        },
+        {
+          "line": 102,
+          "pattern": "background_context"
+        },
+        {
+          "line": 151,
+          "pattern": "background_context"
+        },
+        {
+          "line": 157,
+          "pattern": "background_context"
+        },
+        {
+          "line": 162,
+          "pattern": "background_context"
+        },
+        {
+          "line": 201,
+          "pattern": "background_context"
+        },
+        {
+          "line": 225,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/audit/store.go",
+      "candidates": [
+        {
+          "line": 132,
+          "pattern": "background_context"
+        },
+        {
+          "line": 158,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 182,
+          "pattern": "background_context"
+        },
+        {
+          "line": 198,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/auth/postgres.go",
+      "candidates": [
+        {
+          "line": 42,
+          "pattern": "background_context"
+        },
+        {
+          "line": 54,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 77,
+          "pattern": "ignored_commit"
+        },
+        {
+          "line": 118,
+          "pattern": "background_context"
+        },
+        {
+          "line": 124,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 165,
+          "pattern": "background_context"
+        },
+        {
+          "line": 190,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 233,
+          "pattern": "background_context"
+        },
+        {
+          "line": 240,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 315,
+          "pattern": "background_context"
+        },
+        {
+          "line": 326,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 351,
+          "pattern": "background_context"
+        },
+        {
+          "line": 393,
+          "pattern": "ignored_commit"
+        },
+        {
+          "line": 402,
+          "pattern": "background_context"
+        },
+        {
+          "line": 412,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 423,
+          "pattern": "background_context"
+        },
+        {
+          "line": 429,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 437,
+          "pattern": "background_context"
+        },
+        {
+          "line": 455,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 481,
+          "pattern": "background_context"
+        },
+        {
+          "line": 492,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 535,
+          "pattern": "background_context"
+        },
+        {
+          "line": 541,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 611,
+          "pattern": "background_context"
+        },
+        {
+          "line": 617,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 622,
+          "pattern": "ignored_commit"
+        },
+        {
+          "line": 632,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/billing/authorized.go",
+      "candidates": [
+        {
+          "line": 52,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 87,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 134,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 153,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 185,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 210,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 295,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 327,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 342,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 358,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 439,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 481,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 528,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/billing/bank.go",
+      "candidates": [
+        {
+          "line": 43,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 102,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 157,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/billing/invoices.go",
+      "candidates": [
+        {
+          "line": 61,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 116,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 181,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 281,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 358,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/businesspolicy/store.go",
+      "candidates": [
+        {
+          "line": 73,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 118,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 187,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 192,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 213,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 225,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 256,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 277,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/delegation.go",
+      "candidates": [
+        {
+          "line": 22,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/import_batches.go",
+      "candidates": [
+        {
+          "line": 123,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 145,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 209,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 217,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 241,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 277,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/import_replay.go",
+      "candidates": [
+        {
+          "line": 15,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/invitation_pipeline.go",
+      "candidates": [
+        {
+          "line": 30,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/postgres.go",
+      "candidates": [
+        {
+          "line": 72,
+          "pattern": "background_context"
+        },
+        {
+          "line": 93,
+          "pattern": "background_context"
+        },
+        {
+          "line": 98,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 227,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 248,
+          "pattern": "background_context"
+        },
+        {
+          "line": 364,
+          "pattern": "background_context"
+        },
+        {
+          "line": 369,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 390,
+          "pattern": "background_context"
+        },
+        {
+          "line": 403,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 513,
+          "pattern": "background_context"
+        },
+        {
+          "line": 518,
+          "pattern": "background_context"
+        },
+        {
+          "line": 521,
+          "pattern": "background_context"
+        },
+        {
+          "line": 545,
+          "pattern": "background_context"
+        },
+        {
+          "line": 556,
+          "pattern": "background_context"
+        },
+        {
+          "line": 572,
+          "pattern": "background_context"
+        },
+        {
+          "line": 623,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 649,
+          "pattern": "background_context"
+        },
+        {
+          "line": 654,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/store.go",
+      "candidates": [
+        {
+          "line": 464,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/terms_import.go",
+      "candidates": [
+        {
+          "line": 269,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 317,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 359,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 382,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/terms_import_integrity.go",
+      "candidates": [
+        {
+          "line": 79,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/verification.go",
+      "candidates": [
+        {
+          "line": 39,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 43,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 48,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 54,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 60,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 64,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 70,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 111,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 115,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 144,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/verification_recovery.go",
+      "candidates": [
+        {
+          "line": 25,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 57,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 87,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/buyers/workspaces.go",
+      "candidates": [
+        {
+          "line": 19,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 51,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/collections/engine.go",
+      "candidates": [
+        {
+          "line": 210,
+          "pattern": "background_context"
+        },
+        {
+          "line": 678,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/collections/postgres.go",
+      "candidates": [
+        {
+          "line": 49,
+          "pattern": "background_context"
+        },
+        {
+          "line": 217,
+          "pattern": "background_context"
+        },
+        {
+          "line": 235,
+          "pattern": "background_context"
+        },
+        {
+          "line": 302,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 421,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 501,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 510,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 528,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/collections/provider.go",
+      "candidates": [
+        {
+          "line": 216,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/collections/webhook_provider.go",
+      "candidates": [
+        {
+          "line": 74,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/config/admin_connections.go",
+      "candidates": [
+        {
+          "line": 142,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 144,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 209,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 211,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 212,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 214,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 221,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 223,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 233,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 247,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/consumer/model.go",
+      "candidates": [
+        {
+          "line": 150,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/consumer/notices.go",
+      "candidates": [
+        {
+          "line": 116,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/consumer/store.go",
+      "candidates": [
+        {
+          "line": 32,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 49,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 90,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 143,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 176,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 224,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 258,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 304,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/corrections/history.go",
+      "candidates": [
+        {
+          "line": 44,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/corrections/postgres.go",
+      "candidates": [
+        {
+          "line": 25,
+          "pattern": "background_context"
+        },
+        {
+          "line": 70,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/credit/postgres.go",
+      "candidates": [
+        {
+          "line": 242,
+          "pattern": "background_context"
+        },
+        {
+          "line": 277,
+          "pattern": "background_context"
+        },
+        {
+          "line": 282,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 463,
+          "pattern": "background_context"
+        },
+        {
+          "line": 480,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 629,
+          "pattern": "background_context"
+        },
+        {
+          "line": 661,
+          "pattern": "background_context"
+        },
+        {
+          "line": 671,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 698,
+          "pattern": "background_context"
+        },
+        {
+          "line": 805,
+          "pattern": "background_context"
+        },
+        {
+          "line": 809,
+          "pattern": "background_context"
+        },
+        {
+          "line": 810,
+          "pattern": "background_context"
+        },
+        {
+          "line": 814,
+          "pattern": "background_context"
+        },
+        {
+          "line": 827,
+          "pattern": "background_context"
+        },
+        {
+          "line": 856,
+          "pattern": "background_context"
+        },
+        {
+          "line": 860,
+          "pattern": "background_context"
+        },
+        {
+          "line": 861,
+          "pattern": "background_context"
+        },
+        {
+          "line": 865,
+          "pattern": "background_context"
+        },
+        {
+          "line": 869,
+          "pattern": "background_context"
+        },
+        {
+          "line": 876,
+          "pattern": "background_context"
+        },
+        {
+          "line": 890,
+          "pattern": "background_context"
+        },
+        {
+          "line": 894,
+          "pattern": "background_context"
+        },
+        {
+          "line": 899,
+          "pattern": "background_context"
+        },
+        {
+          "line": 902,
+          "pattern": "background_context"
+        },
+        {
+          "line": 926,
+          "pattern": "background_context"
+        },
+        {
+          "line": 983,
+          "pattern": "background_context"
+        },
+        {
+          "line": 987,
+          "pattern": "background_context"
+        },
+        {
+          "line": 988,
+          "pattern": "background_context"
+        },
+        {
+          "line": 992,
+          "pattern": "background_context"
+        },
+        {
+          "line": 996,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1003,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1006,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1011,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1013,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1021,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1121,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 1185,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1191,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 1201,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1207,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 1225,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1231,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/credit/reads.go",
+      "candidates": [
+        {
+          "line": 30,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/credit/store.go",
+      "candidates": [
+        {
+          "line": 644,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/creditapproval/limits.go",
+      "candidates": [
+        {
+          "line": 23,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 51,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/creditapproval/store.go",
+      "candidates": [
+        {
+          "line": 56,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 62,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 76,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 122,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 145,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 173,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 216,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 244,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/disputes/postgres.go",
+      "candidates": [
+        {
+          "line": 29,
+          "pattern": "background_context"
+        },
+        {
+          "line": 48,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 87,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 111,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/documents/store.go",
+      "candidates": [
+        {
+          "line": 172,
+          "pattern": "background_context"
+        },
+        {
+          "line": 251,
+          "pattern": "background_context"
+        },
+        {
+          "line": 353,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 361,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 397,
+          "pattern": "background_context"
+        },
+        {
+          "line": 425,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 496,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/erp/contracts.go",
+      "candidates": [
+        {
+          "line": 77,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/erp/postgres.go",
+      "candidates": [
+        {
+          "line": 35,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/feedback/store.go",
+      "candidates": [
+        {
+          "line": 94,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/identity/native.go",
+      "candidates": [
+        {
+          "line": 57,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 67,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 97,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 165,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 193,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 202,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/identity/native_actions.go",
+      "candidates": [
+        {
+          "line": 33,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 177,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 208,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/jobs/client.go",
+      "candidates": [
+        {
+          "line": 301,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 429,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/ledger/postgres.go",
+      "candidates": [
+        {
+          "line": 113,
+          "pattern": "background_context"
+        },
+        {
+          "line": 235,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/legalpublication/current.go",
+      "candidates": [
+        {
+          "line": 31,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/mandates/provider.go",
+      "candidates": [
+        {
+          "line": 132,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 194,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 235,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 282,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 351,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 431,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 544,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/mandates/reads.go",
+      "candidates": [
+        {
+          "line": 25,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/mandates/recovery.go",
+      "candidates": [
+        {
+          "line": 24,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 56,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/mandates/routing.go",
+      "candidates": [
+        {
+          "line": 110,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/networkops/scopes.go",
+      "candidates": [
+        {
+          "line": 30,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 65,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/networkops/store.go",
+      "candidates": [
+        {
+          "line": 78,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 138,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 165,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/notifications/mesaj.go",
+      "candidates": [
+        {
+          "line": 42,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/notifications/receipts.go",
+      "candidates": [
+        {
+          "line": 42,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 49,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/notifications/store.go",
+      "candidates": [
+        {
+          "line": 266,
+          "pattern": "background_context"
+        },
+        {
+          "line": 280,
+          "pattern": "background_context"
+        },
+        {
+          "line": 319,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 542,
+          "pattern": "background_context"
+        },
+        {
+          "line": 1060,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/notifications/submission.go",
+      "candidates": [
+        {
+          "line": 37,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/onboarding/postgres.go",
+      "candidates": [
+        {
+          "line": 51,
+          "pattern": "background_context"
+        },
+        {
+          "line": 55,
+          "pattern": "background_context"
+        },
+        {
+          "line": 56,
+          "pattern": "background_context"
+        },
+        {
+          "line": 66,
+          "pattern": "background_context"
+        },
+        {
+          "line": 72,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 128,
+          "pattern": "background_context"
+        },
+        {
+          "line": 129,
+          "pattern": "background_context"
+        },
+        {
+          "line": 136,
+          "pattern": "background_context"
+        },
+        {
+          "line": 153,
+          "pattern": "background_context"
+        },
+        {
+          "line": 155,
+          "pattern": "background_context"
+        },
+        {
+          "line": 159,
+          "pattern": "background_context"
+        },
+        {
+          "line": 176,
+          "pattern": "background_context"
+        },
+        {
+          "line": 186,
+          "pattern": "background_context"
+        },
+        {
+          "line": 190,
+          "pattern": "background_context"
+        },
+        {
+          "line": 202,
+          "pattern": "background_context"
+        },
+        {
+          "line": 211,
+          "pattern": "background_context"
+        },
+        {
+          "line": 269,
+          "pattern": "background_context"
+        },
+        {
+          "line": 311,
+          "pattern": "background_context"
+        },
+        {
+          "line": 317,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/operations/approvals.go",
+      "candidates": [
+        {
+          "line": 169,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 207,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 225,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 389,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/operations/postgres.go",
+      "candidates": [
+        {
+          "line": 57,
+          "pattern": "background_context"
+        },
+        {
+          "line": 62,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 144,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 150,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/orders/orders.go",
+      "candidates": [
+        {
+          "line": 359,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 381,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 414,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 450,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 480,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 534,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 620,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 650,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/organizations/postgres.go",
+      "candidates": [
+        {
+          "line": 54,
+          "pattern": "background_context"
+        },
+        {
+          "line": 79,
+          "pattern": "background_context"
+        },
+        {
+          "line": 85,
+          "pattern": "background_context"
+        },
+        {
+          "line": 133,
+          "pattern": "background_context"
+        },
+        {
+          "line": 142,
+          "pattern": "background_context"
+        },
+        {
+          "line": 163,
+          "pattern": "background_context"
+        },
+        {
+          "line": 175,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 181,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 223,
+          "pattern": "background_context"
+        },
+        {
+          "line": 235,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 259,
+          "pattern": "background_context"
+        },
+        {
+          "line": 260,
+          "pattern": "background_context"
+        },
+        {
+          "line": 280,
+          "pattern": "ignored_commit"
+        },
+        {
+          "line": 280,
+          "pattern": "background_context"
+        },
+        {
+          "line": 291,
+          "pattern": "background_context"
+        },
+        {
+          "line": 297,
+          "pattern": "background_context"
+        },
+        {
+          "line": 343,
+          "pattern": "background_context"
+        },
+        {
+          "line": 349,
+          "pattern": "background_context"
+        },
+        {
+          "line": 399,
+          "pattern": "background_context"
+        },
+        {
+          "line": 405,
+          "pattern": "background_context"
+        },
+        {
+          "line": 432,
+          "pattern": "background_context"
+        },
+        {
+          "line": 438,
+          "pattern": "background_context"
+        },
+        {
+          "line": 464,
+          "pattern": "background_context"
+        },
+        {
+          "line": 476,
+          "pattern": "background_context"
+        },
+        {
+          "line": 518,
+          "pattern": "background_context"
+        },
+        {
+          "line": 519,
+          "pattern": "background_context"
+        },
+        {
+          "line": 540,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/paymentclaims/postgres.go",
+      "candidates": [
+        {
+          "line": 48,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 112,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 123,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 171,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 196,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 231,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 283,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/payments/postgres.go",
+      "candidates": [
+        {
+          "line": 39,
+          "pattern": "background_context"
+        },
+        {
+          "line": 304,
+          "pattern": "background_context"
+        },
+        {
+          "line": 442,
+          "pattern": "background_context"
+        },
+        {
+          "line": 461,
+          "pattern": "background_context"
+        },
+        {
+          "line": 595,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/platformops/controls.go",
+      "candidates": [
+        {
+          "line": 112,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 264,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 311,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/platformops/external_commands.go",
+      "candidates": [
+        {
+          "line": 36,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 104,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/platformops/financial_review.go",
+      "candidates": [
+        {
+          "line": 21,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 83,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/platformops/provider_work.go",
+      "candidates": [
+        {
+          "line": 17,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/platformops/request_recovery.go",
+      "candidates": [
+        {
+          "line": 28,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/platformops/store.go",
+      "candidates": [
+        {
+          "line": 230,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 272,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 306,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 336,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 365,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 461,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 490,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 524,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 565,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/platformsettings/registry.go",
+      "candidates": [
+        {
+          "line": 154,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 155,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/platformsettings/store.go",
+      "candidates": [
+        {
+          "line": 83,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 90,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 95,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 102,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 142,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 150,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 158,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 315,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 369,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 372,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 438,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 439,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/providers/bankdebit/enrollment.go",
+      "candidates": [
+        {
+          "line": 113,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 114,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 136,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 188,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 196,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 218,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 219,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 236,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/providers/bankdebit/recovery.go",
+      "candidates": [
+        {
+          "line": 19,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 48,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 80,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 101,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/providers/flutterwave/flutterwave.go",
+      "candidates": [
+        {
+          "line": 296,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/providers/monnify/monnify.go",
+      "candidates": [
+        {
+          "line": 359,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/providers/mono/fee_billing.go",
+      "candidates": [
+        {
+          "line": 60,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/providers/mono/mono.go",
+      "candidates": [
+        {
+          "line": 347,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/providers/paystack/paystack.go",
+      "candidates": [
+        {
+          "line": 244,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/purchasing/delegations.go",
+      "candidates": [
+        {
+          "line": 68,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 119,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/referrals/read.go",
+      "candidates": [
+        {
+          "line": 19,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/referrals/store.go",
+      "candidates": [
+        {
+          "line": 60,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 78,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 108,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/relationships/store.go",
+      "candidates": [
+        {
+          "line": 93,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 143,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 193,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/relationships/suppliers.go",
+      "candidates": [
+        {
+          "line": 30,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/reports/analytics.go",
+      "candidates": [
+        {
+          "line": 80,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/reports/enterprise_snapshot.go",
+      "candidates": [
+        {
+          "line": 34,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/reports/snapshot.go",
+      "candidates": [
+        {
+          "line": 28,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/reports/store.go",
+      "candidates": [
+        {
+          "line": 459,
+          "pattern": "background_context"
+        },
+        {
+          "line": 507,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/schedules/store.go",
+      "candidates": [
+        {
+          "line": 105,
+          "pattern": "background_context"
+        },
+        {
+          "line": 293,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 636,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 739,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 815,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 882,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/settlement/connector.go",
+      "candidates": [
+        {
+          "line": 65,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/settlement/receipts.go",
+      "candidates": [
+        {
+          "line": 50,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 60,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 94,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 155,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 201,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/settlement/store.go",
+      "candidates": [
+        {
+          "line": 28,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 69,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 74,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/support/store.go",
+      "candidates": [
+        {
+          "line": 66,
+          "pattern": "background_context"
+        },
+        {
+          "line": 94,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 128,
+          "pattern": "background_context"
+        },
+        {
+          "line": 147,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 199,
+          "pattern": "background_context"
+        },
+        {
+          "line": 225,
+          "pattern": "background_context"
+        },
+        {
+          "line": 266,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/tradelines/postgres.go",
+      "candidates": [
+        {
+          "line": 66,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 101,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 135,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 163,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 190,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 212,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 261,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 286,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 311,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 333,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 353,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 358,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 364,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 559,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 594,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 600,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 613,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/tradelines/store.go",
+      "candidates": [
+        {
+          "line": 866,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/usercontrol/store.go",
+      "candidates": [
+        {
+          "line": 132,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 186,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 295,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 348,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 432,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 583,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 682,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 798,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 901,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/admin_insight_handlers.go",
+      "candidates": [
+        {
+          "line": 105,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 108,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/admin_workflow_handlers.go",
+      "candidates": [
+        {
+          "line": 358,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/bank_authorization_handlers.go",
+      "candidates": [
+        {
+          "line": 101,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/branch_access.go",
+      "candidates": [
+        {
+          "line": 51,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/collection_jobs.go",
+      "candidates": [
+        {
+          "line": 256,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/customer_registration_recovery.go",
+      "candidates": [
+        {
+          "line": 35,
+          "pattern": "background_context"
+        },
+        {
+          "line": 101,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/message_recovery_handlers.go",
+      "candidates": [
+        {
+          "line": 131,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/mono_handlers.go",
+      "candidates": [
+        {
+          "line": 48,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 276,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/notification_recipients.go",
+      "candidates": [
+        {
+          "line": 55,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/outbox_notifications.go",
+      "candidates": [
+        {
+          "line": 64,
+          "pattern": "ignored_transaction_cleanup"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/paystack_provider.go",
+      "candidates": [
+        {
+          "line": 22,
+          "pattern": "ignored_transaction_cleanup"
+        },
+        {
+          "line": 51,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/runtime.go",
+      "candidates": [
+        {
+          "line": 461,
+          "pattern": "background_context"
+        },
+        {
+          "line": 499,
+          "pattern": "background_context"
+        },
+        {
+          "line": 770,
+          "pattern": "background_context"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/settlement_review_handlers.go",
+      "candidates": [
+        {
+          "line": 149,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "internal/web/website_content_handlers.go",
+      "candidates": [
+        {
+          "line": 138,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 167,
+          "pattern": "ignored_json_error"
+        },
+        {
+          "line": 168,
+          "pattern": "ignored_json_error"
+        }
+      ]
+    },
+    {
+      "file": "scripts/phase6-context-audit.py",
+      "candidates": [
+        {
+          "line": 28,
+          "pattern": "todo_placeholder"
+        },
+        {
+          "line": 34,
+          "pattern": "background_context"
+        },
+        {
+          "line": 34,
+          "pattern": "todo_placeholder"
+        }
+      ]
+    },
+    {
+      "file": "web/src/lib/components/DSA.svelte",
+      "candidates": [
+        {
+          "line": 238,
+          "pattern": "floating_money"
+        }
+      ]
+    },
+    {
+      "file": "web/src/lib/components/Deck.svelte",
+      "candidates": [
+        {
+          "line": 82,
+          "pattern": "raw_html"
+        },
+        {
+          "line": 132,
+          "pattern": "raw_html"
+        }
+      ]
+    },
+    {
+      "file": "web/src/lib/components/FeeAuthorization.svelte",
+      "candidates": [
+        {
+          "line": 104,
+          "pattern": "floating_money"
+        }
+      ]
+    },
+    {
+      "file": "web/src/routes/+layout.svelte",
+      "candidates": [
+        {
+          "line": 136,
+          "pattern": "raw_html"
+        },
+        {
+          "line": 138,
+          "pattern": "raw_html"
+        },
+        {
+          "line": 140,
+          "pattern": "raw_html"
+        }
+      ]
+    },
+    {
+      "file": "web/src/routes/blog/+page.svelte",
+      "candidates": [
+        {
+          "line": 58,
+          "pattern": "raw_html"
+        }
+      ]
+    },
+    {
+      "file": "web/src/routes/blog/[slug]/+page.svelte",
+      "candidates": [
+        {
+          "line": 37,
+          "pattern": "raw_html"
+        },
+        {
+          "line": 39,
+          "pattern": "raw_html"
+        }
+      ]
+    },
+    {
+      "file": "web/src/routes/blog/topic/[topic]/+page.svelte",
+      "candidates": [
+        {
+          "line": 36,
+          "pattern": "raw_html"
+        },
+        {
+          "line": 38,
+          "pattern": "raw_html"
+        }
+      ]
+    },
+    {
+      "file": "web/src/routes/demo/+page.svelte",
+      "candidates": [
+        {
+          "line": 21,
+          "pattern": "floating_money"
+        },
+        {
+          "line": 22,
+          "pattern": "floating_money"
+        }
+      ]
+    },
+    {
+      "file": "web/src/routes/faq/+page.svelte",
+      "candidates": [
+        {
+          "line": 21,
+          "pattern": "raw_html"
+        }
+      ]
+    },
+    {
+      "file": "web/src/routes/workspace/purchases/permissions/+page.svelte",
+      "candidates": [
+        {
+          "line": 120,
+          "pattern": "floating_money"
+        },
+        {
+          "line": 131,
+          "pattern": "floating_money"
+        }
+      ]
+    }
+  ]
+}

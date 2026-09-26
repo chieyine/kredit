@@ -1,0 +1,302 @@
+[
+  {
+    "file": ".github/workflows/audit-behaviour.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/audit-infrastructure.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/audit-remediation.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/audit-security.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/audit-storage-boundaries.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/ci.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/phase2-tenant-isolation.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/phase3-financial-proof.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/phase4-provider-verification.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/phase5-production-assurance.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/phase6-context-audit.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".github/workflows/product-audit.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": ".golangci.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "Taskfile.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "api/openapi.yaml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "docker-compose.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "docs/api/openapi.yaml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "docs/compliance/data-inventory-additions.json",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "infra/environments/docker-compose.prod.yml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "infra/monitoring/otel-collector.yaml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "infra/monitoring/prometheus-rules.yaml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "internal/platformsettings/guide_catalog.json",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "package.json",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "pnpm-workspace.yaml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "redocly.yaml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/api-lint.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/backup.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/bootstrap.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/build-review-register.py",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/check-tools.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/ci.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/configure-development-database.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/data-inventory-check.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/data-inventory-generate.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/data-inventory.py",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/db-check.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/db-grant-check.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/db-grant-inventory.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/db-reset.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/db-rollback.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/deploy-production.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/dev.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/fuzz.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/generate.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/implementation-plan-conformance.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/lint.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/load-env.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/load-smoke.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/phase5-evidence-gate.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/phase5_load.py",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/phase6-context-audit.py",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/post-deploy-check.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/readme-conformance.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/recovery_fingerprint.py",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/refresh-cloudflare-ranges.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/release-certify.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/restore-drill.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/rls-policy-shape-check.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/run-migrations.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/security.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/setup-vps.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/sub-processor-check.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/supply-chain-pin-check.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/trivy-source-scan.sh",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/verify_backup.py",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/verify_provider_evidence.py",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "scripts/verify_release_evidence.py",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "trivy-secret.yaml",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "web/.prettierrc",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "web/package.json",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "web/src/lib/legal-defaults.json",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "web/src/lib/website-defaults.json",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "web/static/manifest.webmanifest",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "web/tsconfig.json",
+    "check": "syntax_pass"
+  },
+  {
+    "file": "web/vercel.json",
+    "check": "syntax_pass"
+  }
+]

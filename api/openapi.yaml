@@ -1129,8 +1129,9 @@ paths:
               additionalProperties: false
               required: [actions, ceiling_kobo, expires_at, version]
               properties:
-                actions: {type: array, uniqueItems: true, items: {type: string, enum: [read, review, accept, receive]}}
+                actions: {type: array, uniqueItems: true, items: {type: string, enum: [read, review, accept, receive, drawdown, dispute, claim, amend]}}
                 ceiling_kobo: {type: integer, minimum: 0, maximum: 9007199254740991}
+                drawdown_ceiling_kobo: {type: integer, minimum: 0, maximum: 9007199254740991, default: 0}
                 expires_at: {type: string, format: date-time}
                 version: {type: integer, minimum: 0}
       responses:
@@ -1604,7 +1605,7 @@ paths:
           description: Rules, self profile, wallet and paginated agents/referrals/earnings/payouts; each list has at most 100 rows and its own next cursor
           content:
             application/json:
-              schema: {type: object, required: [rules, self, wallet, agents, referrals, earnings, payouts, next]}
+              schema: {$ref: '#/components/schemas/DSAOverview'}
         '403': {description: Current authority required}
     post:
       operationId: changeDSA
@@ -1637,7 +1638,7 @@ paths:
           description: Super Admin view of rules, self profile, wallet and paginated records
           content:
             application/json:
-              schema: {type: object, required: [rules, self, wallet, agents, referrals, earnings, payouts, next]}
+              schema: {$ref: '#/components/schemas/DSAOverview'}
         '403': {description: Current authority required}
     post:
       operationId: changeOpsDSA
@@ -2489,6 +2490,12 @@ paths:
                 due_date: {type: string, format: date}
                 grace_hours: {type: integer, minimum: 0, maximum: 720}
                 collection_local: {type: string, description: "Optional Nigerian local datetime in YYYY-MM-DDTHH:mm format."}
+                principal_kobo: {$ref: '#/components/schemas/CreditRequestInput/properties/principal_kobo'}
+                schedule_type: {$ref: '#/components/schemas/CreditRequestInput/properties/schedule_type'}
+                schedule_count: {$ref: '#/components/schemas/CreditRequestInput/properties/schedule_count'}
+                schedule_cadence: {$ref: '#/components/schemas/CreditRequestInput/properties/schedule_cadence'}
+                month_end_policy: {$ref: '#/components/schemas/CreditRequestInput/properties/month_end_policy'}
+                custom_schedule_items: {$ref: '#/components/schemas/CreditRequestInput/properties/custom_schedule_items'}
       responses:
         '200':
           description: Canonical timing for review before creating a sale.
@@ -4444,7 +4451,7 @@ paths:
       operationId: financialReviews
       summary: Open financial differences with ownership and immutable review history
       responses:
-        '200': { description: "Open reconciliation cases, with monetary values as decimal kobo strings" }
+        '200': { description: "Open reconciliation cases with first/last observed times, monetary values as decimal kobo strings, actor_id and can_takeover" }
         '403': { description: "Provider operations permission and MFA required" }
         '503': { description: "Financial records unavailable" }
   /ops/financial-reconciliation/{caseID}/decision:
@@ -4464,10 +4471,10 @@ paths:
               type: object
               required: [action, reason]
               properties:
-                action: { type: string, enum: [claim, resolve] }
+                action: { type: string, enum: [claim, resolve, release, takeover] }
                 reason: { type: string, minLength: 8, maxLength: 2000 }
       responses:
-        '200': { description: "Review claimed or resolved with immutable evidence" }
+        '200': { description: "Review claimed, released, taken over by the platform owner, or resolved with immutable evidence" }
         '403': { description: "Provider operations permission, MFA and CSRF required" }
         '409': { description: "Ownership conflict or financial records still disagree" }
   /webhooks/messaging/whatsapp:
@@ -4579,7 +4586,7 @@ paths:
                 organization_id: { type: string, format: uuid }
                 area: { type: string, enum: [seller, buyer] }
                 screen: { type: string, enum: [overview] }
-                answer: { type: string, enum: [yes, partly, no] }
+                answer: { type: string, enum: ['yes', partly, 'no'] }
       responses:
         '201': { description: "Feedback answer recorded" }
         '400': { description: "Invalid feedback answer" }
@@ -4645,14 +4652,14 @@ paths:
   /ops/search:
     get:
       operationId: operationsSearch
-      summary: Find an exact public or internal reference
+      summary: Find an exact public, internal or unconfirmed-request support reference
       parameters:
         - name: q
           in: query
           required: true
           schema: { type: string, minLength: 4, maxLength: 128 }
       responses:
-        '200': { description: "Permission-scoped reference matches" }
+        '200': { description: "Permission-scoped reference matches; request_receipt exposes only receipt ID, reference and HTTP receipt state, never a payment confirmation or saved body" }
         '400': { description: "Search reference is invalid" }
         '403': { description: "Support search role required" }
   /ops/users:
@@ -4867,7 +4874,7 @@ paths:
         - $ref: '#/components/parameters/OrganizationID'
       responses:
         '200':
-          description: Base and collection fees, waived_fees_kobo, and total_fees_kobo net of waivers; negative net totals represent a credit. by_obligation contains the same breakdown.
+          description: Base and collection fees, waived_fees_kobo, and total_fees_kobo net of waivers. Invalid waivers exceeding accrued fees fail the report; by_obligation contains the same breakdown.
         '503': {description: "Fee balances could not be loaded reliably."}
   /organizations/{organizationID}/reports/exports:
     post:
@@ -5479,7 +5486,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: Reuse this key to safely retry a mutating request; a different payload returns IDEMPOTENCY_CONFLICT.
+      description: Reuse this key with the same method, resource, actor and payload to recover the original result, including after signing in again. A changed payload, changed access or ambiguous legacy reservation returns a conflict. Uncertain outcomes remain reserved for reconciliation; do not replace their key to retry.
       schema:
         type: string
         minLength: 8
@@ -5574,6 +5581,36 @@ components:
         share_bps: {type: integer, minimum: 0, maximum: 5000, default: 1000}
         share_months: {type: integer, minimum: 1, maximum: 12, default: 6}
         initial_limit: {type: integer, minimum: 1, maximum: 1000, default: 20}
+    DSAOverview:
+      type: object
+      required: [rules, self, wallet, agents, referrals, earnings, payouts, next]
+      properties:
+        rules: {$ref: '#/components/schemas/DSARules'}
+        self:
+          type: [object, 'null']
+          description: The signed-in user's agent profile, or null before enrolment.
+        wallet:
+          type: object
+          required: [earned_kobo, matured_kobo, paid_kobo, reserved_kobo, next_available_at]
+          properties:
+            earned_kobo: {type: integer, format: int64, description: Net rewards including reversal entries.}
+            matured_kobo: {type: integer, format: int64, description: Net rewards whose availability time has passed.}
+            paid_kobo: {type: integer, format: int64, minimum: 0}
+            reserved_kobo: {type: integer, format: int64, minimum: 0}
+            next_available_at: {type: [string, 'null'], format: date-time}
+        agents: {type: array, maxItems: 100, items: {type: object}}
+        referrals: {type: array, maxItems: 100, items: {type: object}}
+        earnings: {type: array, maxItems: 100, items: {type: object}}
+        payouts: {type: array, maxItems: 100, items: {type: object}}
+        next:
+          type: object
+          description: A cursor is present only when that list has another page.
+          additionalProperties: false
+          properties:
+            agents: {type: string, format: uuid}
+            referrals: {type: string, format: uuid}
+            earnings: {type: string, format: uuid}
+            payouts: {type: string, format: uuid}
     DSAAction:
       type: object
       required: [action]

@@ -34,7 +34,12 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
+        attempts=0;
+        until mc alias set local http://minio:9000 minioadmin minioadmin; do
+          attempts=$$((attempts + 1));
+          if [ "$$attempts" -ge 60 ]; then echo 'Local object storage did not become ready.' >&2; exit 1; fi;
+          sleep 1;
+        done;
         mc mb --ignore-existing local/kredit-local
     depends_on:
       minio:
@@ -112,7 +117,7 @@ services:
       DOCUMENT_SCANNER_ENDPOINT: http://provider-simulator:8090/documents/scan
       DOCUMENT_SCANNER_TOKEN: development-simulator-token
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "/app/kredit-api", "-healthcheck"]
       interval: 10s
@@ -161,9 +166,9 @@ services:
       ORIGIN: http://localhost:3000
       API_INTERNAL_URL: http://api:8080
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz >/dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 4

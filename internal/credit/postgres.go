@@ -17,6 +17,7 @@ import (
 	"kredit/internal/legalpublication"
 	"kredit/internal/mandates"
 	"kredit/internal/payments"
+	"kredit/internal/platform/txcleanup"
 	"kredit/internal/schedules"
 
 	"github.com/jackc/pgx/v5"
@@ -244,29 +245,24 @@ func (s *PostgresStore) Create(input CreateInput) (CreditRequest, error) {
 		return CreditRequest{}, err
 	}
 	input.FeeTerms = &ledger.FeeTerms{PolicyRevision: policy.Revision, BaseBPS: policy.Values.BaseFeeBPS, CollectionBPS: policy.Values.CollectionFeeBPS}
-	request, err := s.Store.Create(input)
+	local := s.commandStore()
+	request, err := local.Create(input)
 	if err != nil {
 		return CreditRequest{}, err
 	}
-	// The draft only exists in the projection until it is persisted, so it must
-	// not be evictable in between.
-	s.pin(request.ID)
-	defer func() {
-		s.unpin(request.ID)
-		s.markLoaded(request.ID)
-	}()
 	if policy.Values.EnhancedReview > 0 && int64(request.PrincipalKobo) >= policy.Values.EnhancedReview {
-		s.mu.Lock()
-		if stored := s.requests[request.ID]; stored != nil {
-			stored.RequiresEnhancedReview = true
-		}
-		s.mu.Unlock()
+		local.requests[request.ID].RequiresEnhancedReview = true
 		request.RequiresEnhancedReview = true
 	}
-	if err := s.persistAs(request.ID, input.CreatedBy, access.PermissionCreateCredit); err != nil {
-		s.discard(request.ID)
+	view, err := local.GetPublic(request.ID)
+	if err != nil {
 		return CreditRequest{}, err
 	}
+	if err := s.persistViewAs(view, input.CreatedBy, access.PermissionCreateCredit); err != nil {
+		return CreditRequest{}, err
+	}
+	s.installView(view)
+	s.markLoaded(request.ID)
 	return request, nil
 }
 
@@ -387,12 +383,12 @@ func (*activationTxLedger) GetByReference(string) ([]ledger.Transaction, error) 
 }
 
 func (s *PostgresStore) UpdateDraft(requestID, actorID string, input UpdateDraftInput) (CreditRequest, error) {
-	view, err := s.mutateAs(requestID, actorID, access.PermissionCreateCredit, func() (View, error) {
-		request, err := s.Store.UpdateDraft(requestID, actorID, input)
+	view, err := s.mutateAs(requestID, actorID, access.PermissionCreateCredit, func(local *Store) (View, error) {
+		request, err := local.UpdateDraft(requestID, actorID, input)
 		if err != nil {
 			return View{}, err
 		}
-		return s.Store.GetForSupplier(request.ID, request.SupplierOrganizationID)
+		return local.GetForSupplier(request.ID, request.SupplierOrganizationID)
 	})
 	return view.Request, err
 }
@@ -402,28 +398,30 @@ func (s *PostgresStore) Send(requestID, actorID string) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	return s.mutateAs(requestID, actorID, access.PermissionCreateCredit, func() (View, error) { return s.sendWithLegalVersions(requestID, actorID, versions) })
+	return s.mutateAs(requestID, actorID, access.PermissionCreateCredit, func(local *Store) (View, error) { return local.sendWithLegalVersions(requestID, actorID, versions) })
 }
 func (s *PostgresStore) Cancel(requestID, actorID string) (View, error) {
-	return s.mutateAs(requestID, actorID, access.PermissionCreateCredit, func() (View, error) { return s.Store.Cancel(requestID, actorID) })
+	return s.mutateAs(requestID, actorID, access.PermissionCreateCredit, func(local *Store) (View, error) { return local.Cancel(requestID, actorID) })
 }
 func (s *PostgresStore) Review(requestID, buyerUserID string) (View, error) {
 	if _, err := s.GetForBuyer(requestID, buyerUserID); err != nil {
 		return View{}, err
 	}
-	return s.mutateAs(requestID, buyerUserID, "purchase:review", func() (View, error) { return s.Store.Review(requestID, buyerUserID) })
+	return s.mutateAs(requestID, buyerUserID, "purchase:review", func(local *Store) (View, error) { return local.Review(requestID, buyerUserID) })
 }
 func (s *PostgresStore) Decline(requestID, buyerUserID string) (View, error) {
 	if _, err := s.GetForBuyer(requestID, buyerUserID); err != nil {
 		return View{}, err
 	}
-	return s.mutateAs(requestID, buyerUserID, "purchase:review", func() (View, error) { return s.Store.Decline(requestID, buyerUserID) })
+	return s.mutateAs(requestID, buyerUserID, "purchase:review", func(local *Store) (View, error) { return local.Decline(requestID, buyerUserID) })
 }
 func (s *PostgresStore) AuthorizeMandate(ctx context.Context, requestID, buyerUserID string, options ...mandates.AuthorizationOptions) (View, error) {
 	if _, err := s.GetForBuyer(requestID, buyerUserID); err != nil {
 		return View{}, err
 	}
-	return s.mutateAs(requestID, buyerUserID, "", func() (View, error) { return s.Store.AuthorizeMandate(ctx, requestID, buyerUserID, options...) })
+	return s.mutateAs(requestID, buyerUserID, "", func(local *Store) (View, error) {
+		return local.AuthorizeMandate(ctx, requestID, buyerUserID, options...)
+	})
 }
 func (s *PostgresStore) SetMandate(requestID, buyerUserID string, mandate mandates.Mandate) (View, error) {
 	if _, err := s.GetForBuyer(requestID, buyerUserID); err != nil {
@@ -432,7 +430,7 @@ func (s *PostgresStore) SetMandate(requestID, buyerUserID string, mandate mandat
 	if err := s.hydrateForTenant(requestID, buyerUserID, ""); err != nil {
 		return View{}, err
 	}
-	return s.mutateAs(requestID, buyerUserID, "", func() (View, error) { return s.Store.SetMandate(requestID, buyerUserID, mandate) })
+	return s.mutateAs(requestID, buyerUserID, "", func(local *Store) (View, error) { return local.SetMandate(requestID, buyerUserID, mandate) })
 }
 func (s *PostgresStore) Accept(requestID, buyerUserID, agreementID, agreementHash, mandateID, authLevel string, identityVerified, authorityVerified bool) (View, error) {
 	if _, err := s.GetForBuyer(requestID, buyerUserID); err != nil {
@@ -442,22 +440,24 @@ func (s *PostgresStore) Accept(requestID, buyerUserID, agreementID, agreementHas
 	if err != nil {
 		return View{}, err
 	}
-	return s.mutateAs(requestID, buyerUserID, "purchase:accept", func() (View, error) {
-		v, err := s.Store.Accept(requestID, buyerUserID, agreementID, agreementHash, mandateID, authLevel, identityVerified, authorityVerified)
+	return s.mutateAs(requestID, buyerUserID, "purchase:accept", func(local *Store) (View, error) {
+		v, err := local.Accept(requestID, buyerUserID, agreementID, agreementHash, mandateID, authLevel, identityVerified, authorityVerified)
 		if err != nil {
 			return View{}, err
 		}
-		s.mu.Lock()
-		if a := s.acceptances[v.Request.AcceptanceID]; a != nil {
+		local.mu.Lock()
+		if a := local.acceptances[v.Request.AcceptanceID]; a != nil {
 			a.PersonID = personID
 		}
-		v = s.viewLocked(s.requests[requestID])
-		s.mu.Unlock()
+		v = local.viewLocked(local.requests[requestID])
+		local.mu.Unlock()
 		return v, nil
 	})
 }
 func (s *PostgresStore) Release(requestID, supplierOrgID, actorID, deliveryMethod, notes string) (View, error) {
-	return s.mutateAs(requestID, actorID, access.PermissionReleaseGoods, func() (View, error) { return s.Store.Release(requestID, supplierOrgID, actorID, deliveryMethod, notes) })
+	return s.mutateAs(requestID, actorID, access.PermissionReleaseGoods, func(local *Store) (View, error) {
+		return local.Release(requestID, supplierOrgID, actorID, deliveryMethod, notes)
+	})
 }
 func (s *PostgresStore) RecordReceipt(requestID, buyerUserID, state, issueReason string) (View, *ledger.Transaction, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -581,49 +581,81 @@ func (s *PostgresStore) recordReceiptTransaction(ctx context.Context, requestID,
 	return view, journal, nil
 }
 
+// readerForTenant returns an isolated, committed view for this authorized read.
+// The shared copy is only a routing hint for legacy command signatures.
+func (s *PostgresStore) readerForTenant(requestID, userID, organizationID string) (*Store, error) {
+	view, err := s.loadViewForTenant(requestID, userID, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	s.installView(view)
+	s.markLoaded(requestID)
+	local := s.commandStore()
+	(&PostgresStore{Store: local}).installView(view)
+	return local, nil
+}
+
 // GetForSupplierContext preserves the actual requester when loading supplier data.
 func (s *PostgresStore) GetForSupplierContext(ctx context.Context, requestID, organizationID string) (View, error) {
 	identity, _ := db.TenantFromContext(ctx)
 	if identity.OrganizationID != "" && identity.OrganizationID != organizationID {
 		return View{}, errors.New("credit scope does not match authorized business")
 	}
-	if err := s.hydrateForTenant(requestID, identity.UserID, organizationID); err != nil {
+	local, err := s.readerForTenant(requestID, identity.UserID, organizationID)
+	if err != nil {
 		return View{}, err
 	}
-	return s.Store.GetForSupplier(requestID, organizationID)
+	return local.GetForSupplier(requestID, organizationID)
 }
-
 func (s *PostgresStore) GetForSupplier(requestID, organizationID string) (View, error) {
-	if err := s.hydrateForTenant(requestID, "", organizationID); err != nil {
+	local, err := s.readerForTenant(requestID, "", organizationID)
+	if err != nil {
 		return View{}, err
 	}
-	return s.Store.GetForSupplier(requestID, organizationID)
+	return local.GetForSupplier(requestID, organizationID)
 }
 func (s *PostgresStore) GetForBuyer(requestID, buyerUserID string) (View, error) {
-	if err := s.hydrateForTenant(requestID, buyerUserID, ""); err != nil {
+	local, err := s.readerForTenant(requestID, buyerUserID, "")
+	if err != nil {
 		return View{}, err
 	}
-	return s.Store.GetForBuyer(requestID, buyerUserID)
+	return local.GetForBuyer(requestID, buyerUserID)
 }
 func (s *PostgresStore) GetPublic(requestID string) (View, error) {
-	if err := s.hydrate(requestID); err != nil {
+	if s == nil || s.pool == nil {
+		return View{}, errors.New("credit database is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var payload []byte
+	if err := s.pool.QueryRow(ctx, `SELECT app.public_payment_intent($1::uuid)`, requestID).Scan(&payload); err != nil {
 		return View{}, err
 	}
-	return s.Store.GetPublic(requestID)
+	if len(payload) == 0 {
+		return View{}, ErrRequestNotFound
+	}
+	var view View
+	if err := json.Unmarshal(payload, &view); err != nil {
+		return View{}, err
+	}
+	return view, nil
 }
 func (s *PostgresStore) GetByObligationForBuyer(obligationID, buyerUserID string) (View, error) {
-	if err := s.hydrateByObligationForTenant(obligationID, buyerUserID, ""); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	scoped := &db.ScopedDatabase{Pool: s.pool}
+	var requestID string
+	if err := scoped.QueryRow(db.WithTenantContext(ctx, buyerUserID, ""), `SELECT credit_request_id FROM app.credit_snapshot_by_obligation($1)`, obligationID).Scan(&requestID); err != nil {
 		return View{}, err
 	}
-	return s.Store.GetByObligationForBuyer(obligationID, buyerUserID)
+	return s.GetForBuyer(requestID, buyerUserID)
 }
 func (s *PostgresStore) ListForSupplier(organizationID string) []View {
-	loaded, err := s.hydrateList("supplier_organization_id", organizationID)
+	views, err := s.ReadForSupplier(context.Background(), organizationID)
 	if err != nil {
-		panic(fmt.Errorf("credit: failed to hydrate supplier receivables for %s: %w", organizationID, err))
+		panic(fmt.Errorf("credit: failed to read supplier credit requests for %s: %w", organizationID, err))
 	}
-	defer s.releaseListing(loaded)
-	return s.Store.ListForSupplier(organizationID)
+	return views
 }
 func (s *PostgresStore) ListForBuyer(buyerUserID string) []View {
 	views, err := s.ReadForBuyer(context.Background(), buyerUserID)
@@ -711,25 +743,53 @@ func (s *PostgresStore) ObligationBelongsToOrganization(obligationID, organizati
 	return s.Store.ObligationBelongsToOrganization(obligationID, organizationID)
 }
 
-func (s *PostgresStore) mutateAs(requestID, actorID string, permission access.Permission, operation func() (View, error)) (View, error) {
+// commandStore copies dependencies and policy settings, but owns its aggregate
+// maps. No uncommitted command state is visible through the shared projection.
+func (s *PostgresStore) commandStore() *Store {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	local := NewStore(s.mandates, s.ledger)
+	local.now, local.newID = s.now, s.newID
+	local.creationGuard = s.creationGuard
+	local.enhancedReviewThreshold = s.enhancedReviewThreshold
+	local.maxActiveExposureKobo = s.maxActiveExposureKobo
+	local.purchasePermission, local.purchaseActions = s.purchasePermission, s.purchaseActions
+	local.legalReader = s.legalReader
+	return local
+}
+
+func (s *PostgresStore) mutateAs(requestID, actorID string, permission access.Permission, operation func(*Store) (View, error)) (View, error) {
 	if s.pool == nil {
 		return View{}, errors.New("credit database is not configured")
 	}
-	// Held across the whole command so a concurrent read cannot refresh the
-	// projection out from under the mutation, and so eviction cannot remove the
-	// aggregate between the operation and its write.
-	s.pin(requestID)
-	defer s.unpin(requestID)
-	if err := s.hydrate(requestID); err != nil {
-		return View{}, err
+	// The earlier authorized read supplies only an immutable tenant-routing hint.
+	// Load current committed terms again and recheck the actor in PostgreSQL.
+	s.mu.RLock()
+	cached := s.requests[requestID]
+	organizationID := ""
+	if cached != nil {
+		organizationID = cached.SupplierOrganizationID
 	}
-	view, err := operation()
+	s.mu.RUnlock()
+	if organizationID == "" {
+		return View{}, ErrRequestNotFound
+	}
+	old, err := s.loadViewForTenant(requestID, actorID, organizationID)
 	if err != nil {
 		return View{}, err
 	}
-	if err := s.persistAs(requestID, actorID, permission); err != nil {
-		s.discard(requestID)
+	local := s.commandStore()
+	(&PostgresStore{Store: local}).installView(old)
+	view, err := operation(local)
+	if err != nil {
 		return View{}, err
+	}
+	if view.Request.Version != old.Request.Version {
+		if err := s.persistViewAs(view, actorID, permission); err != nil {
+			return View{}, err
+		}
+		s.installView(view)
+		s.markLoaded(requestID)
 	}
 	if strings.HasPrefix(string(permission), "purchase:") && view.Mandate != nil && actorID != view.Request.BuyerUserID {
 		view.Mandate.AuthorizationURL = ""
@@ -772,6 +832,19 @@ func (s *PostgresStore) discard(requestID string) {
 	}
 	delete(s.receipts, requestID)
 	delete(s.requests, requestID)
+	// Mandates can be shared by several cached requests. Retain only those
+	// still referenced after eviction, including both ID and provider-ID keys.
+	referenced := make(map[string]bool, len(s.requests))
+	for _, remaining := range s.requests {
+		if remaining.MandateID != "" {
+			referenced[remaining.MandateID] = true
+		}
+	}
+	for key, mandate := range s.mandateMap {
+		if mandate == nil || (!referenced[mandate.ID] && !referenced[mandate.ProviderID]) {
+			delete(s.mandateMap, key)
+		}
+	}
 }
 
 func (s *PostgresStore) hydrate(requestID string) error {
@@ -790,48 +863,50 @@ func (s *PostgresStore) hydrate(requestID string) error {
 // aggregate with an in-flight mutation is left alone: replacing it mid-command
 // would discard the mutation.
 func (s *PostgresStore) hydrateForTenant(requestID, userID, organizationID string) error {
-	if s == nil || s.pool == nil {
-		return errors.New("credit database is not configured")
-	}
-	s.mu.RLock()
-	_, exists := s.requests[requestID]
-	s.mu.RUnlock()
-	if strings.TrimSpace(userID) == "" && strings.TrimSpace(organizationID) == "" {
-		if exists {
-			return nil
-		}
-		return errors.New("credit tenant context is required before loading an aggregate")
-	}
-	tx, err := s.pool.Begin(context.Background())
+	view, err := s.loadViewForTenant(requestID, userID, organizationID)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if _, err := tx.Exec(context.Background(), `SELECT set_config('app.current_user_id', $1, true), set_config('app.current_organization_id', $2, true)`, userID, organizationID); err != nil {
-		return err
+	s.installView(view)
+	s.markLoaded(requestID)
+	return nil
+}
+
+func (s *PostgresStore) loadViewForTenant(requestID, userID, organizationID string) (View, error) {
+	if s == nil || s.pool == nil {
+		return View{}, errors.New("credit database is not configured")
+	}
+	if strings.TrimSpace(userID) == "" && strings.TrimSpace(organizationID) == "" {
+		return View{}, errors.New("credit tenant context is required before loading an aggregate")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return View{}, err
+	}
+	defer func() { _ = txcleanup.Rollback(ctx, tx, nil) }()
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, userID, organizationID); err != nil {
+		return View{}, err
 	}
 	var payload []byte
-	if err := tx.QueryRow(context.Background(), `SELECT app.credit_snapshot_by_id($1)`, requestID).Scan(&payload); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT app.credit_snapshot_by_id($1)`, requestID).Scan(&payload); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrRequestNotFound
+			return View{}, ErrRequestNotFound
 		}
-		return fmt.Errorf("load credit aggregate: %w", err)
+		return View{}, fmt.Errorf("load credit aggregate: %w", err)
 	}
 	if len(payload) == 0 {
-		return ErrRequestNotFound
+		return View{}, ErrRequestNotFound
 	}
 	var view View
-	if err := json.Unmarshal(payload, &view); err != nil {
-		return fmt.Errorf("decode credit aggregate: %w", err)
+	if err = json.Unmarshal(payload, &view); err != nil {
+		return View{}, fmt.Errorf("decode credit aggregate: %w", err)
 	}
-	if err := tx.Commit(context.Background()); err != nil {
-		return err
+	if view.Request.ID != requestID {
+		return View{}, errors.New("credit projection identity mismatch")
 	}
-	if !s.isPinned(requestID) {
-		s.installView(view)
-		s.markLoaded(requestID)
-	}
-	return nil
+	return view, tx.Commit(ctx)
 }
 
 func (s *PostgresStore) hydrateByObligation(obligationID string) error {
@@ -885,8 +960,15 @@ func (s *PostgresStore) hydrateByObligationForTenant(obligationID, userID, organ
 // The caller must pass them to releaseListing once it has read the projection;
 // leaving them unpinned would let eviction remove rows mid-listing and return a
 // short list.
-func (s *PostgresStore) hydrateList(field, value string) ([]string, error) {
-	loaded := []string{}
+func (s *PostgresStore) hydrateList(field, value string) (loaded []string, retErr error) {
+	loaded = []string{}
+	// The caller can release the batch only after a successful return. Undo
+	// every pin here if a later row, scan, or commit fails.
+	defer func() {
+		if retErr != nil {
+			s.releaseListing(loaded)
+		}
+	}()
 	tx, err := s.pool.Begin(context.Background())
 	if err != nil {
 		return loaded, err
@@ -930,6 +1012,9 @@ func (s *PostgresStore) installView(view View) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	request := cloneRequest(view.Request)
+	if current := s.requests[request.ID]; current != nil && current.Version > request.Version {
+		return
+	}
 	s.requests[request.ID] = &request
 	if view.Agreement.ID != "" {
 		agreement := cloneAgreement(view.Agreement)
@@ -974,8 +1059,13 @@ func (s *PostgresStore) persistAs(requestID, actorID string, permission access.P
 		return ErrRequestNotFound
 	}
 	view := s.viewLocked(request)
-	version := request.Version
 	s.mu.RUnlock()
+	return s.persistViewAs(view, actorID, permission)
+}
+
+func (s *PostgresStore) persistViewAs(view View, actorID string, permission access.Permission) error {
+	request := &view.Request
+	version := request.Version
 	payload, err := json.Marshal(view)
 	if err != nil {
 		return err

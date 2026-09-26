@@ -95,7 +95,15 @@
 	}
 	$effect(() => {
 		void revision;
+		invoices = [];
 		if (url) void load(url);
+		else {
+			loading = false;
+			error = 'Choose a business before loading fee bills.';
+		}
+		return () => {
+			generation++;
+		};
 	});
 </script>
 

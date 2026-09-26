@@ -106,8 +106,11 @@
 				<label>Your full name<input bind:value={name} required maxlength="200" autocomplete="name" /></label>
 				<p>{notice}</p>
 				<label class="consent"
-					><input type="checkbox" bind:checked={consent} required />I accept the <a href="/legal/terms">terms</a> and
-					<a href="/legal/privacy">privacy notice</a>, and consent to identity and business-authority checks.</label
+					><input type="checkbox" bind:checked={consent} required />I accept the
+					<a href={`/legal/terms?version=${encodeURIComponent(terms)}`}>terms</a>
+					and
+					<a href={`/legal/privacy?version=${encodeURIComponent(privacy)}`}>privacy notice</a>, and consent to identity
+					and business-authority checks.</label
 				><button>Set up my purchasing profile</button>
 			</fieldset>
 		</form>

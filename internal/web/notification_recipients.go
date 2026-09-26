@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"kredit/internal/access"
+	"kredit/internal/db"
 	"kredit/internal/notifications"
 	"kredit/internal/organizations"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // EmitNotification resolves people and contact details before queueing a message.
@@ -33,6 +36,7 @@ func (r *Runtime) EmitNotification(ctx context.Context, event notifications.Even
 			child := event
 			child.ID = event.ID + ":" + member.UserID
 			child.RecipientID = member.UserID
+			child.OrganizationAudience = true
 			delivered, err := r.EmitNotification(ctx, child)
 			if err != nil {
 				return result, err
@@ -72,4 +76,34 @@ func (r *Runtime) EmitNotification(ctx context.Context, event notifications.Even
 		return nil, errors.New("notification recipient has no contact destination")
 	}
 	return r.Notifications.Emit(ctx, event)
+}
+
+// Organization broadcasts contain information spanning the business. Until a
+// notice carries a specific branch, only company-wide readers may receive it.
+// Evaluate the recipient explicitly: a worker's own branch bypass must never
+// be used as evidence that the person receiving a message has access.
+func (r *Runtime) organizationNotificationAllowed(ctx context.Context, recipient, org string) (bool, error) {
+	if r.Database == nil {
+		member, err := r.readMembership(ctx, org, recipient)
+		if errors.Is(err, organizations.ErrMembershipNotFound) {
+			return false, nil
+		}
+		return err == nil && member.Status == "active" && access.Can(member.Role, access.PermissionReadFinancial), err
+	}
+	ctx = db.WithTenantContext(ctx, recipient, org)
+	scoped := &db.ScopedDatabase{Pool: r.Database.Raw()}
+	var role access.Role
+	var companyWide bool
+	err := scoped.QueryRow(ctx, `SELECT m.role,
+		(m.role IN ('owner','administrator') OR s.user_id IS NULL OR
+		 (s.mode='all' AND s.membership_id=m.id AND s.membership_version=m.purchasing_authority_version))
+		FROM app.memberships m JOIN app.users u ON u.id=m.user_id
+		JOIN app.organizations o ON o.id=m.organization_id
+		LEFT JOIN app.member_branch_scopes s ON s.organization_id=m.organization_id AND s.user_id=m.user_id
+		WHERE m.organization_id=$1::uuid AND m.user_id=$2::uuid
+		AND m.status='active' AND u.status='active' AND o.status<>'suspended'`, org, recipient).Scan(&role, &companyWide)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil && companyWide && access.Can(role, access.PermissionReadFinancial), err
 }

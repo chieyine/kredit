@@ -5,7 +5,9 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root_dir"
 : "${DATABASE_URL:?DATABASE_URL is required}"
 
-output="docs/compliance/data-inventory.tsv"
+# Heuristics are review proposals, never replacements for explicit field records.
+# Replacing the base would also duplicate fields in data-inventory-additions.json.
+output="docs/compliance/data-inventory.proposed.tsv"
 temporary="$(mktemp "${output}.XXXXXX")"
 trap 'rm -f "$temporary"' EXIT
 {
@@ -44,4 +46,4 @@ trap 'rm -f "$temporary"' EXIT
     ORDER BY c.table_schema,c.table_name,c.ordinal_position;"
 } > "$temporary"
 mv "$temporary" "$output"
-printf 'Generated %s with %s field rows.\n' "$output" "$(( $(wc -l < "$output") - 1 ))"
+printf 'Generated review proposal %s with %s field rows. Inferred controls are unverified; the explicit inventory was not replaced.\n' "$output" "$(( $(wc -l < "$output") - 1 ))"

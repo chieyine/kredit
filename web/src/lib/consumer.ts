@@ -1,6 +1,6 @@
 import { parseNaira } from '$lib/money';
 import { MutationIntent } from '$lib/api/mutation';
-import { boundedFetch, record, RequestError, type Decoder } from '$lib/api/reliable';
+import { checkedJSON, record, type Decoder } from '$lib/api/reliable';
 export type Due = { date: string; amount_kobo: number; paid_kobo: number };
 export type Terms = {
 	item: string;
@@ -134,20 +134,7 @@ export function purchase(v: unknown): Purchase {
 	return r as unknown as Purchase;
 }
 export async function read(url: string) {
-	const response = await boundedFetch(url);
-	const data = await response.json();
-	if (!response.ok) {
-		const code =
-			typeof data.code === 'string' ? data.code : typeof data.title === 'string' ? data.title : 'request_unavailable';
-		throw new RequestError(
-			code === 'step_up_required'
-				? 'Confirm it is you with your authenticator code, then try again.'
-				: data.detail || 'Could not load this purchase.',
-			response.status,
-			code
-		);
-	}
-	return data;
+	return checkedJSON(url, record);
 }
 // Persist request identities/digests, never purchase or banking evidence.
 export class Mutation {
@@ -158,7 +145,7 @@ export class Mutation {
 			throw new Error('Re-enter the original details to recover this action, or check its saved record.');
 		return this.send(this.pending.url, JSON.parse(this.pending.body), this.pending.decode);
 	}
-	async send(url: string, body: unknown, decode: Decoder<unknown> = purchase): Promise<unknown> {
+	async send(url: string, body: unknown, decode: Decoder<unknown>): Promise<unknown> {
 		const encoded = JSON.stringify(body);
 		if (this.pending && (this.pending.url !== url || this.pending.body !== encoded))
 			throw new Error('Retry the previous action with its original details before starting another.');

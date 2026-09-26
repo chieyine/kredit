@@ -103,7 +103,7 @@ jobs:
             -e PGDATABASE -e PGHOST -e PGHOSTADDR -e PGPORT -e PGUSER -e PGPASSWORD \
             -e PGSSLMODE -e PGSSLROOTCERT -e PGSSLCERT -e PGSSLKEY \
             -e PGCHANNELBINDING -e PGTARGETSESSIONATTRS -e PGAPPNAME \
-            -e PGCONNECT_TIMEOUT -e PGCLIENTENCODING \
+            -e PGCONNECT_TIMEOUT -e PGCLIENTENCODING -e PGOPTIONS \
             --entrypoint "$(basename "$0")" postgres:18 "$@"
           SH
             chmod +x "$RUNNER_TEMP/pgbin/$tool"

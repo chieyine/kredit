@@ -147,6 +147,7 @@
 	onMount(() => {
 		void load();
 		return () => {
+			stopped = true;
 			reads.cancel();
 			batchReads.cancel();
 		};

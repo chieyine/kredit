@@ -124,26 +124,30 @@
 		error = '';
 		try {
 			const data = purchase(
-				await mutation.send(endpoint, {
-					target_type: channel,
-					target: channel === 'phone' ? normalizeNigerianPhone(target) : target.trim(),
-					terms: {
-						item,
-						quantity,
-						total_kobo: kobo(total),
-						deposit_kobo: kobo(deposit),
-						deposit_date: depositDate,
-						first_date: firstDate,
-						count,
-						cadence,
-						fulfillment,
-						threshold_percent: threshold,
-						delivery_days: days,
-						stock_reference: stock,
-						stock_reserved: reserved,
-						returns_policy: returns
-					}
-				})
+				await mutation.send(
+					endpoint,
+					{
+						target_type: channel,
+						target: channel === 'phone' ? normalizeNigerianPhone(target) : target.trim(),
+						terms: {
+							item,
+							quantity,
+							total_kobo: kobo(total),
+							deposit_kobo: kobo(deposit),
+							deposit_date: depositDate,
+							first_date: firstDate,
+							count,
+							cadence,
+							fulfillment,
+							threshold_percent: threshold,
+							delivery_days: days,
+							stock_reference: stock,
+							stock_reserved: reserved,
+							returns_policy: returns
+						}
+					},
+					purchase
+				)
 			);
 			message = `Offer saved. Share this private sign-in link with ${data.target}: ${location.origin}/personal/purchases/${data.id}`;
 			items = [data, ...items];

@@ -41,6 +41,7 @@
 	};
 
 	let loading = $state(true),
+		loaded = $state(false),
 		busy = $state(false),
 		error = $state(''),
 		message = $state('');
@@ -62,13 +63,21 @@
 
 	function decodeLineItem(value: unknown): LineItem {
 		const r = record(value);
+		if (
+			!Number.isSafeInteger(r.quantity) ||
+			Number(r.quantity) <= 0 ||
+			!Number.isSafeInteger(r.fulfilled_quantity) ||
+			Number(r.fulfilled_quantity) < 0 ||
+			Number(r.fulfilled_quantity) > Number(r.quantity)
+		)
+			throw new Error('Invalid delivery quantities');
 		return {
 			id: text(r.id),
 			sku: typeof r.sku === 'string' ? r.sku : '',
 			description: text(r.description),
 			unit_price_kobo: kobo(r.unit_price_kobo),
 			quantity: Number(r.quantity),
-			fulfilled_quantity: Number(r.fulfilled_quantity ?? 0),
+			fulfilled_quantity: Number(r.fulfilled_quantity),
 			total_kobo: kobo(r.total_kobo)
 		};
 	}
@@ -100,9 +109,10 @@
 	async function load() {
 		const req = reads.begin();
 		loading = true;
+		loaded = false;
 		error = '';
 		try {
-			if (!organizationID || !orderID) return;
+			if (!organizationID || !orderID) throw new Error('Open this delivery record from its sale.');
 			const base = `/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(orderID)}`;
 
 			const res = await checkedJSON(
@@ -122,6 +132,7 @@
 			lineItems = res.items;
 			shipments = res.shipments;
 			creditNotes = res.credit_notes;
+			loaded = true;
 		} catch (cause) {
 			if (req.current()) error = cause instanceof Error ? cause.message : 'Deliveries could not be loaded.';
 		} finally {
@@ -130,7 +141,7 @@
 	}
 
 	async function dispatchShipment() {
-		if (busy || !newCarrier.trim()) return;
+		if (busy || loading || !loaded || !newCarrier.trim()) return;
 		busy = true;
 		error = '';
 		message = '';
@@ -146,7 +157,7 @@
 					tracking_reference: newTracking.trim(),
 					items
 				},
-				record,
+				decodeShipment,
 				'POST'
 			);
 
@@ -163,6 +174,7 @@
 	}
 
 	async function createCreditNote() {
+		if (busy || loading || !loaded) return;
 		const amount = parseNaira(creditAmount);
 		if (amount <= 0 || !creditReason.trim()) {
 			error = 'Enter a valid amount and reason for the credit note.';
@@ -178,7 +190,7 @@
 					amount_kobo: amount,
 					reason: creditReason.trim()
 				},
-				record,
+				decodeCreditNote,
 				'POST'
 			);
 
@@ -196,6 +208,7 @@
 	// The second of the two people a credit note needs. Whoever drafted it is
 	// never offered this; the server refuses it too.
 	async function approveCreditNote(note: CreditNote) {
+		if (busy || loading || !loaded) return;
 		busy = true;
 		error = '';
 		message = '';
@@ -203,7 +216,16 @@
 			await new MutationIntent(
 				`credit-note-approve:${note.id}`,
 				`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-notes/${encodeURIComponent(note.id)}/approve`
-			).run({}, record, 'POST');
+			).run(
+				{},
+				(value) => {
+					const result = record(value);
+					if (result.id !== note.id || result.status !== 'approved')
+						throw new Error('Credit note approval not confirmed');
+					return result;
+				},
+				'POST'
+			);
 			message = `Credit note approved. What the customer owes has gone down by ${formatKobo(note.amount_kobo)}.`;
 			await load();
 		} catch (cause) {
@@ -241,6 +263,8 @@
 
 	{#if loading}
 		<p role="status">Loading delivery details…</p>
+	{:else if !loaded}
+		<button type="button" onclick={load} disabled={busy}>Reload delivery details</button>
 	{:else}
 		<!-- Section 1: Line Items -->
 		<section class="card">

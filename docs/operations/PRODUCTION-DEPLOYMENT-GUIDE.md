@@ -70,8 +70,12 @@ command. `Caddyfile.prod` already pins the Cloudflare ranges with
 
 **Running 1Panel's proxy, or any other ingress.** The protections above are then
 its responsibility, and they are not in this repository. The proxy must strip
-every client-supplied forwarding header before setting its own, exactly as the
-Caddyfile does.
+unsigned client-supplied forwarding headers before setting its own, exactly as
+the Caddyfile does. Preserve `X-Kredit-Client-IP`,
+`X-Kredit-Client-Timestamp`, and `X-Kredit-Client-Signature` unchanged: the Go API
+validates that signed envelope from the Vercel frontend. The ingress must not
+treat those fields as trusted client addresses itself. Removing them groups
+frontend visitors under the frontend's egress address for rate limiting.
 
 Either way, set `API_TRUSTED_PROXIES` in `.env.runtime` to the address or subnet
 of that proxy. `X-Real-IP` is the rate-limit identity for sign-in, one-time-code
@@ -122,7 +126,7 @@ The frontend signs the original client address forwarded to the API. This key mu
 
 Initial legal publication metadata lives in `web/src/lib/server/legal-publication.ts` and `internal/legalpublication/versions.go`. Initial terms and privacy versions are `supplier-terms-v2-2026-09-07` and `privacy-v2-2026-09-07`. Published updates use the website-content workflow and preserve earlier versions. Old `LEGAL_*`, `TERMS_VERSION` and `PRIVACY_VERSION` environment examples do not change these publications. Review the actual text, entity details, contact and effective date; do not treat a configured page as legal approval.
 
-## Start the approved release
+## Start the initial approved release
 
 Run from `/opt/kredit/infra/environments` only after the repair review and essential checks are complete:
 
@@ -142,3 +146,5 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail
 The migration and role containers must exit successfully; API and worker must become healthy. Check the public health route through both `api.kredit.ng` and the frontend `/api` proxy. Verify domain redirects and a narrowly scoped sign-in/provider flow only when the final verification phase is authorized. Health alone does not establish launch readiness.
 
 Keep the previous image digests and release record. Database recovery uses a verified backup and forward repairs; do not automatically run financial migrations backwards. Follow [the go-live runbook](../release/go-live-runbook.md) for approval evidence and cutover ownership.
+
+For subsequent upgrades, follow [the production cutover runbook](production-cutover-runbook.md). Its script stops writers before backup and migration, retains recovery artifacts and selects unique release image tags. After such an upgrade, run administrative Compose commands from `/opt/kredit/current/infra/environments` and include both `-f docker-compose.prod.yml -f docker-compose.release.yml`, plus `--env-file .env.production`. The generated override selects that release's images; the initial-install commands above do not. Do not rebuild release images in place.

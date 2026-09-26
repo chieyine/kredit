@@ -1,0 +1,3442 @@
+[
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/app.d.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/hooks.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/account-context.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/activity-language.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/admin-client.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/admin/platform-settings.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/api/client.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/api/mutation.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/api/onboarding-settings.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/api/reliable.ts",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "no-control-regex",
+        "severity": 2,
+        "message": "Unexpected control character(s) in regular expression: \\x00, \\x1f.",
+        "line": 213,
+        "column": 68,
+        "nodeType": "Literal",
+        "messageId": "unexpected",
+        "endLine": 213,
+        "endColumn": 83,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "the control characters are the input being rejected"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/attention.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/blog/articles.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/blog/first-wave-drafts.js",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/blog/guides.js",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/business-time.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/buyer-navigation.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/AdminAttention.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/AuthGate.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/BankReturnNotice.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/BusinessNextSteps.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "no-control-regex",
+        "severity": 2,
+        "message": "Unexpected control character(s) in regular expression: \\x00, \\x1f.",
+        "line": 25,
+        "column": 80,
+        "nodeType": "Literal",
+        "messageId": "unexpected",
+        "endLine": 25,
+        "endColumn": 95,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "the control characters are the input being rejected"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/CommandPalette.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/ConnectivityBanner.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/ConsumerPurchase.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/ConsumerSales.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/DSA.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in URLSearchParams class. Use SvelteURLSearchParams instead.",
+        "line": 162,
+        "column": 14,
+        "nodeType": "NewExpression",
+        "messageId": "mutableURLSearchParamsUsed",
+        "endLine": 162,
+        "endColumn": 35,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "built and consumed within one request"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/Deck.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/DisputeDetail.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "@typescript-eslint/no-unused-expressions",
+        "severity": 2,
+        "message": "Expected an assignment or function call and instead saw an expression.",
+        "line": 182,
+        "column": 3,
+        "nodeType": "ExpressionStatement",
+        "messageId": "unusedExpression",
+        "endLine": 182,
+        "endColumn": 12,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "reading endpoint registers it as an $effect dependency"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/DocumentLayout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/DocumentUploader.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/FeeAuthorization.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/FeeInvoices.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/FeeOperations.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/FeedbackPrompt.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/IdentityChecks.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/Money.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/MotionObserver.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/NetworkChain.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/NetworkRolePage.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/NotificationHistory.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/OwnerDialog.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/PaymentReview.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/PlatformSettingHistory.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/PortalNav.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/ProtectedActionDialog.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/PublishedLegalDocument.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/RepaymentCustomer.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/ResourceNotice.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/RetainedAccounts.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/SaleCosts.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/SaleProgress.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/SellerSettlements.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/ShareActions.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/SiteFooter.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/SiteHeader.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/Skeleton.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/StatusPill.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/SystemBanner.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/TradeRecord.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/VerifyIdentity.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/WorkspaceHub.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/WorkspacePage.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/WorkspacePurchases.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/components/WorkspaceSectionNav.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/consumer.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/datetime.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/deck/investor.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/deck/manufacturer.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/deck/types.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/demo-sale.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/disputes.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/distributor-import-batches.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/distributor-import.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/fee-terms.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/financial-copy.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/financial-input.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/money.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/network-content.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/product-language.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/product-tools.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/records.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/sale-defaults.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/sale-drafts.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/sale-progress.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/seo.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/server/guides.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/server/legal-config.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/server/legal-content.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/server/legal-publication.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/server/page-cache.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/server/proxy-body.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/server/website-content.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/trade-line-records.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/website-content.ts",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "no-control-regex",
+        "severity": 2,
+        "message": "Unexpected control character(s) in regular expression: \\x00, \\x08, \\x0b, \\x0c, \\x0e, \\x1f.",
+        "line": 62,
+        "column": 4,
+        "nodeType": "Literal",
+        "messageId": "unexpected",
+        "endLine": 62,
+        "endColumn": 38,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "the control characters are the input being rejected"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/website-editor-content.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/workspace-context.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/lib/workspace-navigation.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/+error.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/account/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/account/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/account/display/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/account/messages/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/account/notifications/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/account/privacy/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/account/security/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/account/suppliers/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 23,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 23,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/agents/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/analytics/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in URLSearchParams class. Use SvelteURLSearchParams instead.",
+        "line": 119,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableURLSearchParamsUsed",
+        "endLine": 119,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "built and consumed within one request"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/approvals/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 10,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 10,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/attention/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/audit/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/billing/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 62,
+        "column": 17,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 62,
+        "endColumn": 42,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "local to this function, never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/cases/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/cases/[id]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/consumer-sales/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/consumer-sales/[saleID]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/controls/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/customer-registrations/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/diagnostics/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/disputes/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/disputes/[id]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/history/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/inbox/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/jobs/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/mandate-authorizations/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/message-submissions/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/money/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/mono/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/organizations/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/platform-settings/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Set class. Use SvelteSet instead.",
+        "line": 111,
+        "column": 17,
+        "nodeType": "NewExpression",
+        "messageId": "mutableSetUsed",
+        "endLine": 111,
+        "endColumn": 34,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "local to this function, never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/privacy/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/provider-events/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/provider-work/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/reconciliation/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 31,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 31,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/recovery/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/search/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/seller-settlements/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/settings/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 16,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 16,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/settlement-review/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/setup/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Set class. Use SvelteSet instead.",
+        "line": 85,
+        "column": 24,
+        "nodeType": "NewExpression",
+        "messageId": "mutableSetUsed",
+        "endLine": 85,
+        "endColumn": 41,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "local to this function, never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/team/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 10,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 10,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/users/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/verification-requests/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/admin/website/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/agents/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/blog/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/blog/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/blog/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/blog/[slug]/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/blog/[slug]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/blog/rss.xml/+server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/blog/topic/[topic]/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/blog/topic/[topic]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/buyer-invitations/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/buyer-invitations/[token]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/c/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/c/[token]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/c/[token]/+page.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/consumers/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/contact/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/contact/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/deck/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/deck/investor/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/demo/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/demo/consumer/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/distributors/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/faq/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/faq/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/glossary/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/healthz/+server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/how-it-works/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/join/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/legal/complaints/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/legal/complaints/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/legal/privacy/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/legal/privacy/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/legal/terms/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/legal/terms/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/manufacturers/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/pay/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/pay/[token]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/personal/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/personal/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/personal/purchases/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/personal/purchases/[saleID]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/pricing/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/pricing/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/receipt/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/receipt/[public_token]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/recover/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/retailers/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/robots.txt/+server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/secure/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/security/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/signin/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/signin/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/sitemap.xml/+server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/start/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/activity/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 32,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 32,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/disputes/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/disputes/[id]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/help/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 20,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 20,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/money/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/money/collections/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/money/received/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 82,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 82,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/onboarding/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 27,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 27,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      },
+      {
+        "ruleId": "no-control-regex",
+        "severity": 2,
+        "message": "Unexpected control character(s) in regular expression: \\x00, \\x1f.",
+        "line": 53,
+        "column": 5,
+        "nodeType": "Literal",
+        "messageId": "unexpected",
+        "endLine": 53,
+        "endColumn": 20,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "the control characters are the input being rejected"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/overdue/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/partners/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/partners/access/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/partners/customers/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/partners/customers/[id]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/partners/customers/new/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 24,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 24,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/partners/import/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 118,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 118,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/partners/invitations/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/partners/operations/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/+layout.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/access/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/amendments/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 29,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 29,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      },
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 41,
+        "column": 17,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 41,
+        "endColumn": 59,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "local to this function, never rendered"
+          }
+        ]
+      },
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Set class. Use SvelteSet instead.",
+        "line": 52,
+        "column": 16,
+        "nodeType": "NewExpression",
+        "messageId": "mutableSetUsed",
+        "endLine": 52,
+        "endColumn": 33,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "local to this function, never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/bank-authorization/[reference]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/disputes/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/disputes/[id]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/history/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/mandates/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 27,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 27,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/obligations/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/obligations/[id]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 38,
+        "column": 15,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 38,
+        "endColumn": 40,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "retry cache, never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/orders/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/orders/[requestID]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 55,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 55,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/payments/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/permissions/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/purchases/trade-lines/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 19,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 19,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/referral/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/reports/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/[id]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 32,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 32,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/[id]/deliveries/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/approvals/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/consumers/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/consumers/[saleID]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/limits/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 34,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 34,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/limits/[id]/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 38,
+        "column": 13,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 38,
+        "endColumn": 46,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/new/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 52,
+        "column": 27,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 52,
+        "endColumn": 74,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "retry cache, never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/new/+page.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/sales/quick/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/search/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/settings/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/settings/billing/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/settings/credit-policy/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/settings/settlement/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/team/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [
+      {
+        "ruleId": "svelte/prefer-svelte-reactivity",
+        "severity": 2,
+        "message": "Found a mutable instance of the built-in Map class. Use SvelteMap instead.",
+        "line": 19,
+        "column": 18,
+        "nodeType": "NewExpression",
+        "messageId": "mutableMapUsed",
+        "endLine": 19,
+        "endColumn": 51,
+        "suppressions": [
+          {
+            "kind": "directive",
+            "justification": "idempotency keys are never rendered"
+          }
+        ]
+      }
+    ],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/today/+page.server.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/routes/workspace/today/+page.svelte",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  },
+  {
+    "filePath": "/Users/macbookpro/Documents/Kredit.com/web/src/service-worker.ts",
+    "messages": [],
+    "suppressedMessages": [],
+    "errorCount": 0,
+    "fatalErrorCount": 0,
+    "warningCount": 0,
+    "fixableErrorCount": 0,
+    "fixableWarningCount": 0,
+    "usedDeprecatedRules": []
+  }
+]

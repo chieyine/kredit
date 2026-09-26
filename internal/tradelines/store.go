@@ -293,8 +293,9 @@ func (s *Store) CreateLine(input CreateLineInput) (TradeLine, error) {
 		}
 	}
 	s.lines[line.ID] = line
+	created := cloneLine(*line)
 	s.mu.Unlock()
-	return cloneLine(*line), nil
+	return created, nil
 }
 
 func (s *Store) Get(lineID string) (TradeLine, bool) {

@@ -29,10 +29,14 @@ services:
       retries: 12
 
   migrate:
+    image: kredit-api:current
     build:
       context: ../..
       dockerfile: infra/containers/Dockerfile.api
       target: api
+      args:
+        APP_BUILD_VERSION: ${APP_BUILD_VERSION:-development}
+        APP_BUILD_REVISION: ${APP_BUILD_REVISION:-unknown}
     entrypoint: ["/app/kredit-migrate"]
     environment:
       DATABASE_URL: postgres://kredit:${POSTGRES_ROOT_PASSWORD:?Set POSTGRES_ROOT_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt
@@ -43,6 +47,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  backup:
+    image: postgres:18
+    profiles: [maintenance]
+    entrypoint: ["/bin/bash", "/app/backup.sh"]
+    environment:
+      BACKUP_DATABASE_URL: postgres://kredit_backup_login:${KREDIT_BACKUP_DB_PASSWORD:?Set KREDIT_BACKUP_DB_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt
+      BACKUP_DIR: /backups
+      BACKUP_DATABASE_ROLE: kredit_backup
+    volumes:
+      - ../../scripts/backup.sh:/app/backup.sh:ro
+      - ${KREDIT_BACKUP_DIR:-/opt/kredit/backups}:/backups
+      - ./db-certs/root.crt:/etc/postgresql/root.crt:ro
+    networks:
+      - kredit-backend
 
   role-init:
     image: postgres:18
@@ -71,14 +90,19 @@ services:
         condition: service_completed_successfully
 
   api:
+    image: kredit-api:current
     build:
       context: ../..
       dockerfile: infra/containers/Dockerfile.api
       target: api
+      args:
+        APP_BUILD_VERSION: ${APP_BUILD_VERSION:-development}
+        APP_BUILD_REVISION: ${APP_BUILD_REVISION:-unknown}
     restart: unless-stopped
     logging: *default-logging
     env_file:
       - .env.runtime
+      - env.release
     environment:
       ADMIN_CONFIG_AUTO_APPLY: "true"
       API_ADDR: :8080
@@ -101,14 +125,19 @@ services:
         condition: service_completed_successfully
 
   worker:
+    image: kredit-worker:current
     build:
       context: ../..
       dockerfile: infra/containers/Dockerfile.api
       target: worker
+      args:
+        APP_BUILD_VERSION: ${APP_BUILD_VERSION:-development}
+        APP_BUILD_REVISION: ${APP_BUILD_REVISION:-unknown}
     restart: unless-stopped
     logging: *default-logging
     env_file:
       - .env.runtime
+      - env.release
     environment:
       ADMIN_CONFIG_AUTO_APPLY: "true"
       DATABASE_URL: postgres://kredit_app_login:${KREDIT_APP_DB_PASSWORD:?Set KREDIT_APP_DB_PASSWORD in .env.production}@postgres:5432/kredit?sslmode=verify-full&sslrootcert=/etc/postgresql/root.crt

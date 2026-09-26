@@ -7,15 +7,28 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"kredit/internal/platform/txcleanup"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ErrKeyReused means an idempotency key arrived again with a different request body.
 var ErrKeyReused = errors.New("idempotency key was reused for a different request")
+
+// ErrAmbiguous preserves legacy duplicate reservations for explicit recovery.
+var ErrAmbiguous = errors.New("multiple outcomes exist for this idempotency key")
+
+// commandScope retains actor, route and method while separating mutable
+// session/authorization metadata used to decide whether a response is replayable.
+// Keep this definition aligned with app.idempotency_command_scope.
+func commandScope(scope string) string {
+	command, _, _ := strings.Cut(scope, " session:")
+	return command
+}
 
 type Record struct {
 	Scope        string
@@ -61,9 +74,11 @@ func (s *MemoryStore) Reserve(ctx context.Context, scope, key, requestHash strin
 	if err := ctx.Err(); err != nil {
 		return Record{}, false, err
 	}
-	index := scope + "\x00" + key
+	index := commandScope(scope) + "\x00" + key
 	if existing, ok := s.records[index]; ok {
-		if !existing.CompletedAt.IsZero() && !existing.ExpiresAt.IsZero() && !time.Now().UTC().Before(existing.ExpiresAt) {
+		// A missing response or server error can follow a committed mutation.
+		// Age alone is never evidence that executing that intent again is safe.
+		if !existing.CompletedAt.IsZero() && existing.Status >= 200 && existing.Status < 500 && !existing.ExpiresAt.IsZero() && !time.Now().UTC().Before(existing.ExpiresAt) {
 			delete(s.records, index)
 		} else {
 			if existing.RequestHash != requestHash {
@@ -90,9 +105,9 @@ func (s *MemoryStore) Complete(ctx context.Context, scope, key string, status in
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	index := scope + "\x00" + key
+	index := commandScope(scope) + "\x00" + key
 	record, ok := s.records[index]
-	if !ok || !record.CompletedAt.IsZero() {
+	if !ok || record.Scope != scope || !record.CompletedAt.IsZero() {
 		return errors.New("idempotency reservation is missing or already completed")
 	}
 	record.Status, record.ResponseBody, record.CompletedAt = status, append([]byte(nil), body...), time.Now().UTC()
@@ -104,52 +119,66 @@ type PostgresStore struct{ pool *pgxpool.Pool }
 
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore { return &PostgresStore{pool: pool} }
 
-func (s *PostgresStore) Reserve(ctx context.Context, scope, key, requestHash string) (Record, bool, error) {
+func (s *PostgresStore) Reserve(ctx context.Context, scope, key, requestHash string) (_ Record, _ bool, retErr error) {
 	if s == nil || s.pool == nil {
 		return Record{}, false, errors.New("idempotency database is not configured")
 	}
 	if scope == "" || key == "" || requestHash == "" {
 		return Record{}, false, errors.New("idempotency scope, key, and request hash are required")
 	}
-	var record Record
-	var response []byte
-	var completed *time.Time
-	if _, err := s.pool.Exec(ctx, `SELECT app.delete_expired_idempotency_record($1, $2)`, scope, key); err != nil {
-		return Record{}, false, err
-	}
-	err := s.pool.QueryRow(ctx, `
-		INSERT INTO app.idempotency_records (scope, idempotency_key, request_hash)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (scope, idempotency_key) DO NOTHING
-		RETURNING scope, idempotency_key, request_hash, COALESCE(response_status, 0), COALESCE(response_body, '{}'::jsonb), completed_at, expires_at`, scope, key, requestHash).
-		Scan(&record.Scope, &record.Key, &record.RequestHash, &record.Status, &response, &completed, &record.ExpiresAt)
-	if err == nil {
-		record.ResponseBody = response
-		if completed != nil {
-			record.CompletedAt = *completed
-		}
-		return record, false, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return Record{}, false, err
-	}
-	// A conflict means another request already reserved this key. Read its
-	// immutable request hash and snapshot so callers can replay or reject it.
-	err = s.pool.QueryRow(ctx, `
-		SELECT scope, idempotency_key, request_hash, COALESCE(response_status, 0), COALESCE(response_body, '{}'::jsonb), completed_at, expires_at
-		FROM app.idempotency_records WHERE scope = $1 AND idempotency_key = $2`, scope, key).
-		Scan(&record.Scope, &record.Key, &record.RequestHash, &record.Status, &response, &completed, &record.ExpiresAt)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Record{}, false, err
 	}
-	if record.RequestHash != requestHash {
-		return Record{}, false, ErrKeyReused
+	defer txcleanup.Finish(ctx, tx, &retErr)
+	// The database INSERT trigger takes the same lock, including for an older
+	// binary. Separate statements obtain a fresh snapshot after a contender exits.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(app.idempotency_command_scope($1)||chr(10)||$2,211))`, scope, key); err != nil {
+		return Record{}, false, err
 	}
-	record.ResponseBody = response
-	if completed != nil {
-		record.CompletedAt = *completed
+	if _, err = tx.Exec(ctx, `SELECT app.delete_expired_idempotency_record($1,$2)`, scope, key); err != nil {
+		return Record{}, false, err
 	}
-	return record, true, nil
+	rows, err := tx.Query(ctx, `
+		SELECT scope, idempotency_key, request_hash, COALESCE(response_status, 0), COALESCE(response_body, '{}'::jsonb), completed_at, expires_at
+		FROM app.idempotency_records WHERE app.idempotency_command_scope(scope)=app.idempotency_command_scope($1) AND idempotency_key=$2 LIMIT 2`, scope, key)
+	if err != nil {
+		return Record{}, false, err
+	}
+	var record Record
+	count := 0
+	for rows.Next() {
+		var completed *time.Time
+		if err = rows.Scan(&record.Scope, &record.Key, &record.RequestHash, &record.Status, &record.ResponseBody, &completed, &record.ExpiresAt); err != nil {
+			rows.Close()
+			return Record{}, false, err
+		}
+		if completed != nil {
+			record.CompletedAt = *completed
+		}
+		count++
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return Record{}, false, err
+	}
+	if count > 1 {
+		return Record{}, false, ErrAmbiguous
+	}
+	if count == 1 {
+		if record.RequestHash != requestHash {
+			return Record{}, false, ErrKeyReused
+		}
+		return record, true, tx.Commit(ctx)
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO app.idempotency_records(scope,idempotency_key,request_hash)
+		VALUES($1,$2,$3) RETURNING scope,idempotency_key,request_hash,expires_at`, scope, key, requestHash).
+		Scan(&record.Scope, &record.Key, &record.RequestHash, &record.ExpiresAt)
+	if err != nil {
+		return Record{}, false, err
+	}
+	return record, false, tx.Commit(ctx)
 }
 
 func (s *PostgresStore) Complete(ctx context.Context, scope, key string, status int, body []byte) error {

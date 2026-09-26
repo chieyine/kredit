@@ -1054,7 +1054,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 			return hex.EncodeToString(mac.Sum(nil))
 		})
 	}
-	return &Runtime{
+	runtime := &Runtime{
 		FeeBilling:       feeBilling,
 		PaystackAccounts: paystackAccounts, NativeBankAccounts: nativeAccounts, BankEnrollments: bankEnrollments,
 		Mono: monoClient, MonoAccounts: monoAccounts, WebhookJobs: webhookJobs, Settlement: settlementProvider,
@@ -1109,6 +1109,8 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		UserControl: userControlStore,
 		Feedback:    feedbackStore,
 	}
+	notificationStore.SetOrganizationRecipientAccess(runtime.organizationNotificationAllowed)
+	return runtime
 }
 
 func csvSet(value string) map[string]bool {

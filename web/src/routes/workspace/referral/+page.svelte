@@ -12,6 +12,13 @@
 		error = $state(''),
 		message = $state('');
 	const mutation = new Mutation();
+	function clearSavedReferral() {
+		try {
+			sessionStorage.removeItem('kredit_dsa_referral');
+		} catch {
+			// Local storage cleanup cannot change the confirmed server result.
+		}
+	}
 	async function load() {
 		busy = true;
 		error = '';
@@ -33,9 +40,13 @@
 		busy = true;
 		error = '';
 		try {
-			await mutation.send(`/api/v1/organizations/${encodeURIComponent(org)}/dsa`, { code, consent });
+			await mutation.send(`/api/v1/organizations/${encodeURIComponent(org)}/dsa`, { code, consent }, (value) => {
+				const result = record(value);
+				if (result.saved !== true) throw new Error('Referral confirmation was incomplete.');
+				return result;
+			});
 			message = 'Referral confirmed. Finish your business setup; Kredit checks reward qualification automatically.';
-			sessionStorage.removeItem('kredit_dsa_referral');
+			clearSavedReferral();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Referral was not confirmed.';
 		} finally {
@@ -47,7 +58,7 @@
 		try {
 			await mutation.retry();
 			message = 'Referral confirmed.';
-			sessionStorage.removeItem('kredit_dsa_referral');
+			clearSavedReferral();
 			error = '';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not confirm referral.';
@@ -56,8 +67,14 @@
 		}
 	}
 	onMount(() => {
-		code = new URLSearchParams(location.search).get('code') ?? sessionStorage.getItem('kredit_dsa_referral') ?? '';
-		if (code) sessionStorage.setItem('kredit_dsa_referral', code);
+		const linkedCode = new URLSearchParams(location.search).get('code');
+		code = linkedCode ?? '';
+		try {
+			code = linkedCode ?? sessionStorage.getItem('kredit_dsa_referral') ?? '';
+			if (code) sessionStorage.setItem('kredit_dsa_referral', code);
+		} catch {
+			// The URL or a manually entered code works without browser storage.
+		}
 		void load();
 	});
 </script>

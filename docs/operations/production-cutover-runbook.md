@@ -1,168 +1,30 @@
-# Kredit Production Cutover Runbook & Verification Protocol
+# Production backend cutover
 
-This runbook specifies the step-by-step cutover sequence for deploying the 8 architectural blueprint tracks (migrations 165 through 199, versioned ERP reconciliation, item-level order lifecycle, dual-approval branch boundaries, and enterprise reporting) to the production infrastructure (`kredit.ng` and API host `117.55.235.58`).
+This procedure updates the existing `kredit-prod` Compose API, worker and migrator. The frontend has its own deployment. It requires an operator-authorized production maintenance window; source review does not authorize executing it.
 
-> [!IMPORTANT]
-> **Strict Pre-Execution Rule**: Do NOT run this cutover or execute remote changes on the production VPS until explicitly commanded by the operator. All steps below must be executed in the exact sequence specified.
+## Before cutover
 
----
+Commit the reviewed release. The deploy script refuses a dirty checkout and archives exactly `HEAD`, verifies its checksum after transfer, and retains that archive. Confirm the production host has Docker Compose with `--wait` support, Bash, `flock`, SHA-256 utilities, and an existing healthy stack. Configuration and certificates stay under `/opt/kredit/infra/environments`; no credentials are copied from the local checkout.
 
-## 1. Architectural Scope & Invariants
+Set `LEGAL_ENTITY_NAME` to the approved operator name. Optional settings are `VPS_HOST`, `VPS_USER`, `SSH_KEY`, `API_URL` and `BASE_URL`. Then invoke `scripts/deploy-production.sh` from the repository when the operator has authorized cutover. A missing optional key file uses the SSH agent/configuration; authentication remains noninteractive.
 
-The cutover encompasses:
-- **Track 1**: Canonical organization consolidation (`195_canonical_organization_consolidation.sql`).
-- **Track 2**: Delegated drawdowns, specialist claims, and spend ceilings (`196_delegated_drawdown_purchasing.sql`).
-- **Track 3**: Branch-scoped enforcement and dual credit approval for drawdowns (`197_branch_drawdown_approvals.sql`).
-- **Track 4**: Item-level order lifecycles, partial shipments, delivery receipts, and credit notes (`198_item_level_lifecycles.sql`, `internal/orders`).
-- **Track 5**: Dual-control opening balance imports and terms staging (`199_opening_balance_import_batches.sql`, `internal/buyers/terms_import.go`).
-- **Track 6**: Versioned ERP contract ingestion (V1/V2) and ledger reconciler (`internal/erp`).
-- **Track 7**: Multi-branch exposure analytics, portfolio health scoring, and signed enterprise reporting (`internal/reports/enterprise.go`, `web/src/routes/workspace/reports`).
-- **Track 8**: Production cutover execution, verification script, and rollback protocols.
+## What the script does
 
-### Architectural Invariants
-1. **Zero Phantom Debt**: Staged terms, import batches, and draft purchase orders create no debt obligations, payment mandates, or ledger entries until verified acceptance or drawdown release.
-2. **Double-Entry Ledger Immutability**: No ledger entry or journal item is ever modified or deleted (`append-only`).
-3. **Integer Kobo Precision**: All financial arithmetic uses 64-bit integer kobo (`bigint`) with zero floating-point math.
-4. **Tenant Isolation**: PostgreSQL `FORCE ROW LEVEL SECURITY` remains active and verified across all new tables.
+1. Takes a deployment lock and stages the archive in a private, versioned directory under `/opt/kredit/releases`.
+2. Retains prior API/worker image IDs and rollback tags, then builds both images from the staged source under unique release tags. A generated `docker-compose.release.yml` pins the API, worker and migrator to those tags; failed staging does not retag the running release. The migrator is in the same API image. Image labels and process metadata identify the release and full Git revision.
+3. Stops API and worker writers. The PostgreSQL 18 backup container assumes the dedicated `kredit_backup` role and writes a custom-format archive to `/opt/kredit/backups`. It checks the producer exit status, reads the archive contents without restoring them, and records a SHA-256 sidecar and the actual archive path.
+4. Runs all pending migrations with the new migrator, then reapplies role/login provisioning. This includes forward-only integrity fixes; do not select a hard-coded migration range.
+5. Starts both application services, waits for container health, and checks their actual image IDs. It refreshes the existing optional Caddy service, switches `/opt/kredit/current` and installs a systemd drop-in so reboot uses that release.
+6. Checks the public home/legal/robots/sitemap responses and configured API health endpoint. This check does not exercise authenticated financial flows or deploy the frontend.
 
----
+Once writers are stopped, a remote failure leaves them stopped for recovery and returns a failure. A failed public check after remote completion also returns a failure; it does not automatically reverse an otherwise running release.
 
-## 2. Phase 1: Pre-Cutover Verification Checklist
+## Recovery
 
-Before initiating cutover, the operator must execute the following readiness checks:
+Each release retains `source.tar.gz`, its checksum/revision, and `rollback/` containing the previous source directory, prior API/worker image IDs and backup manifest. Images also retain `kredit-api:rollback-<release>` and `kredit-worker:rollback-<release>` tags. Keep these artifacts until the maintenance window and retention requirements are resolved.
 
-### 2.1 Database State & Backup Verification
-Run on the production database host:
-```bash
-# 1. Capture full pre-cutover database snapshot
-./scripts/backup.sh production pre-cutover-$(date +%Y%m%d%H%M%S)
+For a release created by this script, run administrative Compose commands from `/opt/kredit/current/infra/environments` with `--env-file .env.production -f docker-compose.prod.yml -f docker-compose.release.yml`. The generated override is required to select that release's images. Do not build or retag these release images in place.
 
-# 2. Verify snapshot archive integrity
-gzip -t /opt/kredit/backups/pre-cutover-*.sql.gz && echo "BACKUP INTEGRITY VERIFIED"
+Before restarting an older image, verify that it is compatible with the now-applied schema and integrity triggers. Migrations 201 and 207 onward require particular care: restoring unsafe behavior or starting an incompatible writer is not a generic rollback. Choose a reviewed forward correction when compatibility cannot be established. The script never runs migration `down`, deletes a production database, or automatically restores a backup.
 
-# 3. Check current schema version
-psql "$DATABASE_DIRECT_URL" -c "SELECT version, applied_at FROM schema_migrations ORDER BY version DESC LIMIT 5;"
-```
-
-### 2.2 Provider Adapter Health Checks
-Verify external provider responsiveness:
-```bash
-# Verify Mono Open Banking Direct Debit connectivity
-curl -sf -H "mono-sec-key: $MONO_SECRET_KEY" https://api.withmono.com/v1/health || echo "WARNING: Mono check failed"
-
-# Verify Termii SMS Provider connectivity
-curl -sf "https://api.ng.termii.com/api/check/balance?api_key=$TERMII_API_KEY" || echo "WARNING: Termii check failed"
-
-# Verify QoreID KYC/KYB connectivity
-curl -sf -H "Authorization: Bearer $QOREID_TOKEN" https://api.qoreid.com/health || echo "WARNING: QoreID check failed"
-```
-
----
-
-## 3. Phase 2: Database Migration Execution
-
-Migrations must be applied in strict ascending order from 165 to 199.
-
-### 3.1 Migration Command
-```bash
-# On the VPS / production orchestration node:
-source /opt/kredit/infra/environments/.env.production
-./scripts/run-migrations.sh /opt/kredit/db/migrations
-```
-
-### 3.2 Schema & RLS Verification Query
-Execute the following verification query to ensure all new blueprint tables have RLS enforced:
-```sql
-SELECT 
-    relname AS table_name,
-    relrowsecurity AS rls_enabled,
-    relforcerowsecurity AS rls_forced
-FROM pg_class
-JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-WHERE nspname = 'app'
-  AND relname IN (
-    'order_line_items',
-    'order_shipments',
-    'order_shipment_items',
-    'order_delivery_receipts',
-    'order_credit_notes',
-    'tradeline_drawdown_approvals',
-    'partner_terms_import_batches',
-    'partner_terms_import_rows'
-  )
-ORDER BY relname;
-```
-*Expected Result: `rls_enabled = true` and `rls_forced = true` on all rows.*
-
----
-
-## 4. Phase 3: Binary & Application Cutover
-
-### 4.1 Linux AMD64 Binary Compilation
-```bash
-# Build production release binaries with optimizations
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X 'main.version=2026.09.20'" -o .tmp/kredit-api-linux ./cmd/api
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X 'main.version=2026.09.20'" -o .tmp/kredit-worker-linux ./cmd/worker
-```
-
-### 4.2 Zero-Downtime Atomic Service Swap
-```bash
-# 1. Transfer binaries to release directory
-cp .tmp/kredit-api-linux /opt/kredit/bin/kredit-api.new
-cp .tmp/kredit-worker-linux /opt/kredit/bin/kredit-worker.new
-chmod +x /opt/kredit/bin/kredit-api.new /opt/kredit/bin/kredit-worker.new
-
-# 2. Atomic rename
-mv /opt/kredit/bin/kredit-api.new /opt/kredit/bin/kredit-api
-mv /opt/kredit/bin/kredit-worker.new /opt/kredit/bin/kredit-worker
-
-# 3. Reload systemd services (graceful worker drain and API reload)
-sudo systemctl reload kredit-api || sudo systemctl restart kredit-api
-sudo systemctl restart kredit-worker
-```
-
-### 4.3 Frontend Web Deployment
-```bash
-# Build and deploy SvelteKit frontend
-cd web && pnpm build
-# Sync assets to web server / Vercel deployment
-```
-
----
-
-## 5. Phase 4: Post-Cutover Verification Protocol
-
-Execute the automated verification script:
-```bash
-./scripts/post-deploy-check.sh https://api.kredit.ng
-```
-
-The script performs:
-1. Public health check (`GET /api/v1/healthz` -> HTTP 200 `status: ok`).
-2. Readiness probe check (`GET /api/v1/organizations/{id}/readiness`).
-3. Enterprise risk endpoint check (`GET /api/v1/organizations/{id}/reports/enterprise`).
-4. Dual-approval route registration (`GET /api/v1/organizations/{id}/credit-approvals`).
-5. Database connection pool metrics and active migration version.
-
----
-
-## 6. Phase 5: Rollback Procedures
-
-If any critical failure occurs (unrecoverable database deadlock, schema violation, provider failure > 5 minutes):
-
-### 6.1 Service Binary Rollback
-```bash
-# Revert to previous binary snapshot
-mv /opt/kredit/bin/kredit-api.prev /opt/kredit/bin/kredit-api
-mv /opt/kredit/bin/kredit-worker.prev /opt/kredit/bin/kredit-worker
-sudo systemctl restart kredit-api kredit-worker
-```
-
-### 6.2 Database Rollback
-Migrations 195–199 are additive (new tables and non-destructive column additions). They do not break backwards compatibility with older API versions. If complete database rollback is necessary:
-```bash
-# Restore verified pre-cutover backup
-dropdb -h localhost -U postgres kredit_prod
-createdb -h localhost -U postgres kredit_prod
-gunzip -c /opt/kredit/backups/pre-cutover-*.sql.gz | psql -h localhost -U postgres kredit_prod
-```
+A readable archive and matching checksum do not establish successful restoration or an achieved recovery time. Follow [the backup restoration runbook](../runbooks/backup-restore.md) using an isolated target with providers and workers disabled; do not restore over the serving primary. Preserve configuration/encryption keys separately under the existing secret-management process.

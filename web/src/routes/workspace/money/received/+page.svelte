@@ -36,9 +36,11 @@
 	const optional = (value: unknown) => (typeof value === 'string' ? value : '');
 	const payment = (value: unknown): Payment => {
 		const row = record(value);
+		const paymentID = text(row.payment_id);
+		if (!paymentID) throw new Error('Payment identity was incomplete');
 		return {
 			id: text(row.id),
-			payment_id: optional(row.payment_id),
+			payment_id: paymentID,
 			buyer_legal_name: text(row.buyer_legal_name),
 			description: optional(row.description),
 			reference: optional(row.reference),
@@ -349,7 +351,7 @@
 						><span role="columnheader">Date</span><span role="columnheader">Status</span><span aria-hidden="true"
 						></span>
 					</div>
-					{#each visiblePayments as payment (payment.id)}<div class="payment-row" role="row">
+					{#each visiblePayments as payment (payment.payment_id)}<div class="payment-row" role="row">
 							<div role="cell">
 								<strong>{payment.buyer_legal_name || 'Customer'}</strong><small
 									>{payment.description || payment.reference || 'Sale payment'}</small

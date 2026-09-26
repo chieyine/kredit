@@ -17,7 +17,7 @@
 
 	function go(n: number) {
 		index = Math.max(0, Math.min(total - 1, n));
-		if (typeof history !== 'undefined') history.replaceState(null, '', `#${index + 1}`);
+		if (typeof history !== 'undefined') history.replaceState(history.state, '', `#${index + 1}`);
 	}
 	function key(event: KeyboardEvent) {
 		if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;

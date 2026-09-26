@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	_ "embed"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,16 +32,40 @@ func main() {
 }
 
 func run(args []string) error {
+	flags := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	migrationsPath := flags.String("migrations-dir", filepath.Join("db", "migrations"), "directory containing application migrations")
+	if err := flags.Parse(args); err != nil {
+		return fmt.Errorf("parse migration options: %w", err)
+	}
+	commands := flags.Args()
+	if len(commands) > 1 || (len(commands) == 1 && commands[0] != "down") {
+		return errors.New("usage: migrate [--migrations-dir directory] [down]")
+	}
+	rollback := len(commands) == 1
+	if rollback && (os.Getenv("ALLOW_DB_ROLLBACK") != "true" || (os.Getenv("APP_ENV") != "development" && os.Getenv("APP_ENV") != "test")) {
+		return errors.New("rollback requires explicit authorization in development or test")
+	}
+	if strings.TrimSpace(*migrationsPath) == "" {
+		return errors.New("migrations directory is required")
+	}
+	migrationsDir, err := filepath.Abs(*migrationsPath)
+	if err != nil {
+		return fmt.Errorf("resolve migrations directory: %w", err)
+	}
+	info, err := os.Stat(migrationsDir)
+	if err != nil {
+		return fmt.Errorf("read migrations directory: %w", err)
+	}
+	if !info.IsDir() {
+		return errors.New("migrations path must be a directory")
+	}
 	databaseURL := os.Getenv("DATABASE_DIRECT_URL")
 	if databaseURL == "" {
 		databaseURL = os.Getenv("DATABASE_URL")
 	}
 	if databaseURL == "" {
 		return errors.New("DATABASE_DIRECT_URL or DATABASE_URL is required for migrations")
-	}
-	root, err := os.Getwd()
-	if err != nil {
-		return err
 	}
 	database, err := sql.Open("pgx", databaseURL)
 	if err != nil {
@@ -56,14 +82,7 @@ func run(args []string) error {
 	if err := goose.SetDialect("postgres"); err != nil {
 		return err
 	}
-	migrationsDir := filepath.Join(root, "db", "migrations")
-	if len(args) > 0 {
-		if len(args) != 1 || args[0] != "down" {
-			return errors.New("usage: migrate [down]")
-		}
-		if os.Getenv("ALLOW_DB_ROLLBACK") != "true" || (os.Getenv("APP_ENV") != "development" && os.Getenv("APP_ENV") != "test") {
-			return errors.New("rollback requires explicit authorization in development or test")
-		}
+	if rollback {
 		if err := goose.Down(database, migrationsDir); err != nil {
 			return fmt.Errorf("roll back migration: %w", err)
 		}

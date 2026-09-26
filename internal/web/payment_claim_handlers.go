@@ -60,7 +60,11 @@ func (s *Server) createBuyerPaymentClaim(w http.ResponseWriter, r *http.Request)
 	if view.Request.BuyerUserID != user.ID {
 		allowed := false
 		if s.runtime.Database != nil && view.Request.BuyerBusinessID != "" {
-			_ = s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT app.can_purchase($1::uuid, 'claim', 0)`, view.Request.BuyerBusinessID).Scan(&allowed)
+			scoped := &db.ScopedDatabase{Pool: s.runtime.Database.Raw()}
+			if err := scoped.QueryRow(db.WithTenantContext(r.Context(), user.ID, ""), `SELECT app.can_purchase($1::uuid, 'claim', 0)`, view.Request.BuyerBusinessID).Scan(&allowed); err != nil {
+				writeProblem(w, 503, "purchasing_authority_unavailable", "Your purchasing access could not be checked. Please try again.")
+				return
+			}
 		}
 		if !allowed {
 			writeProblem(w, 403, "purchasing_authority_required", "You do not have permission to submit payment claims for this purchase.")

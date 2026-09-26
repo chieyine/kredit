@@ -15,8 +15,14 @@ output="$archive_dir/backup.dump"
 # functions. Restoring an ACL-stripped archive can silently restore defaults.
 # The destination must have the same named roles provisioned before restore.
 # Runtime RLS-scoped credentials cannot produce a complete backup.
-pg_dump --format=custom --no-owner --file="$output" "$backup_database_url"
+dump_args=(--format=custom --no-owner --file="$output")
+if [[ -n "${BACKUP_DATABASE_ROLE:-}" ]]; then dump_args+=(--role="$BACKUP_DATABASE_ROLE"); fi
+pg_dump "${dump_args[@]}" "$backup_database_url"
 chmod 600 "$output"
+# Decode the entire archive without connecting to or restoring a database.
+# A readable table of contents alone cannot detect a truncated data block.
+pg_restore --list "$output" > "$archive_dir/contents.list"
+pg_restore --file=/dev/null "$output"
 if command -v sha256sum >/dev/null 2>&1; then
   sha256sum "$output" > "$output.sha256"
 elif command -v shasum >/dev/null 2>&1; then

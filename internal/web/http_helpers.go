@@ -58,7 +58,7 @@ func safeProblemDetail(status int, code, detail string) string {
 	}
 	detail = platformlogging.Redact(strings.TrimSpace(detail))
 	lower := strings.ToLower(detail + " " + code)
-	for _, marker := range []string{"postgres", "pgx", "sql:", "database", "connection", "provider", "secret", "password", "token", "stack", "panic", "http://", "https://"} {
+	for _, marker := range []string{"postgres", "pgx", "sql:", "sqlstate", "database", "connection", "provider", "secret", "password", "token", "stack", "panic", "http://", "https://"} {
 		if strings.Contains(lower, marker) {
 			return "the operation could not be completed"
 		}

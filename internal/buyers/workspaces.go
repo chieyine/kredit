@@ -83,7 +83,7 @@ func (s *Store) GetProfileByOrganization(ctx context.Context, userID, orgID stri
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, b := range s.businesses {
-		if b.WorkspaceID == orgID {
+		if b.WorkspaceID == orgID && b.OwnerUserID == userID {
 			return *b, nil
 		}
 	}

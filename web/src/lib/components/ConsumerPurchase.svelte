@@ -128,7 +128,7 @@
 				const found = pendingClaims.find((e) => e.id === related);
 				body.occurred_at = found?.occurred_at ?? new Date(occurred).toISOString();
 			}
-			const data = await mutation.send(endpoint, body);
+			const data = await mutation.send(endpoint, body, purchase);
 			sale = purchase(data);
 			message = doneMessage(action);
 			action = '';

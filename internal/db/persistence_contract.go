@@ -152,6 +152,9 @@ var RequiredPersistenceFunctions = []string{
 	"app.payment_mandate_by_provider(text,text)",
 	"app.trade_line_mandate(uuid,uuid,uuid,uuid)",
 	"app.delete_expired_idempotency_record(text,text)",
+	"app.idempotency_command_scope(text)",
+	"app.idempotency_authority_version(uuid)",
+	"app.public_payment_intent(uuid)",
 }
 
 var RequiredPersistenceColumns = []string{
@@ -160,6 +163,7 @@ var RequiredPersistenceColumns = []string{
 	"app.credit_requests.invoice_document_id", "app.notifications.provider_checked_at",
 	"app.agreement_versions.canonical_bytes",
 	"app.notifications.send_started_at",
+	"app.notifications.organization_audience",
 	"app.provider_webhook_inbox.lease_expires_at",
 	"app.mfa_methods.failed_attempts", "app.mfa_methods.locked_until", "app.notifications.priority", "app.notifications.supplier_organization_id", "app.sessions.last_seen_at",
 	"app.credit_requests.fee_terms", "app.drawdowns.fee_terms",
@@ -235,7 +239,7 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	// that lags lets a partially migrated database pass startup and serve
 	// traffic: at 167 it was 32 versions behind, which included the branch
 	// row-level security added in 189.
-	const requiredMigration = 206
+	const requiredMigration = 212
 	if version < requiredMigration {
 		return fmt.Errorf("database migrations are incomplete: version %d, require at least %d", version, requiredMigration)
 	}

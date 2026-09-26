@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"kredit/internal/platform/txcleanup"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -347,11 +349,9 @@ func (s *PostgresStore) findOrCreateUserTx(ctx context.Context, tx pgx.Tx, ident
 	return user, nil
 }
 
-func (s *PostgresStore) SessionFromToken(token string) (Session, User, error) {
+func (s *PostgresStore) SessionFromToken(token string) (session Session, user User, retErr error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	var session Session
-	var user User
 	var email, phone, displayName, status string
 	var revokedAt *time.Time
 	if err := s.pool.QueryRow(ctx, `
@@ -377,20 +377,30 @@ func (s *PostgresStore) SessionFromToken(token string) (Session, User, error) {
 		return Session{}, User{}, errors.New("session is invalid or expired")
 	}
 	user.ID, user.Email, user.Phone, user.DisplayName, user.Status = session.UserID, email, phone, displayName, status
-	tx, txErr := s.beginUserTx(ctx, user.ID)
-	if txErr == nil {
-		var verifiedAt *time.Time
-		if queryErr := tx.QueryRow(ctx, `SELECT mfa_verified_at FROM app.sessions WHERE id = $1`, session.ID).Scan(&verifiedAt); queryErr == nil && verifiedAt != nil {
-			session.MFAVerifiedAt = verifiedAt.UTC()
+	tx, err := s.beginUserTx(ctx, user.ID)
+	if err != nil {
+		return Session{}, User{}, fmt.Errorf("%w: %v", ErrSessionUnavailable, err)
+	}
+	defer txcleanup.Finish(ctx, tx, &retErr)
+	var verifiedAt *time.Time
+	if err := tx.QueryRow(ctx, `SELECT mfa_verified_at FROM app.sessions WHERE id = $1`, session.ID).Scan(&verifiedAt); err != nil {
+		return Session{}, User{}, fmt.Errorf("%w: %v", ErrSessionUnavailable, err)
+	}
+	if verifiedAt != nil {
+		session.MFAVerifiedAt = verifiedAt.UTC()
+	}
+	// Do not report an idle-deadline refresh until its transaction commits.
+	refresh := now.Sub(lastSeen) >= sessionIdleRefresh
+	if refresh {
+		if _, err := tx.Exec(ctx, `SELECT app.touch_session($1, $2)`, session.ID, now); err != nil {
+			return Session{}, User{}, fmt.Errorf("%w: %v", ErrSessionUnavailable, err)
 		}
-		// Refresh last-seen at most once per interval so the idle deadline does
-		// not add a write to every authenticated request.
-		if now.Sub(lastSeen) >= sessionIdleRefresh {
-			if _, execErr := tx.Exec(ctx, `SELECT app.touch_session($1, $2)`, session.ID, now); execErr == nil {
-				session.LastSeenAt = now
-			}
-		}
-		_ = tx.Commit(ctx)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Session{}, User{}, fmt.Errorf("%w: %v", ErrSessionUnavailable, err)
+	}
+	if refresh {
+		session.LastSeenAt = now
 	}
 	if user.LastAuthenticatedAt.Equal(time.Unix(0, 0).UTC()) {
 		user.LastAuthenticatedAt = time.Time{}

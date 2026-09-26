@@ -11,39 +11,14 @@ depth at which this audit actually examined it, and the findings that cite it.
 "not-reviewed" is a legitimate, expected outcome and is written as such.
 """
 from __future__ import annotations
-import hashlib, json, subprocess, sys, csv
+import argparse, hashlib, json, subprocess, sys, csv
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Depth of review actually performed, per the audit's coverage table.
-# read-in-full  : every line read
-# swept         : structure and interfaces read; targeted deep reads on risk constructs
-# not-reviewed  : present in the tree, not examined by this audit
-READ_IN_FULL_PREFIXES = (
-    "cmd/api/", "cmd/worker/",
-    "internal/ledger/", "internal/payments/", "internal/credit/", "internal/disputes/",
-    "internal/operations/", "internal/billing/", "internal/schedules/", "internal/tradelines/",
-    "internal/auth/", "internal/access/", "internal/db/", "internal/config/",
-    "internal/publictoken/", "internal/platform/", "internal/outbox/", "internal/platformsettings/",
-    "internal/jobs/",
-    "infra/", ".github/workflows/",
-)
-READ_IN_FULL_EXACT = {
-    "internal/web/server.go", "internal/web/runtime.go", "internal/web/auth_handlers.go",
-    "internal/web/http_helpers.go", "internal/web/organization_handlers.go",
-    "internal/web/mono_handlers.go", "internal/web/paystack_provider.go",
-    "internal/web/document_handlers.go", "internal/web/secure_link_handlers.go",
-    "internal/organizations/postgres.go", "internal/notifications/store.go",
-    "internal/buyers/postgres.go",
-    "web/src/hooks.server.ts", "web/src/service-worker.ts",
-    "web/src/lib/server/proxy-body.ts", "web/src/lib/server/page-cache.ts",
-    "web/src/lib/api/client.ts", "web/svelte.config.js", "web/vite.config.ts",
-    "web/package.json", "web/tsconfig.json", "package.json", "Taskfile.yml",
-    "go.mod", ".golangci.yml", ".dockerignore", ".gitignore",
-    "scripts/rls-policy-shape-check.sh", "infra/postgres/roles.sql",
-}
-SWEPT_PREFIXES = ("internal/", "cmd/", "db/", "web/src/", "scripts/", "tests/", "api/")
+# Reuse review depth only when explicit evidence names this exact file digest.
+# Path prefixes cannot prove that a newly added or edited file was inspected.
+DEFAULT_EVIDENCE = ROOT / "docs/launch-audit-2026-09-21/file-review-index.json"
 
 # Findings that cite each path. Written by hand from the audit report so the
 # register points back at the evidence rather than asserting a verdict.
@@ -101,17 +76,22 @@ cite("A2-029", "web/src/routes/admin/platform-settings/+page.svelte")
 cite("A2-030", "web/src/lib/components/Deck.svelte")
 
 
-def depth(path: str) -> str:
-    if path in READ_IN_FULL_EXACT or path.startswith(READ_IN_FULL_PREFIXES):
-        return "read-in-full"
-    if path.startswith("web/src/routes/") or path.startswith("web/src/lib/"):
-        return "swept"
-    if path.startswith(SWEPT_PREFIXES):
-        return "swept"
+def depth(path: str, digest: str, evidence: dict[str, dict]) -> str:
+    prior = evidence.get(path, {})
+    reviewed = prior.get("review_depth", "not-reviewed")
+    if prior.get("sha256") == digest and reviewed in {"read-in-full", "swept"}:
+        return reviewed
     return "not-reviewed"
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--review-evidence", type=Path, default=DEFAULT_EVIDENCE)
+    args = parser.parse_args()
+    evidence = {}
+    if args.review_evidence.is_file():
+        source = json.loads(args.review_evidence.read_text(encoding="utf-8"))
+        evidence = {entry["file"]: entry for entry in source.get("entries", [])}
     files = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True)
     paths = [p for p in files.stdout.decode().split("\0") if p]
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
@@ -131,7 +111,7 @@ def main() -> int:
             "bytes": len(raw),
             "lines": lines,
             "sha256": hashlib.sha256(raw).hexdigest(),
-            "review_depth": depth(rel),
+            "review_depth": depth(rel, hashlib.sha256(raw).hexdigest(), evidence),
             "findings": sorted(set(FINDINGS.get(rel, []))),
         })
     counts: dict[str, int] = {}

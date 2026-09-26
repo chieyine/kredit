@@ -31,11 +31,19 @@ USER nonroot:nonroot
 ENV APP_ENV=production
 
 FROM runtime-base AS worker
+ARG APP_BUILD_VERSION=development
+ARG APP_BUILD_REVISION=unknown
+ENV APP_VERSION=${APP_BUILD_VERSION} APP_REVISION=${APP_BUILD_REVISION}
+LABEL org.opencontainers.image.version=${APP_BUILD_VERSION} org.opencontainers.image.revision=${APP_BUILD_REVISION}
 EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["/app/kredit-worker", "-healthcheck"]
 ENTRYPOINT ["/app/kredit-worker"]
 
 FROM runtime-base AS api
+ARG APP_BUILD_VERSION=development
+ARG APP_BUILD_REVISION=unknown
+ENV APP_VERSION=${APP_BUILD_VERSION} APP_REVISION=${APP_BUILD_REVISION}
+LABEL org.opencontainers.image.version=${APP_BUILD_VERSION} org.opencontainers.image.revision=${APP_BUILD_REVISION}
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["/app/kredit-api", "-healthcheck"]
 ENTRYPOINT ["/app/kredit-api"]

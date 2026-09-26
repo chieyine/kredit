@@ -45,6 +45,7 @@
 	let fees = $state<{ total_fees_kobo: KoboValue } | null>(null);
 	let payments = $state<PaymentRow[]>([]);
 	let enterprise = $state<EnterpriseReport | null>(null);
+	let enterpriseError = $state('');
 	let sharePeriod = $state('today');
 	let loading = $state(true);
 	let error = $state('');
@@ -77,6 +78,15 @@
 	});
 	const reportsRequest = new LatestRequest(),
 		businessRequest = new LatestRequest();
+	function reportInteger(value: unknown, maximum = Number.MAX_SAFE_INTEGER): number {
+		if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > maximum)
+			throw new Error('Incomplete report figure');
+		return value;
+	}
+	function reportText(value: unknown): string {
+		if (typeof value !== 'string') throw new Error('Incomplete report label');
+		return value;
+	}
 	async function load() {
 		const request = reportsRequest.begin(),
 			scope = organizationID;
@@ -87,6 +97,7 @@
 		fees = null;
 		payments = [];
 		enterprise = null;
+		enterpriseError = '';
 		if (!scope) {
 			loading = false;
 			return;
@@ -125,36 +136,51 @@
 					(value) => {
 						const data = record(value);
 						const h = record(data.portfolio_health);
-						const rawB = Array.isArray(data.branch_exposures) ? data.branch_exposures : [];
+						if (data.organization_id !== scope || !Array.isArray(data.branch_exposures))
+							throw new Error('Incomplete report');
+						const generatedAt = reportText(data.generated_at);
+						const integrityHash = reportText(data.integrity_hash);
+						const healthRating = reportText(h.health_rating);
+						if (
+							!Number.isFinite(Date.parse(generatedAt)) ||
+							!/^[a-f0-9]{64}$/.test(integrityHash) ||
+							!['NO_DATA', 'EXCELLENT', 'HEALTHY', 'WATCH', 'STRESSED'].includes(healthRating)
+						)
+							throw new Error('Incomplete report');
+						const rawB = data.branch_exposures;
 						const branches: BranchExposure[] = rawB.map((value: unknown) => {
 							const b = record(value);
 							return {
-								branch_id: String(b.branch_id ?? ''),
-								branch_name: String(b.branch_name ?? ''),
-								territory: String(b.territory ?? ''),
+								branch_id: reportText(b.branch_id),
+								branch_name: reportText(b.branch_name),
+								territory: reportText(b.territory),
 								total_outstanding_kobo: kobo(b.total_outstanding_kobo),
 								ageing_buckets: Object.fromEntries(
-									Object.entries(record(b.ageing_buckets ?? {})).map(([k, v]) => [k, kobo(v)])
+									['0-30', '31-60', '61-90', '90+'].map((key) => [key, kobo(record(b.ageing_buckets)[key])])
 								),
-								customer_count: Number(b.customer_count ?? 0),
-								overdue_count: Number(b.overdue_count ?? 0)
+								customer_count: reportInteger(b.customer_count),
+								overdue_count: reportInteger(b.overdue_count)
 							};
 						});
 						return {
-							organization_id: String(data.organization_id ?? ''),
-							generated_at: String(data.generated_at ?? ''),
+							organization_id: scope,
+							generated_at: generatedAt,
 							portfolio_health: {
-								on_time_collection_bps: Number(h.on_time_collection_bps ?? 0),
-								disputed_ratio_bps: Number(h.disputed_ratio_bps ?? 0),
-								top_concentration_bps: Number(h.top_concentration_bps ?? 0),
-								health_rating: String(h.health_rating ?? 'HEALTHY')
+								on_time_collection_bps: reportInteger(h.on_time_collection_bps, 10000),
+								disputed_ratio_bps: reportInteger(h.disputed_ratio_bps, 10000),
+								top_concentration_bps: reportInteger(h.top_concentration_bps, 10000),
+								health_rating: healthRating
 							},
 							branch_exposures: branches,
-							integrity_hash: String(data.integrity_hash ?? '')
+							integrity_hash: integrityHash
 						};
 					},
 					{ signal: request.signal }
-				).catch(() => null)
+				).catch(() => {
+					if (request.current())
+						enterpriseError = 'The full risk report could not be verified. Refresh reports to try again.';
+					return null;
+				})
 			]);
 			if (!request.current() || organizationID !== scope) return;
 			summary = nextSummary;
@@ -277,6 +303,7 @@
 					method: 'POST',
 					signal: AbortSignal.timeout(20000),
 					credentials: 'include',
+					redirect: 'error',
 					headers: { ...csrfHeaders(), 'Idempotency-Key': idempotencyKey() }
 				}
 			);
@@ -284,6 +311,8 @@
 				error = 'Could not generate enterprise report. Please try again.';
 				return;
 			}
+			if (!response.headers.get('Content-Type')?.toLowerCase().startsWith('text/csv'))
+				throw new Error('Unexpected export');
 			const blob = await response.blob();
 			const objectURL = URL.createObjectURL(blob);
 			const link = document.createElement('a');
@@ -392,6 +421,7 @@
 			</div>
 		</section>
 
+		{#if enterpriseError}<p class="error" role="alert">{enterpriseError}</p>{/if}
 		{#if enterprise}
 			<section class="card enterprise-health">
 				<div class="health-header">
@@ -403,6 +433,7 @@
 						<span class={`health-badge badge-${enterprise.portfolio_health.health_rating.toLowerCase()}`}>
 							{(
 								{
+									NO_DATA: 'No data yet',
 									EXCELLENT: 'Strong',
 									HEALTHY: 'Healthy',
 									WATCH: 'Worth watching',
@@ -416,24 +447,22 @@
 				<div class="health-grid">
 					<article>
 						<span>Paid on time</span>
-						<strong>{((enterprise.portfolio_health.on_time_collection_bps ?? 10000) / 100).toFixed(1)}%</strong>
+						<strong>{(enterprise.portfolio_health.on_time_collection_bps / 100).toFixed(1)}%</strong>
 						<small>Paid before any late reminder</small>
 					</article>
 					<article>
 						<span>Under dispute</span>
-						<strong>{((enterprise.portfolio_health.disputed_ratio_bps ?? 0) / 100).toFixed(1)}%</strong>
+						<strong>{(enterprise.portfolio_health.disputed_ratio_bps / 100).toFixed(1)}%</strong>
 						<small>Of what you are owed</small>
 					</article>
 					<article>
 						<span>Largest customer</span>
-						<strong>{((enterprise.portfolio_health.top_concentration_bps ?? 0) / 100).toFixed(1)}%</strong>
+						<strong>{(enterprise.portfolio_health.top_concentration_bps / 100).toFixed(1)}%</strong>
 						<small>Share owed by one customer</small>
 					</article>
 					<article>
 						<span>Report fingerprint</span>
-						<strong class="hash-code"
-							>{enterprise.integrity_hash ? `${enterprise.integrity_hash.slice(0, 8)}…` : 'Verified'}</strong
-						>
+						<strong class="hash-code">{enterprise.integrity_hash.slice(0, 8)}…</strong>
 						<small>Changes if any figure here changes</small>
 					</article>
 				</div>
@@ -463,10 +492,10 @@
 										<td><strong>{branch.branch_name || branch.branch_id}</strong></td>
 										<td>{branch.territory || 'National'}</td>
 										<td>{branch.customer_count} ({branch.overdue_count} late)</td>
-										<td>{money(branch.ageing_buckets['0-30'] ?? 0)}</td>
-										<td>{money(branch.ageing_buckets['31-60'] ?? 0)}</td>
-										<td>{money(branch.ageing_buckets['61-90'] ?? 0)}</td>
-										<td>{money(branch.ageing_buckets['90+'] ?? 0)}</td>
+										<td>{money(branch.ageing_buckets['0-30'])}</td>
+										<td>{money(branch.ageing_buckets['31-60'])}</td>
+										<td>{money(branch.ageing_buckets['61-90'])}</td>
+										<td>{money(branch.ageing_buckets['90+'])}</td>
 										<td class="total-col">{money(branch.total_outstanding_kobo)}</td>
 									</tr>
 								{/each}

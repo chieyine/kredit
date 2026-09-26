@@ -98,15 +98,22 @@ func (s Store) Read(ctx context.Context, user, org string) (Inbox, error) {
 	rows.Close()
 
 	drows, err := tx.Query(ctx, `SELECT COALESCE(NULLIF(customer.trading_name,''),customer.legal_name,'Business customer'),a.id::text,a.drawdown_id::text,a.state,a.requested_by::text,COALESCE(a.decided_by::text,''),a.reason,a.created_at,a.proposal,(a.fingerprint<>app.drawdown_approval_fingerprint(d) OR d.state NOT IN ('PENDING_BUYER_CONFIRMATION','BUYER_CONFIRMED')) FROM app.tradeline_drawdown_approvals a JOIN app.drawdowns d ON d.id=a.drawdown_id JOIN app.trade_lines tl ON tl.id=d.trade_line_id LEFT JOIN app.supplier_customers($1::uuid) customer ON customer.buyer_business_id=tl.buyer_business_id WHERE a.organization_id=$1::uuid ORDER BY (a.state='pending') DESC,a.created_at DESC,a.id DESC LIMIT 100`, org)
-	if err == nil {
-		defer drows.Close()
-		for drows.Next() {
-			var a Approval
-			if err = drows.Scan(&a.CustomerName, &a.ID, &a.DrawdownID, &a.State, &a.RequestedBy, &a.DecidedBy, &a.Reason, &a.CreatedAt, &a.Proposal, &a.Stale); err == nil {
-				a.Kind = "drawdown"
-				out.Approvals = append(out.Approvals, a)
-			}
+	if err != nil {
+		return out, err
+	}
+	for drows.Next() {
+		var a Approval
+		if err = drows.Scan(&a.CustomerName, &a.ID, &a.DrawdownID, &a.State, &a.RequestedBy, &a.DecidedBy, &a.Reason, &a.CreatedAt, &a.Proposal, &a.Stale); err != nil {
+			drows.Close()
+			return out, err
 		}
+		a.Kind = "drawdown"
+		out.Approvals = append(out.Approvals, a)
+	}
+	err = drows.Err()
+	drows.Close()
+	if err != nil {
+		return out, err
 	}
 	out.Reviewers, err = readReviewerLimits(ctx, tx, org)
 	return out, err
@@ -262,6 +269,9 @@ func (s Store) DecideDrawdown(ctx context.Context, user, org, id, decision, reas
 		if existingState == decision && reviewer == user && existingReason == reason {
 			return nil
 		}
+		return ErrConflict
+	}
+	if state != "PENDING_BUYER_CONFIRMATION" && state != "BUYER_CONFIRMED" {
 		return ErrConflict
 	}
 	tag, err := tx.Exec(ctx, `UPDATE app.tradeline_drawdown_approvals SET state=$3,decided_by=$4::uuid,reason=$5,decided_at=now() WHERE organization_id=$1::uuid AND id=$2::uuid AND state='pending' AND requested_by<>$4::uuid AND fingerprint=$6`, org, id, decision, user, reason, fingerprint)

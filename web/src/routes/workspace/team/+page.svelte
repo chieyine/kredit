@@ -205,7 +205,9 @@
 								>
 							</div>{/if}
 					</article>{/each}
-			</div>{:else}<p>You have not added any worker yet.</p>{/if}
+			</div>{:else if error}<p>The staff list could not be verified. Refresh the team to try again.</p>{:else}<p>
+				You have not added any worker yet.
+			</p>{/if}
 	</section>
 </main>
 

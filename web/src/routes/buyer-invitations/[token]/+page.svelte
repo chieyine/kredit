@@ -59,6 +59,7 @@
 		const request = reads.begin();
 		loading = true;
 		error = '';
+		linkGone = false;
 		preview = null;
 		try {
 			const result = await checkedJSON(
@@ -159,6 +160,7 @@
 		const token = page.params.token ?? '';
 		untrack(() => {
 			activeToken = token;
+			workspaceID = '';
 			consentsAccepted = false;
 			acceptance = null;
 			challengeId = '';

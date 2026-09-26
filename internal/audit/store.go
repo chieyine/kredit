@@ -133,7 +133,7 @@ func (s *PostgresStore) Append(event Event) Event {
 	defer cancel()
 	saved, err := s.Record(ctx, event)
 	if err != nil {
-		slog.Error("audit event persistence failed", "action", event.Action, "resource_type", event.ResourceType, "error", logging.Redact(err.Error()))
+		slog.Error("audit event persistence failed", "action", event.Action, "resource_type", event.ResourceType, "error", logging.SafeError(err))
 	}
 	return saved
 }

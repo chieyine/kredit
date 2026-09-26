@@ -3,6 +3,7 @@
 	import { adminPost } from '$lib/admin-client';
 	import { loadOnboardingSettings, settingsProfile } from '$lib/api/onboarding-settings';
 	import { formatKobo, parseNaira, nairaInput } from '$lib/money';
+	import { kobo } from '$lib/records';
 	let organizationName = '',
 		orgID = '',
 		profile: Record<string, unknown> = {},
@@ -11,7 +12,7 @@
 		loadError = '',
 		busy = false,
 		loading = true;
-	let limitNaira = 5000000,
+	let limitNaira = '',
 		days = 30,
 		grace = 48;
 	async function load() {
@@ -23,10 +24,11 @@
 			organizationName = result.organizationName;
 			profile = result.profile;
 			permissions = result.permissions;
-			if (typeof profile.default_credit_limit_kobo === 'number')
-				limitNaira = Number(nairaInput(profile.default_credit_limit_kobo));
-			if (typeof profile.default_payment_days === 'number') days = profile.default_payment_days;
-			if (typeof profile.default_grace_hours === 'number') grace = profile.default_grace_hours;
+			limitNaira = nairaInput(kobo(profile.default_credit_limit_kobo));
+			if (!Number.isSafeInteger(profile.default_payment_days) || !Number.isSafeInteger(profile.default_grace_hours))
+				throw new Error('The saved credit terms could not be verified. Refresh before changing them.');
+			days = Number(profile.default_payment_days);
+			grace = Number(profile.default_grace_hours);
 		} catch (cause) {
 			loadError = cause instanceof Error ? cause.message : 'We could not load these settings.';
 		} finally {
@@ -75,8 +77,7 @@
 			{#if permissions.credit_policy}<label
 					>Most one customer should owe you at once (₦)<input
 						disabled={busy}
-						type="number"
-						min="1"
+						inputmode="decimal"
 						bind:value={limitNaira}
 					/></label
 				><label
@@ -95,7 +96,8 @@
 						max="720"
 						bind:value={grace}
 					/></label
-				><button disabled={busy || limitNaira <= 0} onclick={save}>{busy ? 'Saving…' : 'Save these choices'}</button
+				><button disabled={busy || parseNaira(limitNaira) <= 0} onclick={save}
+					>{busy ? 'Saving…' : 'Save these choices'}</button
 				>{:else}<dl class="terms">
 					<div>
 						<dt>Most one customer should owe you at once</dt>

@@ -24,9 +24,9 @@ fi
 printf 'Running database migrations from: %s\n' "$migrations_dir"
 
 if [[ -x "$root_dir/bin/kredit-migrate" ]]; then
-  "$root_dir/bin/kredit-migrate"
+  "$root_dir/bin/kredit-migrate" --migrations-dir "$migrations_dir"
 else
-  go run "$root_dir/cmd/migrate"
+  go run "$root_dir/cmd/migrate" --migrations-dir "$migrations_dir"
 fi
 
 printf 'All database migrations applied successfully.\n'

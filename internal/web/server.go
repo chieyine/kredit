@@ -198,6 +198,16 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 		if token := sessionTokenFromRequest(r); token != "" {
 			if session, user, err := s.runtime.Auth.SessionFromToken(token); err == nil {
 				scope += " user:" + user.ID + " session:" + session.ID + " aal:" + session.AuthenticationLevel
+				freshMFA := !session.MFAVerifiedAt.IsZero() && time.Since(session.MFAVerifiedAt) <= 15*time.Minute
+				scope += " mfa_fresh:" + strconv.FormatBool(freshMFA)
+				if s.runtime.Database != nil {
+					var authority string
+					if err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT app.idempotency_authority_version($1::uuid)`, user.ID).Scan(&authority); err != nil {
+						writeProblem(w, http.StatusServiceUnavailable, "authorization_unavailable", "Current permissions could not be verified")
+						return
+					}
+					scope += " authority:" + authority
+				}
 				if (strings.HasPrefix(r.URL.Path, "/api/v1/ops/") || strings.HasPrefix(r.URL.Path, "/api/v1/identity/checks/")) && s.runtime.Database != nil {
 					var roles string
 					if err := s.runtime.Database.Raw().QueryRow(r.Context(), `SELECT COALESCE(string_agg(role,',' ORDER BY role),'') FROM app.platform_role_assignments WHERE user_id=$1::uuid AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now())`, user.ID).Scan(&roles); err != nil {
@@ -237,6 +247,10 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 		}
 		record, existing, err := s.runtime.Idempotency.Reserve(r.Context(), scope, key, idempotency.HashRequest(r.Method, r.URL.Path, body, runtimeDomainKey(s.config.TokenHashKey, s.config.SessionSigningKey, "idempotency-request")))
 		if err != nil {
+			if errors.Is(err, idempotency.ErrAmbiguous) {
+				writeProblem(w, http.StatusConflict, "idempotency_ambiguous", "This request has conflicting prior records. Contact support with the request key before submitting it again.")
+				return
+			}
 			if errors.Is(err, idempotency.ErrKeyReused) {
 				writeProblem(w, http.StatusConflict, "idempotency_conflict", "idempotency key was reused for a different request")
 				return
@@ -255,6 +269,12 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 				}
 			}
 			if sessionTokenFromRequest(r) != "" && !s.requireCSRF(w, r) {
+				return
+			}
+			// Deduplication survives session and authority changes. Response
+			// disclosure does not: fetch the resource through its current read gate.
+			if record.Scope != scope {
+				writeProblem(w, http.StatusConflict, "idempotency_access_changed", "This request was already recorded under earlier access. Refresh the record to check its result before making another change.")
 				return
 			}
 			if record.CompletedAt.IsZero() {

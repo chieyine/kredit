@@ -271,6 +271,8 @@ func (s *Store) RecordReceipt(ctx context.Context, org, actor, id string, in Rec
 	}
 	in.Reference = strings.TrimSpace(in.Reference)
 	in.Evidence = strings.TrimSpace(in.Evidence)
+	// Exact replays must compare at the precision persisted by PostgreSQL.
+	in.ReceivedAt = in.ReceivedAt.UTC().Truncate(time.Microsecond)
 	if len(in.Reference) < 3 || len(in.Reference) > 200 || len(in.Evidence) < 20 || len(in.Evidence) > 2000 || in.Amount <= 0 || in.ReceivedAt.IsZero() || in.ReceivedAt.After(time.Now().Add(time.Minute)) {
 		return Invoice{}, errors.New("provide the received amount, bank reference, date and evidence")
 	}

@@ -282,7 +282,7 @@ resource "kubernetes_deployment_v1" "web" {
           }
           readiness_probe {
             http_get {
-              path = "/"
+              path = "/healthz"
               port = "http"
             }
             initial_delay_seconds = 5
@@ -290,7 +290,7 @@ resource "kubernetes_deployment_v1" "web" {
           }
           liveness_probe {
             http_get {
-              path = "/"
+              path = "/healthz"
               port = "http"
             }
             initial_delay_seconds = 20

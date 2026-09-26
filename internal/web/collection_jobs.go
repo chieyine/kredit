@@ -22,6 +22,11 @@ func (r *Runtime) EnqueueCollectionWork(ctx context.Context, cfg config.Config) 
 	if r.Database == nil || r.WebhookJobs == nil {
 		return nil
 	}
+	// Existing bank requests must be reconciled even when unrelated maintenance
+	// or policy reads fail. Discover these jobs before any new-work prerequisite.
+	if err := r.enqueueTenantCollectionPages(ctx, `SELECT resource_id,organization_id::text FROM app.collection_attempt_work_page($1,100)`, jobs.OpReconcileProvider); err != nil {
+		return err
+	}
 	if err := (&consumer.Store{Pool: r.Database.Raw()}).EnqueueReminders(ctx); err != nil {
 		return err
 	}
@@ -73,15 +78,11 @@ func (r *Runtime) EnqueueCollectionWork(ctx context.Context, cfg config.Config) 
 		}
 	}
 
-	err := r.enqueueTenantCollectionPages(ctx, `SELECT resource_id,organization_id::text FROM app.collection_attempt_work_page($1,100)`, jobs.OpReconcileProvider)
-	if err != nil {
-		return err
-	}
-	if _, err = r.Database.Raw().Exec(ctx, `SELECT app.enqueue_due_payment_notices($1)`, int(policy.UpcomingNoticeDays)); err != nil {
+	if _, err := r.Database.Raw().Exec(ctx, `SELECT app.enqueue_due_payment_notices($1)`, int(policy.UpcomingNoticeDays)); err != nil {
 		return err
 	}
 	if r.Mandates != nil {
-		if _, err = r.Database.Raw().Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) SELECT 'payment_mandate',id::text,'notification.requested',jsonb_build_object('event','MANDATE_EXPIRING','ends_at',ends_at),'mandate-expiring:'||id::text||':'||ends_at::text FROM app.payment_mandates WHERE state='active' AND ends_at>now() AND ends_at<=now()+make_interval(days=>$1) ON CONFLICT(idempotency_key) DO NOTHING`, int(policy.MandateNoticeDays)); err != nil {
+		if _, err := r.Database.Raw().Exec(ctx, `INSERT INTO app.outbox_events(aggregate_type,aggregate_id,event_type,payload,idempotency_key) SELECT 'payment_mandate',id::text,'notification.requested',jsonb_build_object('event','MANDATE_EXPIRING','ends_at',ends_at),'mandate-expiring:'||id::text||':'||ends_at::text FROM app.payment_mandates WHERE state='active' AND ends_at>now() AND ends_at<=now()+make_interval(days=>$1) ON CONFLICT(idempotency_key) DO NOTHING`, int(policy.MandateNoticeDays)); err != nil {
 			return err
 		}
 		if err := r.enqueueCollectionPages(ctx, `SELECT id::text,provider||':'||provider_mandate_id FROM app.payment_mandates WHERE state IN ('pending','active') AND (provider_updated_at IS NULL OR provider_updated_at<now()-interval '5 minutes') AND id::text>$1 ORDER BY id::text LIMIT 100`, "reconcile_mandate"); err != nil {

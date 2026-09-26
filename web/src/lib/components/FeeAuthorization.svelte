@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { readableDate } from '$lib/datetime';
-	import { checkedJSON, record, rows, text, publicError } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, record, rows, text, publicError } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { formatKobo } from '$lib/money';
 	let { org, admin = false, onselect }: { org: string; admin?: boolean; onselect?: (id: string) => void } = $props();
@@ -36,10 +36,14 @@
 			: `/api/v1/organizations/${encodeURIComponent(org)}/fee-authorizations`
 	);
 	let mutation: MutationIntent | null = null;
+	const reads = new LatestRequest();
+	let scopeVersion = 0;
 	async function load() {
+		const request = reads.begin();
 		error = '';
 		try {
-			const data = await checkedJSON(endpoint, record);
+			const data = await checkedJSON(endpoint, record, { signal: request.signal });
+			if (!request.current()) return;
 			available = data.available === true;
 			items = rows('authorizations', (value) => {
 				const r = record(value);
@@ -56,15 +60,27 @@
 				};
 			})(data);
 		} catch (cause) {
-			error = publicError(cause, 'Fee permissions could not be loaded.');
+			if (request.current()) error = publicError(cause, 'Fee permissions could not be loaded.');
 		}
 	}
 	$effect(() => {
+		scopeVersion += 1;
+		items = [];
+		available = false;
+		busy = false;
+		error = '';
+		message = '';
+		email = phone = address = bvn = ceiling = evidence = reference = action = '';
+		consent = reviewed = false;
+		mutation = null;
+		selected = null;
 		if (org) {
-			mutation = null;
-			selected = null;
 			void load();
 		}
+		return () => {
+			scopeVersion += 1;
+			reads.cancel();
+		};
 	});
 	function choose(item: Authorization, kind: string) {
 		selected = item;
@@ -76,6 +92,7 @@
 	}
 	async function send(payload: Record<string, unknown>) {
 		if (busy) return;
+		const version = scopeVersion;
 		busy = true;
 		error = '';
 		try {
@@ -84,15 +101,19 @@
 				if (record(value).saved !== true) throw new Error('Setup not confirmed');
 				return true;
 			});
+			if (version !== scopeVersion) return;
 			mutation = null;
 			selected = null;
 			message = 'Saved. Refresh the page after completing the bank permission.';
 			await load();
 		} catch (cause) {
-			error = publicError(cause, 'This request is unconfirmed. Refresh and review the saved setup before retrying.');
+			if (version === scopeVersion)
+				error = publicError(cause, 'This request is unconfirmed. Refresh and review the saved setup before retrying.');
 		} finally {
-			bvn = '';
-			busy = false;
+			if (version === scopeVersion) {
+				bvn = '';
+				busy = false;
+			}
 		}
 	}
 	function start() {

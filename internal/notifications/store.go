@@ -42,21 +42,24 @@ const (
 )
 
 type Event struct {
-	DeferDelivery  bool
-	ID             string
-	Type           string
-	RecipientID    string
-	Phone          string
-	Email          string
-	OrganizationID string
-	Priority       string
-	AmountKobo     int64
-	Currency       string
-	Date           time.Time
-	Reference      string
-	NextAction     string
-	SupportLink    string
-	SecurePath     string
+	// OrganizationAudience requires current company-wide financial access. It
+	// is separate from OrganizationID, which also appears on buyer notices.
+	OrganizationAudience bool
+	DeferDelivery        bool
+	ID                   string
+	Type                 string
+	RecipientID          string
+	Phone                string
+	Email                string
+	OrganizationID       string
+	Priority             string
+	AmountKobo           int64
+	Currency             string
+	Date                 time.Time
+	Reference            string
+	NextAction           string
+	SupportLink          string
+	SecurePath           string
 }
 type Message struct {
 	AuthenticationCode string
@@ -219,21 +222,22 @@ func (p *MockProvider) Messages() []Message {
 }
 
 type Store struct {
-	mu                 sync.Mutex
-	secret             []byte
-	providers          map[string]Provider
-	templates          map[string]string
-	preferences        map[string]Preferences
-	deliveries         map[string]*Delivery
-	dedupe             map[string]string
-	eventFingerprints  map[string]string
-	now                func() time.Time
-	newID              func() string
-	baseURL            string
-	pool               *db.ScopedDatabase
-	encryption         []byte
-	reminderConsent    func(context.Context, string, string) (bool, error)
-	optionalProcessing func(context.Context, string) (bool, error)
+	mu                          sync.Mutex
+	secret                      []byte
+	providers                   map[string]Provider
+	templates                   map[string]string
+	preferences                 map[string]Preferences
+	deliveries                  map[string]*Delivery
+	dedupe                      map[string]string
+	eventFingerprints           map[string]string
+	now                         func() time.Time
+	newID                       func() string
+	baseURL                     string
+	pool                        *db.ScopedDatabase
+	encryption                  []byte
+	reminderConsent             func(context.Context, string, string) (bool, error)
+	optionalProcessing          func(context.Context, string) (bool, error)
+	organizationRecipientAccess func(context.Context, string, string) (bool, error)
 }
 
 func NewStore(secret string) *Store {
@@ -363,7 +367,26 @@ func (s *Store) SetOptionalProcessing(check func(context.Context, string) (bool,
 	defer s.mu.Unlock()
 	s.optionalProcessing = check
 }
+
+func (s *Store) SetOrganizationRecipientAccess(check func(context.Context, string, string) (bool, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.organizationRecipientAccess = check
+}
+
 func (s *Store) reminderAllowed(ctx context.Context, event Event) (bool, error) {
+	if event.OrganizationAudience {
+		s.mu.Lock()
+		check := s.organizationRecipientAccess
+		s.mu.Unlock()
+		if check == nil || event.OrganizationID == "" {
+			return false, errors.New("organization notification authorization is unavailable")
+		}
+		allowed, err := check(ctx, event.RecipientID, event.OrganizationID)
+		if err != nil || !allowed {
+			return false, err
+		}
+	}
 	if event.Priority == PriorityCritical {
 		return true, nil
 	}
@@ -792,13 +815,14 @@ func (s *Store) deliverPostgres(ctx context.Context, event Event, channel string
 		delivery.State = StateSending
 	}
 	inserted := false
-	err = s.pool.QueryRow(ctx, `INSERT INTO app.notifications(id,recipient_id,channel,template,template_version,event_reference,state,body,scheduled_at,failed_at,failure_reason,secure_link,destination_ciphertext,lease_expires_at,supplier_organization_id,priority,send_started_at,event_fingerprint) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),$13,$14,NULLIF($15,'')::uuid,$16,CASE WHEN $17 THEN now() END,$18) ON CONFLICT(event_reference,channel) DO NOTHING RETURNING true`, delivery.ID, delivery.RecipientID, delivery.Channel, delivery.Template, delivery.TemplateVersion, delivery.EventID, delivery.State, delivery.Body, nullableTime(delivery.ScheduledAt), nullableTime(delivery.FailedAt), delivery.FailureReason, delivery.SecureLink, ciphertext, leaseTime(shouldSend, now), event.OrganizationID, defaultPriority(event.Priority), shouldSend, s.eventFingerprint(event)).Scan(&inserted)
+	err = s.pool.QueryRow(ctx, `INSERT INTO app.notifications(id,recipient_id,channel,template,template_version,event_reference,state,body,scheduled_at,failed_at,failure_reason,secure_link,destination_ciphertext,lease_expires_at,supplier_organization_id,priority,send_started_at,event_fingerprint,organization_audience) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),$13,$14,NULLIF($15,'')::uuid,$16,CASE WHEN $17 THEN now() END,$18,$19) ON CONFLICT(event_reference,channel) DO NOTHING RETURNING true`, delivery.ID, delivery.RecipientID, delivery.Channel, delivery.Template, delivery.TemplateVersion, delivery.EventID, delivery.State, delivery.Body, nullableTime(delivery.ScheduledAt), nullableTime(delivery.FailedAt), delivery.FailureReason, delivery.SecureLink, ciphertext, leaseTime(shouldSend, now), event.OrganizationID, defaultPriority(event.Priority), shouldSend, s.eventFingerprint(event), event.OrganizationAudience).Scan(&inserted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var fingerprint string
-		if err := s.pool.QueryRow(ctx, `SELECT COALESCE(event_fingerprint,'') FROM app.notifications WHERE event_reference=$1 AND channel=$2`, event.ID, channel).Scan(&fingerprint); err != nil {
+		var organizationAudience bool
+		if err := s.pool.QueryRow(ctx, `SELECT COALESCE(event_fingerprint,''),organization_audience FROM app.notifications WHERE event_reference=$1 AND channel=$2`, event.ID, channel).Scan(&fingerprint, &organizationAudience); err != nil {
 			return Delivery{}, err
 		}
-		if fingerprint != s.eventFingerprint(event) {
+		if fingerprint != s.eventFingerprint(event) || organizationAudience != event.OrganizationAudience {
 			return Delivery{}, errors.New("notification event belongs to a different or unverifiable intent")
 		}
 		existing, loadErr := s.loadPersistentDelivery(ctx, event.ID, channel)
@@ -870,6 +894,7 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 	var message Message
 	var ciphertext []byte
 	var organizationID, priority string
+	var organizationAudience bool
 	var attempt int
 	var sendStarted *time.Time
 	err := s.pool.QueryRow(ctx, `
@@ -883,9 +908,9 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 			(state='sending' AND lease_expires_at<=now())
 		)
 		RETURNING event_reference,recipient_id::text,channel,template,
-			template_version,body,COALESCE(secure_link,''),destination_ciphertext,COALESCE(supplier_organization_id::text,''),priority,delivery_attempts,send_started_at`, id).
+			template_version,body,COALESCE(secure_link,''),destination_ciphertext,COALESCE(supplier_organization_id::text,''),priority,delivery_attempts,send_started_at,organization_audience`, id).
 		Scan(&message.EventID, &message.RecipientID, &message.Channel, &message.Template,
-			&message.TemplateVersion, &message.Body, &message.SecureLink, &ciphertext, &organizationID, &priority, &attempt, &sendStarted)
+			&message.TemplateVersion, &message.Body, &message.SecureLink, &ciphertext, &organizationID, &priority, &attempt, &sendStarted, &organizationAudience)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A sent row or a lease owned by another worker is already complete from
 		// this job's perspective.
@@ -898,7 +923,7 @@ func (s *Store) DeliverScheduled(ctx context.Context, id string) error {
 	if err != nil {
 		return s.failDelivery(ctx, id, attempt, err)
 	}
-	allowed, err := s.reminderAllowed(ctx, Event{RecipientID: message.RecipientID, OrganizationID: organizationID, Type: message.Template, Priority: priority})
+	allowed, err := s.reminderAllowed(ctx, Event{OrganizationAudience: organizationAudience, RecipientID: message.RecipientID, OrganizationID: organizationID, Type: message.Template, Priority: priority})
 	if err != nil {
 		return s.failDelivery(ctx, id, attempt, err)
 	}

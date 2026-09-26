@@ -225,6 +225,9 @@ func (s *PostgresStore) DecideChange(ctx context.Context, id, actor, decision, r
 	defer func() { _ = tx.Rollback(ctx) }()
 	// Determine identity without returning private contents, then use consistent
 	// obligation -> schedule -> proposal locking across all financial mutations.
+	if err = db.SetTenantContext(ctx, tx); err != nil {
+		return err
+	}
 	var obligation, buyer string
 	if err = tx.QueryRow(ctx, `SELECT obligation_id::text,buyer_id::text FROM app.admin_change_requests WHERE id=$1::uuid`, id).Scan(&obligation, &buyer); err != nil {
 		return err

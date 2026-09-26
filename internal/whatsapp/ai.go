@@ -150,7 +150,7 @@ func (p *AIParser) ParseText(ctx context.Context, text string) (AIResult, error)
 		"contents": []map[string]any{
 			{
 				"parts": []map[string]any{
-					{"text": systemPrompt + "\n\nUser message: " + text},
+					{"text": p.datedPrompt() + "\n\nUser message: " + text},
 				},
 			},
 		},
@@ -186,7 +186,7 @@ func (p *AIParser) ParseAudio(ctx context.Context, audioBytes []byte, mimeType s
 			{
 				"parts": []map[string]any{
 					{
-						"text": systemPrompt + "\n\nListen to the voice note attached and extract the details:",
+						"text": p.datedPrompt() + "\n\nListen to the voice note attached and extract the details:",
 					},
 					{
 						"inlineData": map[string]string{
@@ -203,6 +203,10 @@ func (p *AIParser) ParseAudio(ctx context.Context, audioBytes []byte, mimeType s
 	}
 
 	return p.callGemini(ctx, reqBody)
+}
+
+func (p *AIParser) datedPrompt() string {
+	return systemPrompt + "\n\nCurrent date in Nigeria (Africa/Lagos): " + p.now().In(time.FixedZone("WAT", 60*60)).Format("2006-01-02")
 }
 
 func (p *AIParser) callGemini(ctx context.Context, payload map[string]any) (AIResult, error) {

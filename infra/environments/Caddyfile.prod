@@ -40,12 +40,12 @@ api.kredit.ng {
         header_up -CF-Connecting-IP
         header_up -True-Client-IP
         header_up -Forwarded
-        # The API verifies the HMAC on these, so a forged set is already
-        # rejected. Stripping them here means a forgery never reaches the
-        # check at all, and the only signer is the frontend proxy.
-        header_up -X-Kredit-Client-IP
-        header_up -X-Kredit-Client-Timestamp
-        header_up -X-Kredit-Client-Signature
+        # Preserve X-Kredit-Client-IP/Timestamp/Signature from the frontend.
+        # The API authenticates them using the shared signing key, request URI,
+        # method and timestamp. Removing them would collapse Vercel visitors
+        # onto the frontend's egress IP and a shared sign-in rate limit.
+        # Unsigned forwarding claims are replaced below; they remain distinct
+        # from this end-to-end authenticated envelope.
         header_up X-Real-IP {client_ip}
         header_up X-Forwarded-Proto {scheme}
 

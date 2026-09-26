@@ -17,7 +17,8 @@
 		error = $state(''),
 		loadError = $state(''),
 		notice = $state('');
-	let buyerUserID = $state(''),
+	let selectedCustomer = $state(''),
+		buyerUserID = $state(''),
 		buyerBusinessID = $state(''),
 		mandateID = $state(''),
 		limit = $state(''),
@@ -77,10 +78,16 @@
 			if (request.current()) loading = false;
 		}
 	}
-	function selectCustomer() {
-		buyerBusinessID = customers.find((item) => item.buyer_user_id === buyerUserID)?.buyer_business_id ?? '';
+	function selectCustomer(key: string) {
+		selectedCustomer = key;
+		const selected = customers.find((item) => customerKey(item) === key);
+		buyerUserID = selected?.buyer_user_id ?? '';
+		buyerBusinessID = selected?.buyer_business_id ?? '';
+		mandateID = '';
 	}
+	const customerKey = (item: Customer) => `${item.buyer_user_id}:${item.buyer_business_id}`;
 	function switchBusiness() {
+		selectedCustomer = '';
 		buyerUserID = '';
 		buyerBusinessID = '';
 		mandateID = '';
@@ -131,6 +138,7 @@
 				}
 			);
 			notice = `Customer limit saved: ${money(saved.approved_limit_kobo)}. Status: ${productLabel(saved.state)}.`;
+			selectedCustomer = '';
 			buyerUserID = '';
 			buyerBusinessID = '';
 			mandateID = '';
@@ -179,9 +187,13 @@
 			<p>Your customer must give bank debit permission first.</p>
 			<form onsubmit={create}>
 				<label
-					>Customer<select disabled={busy} bind:value={buyerUserID} onchange={selectCustomer} required
+					>Customer<select
+						disabled={busy}
+						bind:value={selectedCustomer}
+						onchange={(event) => selectCustomer(event.currentTarget.value)}
+						required
 						><option value="">Choose a customer</option>{#each customers as customer, i (i)}<option
-								value={customer.buyer_user_id}>{customer.legal_name || customer.trading_name}</option
+								value={customerKey(customer)}>{customer.legal_name || customer.trading_name}</option
 							>{/each}</select
 					></label
 				><label>Customer number<input disabled={busy} bind:value={buyerBusinessID} required /></label><label

@@ -182,7 +182,13 @@
 		busy = true;
 		error = '';
 		try {
-			await mutation.send(endpoint, body);
+			const preparing = record(body).action === 'prepare';
+			await mutation.send(endpoint, body, (value) => {
+				const result = record(value);
+				if (preparing ? typeof result.id !== 'string' || !result.id : result.saved !== true)
+					throw new Error('Referral action confirmation was incomplete.');
+				return result;
+			});
 			message = 'Saved. Reward qualification is refreshed automatically; payouts record completed bank transfers.';
 			selected = null;
 			await load();

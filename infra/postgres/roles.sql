@@ -393,6 +393,10 @@ GRANT EXECUTE ON FUNCTION app.order_evidence_visible(uuid),app.order_supplier_au
 -- Per-boot heartbeats; RLS limits deletion to this process kind's stale rows.
 GRANT SELECT,INSERT,UPDATE,DELETE ON app.runtime_process_instances TO kredit_app,kredit_worker;
 
+-- Stable HTTP command identities and the signed public payment-link projection.
+REVOKE ALL ON FUNCTION app.idempotency_command_scope(text),app.idempotency_authority_version(uuid),app.public_payment_intent(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.idempotency_command_scope(text),app.idempotency_authority_version(uuid),app.public_payment_intent(uuid) TO kredit_app;
+
 -- Most SECURITY DEFINER functions pin search_path without naming pg_temp, and
 -- PostgreSQL then searches pg_temp first for relations. A session that can
 -- create temporary tables could shadow an unqualified table inside such a

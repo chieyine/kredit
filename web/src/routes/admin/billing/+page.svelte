@@ -32,6 +32,14 @@
 		receivedAt = $state(''),
 		evidence = $state('');
 	let intent: MutationIntent | null = null;
+	function selectBusiness(id: string) {
+		org = id;
+		selected = null;
+		receipt = null;
+		intent = null;
+		reviewed = false;
+		message = '';
+	}
 	async function load() {
 		loading = true;
 		error = '';
@@ -164,16 +172,13 @@
 						onclick={() => choose(item)}>Review arrangement</button
 					>{:else}<p>Review the separate fee bank permission below before approving this arrangement.</p>{/if}<button
 					disabled={busy}
-					onclick={() => (org = item.organization_id)}>Open business fee setup</button
+					onclick={() => selectBusiness(item.organization_id)}>Open business fee setup</button
 				>
 			</article>{/each}<label
 			>Business bills<select
 				disabled={busy}
 				bind:value={org}
-				onchange={() => {
-					receipt = null;
-					selected = null;
-				}}
+				onchange={(event) => selectBusiness(event.currentTarget.value)}
 				><option value="">Choose a business</option>{#each invoiceBusinesses as item, i (i)}<option
 						value={item.organization_id}>{item.business_name}</option
 					>{/each}</select

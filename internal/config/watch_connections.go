@@ -36,7 +36,9 @@ func WatchConnections(ctx context.Context, applied Config, settings platformsett
 		instance, _ = os.Hostname()
 	}
 	instance = boundedRuntimeLabel(instance, "unnamed")
-	revision := "unknown"
+	// Container builds use a source archive without .git. The release image
+	// supplies its revision explicitly; native Git builds retain VCS metadata.
+	revision := boundedRuntimeLabel(os.Getenv("APP_REVISION"), "unknown")
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
 			if setting.Key == "vcs.revision" {

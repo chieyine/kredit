@@ -44,6 +44,8 @@ export function rows<T>(key: string, decode: Decoder<T>): Decoder<T[]> {
 }
 export function publicError(error: unknown, subject = 'these details'): string {
 	if (error instanceof UserFacingError) return error.message;
+	if (error instanceof RequestError && ['idempotency_access_changed', 'idempotency_ambiguous'].includes(error.code))
+		return refusal(error.status, error.code);
 	if (error instanceof RequestError && error.status === 401)
 		return 'Your session has ended. Sign in again to continue.';
 	// A missing second step is not a missing permission: say what to do.
@@ -58,17 +60,11 @@ export function publicError(error: unknown, subject = 'these details'): string {
 	return `We could not check ${subject}. Check your connection and try again.`;
 }
 export async function boundedFetch(url: string, init: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
-	const controller = new AbortController();
-	const abort = () => controller.abort();
-	if (init.signal?.aborted) abort();
-	else init.signal?.addEventListener('abort', abort, { once: true });
-	const timer = setTimeout(abort, timeoutMs);
-	try {
-		return await fetch(url, { ...init, credentials: 'include', cache: 'no-store', signal: controller.signal });
-	} finally {
-		clearTimeout(timer);
-		init.signal?.removeEventListener('abort', abort);
-	}
+	// fetch resolves when headers arrive. Keep cancellation active while the
+	// caller consumes the body, including cancellation after this function returns.
+	const deadline = AbortSignal.timeout(timeoutMs);
+	const signal = init.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
+	return fetch(url, { ...init, credentials: 'include', cache: 'no-store', signal });
 }
 /**
  * Problems whose detail the API writes for the person acting (for example a
@@ -77,6 +73,10 @@ export async function boundedFetch(url: string, init: RequestInit = {}, timeoutM
  */
 export const userCopyProblems = new Set(['purchase_action_invalid', 'purchase_invalid']);
 function refusal(status: number, code: string): string {
+	if (code === 'idempotency_access_changed')
+		return 'This request was already recorded. Refresh the record to check its result before making another change.';
+	if (code === 'idempotency_ambiguous')
+		return 'This request needs review. Contact support with the request key before submitting it again.';
 	if (status === 401) return 'Your session has ended. Sign in again to continue.';
 	if (code === 'step_up_required') return 'Confirm it is you with your authenticator code, then try again.';
 	if (status === 403) return 'Your role in this business does not allow this. Ask the owner if you need it.';
@@ -199,7 +199,7 @@ export function clearPrivateBrowserData(): void {
 				// outlive the session on a shared phone. The rule is now the reverse:
 				// our namespace is cleared, apart from the two device preferences that
 				// contain nothing about anybody.
-				if (!key || !/^kredit[.:]/.test(key)) continue;
+				if (!key || !/^kredit[.:_-]/.test(key)) continue;
 				if (key === 'kredit:low-data') continue;
 				store.removeItem(key);
 			}

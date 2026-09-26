@@ -69,7 +69,7 @@ func (s *PostgresStore) Create(ctx context.Context, input CreateInput) (Claim, e
 	}
 	var remaining ledger.Money
 	var supplier, currency string
-	// The narrow capability verifies ownership/current authority and holds the
+	// The narrow capability verifies current owner/delegated claim authority and holds the
 	// common obligation lock without giving buyers UPDATE rights to the debt.
 	err = tx.QueryRow(ctx, `SELECT outstanding_kobo,supplier_organization_id::text,currency FROM app.lock_buyer_payment_claim($1::uuid)`, input.ObligationID).Scan(&remaining, &supplier, &currency)
 	if err != nil {
@@ -306,7 +306,7 @@ func (s *PostgresStore) ReadForBuyer(ctx context.Context, id string) ([]Claim, e
 }
 
 func (s *PostgresStore) ReadForSupplier(ctx context.Context, id string) ([]Claim, error) {
-	return s.readList(db.WithTenantContext(ctx, "", id), `supplier_organization_id=$1::uuid`, id)
+	return s.readList(db.WithOrganizationContext(ctx, id), `supplier_organization_id=$1::uuid`, id)
 }
 
 func (s *PostgresStore) ReadForObligation(ctx context.Context, id string) ([]Claim, error) {

@@ -494,6 +494,14 @@ func (s *Store) GrantRole(ctx context.Context, actorID, userID, role, reason str
 	if !access.PlatformRole(role).Valid() || role == string(access.PlatformOwner) {
 		return TeamMember{}, errors.New("use the ownership transfer workflow for the owner role")
 	}
+	if userID == actorID {
+		return TeamMember{}, errors.New("another access administrator must change your own roles")
+	}
+	if role == string(access.PlatformAdministrator) || role == string(access.PlatformAccessAdministrator) {
+		if err = access.LockPlatformAuthority(ctx, tx, actorID, access.PermissionBreakGlass); err != nil {
+			return TeamMember{}, err
+		}
+	}
 	var item TeamMember
 	err = tx.QueryRow(ctx, `WITH assignment AS (
 		INSERT INTO app.platform_role_assignments(user_id,role,granted_by,reason,expires_at)
@@ -522,9 +530,24 @@ func (s *Store) RevokeRole(ctx context.Context, actorID, assignmentID string) er
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = access.LockPlatformAuthority(ctx, tx, actorID, access.PermissionManageAccess); err != nil {
+		return err
+	}
 	var userID, role string
 	if err = tx.QueryRow(ctx, `SELECT user_id::text,role FROM app.platform_role_assignments WHERE id=$1::uuid AND revoked_at IS NULL FOR UPDATE`, assignmentID).Scan(&userID, &role); err != nil {
-		return errors.New("active role assignment was not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("active role assignment was not found")
+		}
+		return err
+	}
+	permission := access.PermissionManageAccess
+	if role == string(access.PlatformOwner) {
+		permission = access.PermissionPlatformOwner
+	} else if role == string(access.PlatformAdministrator) || role == string(access.PlatformAccessAdministrator) {
+		permission = access.PermissionBreakGlass
+	}
+	if err = access.LockPlatformAuthority(ctx, tx, actorID, permission); err != nil {
+		return err
 	}
 	if userID == actorID && role == "platform_admin" {
 		var count int
