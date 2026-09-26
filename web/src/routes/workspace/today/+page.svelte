@@ -442,7 +442,7 @@
 							><span class="k-mark" class:person={row.kind === 'Person'} aria-hidden="true">{initials(row.name)}</span
 							><span class="k-who"
 								><strong>{row.name}</strong><small
-									>{#if row.late}<span class="k-tag">Past due</span>{' · '}{/if}{row.kind}{row.waiting
+									>{#if row.late}<span class="k-tag">Past due</span>&nbsp;·&nbsp;{/if}{row.kind}{row.waiting
 										? ` · ${row.waiting} not yet accepted`
 										: ''}</small
 								></span
