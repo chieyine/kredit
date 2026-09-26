@@ -1,5 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { PARKED, PARKED_REASON } from './parked';
+
+test.skip(PARKED, PARKED_REASON);
 const org = '00000000-0000-4000-8000-000000000001',
 	staff = '00000000-0000-4000-8000-000000000002',
 	branch = '00000000-0000-4000-8000-000000000003';

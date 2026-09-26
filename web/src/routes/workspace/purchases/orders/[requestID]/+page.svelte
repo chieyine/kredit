@@ -451,13 +451,8 @@
 			<section class="consent-panel">
 				<h2>Your decision</h2>
 				<p>
-					<a href={`/workspace/purchases?business_id=${encodeURIComponent(view.request.buyer_business_id)}`}
-						>Review identity checks for this business</a
-					>
-				</p>
-				<p>
-					Accepting records your agreement to this sale. Bank-debit permission is a separate step. Ask the seller to
-					correct anything that is wrong before you accept.
+					If anything here is wrong, do not accept. Tell the seller to correct it first. After you accept, you set up
+					how you will pay.
 				</p>
 				{#if !mayAccept}<p role="alert">
 						The complete agreement or fees could not be verified. Refresh before accepting.
@@ -522,21 +517,26 @@
 						<button class="primary" disabled={!mayAccept || blocked('accept')} onclick={() => openConfirm('accept')}
 							>Accept sale for <Money amountKobo={view.request.principal_kobo} /></button
 						><button class="secondary" disabled={blocked('decline')} onclick={() => openConfirm('decline')}
-							>Decline sale</button
+							>Decline</button
 						>
 					</div>{/if}
 			</section>
 		{/if}
 		{#if accepted && !['PAID', 'COMPLETED'].includes(view.request.state)}
 			<section class="bank-panel" aria-labelledby="bank-heading">
-				<h2 id="bank-heading">Bank-debit permission</h2>
+				<h2 id="bank-heading">How you will pay</h2>
 				{#if view.mandate?.status === 'ACTIVE'}<p class="permission-state">Permission active</p>
+					<p>
+						<a href={`/workspace/purchases/mandates?business_id=${encodeURIComponent(view.request.buyer_business_id)}`}
+							>Stop or check this bank debit →</a
+						>
+					</p>
 					{#if view.request.state === 'READY_TO_RELEASE'}<p>The seller can now arrange the goods.</p>{:else}<p>
 							Permission is active. Any debit still depends on the agreed date, amount and payment checks.
 						</p>{/if}
 				{:else}<p>
-						The sale is accepted, but bank permission is not ready. The seller must not release goods until Kredit
-						confirms readiness.
+						Link your bank so Kredit can collect the money on the due date. You can still pay earlier yourself, by card
+						or transfer, from this page.
 					</p>
 					<p>
 						{view.mandate

@@ -1,4 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
+import { PARKED, PARKED_REASON } from './parked';
+
+test.skip(PARKED, PARKED_REASON);
 const org = '00000000-0000-4000-8000-000000000071',
 	profile = '00000000-0000-4000-8000-000000000072',
 	staff = '00000000-0000-4000-8000-000000000073';

@@ -1,5 +1,6 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { readDraft, saveDraft } from '../src/lib/sale-drafts';
+import { PARKED, PARKED_REASON } from './parked';
 
 async function signedIn(page: Page, context: BrowserContext, baseURL?: string) {
 	await context.addCookies([
@@ -58,6 +59,7 @@ for (const [kind, path, goodsLabel] of [
 		context,
 		baseURL
 	}) => {
+		test.skip(PARKED, PARKED_REASON);
 		await signedIn(page, context, baseURL);
 		await page.goto(path);
 		const consent = page.getByRole('checkbox', { name: /Keep .*on this device/ });
@@ -102,6 +104,7 @@ for (const [kind, path, goodsLabel] of [
 }
 
 test('switching business does not transfer draft contents or draft consent', async ({ page, context, baseURL }) => {
+	test.skip(PARKED, PARKED_REASON);
 	await signedIn(page, context, baseURL);
 	await page.goto('/workspace/sales/quick?organization=org-a');
 	const consent = page.getByRole('checkbox', { name: /Keep this draft/ });

@@ -3,8 +3,7 @@
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import WorkspacePage from '$lib/components/WorkspacePage.svelte';
 
-	// /workspace/purchases/obligations/[id] reads an obligation id, not the credit request's.
-	// Linking the request id sent every row to a sale that does not exist.
+	// Every row opens the credit's own page: accept it, set up payment, pay, or report a transfer there.
 	type PurchaseView = {
 		request?: {
 			id?: string;
@@ -17,24 +16,27 @@
 		};
 		obligation?: { id?: string; payment_status?: string; outstanding_kobo?: KoboValue } | null;
 	};
-	const obligationHref = (view: PurchaseView) =>
-		view.obligation?.id ? `/workspace/purchases/obligations/${encodeURIComponent(view.obligation.id)}` : '';
+	const closed = ['CANCELLED', 'DECLINED', 'EXPIRED', 'CLOSED', 'PAID', 'COMPLETED', 'WRITTEN_OFF', 'DRAFT'];
+	const waiting = (view: PurchaseView) => ['SENT', 'BUYER_REVIEWING'].includes(view.request?.state ?? '');
+	const creditHref = (view: PurchaseView) =>
+		view.request?.id ? `/workspace/purchases/orders/${encodeURIComponent(view.request.id)}` : '';
 </script>
 
 <WorkspacePage
-	eyebrow="Money I owe"
-	title="What you owe"
-	description="For each sale: the goods, the payment day and what is left to pay."
+	eyebrow=""
+	title="What I owe"
+	description="Each supplier, what you took, how much is left and when to pay."
 	endpoint={buyerEndpoint('/api/v1/buyer/credit-requests')}
 	collectionKey="requests"
 	emptyTitle="You owe nothing right now"
-	emptyCopy="An obligation appears after the agreement’s acceptance, bank-permission and delivery conditions have been met."
-	searchPlaceholder="Seller or goods"
-	keep={(view: PurchaseView) => Boolean(view.obligation)}
-	rowTitle={(view) => view.request?.supplier_trading_name || view.request?.supplier_legal_name || 'Seller'}
-	rowDetail={(view) => [view.request?.goods_description, 'Open for current payment days'].filter(Boolean).join(' · ')}
+	emptyCopy="When a supplier gives you goods on credit, it shows here for you to accept."
+	searchPlaceholder="Supplier or goods"
+	keep={(view: PurchaseView) => !closed.includes(view.request?.state ?? '')}
+	rowTitle={(view) => view.request?.supplier_trading_name || view.request?.supplier_legal_name || 'Supplier'}
+	rowDetail={(view) =>
+		[view.request?.goods_description, waiting(view) ? 'Waiting for you to accept' : ''].filter(Boolean).join(' · ')}
 	rowStatus={(view) => view.obligation?.payment_status ?? view.request?.state ?? ''}
-	rowAmount={(view) => view.obligation?.outstanding_kobo ?? null}
+	rowAmount={(view) => view.obligation?.outstanding_kobo ?? view.request?.principal_kobo ?? null}
 	rowAmountLabel="Left to pay"
-	rowHref={obligationHref}
+	rowHref={creditHref}
 />

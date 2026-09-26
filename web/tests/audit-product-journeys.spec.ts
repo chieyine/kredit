@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Route, type BrowserContext } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { PARKED, PARKED_REASON } from './parked';
 
 const orgs = [
 	{ id: 'org-a', legal_name: 'Kora Wholesale', trading_name: 'Kora Wholesale' },
@@ -98,7 +99,7 @@ test('switching businesses cannot show an earlier balance under the new name', a
 	);
 	await page.goto('/workspace/today');
 	await page.getByRole('combobox', { name: 'Business', exact: true }).selectOption('org-b');
-	await expect(page.getByRole('heading', { name: 'Borno Supplies' })).toBeVisible();
+	await expect(page.locator('.task-heading .eyebrow')).toHaveText('Borno Supplies');
 	await expect(page.getByLabel('What you are owed')).toContainText('₦98,765.49');
 	finishA?.();
 	await expect(page.getByLabel('What you are owed')).not.toContainText('₦123,456.00');
@@ -212,19 +213,20 @@ test('failed sign-out is not presented as successful logout', async ({ page, con
 	expect((await context.cookies()).some((cookie) => cookie.name === 'kredit_session')).toBe(true);
 });
 
-test('quick sale uses the server timing preview and exact kobo', async ({ page, context, baseURL }) => {
+test('giving credit uses the server timing preview, exact kobo, and sends it', async ({ page, context, baseURL }) => {
 	await signedIn(page, context, baseURL);
 	await page.route('**/organizations/org-a/credit-terms/preview', (route) =>
 		send(route, {
-			due_date: '2026-09-18',
+			due_date: '2026-12-18',
 			grace_hours: 24,
-			collection_at: '2026-09-19T22:59:00Z',
+			collection_at: '2026-12-19T22:59:00Z',
 			timezone: 'Africa/Lagos',
 			cutoff: '23:59',
 			timing_mode: 'lagos_end_of_day'
 		})
 	);
 	let body: Record<string, unknown> | undefined;
+	let sent = false;
 	await page.route('**/organizations/org-a/credit-requests', async (route) => {
 		if (route.request().method() === 'POST') {
 			body = route.request().postDataJSON();
@@ -232,24 +234,27 @@ test('quick sale uses the server timing preview and exact kobo', async ({ page, 
 		}
 		return send(route, { requests: [] });
 	});
-	await page.goto('/workspace/sales/quick?organization=org-a');
+	await page.route('**/organizations/org-a/credit-requests/created-sale/send', (route) => {
+		sent = true;
+		return send(route, { request: { id: 'created-sale', state: 'SENT' } });
+	});
+	await page.goto('/workspace/give?organization=org-a');
+	await page.getByText('A business', { exact: true }).click();
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
-	await page.getByRole('button', { name: 'Continue', exact: true }).click();
-	await page.getByRole('textbox', { name: 'Goods and quantity' }).fill('40 cartons of cooking oil');
-	await page.getByRole('textbox', { name: 'Sale amount (₦)' }).fill('127,500.49');
-	await page.getByRole('button', { name: 'Continue', exact: true }).click();
-	await page.getByLabel('Agreed payment date').fill('2026-09-18');
-	await page.getByRole('button', { name: 'Continue', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Check your sale' })).toBeFocused();
-	await expect(page.locator('.sale-summary')).toContainText('₦127,500.49');
-	await page.getByRole('button', { name: 'Save draft sale' }).click();
+	await page.getByLabel('What goods?').fill('40 cartons of cooking oil');
+	await page.getByLabel('How much? (₦)').fill('127,500.49');
+	await page.getByLabel('Pay by').fill('2026-12-18');
+	await expect(page.locator('.summary')).toContainText('₦127,500.49');
+	await page.getByRole('button', { name: 'Send to customer' }).click();
 	await expect.poll(() => body).toBeTruthy();
 	expect(body).toMatchObject({
 		principal_kobo: 12750049,
-		collection_at: '2026-09-19T22:59:00Z',
+		collection_at: '2026-12-19T22:59:00Z',
 		timing_mode: 'lagos_end_of_day',
 		schedule_count: 1
 	});
+	await expect.poll(() => sent).toBe(true);
+	await expect(page).toHaveURL(/\/workspace\/sales\/created-sale\?organization=org-a&given=1$/);
 });
 
 test('exact typed pricing supports voluntary and partial repayment examples', async ({ page }) => {
@@ -305,7 +310,7 @@ test('native account menu traps focus and restores it on Escape', async ({ page,
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/workspace/settings');
 	const trigger = page
-		.getByRole('navigation', { name: 'Business workspace', exact: true })
+		.getByRole('navigation', { name: 'Your business', exact: true })
 		.getByRole('button', { name: 'Menu', exact: true });
 	await trigger.click();
 	const dialog = page.getByRole('dialog', { name: /menu$/i });
@@ -355,6 +360,7 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 	context,
 	baseURL
 }) => {
+	test.skip(PARKED, PARKED_REASON);
 	await signedIn(page, context, baseURL);
 	await page.route('**/api/v1/organizations/org-a/customers', (route) =>
 		send(route, {
@@ -415,13 +421,14 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 	});
 });
 
-test('full sale never presents an unavailable customer list as empty', async ({ page, context, baseURL }) => {
+test('giving credit never presents an unavailable customer list as empty', async ({ page, context, baseURL }) => {
 	await signedIn(page, context, baseURL);
 	await page.route('**/api/v1/organizations/org-a/customers', (route) =>
 		send(route, { code: 'financial_data_unavailable' }, 503)
 	);
-	await page.goto('/workspace/sales/new?advanced=1');
-	await expect(page.getByRole('alert')).toContainText('Customer list unavailable');
-	await expect(page.getByText('You have not added a customer yet.', { exact: true })).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Check terms', exact: true })).toBeDisabled();
+	await page.goto('/workspace/give?organization=org-a');
+	await page.getByText('A business', { exact: true }).click();
+	await expect(page.getByRole('alert')).toContainText('Your customers unavailable');
+	await expect(page.getByRole('heading', { name: 'New business customer' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Send to customer' })).toHaveCount(0);
 });

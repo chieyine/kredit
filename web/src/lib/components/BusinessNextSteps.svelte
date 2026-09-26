@@ -48,34 +48,23 @@
 	const query = $derived(`?organization=${encodeURIComponent(organizationID)}`);
 </script>
 
-<section class="next-steps" aria-label="Your next step">
-	{#if loading}<p role="status">Checking your next setup step…</p>
-	{:else if error}<h2>Check your business setup</h2>
-		<p>{error}</p>
-		<button onclick={() => load(organizationID)}>Check again</button><a href={`/workspace/onboarding${query}`}
-			>Open setup →</a
-		>
-	{:else if !ready}<p class="eyebrow">Before your first live sale</p>
-		<h2>Finish your selling setup.</h2>
-		<p>
-			{missing.length} step{missing.length === 1 ? '' : 's'} remaining. You can prepare your customer network while completing
-			the required checks.
-		</p>
-		{#if missing[0]}<a
-				class="primary"
-				href={`${missing[0].href}${missing[0].href.includes('?') ? '&' : '?'}organization=${encodeURIComponent(organizationID)}`}
-				>{missing[0].label} →</a
-			>{/if}<a href={`/workspace/onboarding${query}`}>See all setup steps</a>
-	{:else}<p class="eyebrow">Next customer</p>
-		<h2>Connect your next customer.</h2>
-		<p>
-			Invite a distributor or retailer, or create a personal offer for an individual consumer. Each trade still has its
-			own acceptance and payment checks.
-		</p>
-		<a class="primary" href={`/workspace/partners/customers/new${query}`}>Invite a business →</a><a
-			href={`/workspace/sales/consumers${query}`}>Sell to a consumer</a
-		>{/if}
-</section>
+{#if loading || error || !ready}<section class="next-steps" aria-label="Your next step">
+		{#if loading}<p role="status">Checking your setup…</p>
+		{:else if error}<h2>Check your business setup</h2>
+			<p>{error}</p>
+			<button onclick={() => load(organizationID)}>Check again</button><a href={`/workspace/onboarding${query}`}
+				>Open setup →</a
+			>
+		{:else}<p class="eyebrow">Before your first credit</p>
+			<h2>Finish setting up your business.</h2>
+			<p>{missing.length} thing{missing.length === 1 ? '' : 's'} left to do.</p>
+			{#if missing[0]}<a
+					class="primary"
+					href={`${missing[0].href}${missing[0].href.includes('?') ? '&' : '?'}organization=${encodeURIComponent(organizationID)}`}
+					>{missing[0].label} →</a
+				>{/if}<a href={`/workspace/onboarding${query}`}>See everything left</a>
+		{/if}
+	</section>{/if}
 
 <style>
 	.next-steps {

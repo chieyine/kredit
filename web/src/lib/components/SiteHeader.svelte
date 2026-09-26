@@ -3,9 +3,10 @@
 
 	const links = [
 		['How it works', '/how-it-works'],
-		['For business', '/manufacturers'],
-		['For consumers', '/consumers'],
-		['Pricing', '/pricing']
+		['Selling to individuals', '/consumers'],
+		['Pricing', '/pricing'],
+		['Questions', '/faq'],
+		['Contact', '/contact']
 	];
 	let menu: HTMLDetailsElement;
 	let scrolled = $state(false);

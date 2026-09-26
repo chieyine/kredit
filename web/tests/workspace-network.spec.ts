@@ -47,30 +47,25 @@ test.beforeEach(async ({ page, context, baseURL }) => {
 	});
 });
 
-test('Today keeps purchasing balances tied to the selected selling workspace', async ({ page }) => {
+test('Who owes me carries the selected business into every tab', async ({ page }) => {
 	await page.goto('/workspace/today?organization=org-b');
-	const balances = page.getByRole('region', { name: 'Supplier balances' });
-	await expect(balances).toContainText('₦250.00');
-	await expect(balances.getByRole('link')).toHaveAttribute('href', '/workspace/purchases?business_id=profile-1');
-	await page.getByRole('combobox', { name: 'Business', exact: true }).selectOption('org-a');
-	await expect(balances).toContainText('₦100.00');
-	await expect(balances).not.toContainText('₦250.00');
-	await expect(balances.getByRole('link')).toHaveAttribute('href', '/workspace/purchases?business_id=profile-0');
-});
-
-test('an unavailable purchasing profile never appears as a zero balance', async ({ page }) => {
-	await page.route('**/api/v1/buyer/businesses', (route) => route.fulfill({ json: { businesses: [] } }));
-	await page.goto('/workspace/today');
-	const balances = page.getByRole('region', { name: 'Supplier balances' });
-	await expect(balances).toContainText('No purchasing profile is available');
-	await expect(balances).not.toContainText('₦0.00');
-});
-
-test('distributor import preserves the originating business', async ({ page }) => {
-	await page.goto('/workspace/partners/import?organization=org-b');
-	await expect(page.getByRole('combobox', { name: 'Your business' })).toHaveValue('org-b');
-	await expect(page.getByRole('link', { name: 'Track invitations' })).toHaveAttribute(
+	await expect(page.getByRole('heading', { name: 'Who owes me', exact: true })).toBeVisible();
+	const tabs = page.getByRole('navigation', { name: 'Your business', exact: true });
+	await expect(tabs.getByRole('link', { name: 'Customers', exact: true })).toHaveAttribute(
 		'href',
-		'/workspace/partners/invitations?organization=org-b'
+		'/workspace/partners/customers?organization=org-b'
 	);
+	await expect(tabs.getByRole('link', { name: 'Give goods on credit', exact: true })).toHaveAttribute(
+		'href',
+		'/workspace/give?organization=org-b'
+	);
+	// Supplier balances moved off the seller's home to What I owe.
+	await expect(page.getByRole('region', { name: 'Supplier balances' })).toHaveCount(0);
+});
+
+test('a switched-off tool sends the person back and keeps the business', async ({ page }) => {
+	await page.goto('/workspace/partners/import?organization=org-b');
+	await expect(page).toHaveURL(/\/workspace\/partners\/customers\?organization=org-b$/);
+	await page.goto('/workspace/sales/quick?organization=org-b&goods=Rice');
+	await expect(page).toHaveURL(/\/workspace\/give\?organization=org-b&goods=Rice$/);
 });

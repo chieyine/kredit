@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { PARKED, PARKED_REASON } from './parked';
+
+test.skip(PARKED, PARKED_REASON);
 
 const header = 'source_reference,target,target_type,legal_name,trading_name,business_type,business_address,industry\n';
 const row = 'D001,buyer@example.test,email,Example Distributors,,limited_company,"Market Road, Lagos",food\n';

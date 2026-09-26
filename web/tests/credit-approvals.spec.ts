@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { PARKED, PARKED_REASON } from './parked';
+
+test.skip(PARKED, PARKED_REASON);
 
 type Role = 'owner' | 'finance';
 async function setup(page: Page, role: Role) {

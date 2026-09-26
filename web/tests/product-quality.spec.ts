@@ -21,8 +21,8 @@ test('public navigation is clear, complete and closes after a mobile choice', as
 	const menu = page.locator('.site-menu-disclosure');
 	await menu.locator('summary').click();
 	await expect(menu).toHaveAttribute('open', '');
-	await menu.getByRole('link', { name: 'For business' }).click();
-	await expect(page).toHaveURL(/\/manufacturers$/);
+	await menu.getByRole('link', { name: 'Selling to individuals' }).click();
+	await expect(page).toHaveURL(/\/consumers$/);
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	await expect(page.locator('.site-menu-disclosure')).not.toHaveAttribute('open', '');
 	const footer = page.locator('footer.site-footer');

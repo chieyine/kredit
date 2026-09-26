@@ -7,7 +7,7 @@ test('logged-out visitors are redirected before protected account pages render',
 	await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
 	await expect(page.locator('footer.site-footer')).toBeVisible();
 	await expect(page.locator('footer.site-footer').getByText('How it works')).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Business workspace', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('navigation', { name: 'Your business', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Payments received' })).toHaveCount(0);
 });
 
@@ -49,7 +49,7 @@ test('an invalid saved session shows only the account check before sign-in', asy
 	await page.goto('/workspace/money/received');
 	await expect(page.getByRole('heading', { name: 'Checking your account…' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Payments received' })).toHaveCount(0);
-	await expect(page.getByRole('navigation', { name: 'Business workspace', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('navigation', { name: 'Your business', exact: true })).toHaveCount(0);
 	await expect(page).toHaveURL(/\/signin\?next=%2Fworkspace%2Fmoney%2Freceived$/);
 });
 
@@ -80,16 +80,16 @@ test('an expired session cannot flash the next page during an account navigation
 		});
 	});
 	await page.goto('/workspace/settings');
-	await expect(page.getByRole('navigation', { name: 'Business workspace', exact: true })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Your business', exact: true })).toBeVisible();
 	await expect(
 		page
-			.getByRole('navigation', { name: 'Business workspace', exact: true })
+			.getByRole('navigation', { name: 'Your business', exact: true })
 			.getByRole('button', { name: 'Menu', exact: true })
 	).toBeVisible();
 	await page.getByRole('button', { name: 'Menu', exact: true }).click();
-	await page.getByRole('dialog').getByRole('link', { name: 'Reports', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Payments received' })).toHaveCount(0);
-	await expect(page).toHaveURL(/\/signin\?next=%2Fworkspace%2Freports$/);
+	await page.getByRole('dialog').getByRole('link', { name: 'Get help', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Money in' })).toHaveCount(0);
+	await expect(page).toHaveURL(/\/signin\?next=%2Fworkspace%2Fhelp$/);
 	await expect(page.getByRole('heading', { name: 'Start or sign in.' })).toBeVisible();
 	await expect(page.locator('footer.site-footer')).toBeVisible();
 });
@@ -114,7 +114,7 @@ test('the secure payment link is public but never shows the seller account', asy
 	await page.goto('/pay/example');
 	await expect(page.getByRole('heading', { name: 'Check what is left to pay.' })).toBeVisible();
 	await expect(page.getByText('₦250,000.00')).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Business workspace', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('navigation', { name: 'Your business', exact: true })).toHaveCount(0);
 });
 
 test('the signed-in payments page prioritizes money and items needing an answer', async ({
@@ -179,25 +179,26 @@ test('the signed-in payments page prioritizes money and items needing an answer'
 		})
 	);
 	await page.goto('/workspace/money/received');
-	await expect(page.getByRole('heading', { name: 'Payments received' })).toBeVisible();
-	await expect(page.getByRole('navigation', { name: 'Business workspace', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Money in' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Your business', exact: true })).toBeVisible();
 	const headerMenu = page
-		.getByRole('navigation', { name: 'Business workspace', exact: true })
+		.getByRole('navigation', { name: 'Your business', exact: true })
 		.getByRole('button', { name: 'Menu', exact: true });
 	await expect(headerMenu).toBeVisible();
-	const bottomNavigation = page.getByLabel('Business workspace main pages');
-	await expect(bottomNavigation.getByRole('link')).toHaveCount(5);
+	const bottomNavigation = page.getByLabel('Your business main pages');
+	// Three tabs and the one button: Who owes me, Give goods on credit, Customers, Money in.
+	await expect(bottomNavigation.getByRole('link')).toHaveCount(4);
 	await expect(bottomNavigation.getByRole('button')).toHaveCount(0);
 	await expect(page.locator('footer.site-footer')).toHaveCount(0);
 	await expect(page.getByLabel('Payment summary').getByText('₦400,000.00')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Yes, I got the money' })).toBeVisible();
 	await expect(page.getByText('Kano Retail')).toBeVisible();
 	await headerMenu.click();
-	const moreMenu = page.getByRole('dialog', { name: 'Business workspace menu' });
+	const moreMenu = page.getByRole('dialog', { name: 'Your business menu' });
 	await expect(moreMenu).toBeVisible();
-	await expect(moreMenu.getByRole('link', { name: 'Reports', exact: true })).toBeVisible();
-	await expect(moreMenu.getByText('Your business', { exact: true })).toBeVisible();
-	await expect(moreMenu.getByText('Your account', { exact: true })).toBeVisible();
+	await expect(moreMenu.getByRole('link', { name: 'What I owe suppliers', exact: true })).toBeVisible();
+	await expect(moreMenu.getByText('Business', { exact: true })).toBeVisible();
+	await expect(moreMenu.getByText('You', { exact: true })).toBeVisible();
 	await expect(moreMenu.getByRole('link', { name: /Settings/ })).toBeVisible();
 	await expect(moreMenu.getByRole('button', { name: 'Find a page' })).toHaveCount(0);
 });

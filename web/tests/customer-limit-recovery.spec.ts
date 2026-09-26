@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { PARKED, PARKED_REASON } from './parked';
+
+test.skip(PARKED, PARKED_REASON);
 const line = (id: string) => ({
 	id,
 	supplier_organization_id: 'org',

@@ -17,9 +17,9 @@
 <svelte:head><title>{title} — Kredit</title></svelte:head>
 <main class="shell workspace workspace-hub">
 	<header>
-		<p class="eyebrow">{eyebrow}</p>
+		{#if eyebrow}<p class="eyebrow">{eyebrow}</p>{/if}
 		<h1>{title}</h1>
-		<p class="lede">{description}</p>
+		{#if description}<p class="lede">{description}</p>{/if}
 	</header>
 	{#each groups as group, groupIndex (groupIndex)}<section>
 			<h2>{group.title}</h2>

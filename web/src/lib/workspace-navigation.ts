@@ -1,80 +1,25 @@
-/** One workspace, five everyday destinations. Specialist tools live inside each area. */
+/**
+ * Simple Kredit: three tabs and one button. See $lib/features for the tools
+ * that are switched off and where their addresses now lead.
+ */
 export const workspacePrimary: [string, string, string][] = [
-	['Today', '/workspace/today', 'home'],
-	['Sales', '/workspace/sales', 'sales'],
-	['Purchases', '/workspace/purchases', 'owe'],
-	['Partners', '/workspace/partners', 'customers'],
-	['Money', '/workspace/money', 'payments']
+	['Who owes me', '/workspace/today', 'home'],
+	['Give goods on credit', '/workspace/give', 'add'],
+	['Customers', '/workspace/partners/customers', 'customers'],
+	['Money in', '/workspace/money/received', 'payments']
 ];
 export const workspaceMore: [string, string, string][] = [
-	['Find a record', '/workspace/search', 'Your business'],
-	['Reports', '/workspace/reports', 'Your business'],
-	['Team', '/workspace/team', 'Your business'],
-	['Business setup', '/workspace/onboarding', 'Your business'],
-	['Settings', '/workspace/settings', 'Your business'],
-	['Messages', '/account/messages', 'Your account'],
-	['Personal purchases', '/personal/purchases', 'Your account'],
-	['Get help', '/workspace/help', 'Your account']
+	['Settings', '/workspace/settings', 'Business'],
+	['What I owe suppliers', '/workspace/purchases/obligations', 'Business'],
+	['My account', '/account', 'You'],
+	['Get help', '/workspace/help', 'You']
 ];
 export const workspaceLinks: [string, string][] = [...workspacePrimary, ...workspaceMore].map(([name, href]) => [
 	name,
 	href
 ]);
-export const workspaceSections: { root: string; label: string; links: [string, string][] }[] = [
-	{
-		root: '/workspace/sales',
-		label: 'Sales tools',
-		links: [
-			['Business sales', '/workspace/sales'],
-			['Credit approvals', '/workspace/sales/approvals'],
-			['Consumer sales', '/workspace/sales/consumers'],
-			['Customer limits', '/workspace/sales/limits'],
-			['Overdue', '/workspace/overdue'],
-			['Disputes', '/workspace/disputes']
-		]
-	},
-	{
-		root: '/workspace/purchases',
-		label: 'Purchasing tools',
-		links: [
-			['Overview', '/workspace/purchases'],
-			['Team permissions', '/workspace/purchases/permissions'],
-			['Staff setup', '/workspace/purchases/access'],
-			['Offers', '/workspace/purchases/orders'],
-			['Balances', '/workspace/purchases/obligations'],
-			['Buying limits', '/workspace/purchases/trade-lines'],
-			['Payments', '/workspace/purchases/payments'],
-			['Bank permissions', '/workspace/purchases/mandates'],
-			['History', '/workspace/purchases/history'],
-			['Disputes', '/workspace/purchases/disputes'],
-			['Payment changes', '/workspace/purchases/amendments'],
-			['Preferences', '/account']
-		]
-	},
-	{
-		root: '/workspace/partners',
-		label: 'Partner tools',
-		links: [
-			['Overview', '/workspace/partners'],
-			['Customers', '/workspace/partners/customers'],
-			['Invitations', '/workspace/partners/invitations'],
-			['Import contacts', '/workspace/partners/import'],
-			['Branches & managers', '/workspace/partners/operations'],
-			['Branch access', '/workspace/partners/access']
-		]
-	},
-	{
-		root: '/workspace/money',
-		label: 'Money tools',
-		links: [
-			['Overview', '/workspace/money'],
-			['Received', '/workspace/money/received'],
-			['Collections', '/workspace/money/collections'],
-			['Receiving account', '/workspace/settings/settlement'],
-			['Kredit fees', '/workspace/settings/billing']
-		]
-	}
-];
+/** No sub-tabs: each simple screen carries what it needs on the page itself. */
+export const workspaceSections: { root: string; label: string; links: [string, string][] }[] = [];
 
 /** Scope belongs in the URL so refreshes and shared workspace links stay explicit. */
 export function workspaceHref(href: string, current: URL): string {

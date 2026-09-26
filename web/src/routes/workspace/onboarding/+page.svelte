@@ -380,11 +380,7 @@
 				<a href={`/workspace/settings/settlement?organization=${encodeURIComponent(orgID)}`}
 					>Where we send your money →</a
 				><a href={`/workspace/settings/billing?organization=${encodeURIComponent(orgID)}`}>How you pay Kredit fees →</a
-				><a href={`/workspace/settings/credit-policy?organization=${encodeURIComponent(orgID)}`}
-					>Your normal sale settings →</a
-				><a href="/account/security">Extra sign-in safety →</a><a href="/workspace/team"
-					>Protect staff who handle money →</a
-				>
+				><a href="/account/security">Extra sign-in safety →</a>
 			</section>
 		</div>{/if}
 	<IdentityChecks subjectID={orgID} personalOnly={businessType === 'unregistered_business'} />

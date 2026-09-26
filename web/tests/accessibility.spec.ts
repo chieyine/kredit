@@ -174,10 +174,11 @@ test.beforeEach(async ({ page, context, baseURL }) => {
 for (const journey of [
 	['login', '/signin'],
 	['supplier onboarding', '/workspace/onboarding'],
-	['credit creation', '/workspace/sales/new?advanced=1'],
+	['credit creation', '/workspace/give?customer=buyer-a11y&customer_business=business-a11y'],
+	['credit to a person', '/workspace/give?kind=person'],
 	['buyer acceptance', '/workspace/purchases/orders/request-a11y'],
-	['goods release', '/workspace/sales/limits/line-a11y'],
-	['goods receipt and drawdown', '/workspace/purchases/trade-lines'],
+	['who owes me', '/workspace/today'],
+	['customers', '/workspace/partners/customers'],
 	['payments', '/workspace/money/received'],
 	['supplier disputes', '/workspace/disputes/dispute-a11y?organization=org-a11y'],
 	['settings', '/workspace/settings'],
@@ -192,8 +193,7 @@ for (const journey of [
 			await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
 		if (journey[0] === 'credit creation')
 			await expect(page.getByRole('combobox', { name: 'Customer', exact: true })).toBeVisible();
-		if (journey[0] === 'goods receipt and drawdown' || journey[0] === 'goods release')
-			await expect(page.getByText('Twenty bags of rice')).toBeVisible();
+		if (journey[0] === 'credit to a person') await expect(page.getByLabel('His WhatsApp number')).toBeVisible();
 		await expectNoSeriousViolations(page, journey[0]);
 	});
 }
@@ -212,13 +212,6 @@ test('keyboard, focus, reflow, reduced motion, and touch-target safeguards remai
 	await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
 	await page.keyboard.press('Enter');
 	await expect(page.locator('#main-content')).toBeFocused();
-	const search = page.getByRole('button', { name: /Search/ });
-	await search.click();
-	await expect(page.getByRole('searchbox', { name: 'Search pages' })).toBeFocused();
-	await page.keyboard.press('Shift+Tab');
-	expect(await page.locator('dialog').evaluate((element) => element.contains(document.activeElement))).toBe(true);
-	await page.keyboard.press('Escape');
-	await expect(search).toBeFocused();
 	// A 640 CSS-pixel viewport is the layout viewport produced by 200% browser zoom
 	// on the required 1280px desktop baseline.
 	await page.setViewportSize({ width: 640, height: 800 });
@@ -239,22 +232,22 @@ test('keyboard, focus, reflow, reduced motion, and touch-target safeguards remai
 	expect(tooSmall).toEqual([]);
 });
 
-test('credit validation focuses a linked error summary', async ({ page }) => {
-	await page.goto('/workspace/sales/new?advanced=1');
-	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-a11y:business-a11y');
-	await page.getByLabel('Sale amount (₦)').fill('0');
-	await page.getByLabel('What goods are they taking?').fill('Inventory');
-	await page.getByLabel('First payment date').fill('2026-10-30');
-	await page.getByLabel('Optional later collection time (Nigerian time)').fill('2026-10-31T09:00');
-	await page.getByRole('button', { name: 'Check terms', exact: true }).click();
-	const summary = page.getByRole('alert');
-	await expect(summary).toContainText('Check the customer, goods, amount and first payment date.');
-	await expect(summary).toBeFocused();
+test('giving credit stays closed until who, what, how much and when are filled', async ({ page }) => {
+	await page.goto('/workspace/give?customer=buyer-a11y&customer_business=business-a11y');
+	const send = page.getByRole('button', { name: 'Send to customer', exact: true });
+	await expect(send).toBeDisabled();
+	await page.getByLabel('What goods?').fill('Twenty bags of rice');
+	await page.getByLabel('How much? (₦)').fill('0');
+	await expect(send).toBeDisabled();
+	await page.getByLabel('How much? (₦)').fill('150000');
+	await expect(send).toBeEnabled();
+	await expect(page.getByText('owes you')).toBeVisible();
 });
 
 test('offline mode is announced and financial actions remain unqueued', async ({ page, context }) => {
 	await page.goto('/workspace/settings');
-	await expect(page.locator('.palette-trigger')).toHaveAttribute('data-ready', 'true');
+	await expect(page.locator('.account-gate')).toHaveCount(0);
+	await expect(page.locator('h1')).toBeVisible();
 	await context.setOffline(true);
 	await expect(
 		page.getByText('You are offline. New money actions cannot be sent. An earlier request may still be processing.')
@@ -263,7 +256,8 @@ test('offline mode is announced and financial actions remain unqueued', async ({
 });
 
 test('keyboard selection opens the focused command-palette result', async ({ page }) => {
-	await page.goto('/workspace/today');
+	// The admin area keeps page search; the seller's workspace is small enough not to need it.
+	await page.goto('/admin');
 	await page.getByRole('button', { name: /Search/ }).click();
 	const result = page.getByRole('option').nth(1);
 	const destination = await result.locator('span').innerText();
