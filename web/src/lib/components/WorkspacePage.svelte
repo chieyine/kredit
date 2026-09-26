@@ -318,8 +318,14 @@
 		gap: 0.25rem;
 		min-width: 0;
 	}
-	.who strong {
-		overflow-wrap: anywhere;
+	.who strong,
+	.who small {
+		display: -webkit-box;
+		overflow: hidden;
+		overflow-wrap: break-word;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 	}
 	.who small,
 	.amount small {
@@ -399,6 +405,14 @@
 		.record :global(.status) {
 			grid-column: 2 / -1;
 			justify-self: start;
+		}
+	}
+	@media (max-width: 400px) {
+		.record {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+		.record > :global(.k-mark) {
+			display: none !important;
 		}
 	}
 </style>

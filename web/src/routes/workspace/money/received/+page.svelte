@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fitText } from '$lib/fit-text';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { getContext, onMount } from 'svelte';
 	import { formatKobo, sumKobo } from '$lib/money';
@@ -263,7 +264,7 @@
 		<section class="k-ink" aria-label="Payment summary">
 			<div class="k-ink-bar"><span>Money in</span><span class="k-mono">Confirmed payments</span></div>
 			<p class="k-figure">
-				<small>Money received</small><strong><Money amountKobo={receivedTotal} /></strong>
+				<small>Money received</small><strong use:fitText><Money amountKobo={receivedTotal} /></strong>
 			</p>
 			<div class="k-stats">
 				<span class:alert={pendingClaims.length > 0}
@@ -643,6 +644,14 @@
 		}
 		.claim-actions {
 			grid-template-columns: 1fr;
+		}
+		.claim dl div {
+			display: grid;
+			gap: 0.15rem;
+		}
+		.claim dd {
+			text-align: left;
+			overflow-wrap: anywhere;
 		}
 	}
 </style>

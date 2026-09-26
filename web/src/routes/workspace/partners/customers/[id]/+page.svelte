@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fitText } from '$lib/fit-text';
 	import { readableDate } from '$lib/datetime';
 	import { page } from '$app/state';
 	import { formatKobo, type KoboValue } from '$lib/money';
@@ -154,7 +155,7 @@
 		<section class="k-ink stats" aria-label="This customer">
 			<div class="k-ink-bar"><span>Account with you</span><span class="k-mono">Statement</span></div>
 			<p class="k-figure">
-				<small>Owes you</small><strong>{money(history.current_active_principal_kobo)}</strong>
+				<small>Owes you</small><strong use:fitText>{money(history.current_active_principal_kobo)}</strong>
 			</p>
 			<div class="k-stats">
 				<span><small>Credits still open</small><strong>{history.active_obligations ?? 0}</strong></span>

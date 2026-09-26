@@ -1388,6 +1388,10 @@ th {
 	color: var(--kredit-ink);
 	font-weight: 650;
 }
+.product-route .k-ink :is(a.primary, button.primary, .primary-button),
+.product-route .k-ink :is(a.primary, button.primary, .primary-button):hover {
+	color: var(--kredit-ink);
+}
 .product-route :is(a.primary, button.primary, .primary-button):hover:not(:disabled) {
 	background: var(--kredit-orange-hover);
 	color: var(--kredit-ink);
@@ -1414,6 +1418,11 @@ th {
 	flex-wrap: wrap;
 	margin-bottom: 1.75rem;
 }
+.product-route .k-head > div {
+	flex: 1 1 auto;
+	min-width: 0;
+	max-width: 100%;
+}
 .product-route .k-head h1 {
 	margin: 0.35rem 0 0;
 	font-size: clamp(2.1rem, 5vw, 3rem);
@@ -1427,10 +1436,14 @@ th {
 	line-height: 1.55;
 }
 .product-route .k-eyebrow {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.55rem;
+	position: relative;
+	display: block;
+	max-width: 100%;
 	margin: 0;
+	padding-left: 1.05rem;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
 	color: var(--color-muted);
 	font-size: 0.78rem;
 	font-weight: 600;
@@ -1439,6 +1452,9 @@ th {
 }
 .product-route .k-eyebrow::before {
 	content: '';
+	position: absolute;
+	left: 0.1rem;
+	top: 0.42em;
 	width: 0.45rem;
 	height: 0.45rem;
 	background: var(--kredit-orange);
@@ -1478,6 +1494,7 @@ th {
 }
 .product-route .k-ink-bar {
 	display: flex;
+	white-space: nowrap;
 	align-items: center;
 	justify-content: space-between;
 	gap: 1rem;
@@ -1485,6 +1502,10 @@ th {
 	border-bottom: 1px solid var(--kredit-ink-line);
 	font-size: 0.85rem;
 	color: var(--kredit-cream-muted);
+}
+.product-route .k-ink-bar > span:first-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 .product-route .k-ink-bar code,
 .product-route .k-mono {
@@ -1505,12 +1526,13 @@ th {
 .product-route .k-figure strong {
 	display: block;
 	margin-top: 0.4rem;
+	overflow: hidden;
+	white-space: nowrap;
 	font-size: clamp(2.4rem, 8vw, 3.6rem);
 	font-weight: 650;
 	line-height: 1.05;
 	letter-spacing: -0.045em;
 	font-variant-numeric: tabular-nums;
-	overflow-wrap: anywhere;
 }
 .product-route .k-stats {
 	display: grid;
@@ -1533,6 +1555,7 @@ th {
 	font-size: 0.82rem;
 }
 .product-route .k-stats strong {
+	white-space: nowrap;
 	font-size: 1.25rem;
 	font-weight: 650;
 	letter-spacing: -0.02em;
@@ -1631,10 +1654,14 @@ th {
 	min-width: 0;
 }
 .product-route .k-who strong {
+	display: -webkit-box;
 	font-weight: 620;
+	line-height: 1.3;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: break-word;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
 }
 .product-route .k-who small {
 	color: var(--color-muted);
@@ -1729,6 +1756,29 @@ th {
 	white-space: nowrap;
 }
 
+@media (max-width: 400px) {
+	.product-route .k-stats {
+		grid-template-columns: 1fr !important;
+	}
+	.product-route .k-stats > * {
+		display: flex !important;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 1rem;
+		padding-block: 0.85rem;
+		border-left: 0 !important;
+		border-top: 1px solid var(--color-border);
+	}
+	.product-route .k-stats > :first-child {
+		border-top: 0;
+	}
+	.product-route .k-row {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+	.product-route .k-row > .k-mark {
+		display: none !important;
+	}
+}
 @media (max-width: 640px) {
 	.product-route .k-page {
 		padding-top: 1.5rem;
@@ -1740,11 +1790,17 @@ th {
 	.product-route .k-head .primary {
 		width: 100%;
 	}
+	.product-route .k-head > div {
+		flex: none;
+		width: 100%;
+	}
 	.product-route .k-stats {
 		grid-template-columns: 1fr 1fr;
 	}
 	.product-route .k-stats > :nth-child(3) {
-		display: none;
+		grid-column: 1 / -1;
+		border-left: 0;
+		border-top: 1px solid var(--color-border);
 	}
 	.product-route .k-row {
 		padding-inline: 1rem;

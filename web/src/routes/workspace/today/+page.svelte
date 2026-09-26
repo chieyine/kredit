@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fitText } from '$lib/fit-text';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { getContext, onMount } from 'svelte';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
@@ -390,10 +391,8 @@
 			<div class="k-ink-bar"><span>Your balance</span><span class="k-mono">{todayLabel}</span></div>
 			<p class="k-figure">
 				<small>Customers owe you</small>
-				{#if totalOwed !== null}<strong class="balance"><Money amountKobo={totalOwed} /></strong>{:else}<strong
-						class="balance"
-						aria-hidden="true">—</strong
-					>{/if}
+				{#if totalOwed !== null}<strong use:fitText class="balance"><Money amountKobo={totalOwed} /></strong
+					>{:else}<strong class="balance" aria-hidden="true">—</strong>{/if}
 			</p>
 			<div class="k-stats">
 				<span class:alert={pastDue > 0n}
@@ -438,7 +437,7 @@
 				/>{/each}
 			{#if owing.length}<div class="k-ledger record-list">
 					<div class="k-ledger-head"><span>Customer</span><span>Owes you</span></div>
-					{#each owing as row (row.key)}<a class="k-row record-row" class:late={row.late} href={row.href}
+					{#each owing.slice(0, 8) as row (row.key)}<a class="k-row record-row" class:late={row.late} href={row.href}
 							><span class="k-mark" class:person={row.kind === 'Person'} aria-hidden="true">{initials(row.name)}</span
 							><span class="k-who"
 								><strong>{row.name}</strong><small
@@ -453,6 +452,9 @@
 							></a
 						>{/each}
 				</div>
+				{#if owing.length > 8}<a class="see-all" href="/workspace/partners/customers{scopeQuery}"
+						>See all {owing.length} customers <span aria-hidden="true">→</span></a
+					>{/if}
 			{:else if sales.state === 'ready' && people.state === 'ready'}<div class="k-ledger k-empty">
 					<h3>Nobody owes you yet</h3>
 					<p>Give goods on credit and the customer shows here, with what he owes and when.</p>
@@ -486,6 +488,22 @@
 		font-weight: 600;
 		font-size: 0.9rem;
 		text-decoration: none;
+	}
+	.see-all {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		min-height: 3.25rem;
+		border: 1px solid var(--color-border);
+		border-top: 0;
+		background: var(--color-surface);
+		color: var(--color-primary);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.see-all:hover {
+		background: var(--color-surface-muted);
 	}
 	.pending {
 		color: var(--color-muted);

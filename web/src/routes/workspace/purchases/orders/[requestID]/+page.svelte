@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { fitText } from '$lib/fit-text';
+	import { workspaceHref } from '$lib/workspace-navigation';
 	import { actualPaymentTime } from '$lib/financial-input';
 	import SaleProgress from '$lib/components/SaleProgress.svelte';
 	import SaleCosts from '$lib/components/SaleCosts.svelte';
@@ -350,18 +352,23 @@
 </script>
 
 <svelte:head><title>Review your sale — Kredit</title></svelte:head>
-<main class="shell buyer-sale">
-	<header class="task-heading">
+<main class="shell k-page buyer-sale">
+	<a class="k-back" href={workspaceHref('/workspace/purchases/obligations', page.url)}
+		><span aria-hidden="true">←</span> What I owe</a
+	>
+	<header class="k-head">
 		<div>
-			<p class="eyebrow">Your credit sale</p>
-			<h1>{accepted ? 'Your sale record' : 'Review this sale'}</h1>
+			<p class="k-eyebrow">
+				{view ? `From ${view.request.supplier_legal_name || 'your supplier'}` : 'Goods on credit'}
+			</p>
+			<h1>{accepted ? 'Your credit' : 'Check this credit'}</h1>
 			<p>
 				{accepted
-					? 'What you agreed to, what has arrived and what is left to pay.'
-					: 'Check the goods, amount and payment date before agreeing.'}
+					? 'What you took, what you have paid and what is left.'
+					: 'Check the goods, the amount and the day to pay. If all is correct, accept it.'}
 			</p>
 		</div>
-		<a href="/legal/complaints">Get help</a>
+		<a class="help" href="/legal/complaints">Get help</a>
 	</header>
 	<ResourceNotice {resource} label="Sale" retry={() => load()} />
 	{#if actionError}<div class="action-error" role="alert">
@@ -372,6 +379,35 @@
 		</div>{/if}
 	{#if message}<p class="inline-notice" role="status">{message}</p>{/if}
 	{#if view}
+		<section class="k-ink record" aria-label="This credit">
+			<div class="k-ink-bar">
+				<span>Credit record · {productLabel(view.request.state)}</span><span class="k-mono"
+					>KR-{view.request.id.slice(0, 6).toUpperCase()}</span
+				>
+			</div>
+			<p class="k-figure">
+				<small>{view.obligation ? 'Left to pay' : 'You will pay'}</small><strong use:fitText
+					><Money amountKobo={view.obligation?.outstanding_kobo ?? view.request.principal_kobo} /></strong
+				>
+			</p>
+			<dl class="record-lines">
+				<div>
+					<dt>From</dt>
+					<dd>{view.request.supplier_legal_name || '—'}</dd>
+				</div>
+				<div>
+					<dt>Pay by</dt>
+					<dd>{dateLabel(view.request.due_date)}</dd>
+				</div>
+				<div class="wide">
+					<dt>Goods</dt>
+					<dd>{view.request.goods_description}</dd>
+				</div>
+			</dl>
+			{#if ['SENT', 'BUYER_REVIEWING'].includes(view.request.state)}<div class="record-action">
+					<a class="primary" href="#decision">Accept or decline <span aria-hidden="true">↓</span></a>
+				</div>{/if}
+		</section>
 		<SaleProgress {view} audience="buyer" />{#if view.request.buyer_user_id !== account.userID}<p class="inline-notice">
 				You are acting for this business. Your current purchasing permissions and acceptance limit control the actions
 				below. Bank authorizations and payment-management actions remain with the purchasing owner.
@@ -381,7 +417,6 @@
 				agreed terms using a system record. This is not recorded as your receipt confirmation. You can still report a
 				problem below.
 			</p>{/if}
-		<p class="state-label">{productLabel(view.request.state)}</p>
 		<section class="terms" aria-labelledby="terms-heading">
 			<h2 id="terms-heading">{accepted ? 'Agreed sale details' : 'What you are agreeing to'}</h2>
 			<dl class="sale-summary">
@@ -447,8 +482,11 @@
 				</details>{/if}
 		</section>
 		{#if ['SENT', 'BUYER_REVIEWING'].includes(view.request.state)}
-			<SaleCosts {view} />
-			<section class="consent-panel">
+			<details class="costs">
+				<summary>Fees on this credit</summary>
+				<SaleCosts {view} />
+			</details>
+			<section class="consent-panel" id="decision">
 				<h2>Your decision</h2>
 				<p>
 					If anything here is wrong, do not accept. Tell the seller to correct it first. After you accept, you set up
@@ -731,7 +769,6 @@
 		max-width: 48rem;
 		padding-bottom: 3rem;
 	}
-	.task-heading,
 	.section-heading {
 		display: flex;
 		align-items: baseline;
@@ -739,23 +776,11 @@
 		gap: 1rem;
 		margin: 1rem 0 1.5rem;
 	}
-	.task-heading h1 {
-		font-size: 2rem;
-		line-height: 1.2;
-		margin: 0.35rem 0;
-	}
-	.task-heading p {
-		color: var(--color-muted);
-		line-height: 1.6;
-	}
-	.task-heading > a {
-		white-space: nowrap;
-	}
 	.buyer-sale a {
 		color: var(--color-primary);
 	}
 	.buyer-sale a.primary {
-		color: var(--color-on-primary);
+		color: var(--kredit-ink);
 	}
 	.buyer-sale h2 {
 		font-size: 1.25rem;
@@ -785,16 +810,6 @@
 	.consent-panel,
 	.bank-panel {
 		border-top: 3px solid var(--color-primary);
-	}
-	.state-label {
-		display: inline-block;
-		background: var(--color-background);
-		color: var(--color-primary);
-		padding: 0.35rem 0.75rem;
-		border-radius: 0.3rem;
-		font-size: 0.9rem;
-		font-weight: 650;
-		margin: 0;
 	}
 	.sale-summary {
 		display: grid;
@@ -946,14 +961,63 @@
 			grid-template-columns: 1fr;
 			gap: 0.3rem;
 		}
-		.task-heading {
-			flex-wrap: wrap;
-		}
 		.actions > * {
 			width: 100%;
 		}
 		.section-heading {
 			flex-wrap: wrap;
 		}
+	}
+	.buyer-sale {
+		max-width: 48rem;
+	}
+	.help {
+		color: var(--color-primary);
+		font-weight: 600;
+		font-size: 0.9rem;
+	}
+	.record {
+		margin-bottom: 1.5rem;
+	}
+	.record-lines {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem 1.25rem;
+		margin: 0;
+		padding: 1.1rem 1.5rem 1.25rem;
+		border-top: 1px solid var(--kredit-ink-line);
+	}
+	.record-lines .wide {
+		grid-column: 1 / -1;
+	}
+	.record-lines dt {
+		color: var(--kredit-cream-muted);
+		font-size: 0.8rem;
+	}
+	.record-lines dd {
+		margin: 0.2rem 0 0;
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.record-action {
+		padding: 0 1.5rem 1.5rem;
+	}
+	.record-action .primary {
+		width: 100%;
+	}
+	.costs {
+		margin: 1rem 0;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+	}
+	.costs > summary {
+		padding: 1rem 1.25rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.costs :global(section) {
+		margin: 0;
+		border: 0;
+		border-top: 1px solid var(--color-border);
 	}
 </style>

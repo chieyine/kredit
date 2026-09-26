@@ -22,10 +22,6 @@
 	<p class="eyebrow">Next step · {actor}</p>
 	<h2>{next.title}</h2>
 	<p>{next.detail}</p>
-	{#if audience === 'buyer' && ['VERIFICATION_PENDING', 'SENT', 'BUYER_REVIEWING'].includes(view.request.state)}<a
-			href={`/workspace/purchases?business_id=${encodeURIComponent(view.request.buyer_business_id)}`}
-			>Check identity and business verification</a
-		>{/if}
 	<details>
 		<summary>Sale timeline</summary>
 		<ol>
@@ -43,12 +39,6 @@
 		padding: 1.25rem;
 		margin: 1rem 0;
 		background: var(--color-surface, var(--color-surface));
-	}
-	a {
-		display: inline-flex;
-		align-items: center;
-		min-height: 44px;
-		padding-block: 0.5rem;
 	}
 	h2 {
 		margin: 0.35rem 0;

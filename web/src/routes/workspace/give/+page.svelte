@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fitText } from '$lib/fit-text';
 	import { getContext, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
@@ -468,7 +469,7 @@
 				</dl>
 				<div class="total">
 					<small>To pay</small>
-					<strong
+					<strong use:fitText
 						>{#if amount > 0}<Money amountKobo={amount} />{:else}₦0.00{/if}</strong
 					>
 				</div>

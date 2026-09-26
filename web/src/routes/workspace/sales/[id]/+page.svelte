@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fitText } from '$lib/fit-text';
 	import { readableDate } from '$lib/datetime';
 	import SaleProgress from '$lib/components/SaleProgress.svelte';
 	import SaleCosts from '$lib/components/SaleCosts.svelte';
@@ -571,7 +572,7 @@
 				<span>Credit record</span><span class="k-mono">KR-{view.request.id.slice(0, 6).toUpperCase()}</span>
 			</div>
 			<p class="k-figure">
-				<small>{view.obligation ? 'Left to pay' : 'Amount of this credit'}</small><strong
+				<small>{view.obligation ? 'Left to pay' : 'Amount of this credit'}</small><strong use:fitText
 					><Money amountKobo={view.obligation?.outstanding_kobo ?? view.request.principal_kobo} /></strong
 				>
 			</p>
@@ -589,71 +590,79 @@
 				<span><small>Pay by</small><strong>{readableDate(nextDueItem?.due_at ?? view.request.due_date)}</strong></span>
 			</div>
 		</section>
+		<div class="action-bar">
+			{#if view.obligation}<a class="primary" href="#record-payment">Record a payment</a>{/if}
+			<div class="remind">
+				<span>Remind him</span>
+				<ShareActions
+					compact
+					title="Kredit payment reminder"
+					text={`Hello ${view.request.buyer_legal_name}, this is a reminder that ${formatKobo(view.obligation?.outstanding_kobo ?? view.request.principal_kobo)} is left for ${view.request.goods_description}. Payment day: ${nextDueItem?.due_at ? readableDate(nextDueItem.due_at) : view.obligation ? 'check your current payment schedule' : readableDate(view.request.due_date)}.`}
+				/>
+			</div>
+		</div>
+		<p class="more-links">
+			<a
+				href={`/workspace/give?organization=${encodeURIComponent(organizationID)}&customer=${encodeURIComponent(view.request.buyer_user_id ?? '')}&customer_business=${encodeURIComponent(view.request.buyer_business_id ?? '')}&goods=${encodeURIComponent(view.request.goods_description)}&amount=${encodeURIComponent(nairaInput(view.request.principal_kobo))}`}
+				>Give the same goods again</a
+			><a href={`/workspace/sales/${id}/deliveries?organization=${encodeURIComponent(organizationID)}`}
+				>Deliveries and credit notes</a
+			>{#if view.request.invoice_document_id}<button type="button" class="invoice-link" onclick={openInvoice}
+					>Open the invoice →</button
+				>{/if}
+		</p>
 		<SaleProgress {view} audience="seller" />
 		<details class="costs">
 			<summary>What this credit costs you</summary>
 			<SaleCosts {view} />
 		</details>
-		<div class="quick-actions">
-			<a
-				class="repeat"
-				href={`/workspace/sales/new?organization=${encodeURIComponent(organizationID)}&customer=${encodeURIComponent(view.request.buyer_user_id ?? '')}&goods=${encodeURIComponent(view.request.goods_description)}&amount=${encodeURIComponent(nairaInput(view.request.principal_kobo))}`}
-				>Sell these same goods again</a
-			><a class="repeat" href={`/workspace/sales/${id}/deliveries?organization=${encodeURIComponent(organizationID)}`}
-				>Deliveries and credit notes →</a
-			><ShareActions
-				compact
-				title="Kredit payment reminder"
-				text={`Hello ${view.request.buyer_legal_name}, this is a reminder that ${formatKobo(view.obligation?.outstanding_kobo ?? view.request.principal_kobo)} is left for ${view.request.goods_description}. Payment day: ${nextDueItem?.due_at ? readableDate(nextDueItem.due_at) : view.obligation ? 'check your current payment schedule' : readableDate(view.request.due_date)}.`}
-			/>
-		</div>
-		<section class="detail-grid">
-			<article class="card">
-				<h2>The sale</h2>
-				<dl>
-					<div>
-						<dt>Money to pay</dt>
-						<dd><Money amountKobo={view.request.principal_kobo} /></dd>
-					</div>
-					<div>
-						<dt>Goods</dt>
-						<dd>{view.request.goods_description}</dd>
-					</div>
-					<div>
-						<dt>{view.obligation ? 'Original payment day' : 'Pay before'}</dt>
-						<dd>{readableDate(view.request.due_date)}</dd>
-					</div>
-					<div>
-						<dt>{view.obligation ? 'Original bank debit date' : 'Bank debit after'}</dt>
-						<dd>{timeLabel(view.request.collection_at)}</dd>
-					</div>
-					<div>
-						<dt>Extra time</dt>
-						<dd>{view.request.grace_hours} hours</dd>
-					</div>
-				</dl>
-				{#if view.request.invoice_document_id}<p>
-						<button type="button" onclick={openInvoice}>Open the invoice →</button>
-					</p>{/if}
-			</article>
-			<article class="card">
-				<h2>What has happened so far</h2>
-				<p><strong>{productLabel(view.request.state)}</strong></p>
-				{#if view.agreement?.document_hash}<details>
-						<summary>Technical record (for reference)</summary>
-						<p>Sale record code<br /><code>{view.agreement.document_hash}</code></p>
-					</details>{/if}{#if view.obligation}<p>
-						Money left<br /><strong><Money amountKobo={view.obligation.outstanding_kobo} /></strong>
-					</p>
-					<p>
-						<a
-							href={`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/agreement-document`}
-							target="_blank"
-							rel="noreferrer">Print or save a copy of this sale →</a
-						>
-					</p>{/if}
-			</article>
-		</section>
+		<details class="full-details">
+			<summary>Full credit details</summary>
+			<section class="detail-grid">
+				<article class="card">
+					<h2>The sale</h2>
+					<dl>
+						<div>
+							<dt>Money to pay</dt>
+							<dd><Money amountKobo={view.request.principal_kobo} /></dd>
+						</div>
+						<div>
+							<dt>Goods</dt>
+							<dd>{view.request.goods_description}</dd>
+						</div>
+						<div>
+							<dt>{view.obligation ? 'Original payment day' : 'Pay before'}</dt>
+							<dd>{readableDate(view.request.due_date)}</dd>
+						</div>
+						<div>
+							<dt>{view.obligation ? 'Original bank debit date' : 'Bank debit after'}</dt>
+							<dd>{timeLabel(view.request.collection_at)}</dd>
+						</div>
+						<div>
+							<dt>Extra time</dt>
+							<dd>{view.request.grace_hours} hours</dd>
+						</div>
+					</dl>
+				</article>
+				<article class="card">
+					<h2>What has happened so far</h2>
+					<p><strong>{productLabel(view.request.state)}</strong></p>
+					{#if view.agreement?.document_hash}<details>
+							<summary>Technical record (for reference)</summary>
+							<p>Sale record code<br /><code>{view.agreement.document_hash}</code></p>
+						</details>{/if}{#if view.obligation}<p>
+							Money left<br /><strong><Money amountKobo={view.obligation.outstanding_kobo} /></strong>
+						</p>
+						<p>
+							<a
+								href={`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/agreement-document`}
+								target="_blank"
+								rel="noreferrer">Print or save a copy of this sale →</a
+							>
+						</p>{/if}
+				</article>
+			</section>
+		</details>
 		{#if view.request.state === 'DRAFT'}<section class="card action">
 				<h2>Check it before you send</h2>
 				<p>You can still change anything now. Once you send it, your customer must see exactly this sale.</p>
@@ -711,8 +720,40 @@
 				>
 			</section>{/if}
 		{#if view.obligation}
-			<section class="card action">
-				<h2>Enter money you have received</h2>
+			{#if paymentClaims.length}<section class="card action">
+					<h2>Transfers your customer says they sent</h2>
+					<p>
+						Open your bank and verify the amount, reference and payment date first. Reject an incorrect report so the
+						customer can correct it. The moment you accept it, the balance drops.
+					</p>
+					{#if paymentClaims.length}<div class="claim-list">
+							{#each paymentClaims as claim, i (i)}<article>
+									<div>
+										<strong><Money amountKobo={claim.amount_kobo} /></strong><span
+											>{productLabel(claim.state)} · {claim.transfer_reference}</span
+										><small>Customer’s payment date: {timeLabel(claim.paid_at)}</small>
+									</div>
+									{#if ['pending', 'expired'].includes(claim.state?.toLowerCase())}<label
+											>Why are you accepting or rejecting this?<input
+												disabled={busy || loading}
+												bind:value={claimReviewReason}
+												placeholder="For example: Seen in our bank account"
+											/></label
+										>
+										<div class="button-row">
+											<button
+												class="primary"
+												disabled={busy || loading}
+												onclick={() => decidePaymentClaim(claim, 'confirmed')}>Yes, this money reached me</button
+											><button disabled={busy || loading} onclick={() => decidePaymentClaim(claim, 'rejected')}
+												>No, I never received it</button
+											>
+										</div>{:else if claim.review_reason}<p>{claim.review_reason}</p>{/if}
+								</article>{/each}
+						</div>{:else}<p>Your customer has not reported any transfer.</p>{/if}
+				</section>{/if}
+			<section class="card action" id="record-payment">
+				<h2>Record a payment</h2>
 				<p>Only enter money that has actually reached you. Open your bank app and see it first.</p>
 				{#if paymentNotice}<p class="success" role="status">{paymentNotice}</p>{/if}<label
 					>How did they pay you?<select disabled={busy || loading} bind:value={paymentSource}
@@ -777,38 +818,6 @@
 			</details>
 
 			{#if claimError}<p role="alert">{claimError}</p>{/if}
-			{#if paymentClaims.length}<section class="card action">
-					<h2>Transfers your customer says they sent</h2>
-					<p>
-						Open your bank and verify the amount, reference and payment date first. Reject an incorrect report so the
-						customer can correct it. The moment you accept it, the balance drops.
-					</p>
-					{#if paymentClaims.length}<div class="claim-list">
-							{#each paymentClaims as claim, i (i)}<article>
-									<div>
-										<strong><Money amountKobo={claim.amount_kobo} /></strong><span
-											>{productLabel(claim.state)} · {claim.transfer_reference}</span
-										><small>Customer’s payment date: {timeLabel(claim.paid_at)}</small>
-									</div>
-									{#if ['pending', 'expired'].includes(claim.state?.toLowerCase())}<label
-											>Why are you accepting or rejecting this?<input
-												disabled={busy || loading}
-												bind:value={claimReviewReason}
-												placeholder="For example: Seen in our bank account"
-											/></label
-										>
-										<div class="button-row">
-											<button
-												class="primary"
-												disabled={busy || loading}
-												onclick={() => decidePaymentClaim(claim, 'confirmed')}>Yes, this money reached me</button
-											><button disabled={busy || loading} onclick={() => decidePaymentClaim(claim, 'rejected')}
-												>No, I never received it</button
-											>
-										</div>{:else if claim.review_reason}<p>{claim.review_reason}</p>{/if}
-								</article>{/each}
-						</div>{:else}<p>Your customer has not reported any transfer.</p>{/if}
-				</section>{/if}
 
 			<details class="card action" open={eligibility?.eligible}>
 				<summary
@@ -977,27 +986,6 @@
 		padding: 0.8rem 1rem;
 		background: var(--color-background);
 	}
-	.quick-actions {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.7rem;
-	}
-	.repeat {
-		display: inline-flex;
-		align-items: center;
-		min-height: 2.5rem;
-		padding: 0.35rem 0.9rem;
-		border: 1px solid var(--color-border-strong);
-		background: var(--color-surface);
-		color: var(--color-foreground);
-		font-weight: 600;
-		text-decoration: none;
-		transition: border-color 160ms ease;
-	}
-	.repeat:hover {
-		border-color: var(--color-primary);
-	}
 	dl div {
 		display: flex;
 		justify-content: space-between;
@@ -1133,5 +1121,71 @@
 		margin: 0;
 		border: 0;
 		border-top: 1px solid var(--color-border);
+	}
+	.action-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem 1.5rem;
+		margin: 0 0 0.75rem;
+	}
+	.remind {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+	}
+	.remind > span {
+		color: var(--color-muted);
+		font-size: 0.88rem;
+		font-weight: 600;
+	}
+	.more-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1.5rem;
+		margin: 0 0 1.25rem;
+	}
+	.more-links a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 2.75rem;
+		color: var(--color-primary);
+		font-size: 0.9rem;
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.full-details {
+		margin: 1rem 0;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+	}
+	.full-details > summary {
+		padding: 1rem 1.25rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.full-details .detail-grid {
+		margin: 0;
+		padding: 0 1rem 1rem;
+	}
+	#record-payment {
+		scroll-margin-top: 5.5rem;
+	}
+	@media (max-width: 560px) {
+		.action-bar > .primary {
+			width: 100%;
+		}
+	}
+	.invoice-link {
+		min-height: 2.75rem;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--color-primary);
+		font-size: 0.9rem;
+		font-weight: 600;
+		cursor: pointer;
 	}
 </style>
