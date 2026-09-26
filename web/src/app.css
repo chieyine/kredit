@@ -52,7 +52,7 @@
 	--font-mono: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
 
 	/* The light theme is the working theme: the product, admin and every
-	   signed-in action page. Warm paper, near-black ink, indigo for action. */
+	   signed-in action page. Warm paper, near-black ink, terracotta for action. */
 	--color-background: #f7f4ee;
 	--color-background-sunk: #efebe2;
 	--color-surface: #fffefb;
@@ -61,8 +61,8 @@
 	--color-muted: #56544f;
 	--color-border: #dad6cc;
 	--color-border-strong: #c3beb2;
-	--color-primary: #1f3473;
-	--color-primary-hover: #16254f;
+	--color-primary: #be4227;
+	--color-primary-hover: #a5371e;
 	--color-on-primary: #ffffff;
 
 	/* One accent, and it is the seal. 4.8:1 on paper, 5.5:1 on ink — it is also

@@ -19,7 +19,7 @@
 	import { customer, organization, dateLabel, type Customer, type Organization } from '$lib/records';
 	import { parseNaira, verbalizeNaira } from '$lib/money';
 	import { loadSaleDefaults, paymentDateAfter } from '$lib/sale-defaults';
-	import { Mutation, purchase } from '$lib/consumer';
+	import { Mutation, purchase, type Purchase } from '$lib/consumer';
 	import Money from '$lib/components/Money.svelte';
 	import ResourceNotice from '$lib/components/ResourceNotice.svelte';
 	import ShareActions from '$lib/components/ShareActions.svelte';
@@ -218,8 +218,9 @@
 	}
 
 	async function giveToPerson() {
-		const data = purchase(
-			await personMutation.send(`/api/v1/organizations/${encodeURIComponent(organizationID)}/consumer-sales`, {
+		const data = (await personMutation.send(
+			`/api/v1/organizations/${encodeURIComponent(organizationID)}/consumer-sales`,
+			{
 				target_type: 'phone',
 				target: normalizeNigerianPhone(personPhone),
 				terms: {
@@ -238,8 +239,9 @@
 					stock_reserved: true,
 					returns_policy: RETURNS
 				}
-			})
-		);
+			},
+			purchase
+		)) as Purchase;
 		personLink = `${location.origin}/personal/purchases/${data.id}`;
 	}
 

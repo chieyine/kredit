@@ -276,12 +276,6 @@
 		}
 	}
 	onMount(() => {
-		try {
-			referralPending = Boolean(sessionStorage.getItem('kredit_dsa_referral'));
-		} catch {
-			// Optional referral storage must not prevent the dashboard from loading.
-			referralPending = false;
-		}
 		// The server load already fetched this request's data. Re-fetching on
 		// mount would discard it and reintroduce the two round trips it exists
 		// to remove; a business change still goes through load() below.
