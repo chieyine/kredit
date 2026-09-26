@@ -28,11 +28,11 @@ test('failed business lookup shows an error and can be retried', async ({ page }
 	await page.goto('/workspace/partners/customers');
 	// The message names the thing that failed and the next move, rather than
 	// "this page". A list that cannot load must never look like an empty list.
-	await expect(page.getByRole('alert')).toContainText('We could not check customers');
+	await expect(page.getByRole('alert')).toContainText('We could not check your customers');
 	await expect(page.getByRole('heading', { name: 'You have not added a customer yet' })).toHaveCount(0);
 	await page.getByRole('button', { name: 'Try again', exact: true }).click();
-	await expect(page.locator('.records')).toContainText('Ada Stores');
-	await expect(page.locator('.records')).toContainText('₦1,234.56');
+	await expect(page.locator('.record-list')).toContainText('Ada Stores');
+	await expect(page.locator('.record-list')).toContainText('₦1,234.56');
 });
 
 test('switching business resets pagination and ignores a late response', async ({ page }) => {
@@ -69,12 +69,20 @@ test('switching business resets pagination and ignores a late response', async (
 	await expect(page.locator('.records')).not.toContainText('Second buyer');
 });
 
-test('money owed excludes unaccepted sales without an obligation', async ({ page }) => {
+test('what I owe lists credits to accept beside credits being paid', async ({ page }) => {
 	await page.route('**/api/v1/buyer/credit-requests*', (route) =>
 		route.fulfill({
 			json: {
 				requests: [
-					{ request: { id: 'draft', goods_description: 'Pending goods', buyer_legal_name: 'Pending sale' } },
+					{
+						request: {
+							id: 'offer',
+							state: 'SENT',
+							goods_description: 'Pending goods',
+							buyer_legal_name: 'Pending sale'
+						}
+					},
+					{ request: { id: 'draft', state: 'DRAFT', goods_description: 'Not sent yet', buyer_legal_name: 'Draft' } },
 					{
 						request: { id: 'accepted', buyer_legal_name: 'Accepted sale' },
 						obligation: { id: 'debt', outstanding_kobo: 75000 }
@@ -84,11 +92,13 @@ test('money owed excludes unaccepted sales without an obligation', async ({ page
 		})
 	);
 	await page.goto('/workspace/purchases/obligations');
-	await expect(page.locator('.records li')).toHaveCount(1);
+	// A draft the seller has not sent is not owed; an offer waiting for an answer is shown so it can be accepted.
+	await expect(page.locator('.records li')).toHaveCount(2);
+	await expect(page.locator('.records')).toContainText('Waiting for you to accept');
 	await expect(page.locator('.records')).toContainText('₦750.00');
-	await expect(page.locator('.records a')).toHaveAttribute(
+	await expect(page.locator('.records a').last()).toHaveAttribute(
 		'href',
-		'/workspace/purchases/obligations/debt?organization=org-a&business_id=business-1'
+		'/workspace/purchases/orders/accepted?organization=org-a&business_id=business-1'
 	);
 });
 
@@ -97,13 +107,13 @@ test('desktop navigation works before JavaScript loads', async ({ browser, baseU
 	const page = await context.newPage();
 	await page.goto(baseURL!);
 	await expect(
-		page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'For business', exact: true })
+		page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'How it works', exact: true })
 	).toBeVisible();
 	await page
 		.getByRole('navigation', { name: 'Main navigation' })
-		.getByRole('link', { name: 'For business', exact: true })
+		.getByRole('link', { name: 'How it works', exact: true })
 		.click();
-	await expect(page).toHaveURL(/\/manufacturers$/);
+	await expect(page).toHaveURL(/\/how-it-works$/);
 	await context.close();
 });
 

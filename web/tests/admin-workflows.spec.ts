@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { PARKED, PARKED_REASON } from './parked';
 async function auth(page: any, context: any, baseURL: any) {
 	await context.addCookies([{ name: 'kredit_session', value: 'admin-test', url: baseURL || 'http://127.0.0.1:5173' }]);
 	await page.route('**/api/v1/buyer/businesses', (route: any) =>
@@ -73,6 +74,7 @@ test('financial operator proposes naira amount and independent reviewer approves
 	await expect(page.getByRole('heading', { name: 'Propose a change' })).toHaveCount(0);
 });
 test('buyer reviews dates and must explicitly consent before accepting', async ({ page, context, baseURL }) => {
+	test.skip(PARKED, PARKED_REASON);
 	await auth(page, context, baseURL);
 	const proposal: any = {
 		id: 'change',

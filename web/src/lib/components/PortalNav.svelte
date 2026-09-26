@@ -145,8 +145,13 @@
 	<div id={menuID} class="portal-menu" class:open>
 		{#if hasMobileBar}
 			<div class="desktop-primary">
-				{#each mobilePrimary as [linkLabel, href], i (i)}
-					<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>{linkLabel}</a>
+				{#each mobilePrimary as [linkLabel, href, icon], i (i)}
+					<a
+						{href}
+						class:give={icon === 'add'}
+						aria-current={current(href) ? 'page' : undefined}
+						onclick={() => closeMenus()}>{linkLabel}</a
+					>
 				{/each}
 			</div>
 		{:else}
@@ -187,7 +192,12 @@
 {#if hasMobileBar}
 	<div class="mobile-nav" style:--nav-count={mobilePrimary.length} role="navigation" aria-label={`${label} main pages`}>
 		{#each mobilePrimary as [linkLabel, href, icon], i (i)}
-			<a {href} aria-current={current(href) ? 'page' : undefined} onclick={() => closeMenus()}>
+			<a
+				{href}
+				class:give={icon === 'add'}
+				aria-current={current(href) ? 'page' : undefined}
+				onclick={() => closeMenus()}
+			>
 				<span class="mobile-icon" data-icon={icon} aria-hidden="true"></span>
 				<span>{linkLabel}</span>
 			</a>
@@ -477,6 +487,22 @@
 		color: var(--color-on-primary);
 		background: transparent;
 	}
+	/* Giving credit is the one action; it reads as a button, not a tab. */
+	.desktop-primary a.give {
+		margin-left: 0.5rem;
+		padding-inline: 1rem;
+		border-radius: 999px;
+		background: var(--color-accent);
+		color: #fff;
+	}
+	.desktop-primary a.give:hover,
+	.desktop-primary a.give[aria-current='page'] {
+		color: #fff;
+		filter: brightness(1.08);
+	}
+	.desktop-primary a.give[aria-current='page']::after {
+		display: none;
+	}
 	.desktop-primary a[aria-current='page']::after {
 		content: '';
 		position: absolute;
@@ -749,6 +775,14 @@
 			height: 1.45rem;
 			color: currentColor;
 			transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
+		}
+		.mobile-nav a.give {
+			color: var(--color-accent);
+		}
+		.mobile-nav a.give .mobile-icon {
+			border-radius: 999px;
+			background: var(--color-accent);
+			color: #fff;
 		}
 		.mobile-nav a[aria-current='page'] .mobile-icon {
 			transform: translateY(-1px) scale(1.06);

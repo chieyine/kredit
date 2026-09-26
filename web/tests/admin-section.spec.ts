@@ -114,7 +114,8 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 	await page.goto('/admin');
 	const mobileNavigation = page.getByLabel('Admin account main pages');
 	await expect(mobileNavigation).toBeVisible();
-	await expect(mobileNavigation.getByRole('link')).toHaveCount(4);
+	// Five daily areas; everything else is one tap away under the menu.
+	await expect(mobileNavigation.getByRole('link')).toHaveCount(5);
 	await expect(mobileNavigation.getByRole('button')).toHaveCount(0);
 	await page
 		.getByRole('navigation', { name: 'Admin account', exact: true })
@@ -123,12 +124,11 @@ test('mobile admin navigation stays small and closes after a page is chosen', as
 
 	const more = page.getByRole('dialog', { name: 'Admin account menu' });
 	await expect(more).toBeVisible();
-	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(32);
-	await expect(more.getByRole('link', { name: 'Platform settings' })).toBeVisible();
-	await expect(more.getByRole('link', { name: 'Website content' })).toBeVisible();
-	await expect(more.getByRole('link', { name: 'Business settings' })).toBeVisible();
-	await expect(more.getByText('Customer support', { exact: true })).toBeVisible();
-	await expect(more.getByText('Access and control', { exact: true })).toBeVisible();
+	await expect(more.getByRole('navigation', { name: 'Account menu pages' }).getByRole('link')).toHaveCount(13);
+	await expect(more.getByRole('link', { name: 'Engineering tools' })).toBeVisible();
+	await expect(more.getByRole('link', { name: 'Reconciliation' })).toBeVisible();
+	await expect(more.getByText('Problems', { exact: true })).toBeVisible();
+	await expect(more.getByText('Settings', { exact: true })).toBeVisible();
 	await more.getByRole('link', { name: 'Support cases' }).click();
 	await expect(page).toHaveURL(/\/admin\/cases$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Support cases', exact: true })).toBeVisible();

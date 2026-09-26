@@ -1,4 +1,7 @@
 import { test, expect, type Page, type BrowserContext, type Route } from '@playwright/test';
+import { PARKED, PARKED_REASON } from './parked';
+
+test.skip(PARKED, PARKED_REASON);
 const send = (route: Route, body: unknown, status = 200) =>
 	route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 async function prepare(page: Page, context: BrowserContext, baseURL?: string) {

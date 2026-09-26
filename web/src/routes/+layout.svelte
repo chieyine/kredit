@@ -8,8 +8,20 @@
 	import { isPrivateRoute, isUnlistedRoute, jsonLd, nonIndexablePaths, seoForPath, SITE_URL } from '$lib/seo';
 	import { page } from '$app/state';
 	import { applySavedDisplayChoice } from '$lib/product-tools';
+	import { beforeNavigate, goto } from '$app/navigation';
+	import { env as publicEnv } from '$env/dynamic/public';
+	import { parkedDestination } from '$lib/features';
 
 	let { children } = $props();
+	// The server sends switched-off addresses to the simple screen; this does the
+	// same for links followed inside the app, which never reach the server.
+	beforeNavigate(({ to, cancel }) => {
+		if (!to?.url || to.url.origin !== location.origin) return;
+		const destination = parkedDestination(to.url.pathname, publicEnv.PUBLIC_KREDIT_FULL_WORKSPACE === '1');
+		if (!destination) return;
+		cancel();
+		void goto(`${destination}${to.url.search}`, { replaceState: true });
+	});
 	let offline = $state(false);
 	let privateShell = $derived(isPrivateRoute(page.url.pathname));
 	// The deck is presented full-screen, so the site chrome stays out of the room.

@@ -1,7 +1,9 @@
 import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
+import { env as publicEnv } from '$env/dynamic/public';
 import type { Handle } from '@sveltejs/kit';
 import { assertLaunchWebConfig } from '$lib/server/legal-config';
+import { parkedDestination } from '$lib/features';
 import { applyPageCachePolicy, isAccountPage } from '$lib/server/page-cache';
 import { ProxyBodyError, proxyHeaders, readProxyBody } from '$lib/server/proxy-body';
 
@@ -35,6 +37,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 					...SECURITY_HEADERS,
 					location: `/signin?next=${encodeURIComponent(next)}`
 				}
+			});
+			applyPageCachePolicy(event.url.pathname, response, event.request.method);
+			return response;
+		}
+		const parked =
+			event.request.method === 'GET' || event.request.method === 'HEAD'
+				? parkedDestination(event.url.pathname, publicEnv.PUBLIC_KREDIT_FULL_WORKSPACE === '1')
+				: null;
+		if (parked) {
+			// Keep the business choice (?organization=) and any prefilled sale details.
+			const response = new Response(null, {
+				status: 307,
+				headers: { ...SECURITY_HEADERS, location: `${parked}${event.url.search}` }
 			});
 			applyPageCachePolicy(event.url.pathname, response, event.request.method);
 			return response;

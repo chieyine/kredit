@@ -221,13 +221,20 @@
 	});
 </script>
 
-<svelte:head><title>Payments — Kredit</title></svelte:head>
+<svelte:head><title>Money in — Kredit</title></svelte:head>
 <main class="shell workspace payments-page">
 	<header class="page-heading">
 		<div>
-			<p class="eyebrow">Payments</p>
-			<h1>Payments received</h1>
-			<p class="lede">See what has actually entered your account, and check the payments customers say they made.</p>
+			<h1>Money in</h1>
+			<p class="lede">
+				What your customers have paid, and transfers they say they sent. Check your bank before you confirm a transfer.
+			</p>
+			<p class="money-links">
+				<a href={`/workspace/settings/settlement?organization=${encodeURIComponent(organizationID)}`}
+					>Where your money goes</a
+				>
+				<a href={`/workspace/settings/billing?organization=${encodeURIComponent(organizationID)}`}>Kredit fees</a>
+			</p>
 		</div>
 		{#if organizations.length > 1}<label
 				>Business<select
@@ -375,7 +382,9 @@
 					<span aria-hidden="true">₦</span>
 					<h3>No confirmed payments yet.</h3>
 					<p>Verified payments appear here. A reported transfer stays separate until it is confirmed.</p>
-					<a class="primary" href="/workspace/sales/new">Add a sale</a>
+					<a class="primary" href={`/workspace/give?organization=${encodeURIComponent(organizationID)}`}
+						>Give goods on credit</a
+					>
 				</div>{/if}
 		</section>
 	{/if}
@@ -786,5 +795,17 @@
 	}
 	.money-summary .total small {
 		color: var(--color-muted);
+	}
+	.money-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.5rem;
+	}
+	.money-links a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 2.75rem;
+		color: var(--color-primary);
+		font-weight: 600;
 	}
 </style>

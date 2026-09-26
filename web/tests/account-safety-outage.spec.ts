@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { PARKED, PARKED_REASON } from './parked';
 
 test.beforeEach(async ({ page, context, baseURL }) => {
 	await context.addCookies([{ name: 'kredit_session', value: 'audit-session', url: baseURL! }]);
@@ -141,6 +142,7 @@ test('interrupted account recovery can be retried without a stuck button', async
 
 for (const path of ['billing', 'settlement', 'credit-policy']) {
 	test(`${path} settings explain an outage and recover before allowing edits`, async ({ page }) => {
+		test.skip(PARKED && path === 'credit-policy', PARKED_REASON);
 		let ready = false;
 		await page.route('**/api/v1/organizations', (route) =>
 			ready ? route.fulfill({ json: { organizations: [{ id: 'org-a' }] } }) : route.abort('failed')

@@ -159,7 +159,7 @@
 <main class="shell workspace">
 	<header class="page-head">
 		<div>
-			<p class="eyebrow">{eyebrow}</p>
+			{#if eyebrow}<p class="eyebrow">{eyebrow}</p>{/if}
 			<h1>{title}</h1>
 			<p class="lede">{description}</p>
 		</div>

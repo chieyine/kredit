@@ -86,15 +86,11 @@ test('workspace navigation keeps the selected business across both sides of trad
 }) => {
 	await account(page, context, baseURL!);
 	await page.goto('/workspace/today?organization=org-b');
-	await expect(page.getByRole('heading', { name: 'Distributor Limited', exact: true })).toBeVisible();
-	await page.getByRole('link', { name: 'Purchases', exact: true }).first().click();
-	await expect(page.getByRole('combobox', { name: 'Purchasing business' })).toHaveValue('profile-1');
-	await expect(page).toHaveURL(/business_id=profile-1/);
-	await page.getByRole('link', { name: 'Sales', exact: true }).first().click();
-	await expect(page).toHaveURL(/\/workspace\/sales\?organization=org-b$/);
-	await expect(page.getByRole('combobox', { name: 'Business', exact: true })).toHaveValue('org-b');
-	await page.goto('/workspace/partners?organization=org-b');
-	await expect(page.getByRole('heading', { name: 'Partners', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Who owes me', exact: true })).toBeVisible();
+	await expect(page.getByText('Distributor Limited').first()).toBeVisible();
+	await page.getByRole('link', { name: 'Customers', exact: true }).first().click();
+	await expect(page).toHaveURL(/\/workspace\/partners\/customers\?organization=org-b$/);
+	await expect(page.getByRole('heading', { name: 'Customers', exact: true })).toBeVisible();
 	await page.screenshot({ path: '../.tmp/redesign-flow/partners-desktop.png', fullPage: true });
 	await page.setViewportSize({ width: 390, height: 844 });
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();

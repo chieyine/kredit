@@ -9,6 +9,7 @@
 	let paletteOpen = $state(false);
 	const links: [string, string][] = [
 		['Overview', '/admin'],
+		['Engineering tools', '/admin/tools'],
 		['Launch setup', '/admin/setup'],
 		['Approval queue', '/admin/inbox'],
 		['Financial approvals', '/admin/approvals'],
@@ -45,45 +46,28 @@
 		['Admin access', '/admin/team'],
 		['Audit trail', '/admin/audit']
 	];
+	// Five things you check daily. Everything else sits under "Engineering tools".
 	const mobilePrimary: [string, string, string][] = [
-		['Overview', '/admin', 'home'],
-		['Users', '/admin/users', 'customers'],
-		['Businesses', '/admin/organizations', 'sales'],
-		['Money', '/admin/money', 'payments']
+		['Needs attention', '/admin/attention', 'home'],
+		['Businesses', '/admin/organizations', 'customers'],
+		['Money', '/admin/money', 'payments'],
+		['Problems', '/admin/disputes', 'sales'],
+		['Settings', '/admin/platform-settings', 'limits']
 	];
 	const mobileMore: [string, string, string][] = [
-		['Approval queue', '/admin/inbox', 'Operations'],
-		['Financial approvals', '/admin/approvals', 'Operations'],
-		['Change history', '/admin/history', 'Operations'],
-		['Needs attention', '/admin/attention', 'Operations'],
-		['Support cases', '/admin/cases', 'Customer support'],
-		['Disputes', '/admin/disputes', 'Customer support'],
-		['Account recovery', '/admin/recovery', 'Customer support'],
-		['Privacy requests', '/admin/privacy', 'Customer support'],
-		['Analytics evidence', '/admin/analytics', 'Operations'],
-		['Find a reference', '/admin/search', 'Operations'],
-		['Background jobs', '/admin/jobs', 'Operations'],
-		['Provider events', '/admin/provider-events', 'Operations'],
-		['Reconciliation reviews', '/admin/reconciliation', 'Operations'],
-		['Provider work', '/admin/provider-work', 'Operations'],
-		['Message recovery', '/admin/message-submissions', 'Operations'],
-		['Business bank review', '/admin/settlement-review', 'Operations'],
-		['Seller settlements', '/admin/seller-settlements', 'Operations'],
-		['Fee billing', '/admin/billing', 'Operations'],
-		['Field agents', '/admin/agents', 'Operations'],
-		['Consumer purchases', '/admin/consumer-sales', 'Operations'],
-		['System diagnostics', '/admin/diagnostics', 'Operations'],
-		['Mono integration', '/admin/mono', 'Operations'],
-		['Registration recovery', '/admin/customer-registrations', 'Operations'],
-		['Verification recovery', '/admin/verification-requests', 'Operations'],
-		['Mandate recovery', '/admin/mandate-authorizations', 'Operations'],
-		['Launch setup', '/admin/setup', 'Access and control'],
-		['Website content', '/admin/website', 'Access and control'],
-		['Platform settings', '/admin/platform-settings', 'Access and control'],
-		['Business settings', '/admin/settings', 'Access and control'],
-		['Protected controls', '/admin/controls', 'Access and control'],
-		['Admin access', '/admin/team', 'Access and control'],
-		['Audit trail', '/admin/audit', 'Access and control']
+		['Overview', '/admin', 'Needs attention'],
+		['Approval queue', '/admin/inbox', 'Needs attention'],
+		['Financial approvals', '/admin/approvals', 'Needs attention'],
+		['Verification requests', '/admin/verification-requests', 'Needs attention'],
+		['Users', '/admin/users', 'Businesses'],
+		['Customer registrations', '/admin/customer-registrations', 'Businesses'],
+		['Consumer purchases', '/admin/consumer-sales', 'Businesses'],
+		['Reconciliation', '/admin/reconciliation', 'Money'],
+		['Seller settlements', '/admin/seller-settlements', 'Money'],
+		['Settlement review', '/admin/settlement-review', 'Money'],
+		['Support cases', '/admin/cases', 'Problems'],
+		['Admin team', '/admin/team', 'Settings'],
+		['Engineering tools', '/admin/tools', 'Settings']
 	];
 </script>
 

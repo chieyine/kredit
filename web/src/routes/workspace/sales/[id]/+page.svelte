@@ -153,7 +153,11 @@
 		paymentClaims: PaymentClaim[] = $state([]),
 		collectionAttempts: CollectionAttempt[] = $state([]),
 		eligibility: Eligibility | null = $state(null),
-		notice = $state('');
+		notice = $state(
+			page.url.searchParams.get('given') === '1'
+				? 'Sent. Your customer gets a message to open it and say yes. You will see it on Who owes me.'
+				: ''
+		);
 	const nextDueItem = $derived(scheduleItems.find(hasUnpaid));
 	let deliveryMethod = $state('supplier_delivery'),
 		releaseNotes = $state(''),
@@ -619,10 +623,6 @@
 		</section>
 		{#if view.request.state === 'DRAFT'}<section class="card action">
 				<h2>Check it before you send</h2>
-				<a
-					href={`/workspace/sales/approvals?organization=${encodeURIComponent(organizationID)}&request=${encodeURIComponent(view.request.id)}`}
-					>Ask for internal approval</a
-				>
 				<p>You can still change anything now. Once you send it, your customer must see exactly this sale.</p>
 				<label
 					>How much must they pay? (₦)<input

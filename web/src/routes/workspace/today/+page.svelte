@@ -19,12 +19,12 @@
 	import { attentionItems } from '$lib/attention';
 	import type { PageData } from './$types';
 	import { exactKobo } from '$lib/money';
-	import { productLabel } from '$lib/product-language';
 	import Money from '$lib/components/Money.svelte';
 	import ResourceNotice from '$lib/components/ResourceNotice.svelte';
-	import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
-	import WorkspacePurchases from '$lib/components/WorkspacePurchases.svelte';
 	import BusinessNextSteps from '$lib/components/BusinessNextSteps.svelte';
+	import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
+	import { read as readConsumer, purchase, type Purchase } from '$lib/consumer';
+	import { paymentDateAfter } from '$lib/sale-defaults';
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
 	let { data }: { data: PageData } = $props();
 	// Capturing the initial value is correct here, not an oversight: the
@@ -48,7 +48,7 @@
 	let disputes = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.disputes) : pending());
 	let due = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.due) : pending());
 	let summary = $state<Resource<Receivables>>(seeded ? fromServer(seeded.summary) : pending());
-	let referralPending = $state(false);
+	let people = $state<Resource<Purchase[]>>(pending());
 	let visibleCount = $state(5),
 		legalName = $state(''),
 		tradingName = $state(''),
@@ -73,6 +73,9 @@
 			(item) => item.state === 'ready' && item.scope === organizationID
 		)
 	);
+	// Only what the seller must do something about; late and waiting customers show in the list below.
+	// Only what the seller must do something about. Late and waiting customers
+	// already show in the customer list below, so they are not repeated here.
 	const attention = $derived(
 		attentionItems(
 			organizationID,
@@ -81,7 +84,93 @@
 			overdue.state === 'ready' ? overdue.data : [],
 			disputes.state === 'ready' ? disputes.data : [],
 			due.state === 'ready' ? due.data : []
-		)
+		).filter((item) => /^(claim|dispute|release|receipt|draft)-/.test(item.id))
+	);
+	type Owing = {
+		key: string;
+		name: string;
+		kind: 'Business' | 'Person';
+		owed: bigint;
+		waiting: number;
+		waitingKobo: bigint;
+		late: boolean;
+		href: string;
+	};
+	const today = paymentDateAfter(0);
+	const weekAhead = paymentDateAfter(7);
+	const closedStates = ['CANCELLED', 'DECLINED', 'EXPIRED', 'CLOSED', 'PAID', 'WRITTEN_OFF', 'REJECTED'];
+	const owing = $derived.by(() => {
+		const query = `?organization=${encodeURIComponent(organizationID)}`;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a local tally, never rendered directly
+		const list = new Map<string, Owing>();
+		const late = new Set(
+			(overdue.state === 'ready' ? overdue.data : []).flatMap((row) => [row.credit_request_id, row.obligation_id])
+		);
+		for (const view of sales.state === 'ready' ? sales.data : []) {
+			const r = view.request;
+			if (closedStates.includes(r.state.toUpperCase())) continue;
+			const id = r.buyer_business_id || r.buyer_user_id;
+			const row = list.get(`b:${id}`) ?? {
+				key: `b:${id}`,
+				name: r.buyer_legal_name || 'Customer',
+				kind: 'Business' as const,
+				owed: 0n,
+				waiting: 0,
+				waitingKobo: 0n,
+				late: false,
+				href: r.buyer_business_id
+					? `/workspace/partners/customers/${encodeURIComponent(r.buyer_business_id)}${query}`
+					: `/workspace/sales/${encodeURIComponent(r.id)}${query}`
+			};
+			if (view.obligation) row.owed += exactKobo(view.obligation.outstanding_kobo) ?? 0n;
+			else {
+				row.waiting += 1;
+				row.waitingKobo += exactKobo(r.principal_kobo) ?? 0n;
+			}
+			if (late.has(r.id) || (view.obligation && late.has(view.obligation.id))) row.late = true;
+			list.set(row.key, row);
+		}
+		for (const sale of people.state === 'ready' ? people.data : []) {
+			if (!['offered', 'active', 'received'].includes(sale.state)) continue;
+			const row = list.get(`p:${sale.target}`) ?? {
+				key: `p:${sale.target}`,
+				name: sale.customer_name || sale.target,
+				kind: 'Person' as const,
+				owed: 0n,
+				waiting: 0,
+				waitingKobo: 0n,
+				late: false,
+				href: `/workspace/sales/consumers/${encodeURIComponent(sale.id)}${query}`
+			};
+			if (sale.state === 'offered') {
+				row.waiting += 1;
+				row.waitingKobo += BigInt(Math.trunc(sale.terms?.total_kobo ?? 0));
+			} else row.owed += BigInt(Math.trunc(sale.outstanding_kobo ?? 0));
+			if (sale.schedule_progress?.some((item) => item.date < today && item.paid_kobo < item.amount_kobo))
+				row.late = true;
+			list.set(row.key, row);
+		}
+		return [...list.values()]
+			.filter((row) => row.owed > 0n || row.waiting > 0)
+			.sort((a, b) => Number(b.late) - Number(a.late) || (b.owed > a.owed ? 1 : b.owed < a.owed ? -1 : 0));
+	});
+	const personOwed = $derived(
+		(people.state === 'ready' ? people.data : [])
+			.filter((sale) => sale.state === 'active' || sale.state === 'received')
+			.reduce((sum, sale) => sum + BigInt(Math.trunc(sale.outstanding_kobo ?? 0)), 0n)
+	);
+	const totalOwed = $derived(
+		summary.state === 'ready' ? (exactKobo(summary.data.outstanding_kobo) ?? 0n) + personOwed : null
+	);
+	const dueThisWeek = $derived(
+		(due.state === 'ready' ? due.data.length : 0) +
+			(people.state === 'ready'
+				? people.data.filter((sale) =>
+						sale.schedule_progress?.some(
+							(item) => item.date >= today && item.date <= weekAhead && item.paid_kobo < item.amount_kobo
+						)
+					).length
+				: 0)
 	);
 	const scopeQuery = $derived(`?organization=${encodeURIComponent(organizationID)}`);
 	async function loadRequests() {
@@ -89,6 +178,7 @@
 		const request = dashboardRequest.begin();
 		visibleCount = 5;
 		sales = pending(scope);
+		people = pending(scope);
 		payments = pending(scope);
 		overdue = pending(scope);
 		claims = pending(scope);
@@ -114,6 +204,23 @@
 		]);
 		if (!request.current() || organizationID !== scope) return;
 		[sales, payments, overdue, claims, disputes, summary, due] = results;
+		await loadPeople(scope);
+	}
+	async function loadPeople(scope: string) {
+		try {
+			const data = record(await readConsumer(`/api/v1/organizations/${encodeURIComponent(scope)}/consumer-sales`));
+			if (!Array.isArray(data.items)) throw new Error('The list of persons could not be checked.');
+			if (organizationID === scope)
+				people = { state: 'ready', scope, data: data.items.map(purchase), checkedAt: new Date().toISOString() };
+		} catch (cause) {
+			if (organizationID === scope)
+				people = {
+					state: 'error',
+					scope,
+					status: 0,
+					message: cause instanceof Error ? cause.message : 'Credit given to persons could not be loaded.'
+				};
+		}
 	}
 	async function load() {
 		const request = businessRequest.begin();
@@ -179,6 +286,7 @@
 		// mount would discard it and reintroduce the two round trips it exists
 		// to remove; a business change still goes through load() below.
 		if (!seeded) void load();
+		else if (organizationID) void loadPeople(organizationID);
 		return () => {
 			businessRequest.cancel();
 			dashboardRequest.cancel();
@@ -186,31 +294,24 @@
 	});
 </script>
 
-<svelte:head><title>Today — Kredit</title></svelte:head>
+<svelte:head><title>Who owes me — Kredit</title></svelte:head>
 <main class="shell workspace account-home">
 	<header class="task-heading">
 		<div>
-			<p class="eyebrow">Your business</p>
-			<h1>{businessTitle}</h1>
-			<p class="lede">Manage the credit you give your customers and the credit you receive from suppliers.</p>
+			<p class="eyebrow">{businessTitle}</p>
+			<h1>Who owes me</h1>
 		</div>
-		{#if organizationID}<a class="primary" href="/workspace/sales/quick{scopeQuery}">Add a sale</a>{/if}
+		{#if organizationID}<a class="primary give" href="/workspace/give{scopeQuery}">Give goods on credit</a>{/if}
 	</header>
-	{#if referralPending}<p>
-			<a class="referral-link" href="/workspace/referral">Confirm your field agent introduction →</a>
-		</p>{/if}
 	<ResourceNotice resource={businesses} label="Businesses" retry={load} />
 	{#if businesses.state === 'ready' && !organizations.length}
 		<section class="card onboarding">
-			<h2>Add your business</h2>
-			<p>
-				Joining a supplier? Open their invitation and connect your business there. Buying for personal use? <a
-					href="/personal/purchases">Open personal purchases</a
+			<h2>Tell us about your business</h2>
+			<p>This takes a minute. Next, you add the bank account your money will go to.</p>
+			<p class="small">
+				Did a supplier send you a link? Open that link instead. Buying for yourself? <a href="/personal/purchases"
+					>See what you owe</a
 				>.
-			</p>
-			<p>
-				Create one business workspace for both buying and selling. Manufacturer, distributor or retailer, the flow is
-				the same. Verification is required before live sales and payment services.
 			</p>
 			<form
 				class="form-grid"
@@ -220,222 +321,160 @@
 				}}
 			>
 				<label
-					>Your name, or registered business name<input
+					>Business name<input
 						bind:value={legalName}
 						autocomplete="organization"
 						required
 						disabled={createBusy}
 					/></label
-				><label
-					>CAC registration number <small>if registered</small><input
-						bind:value={registrationInfo}
-						maxlength="80"
-						disabled={createBusy}
-						placeholder="RC or BN number"
-					/></label
-				><label>Trading name <small>if different</small><input bind:value={tradingName} disabled={createBusy} /></label>
+				>
 				<label
-					>Business type<select bind:value={businessType} disabled={createBusy}
-						><option value="unregistered_business">Not registered yet</option><option value="registered_business"
-							>Business name registered with CAC</option
+					>What do you sell?<input
+						bind:value={industry}
+						placeholder="Provisions, drinks, medicines…"
+						required
+						disabled={createBusy}
+					/></label
+				>
+				<label class="wide"
+					>Shop address<input
+						bind:value={address}
+						placeholder="Shop number, street, area, town"
+						required
+						disabled={createBusy}
+					/></label
+				>
+				<label
+					>Is the business registered?<select bind:value={businessType} disabled={createBusy}
+						><option value="unregistered_business">Not registered</option><option value="registered_business"
+							>Business name (CAC)</option
 						><option value="sole_proprietor">Sole proprietor</option><option value="limited_company"
 							>Limited company</option
 						><option value="partnership">Partnership</option></select
 					></label
 				>
-				<label
-					>What do you sell?<input
-						bind:value={industry}
-						placeholder="Food, medicines, building materials…"
-						required
-						disabled={createBusy}
-					/></label
-				><label class="wide"
-					>Business address<textarea
-						bind:value={address}
-						placeholder="Shop number, street, area, town and state"
-						required
-						disabled={createBusy}
-					></textarea></label
-				>
+				{#if businessType !== 'unregistered_business'}<label
+						>CAC number<input
+							bind:value={registrationInfo}
+							maxlength="80"
+							disabled={createBusy}
+							placeholder="RC or BN"
+						/></label
+					>{/if}
 				{#if createError}<p class="error wide" role="alert">{createError}</p>{/if}<button
 					class="primary wide"
-					disabled={createBusy}>{createBusy ? 'Saving…' : 'Add my business'}</button
+					disabled={createBusy}>{createBusy ? 'Saving…' : 'Save and continue'}</button
 				>
 			</form>
 		</section>
 	{:else if currentBusiness}
-		<BusinessNextSteps {organizationID} />
-		<div class="toolbar">
-			<label
+		{#if organizations.length > 1}<label class="switch"
 				>Business<select bind:value={organizationID} onchange={() => chooseWorkspace(organizationID)}
 					>{#each organizations as org (org.id)}<option value={org.id}>{org.trading_name || org.legal_name}</option
 						>{/each}</select
 				></label
-			><button type="button" onclick={loadRequests}>Refresh</button><a href="/workspace/onboarding">Business setup</a>
-		</div>
-		<ResourceNotice resource={due} label="Upcoming payments" retry={loadRequests} />
+			>{/if}
+		<BusinessNextSteps {organizationID} />
 		<section class="balance-card" aria-label="What you are owed" aria-busy={summary.state === 'loading'}>
-			<p>Customers owe your business</p>
-			{#if summary.state === 'ready'}
-				<strong class="balance"><Money amountKobo={summary.data.outstanding_kobo} /></strong>
-				<p class="balance-caption">
-					Across {summary.data.obligation_count} active sale{summary.data.obligation_count === 1 ? '' : 's'}
-				</p>
-				{#if (exactKobo(summary.data.overdue_kobo) ?? 0n) > 0n}<a
-						class="late-strip"
-						href="/workspace/overdue{scopeQuery}"
-						><span>Overdue</span><strong><Money amountKobo={summary.data.overdue_kobo} /></strong><span
-							aria-hidden="true">→</span
-						></a
+			<p>Customers owe you</p>
+			{#if totalOwed !== null}
+				<strong class="balance"><Money amountKobo={totalOwed} /></strong>
+				<div class="figures">
+					<span
+						><small>Past due date</small><strong
+							>{#if summary.state === 'ready'}<Money amountKobo={summary.data.overdue_kobo} />{/if}</strong
+						></span
 					>
-				{:else}<p class="checked-state">No overdue balance in this checked summary.</p>{/if}
-			{:else}<ResourceNotice resource={summary} label="Balance" retry={loadRequests} />{/if}
-		</section>
-		<WorkspacePurchases {organizationID} />
-		<nav class="shortcut-links" aria-label="Grow your customer network">
-			<a href="/workspace/partners/invitations{scopeQuery}">Distributor onboarding</a>
-			<a href="/workspace/partners/import{scopeQuery}">Import distributors</a>
-			<a href="/workspace/partners/customers/new{scopeQuery}">Invite a customer</a>
-		</nav>
-		<section class="attention-section" aria-labelledby="attention-heading">
-			<header class="section-heading">
-				<div>
-					<h2 id="attention-heading">Needs attention</h2>
-					<p>
-						{allChecked
-							? `${attention.length} item${attention.length === 1 ? '' : 's'} to review`
-							: 'Some records have not been checked yet.'}
-					</p>
+					<span><small>Due in the next 7 days</small><strong>{dueThisWeek}</strong></span>
 				</div>
-				<a href="/workspace/sales{scopeQuery}">View sales</a>
-			</header>
-			{#each [{ resource: sales, label: 'Sales' }, { resource: payments, label: 'Payments' }, { resource: overdue, label: 'Overdue sales' }, { resource: claims, label: 'Reported transfers' }, { resource: disputes, label: 'Reported problems' }] as item, i (i)}<ResourceNotice
+			{:else}<strong class="balance" aria-hidden="true">—</strong>{/if}
+		</section>
+		{#if totalOwed === null}<ResourceNotice resource={summary} label="Balance" retry={loadRequests} />{/if}
+
+		{#if allChecked && attention.length}<section class="attention" aria-labelledby="attention-heading">
+				<h2 id="attention-heading">Check these</h2>
+				<div class="action-list">
+					{#each attention.slice(0, visibleCount) as item (item.id)}<a href={item.href}
+							><span><strong>{item.title}</strong><small>{item.detail}</small></span><span aria-hidden="true">→</span
+							></a
+						>{/each}
+				</div>
+				{#if attention.length > visibleCount}<button
+						class="secondary"
+						type="button"
+						onclick={() => (visibleCount += 10)}>Show {attention.length - visibleCount} more</button
+					>{/if}
+			</section>{/if}
+
+		<section class="owing" aria-labelledby="owing-heading">
+			<h2 id="owing-heading">Customers</h2>
+			{#each [{ resource: sales, label: 'Credit to businesses' }, { resource: people, label: 'Credit to persons' }, { resource: overdue, label: 'Past due dates' }, { resource: payments, label: 'Payments' }, { resource: claims, label: 'Reported transfers' }, { resource: disputes, label: 'Reported problems' }] as item, i (i)}<ResourceNotice
 					resource={item.resource}
 					label={item.label}
 					retry={loadRequests}
 				/>{/each}
-			{#if attention.length}<div class="action-list">
-					{#each attention.slice(0, visibleCount) as item (item.id)}<article>
-							<div>
-								<h3>{item.title}</h3>
-								<p>{item.detail}</p>
-							</div>
-							<a href={item.href}>{item.action} <span aria-hidden="true">→</span></a>
-						</article>{/each}
+			{#if owing.length}<div class="record-list">
+					{#each owing as row (row.key)}<a class="record-row" class:late={row.late} href={row.href}
+							><span
+								><strong>{row.name}</strong><small
+									>{row.kind}{row.late ? ' · Past due date' : ''}{row.waiting
+										? ` · ${row.waiting} not yet accepted`
+										: ''}</small
+								></span
+							><strong
+								>{#if row.owed > 0n}<Money amountKobo={row.owed} />{:else}<small class="pending"
+										>Waiting: <Money amountKobo={row.waitingKobo} /></small
+									>{/if}</strong
+							></a
+						>{/each}
 				</div>
-				{#if attention.length > visibleCount}<button
-						class="secondary show-more"
-						type="button"
-						onclick={() => (visibleCount += 10)}>Show more · {attention.length - visibleCount} remaining</button
-					>{/if}
-			{:else if allChecked}<div class="empty-state">
-					<h3>Nothing needs an action right now.</h3>
-					<p>Your sales, reported payments and problems were checked successfully.</p>
+			{:else if sales.state === 'ready' && people.state === 'ready'}<div class="empty-state">
+					<h3>Nobody owes you yet</h3>
+					<p>When you give goods on credit, the customer shows here with what he owes and when.</p>
+					<a class="primary" href="/workspace/give{scopeQuery}">Give goods on credit</a>
 				</div>{/if}
 		</section>
-		{#if sales.state === 'ready'}<section class="recent-sales">
-				<header class="section-heading">
-					<h2>Recent sales</h2>
-					<a href="/workspace/sales{scopeQuery}">All sales</a>
-				</header>
-				{#if !sales.data.length}<div class="empty-state">
-						<h3>No sales yet</h3>
-						<p>Add the goods, amount and payment date for your first customer.</p>
-						<a class="primary" href="/workspace/sales/quick{scopeQuery}">Add my first sale</a>
-					</div>{:else}<div class="record-list">
-						{#each sales.data.slice(0, 5) as view (view.request.id)}<a
-								class="record-row"
-								href="/workspace/sales/{encodeURIComponent(view.request.id)}{scopeQuery}"
-								><span
-									><strong>{view.request.buyer_legal_name}</strong><small>{productLabel(view.request.state)}</small
-									></span
-								><strong><Money amountKobo={view.obligation?.outstanding_kobo ?? view.request.principal_kobo} /></strong
-								></a
-							>{/each}
-					</div>{/if}
-			</section>{/if}
 		<FeedbackPrompt area="seller" {organizationID} />
 	{/if}
 </main>
 
 <style>
-	.shortcut-links {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem 1.5rem;
-		margin-block: 1.5rem;
-	}
-	.shortcut-links a {
-		display: inline-flex;
-		align-items: center;
-		min-height: 44px;
-		color: var(--color-primary);
-		font-weight: 550;
-	}
-
-	.referral-link {
-		display: inline-flex;
-		align-items: center;
-		min-height: 44px;
-		padding-block: 0.5rem;
-	}
 	.account-home {
-		max-width: 66rem;
+		max-width: 48rem;
+		padding-bottom: 3rem;
 	}
 	.task-heading {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 1.5rem;
-		padding-block: 1rem 1.5rem;
+		gap: 1rem;
+		padding-block: 1rem 1.25rem;
 	}
 	.task-heading h1 {
-		margin: 0.25rem 0;
-		font-size: clamp(1.8rem, 4vw, 2.4rem);
-		line-height: 1.2;
+		margin: 0.25rem 0 0;
+		font-size: clamp(1.8rem, 5vw, 2.4rem);
+		line-height: 1.15;
 	}
-	.task-heading .lede {
-		font-size: 1rem;
-		margin: 0.5rem 0 0;
+	.give {
+		white-space: nowrap;
 	}
-	.toolbar {
-		display: flex;
-		align-items: end;
-		flex-wrap: wrap;
-		gap: 1rem;
-		margin-bottom: 1.5rem;
-	}
-	.toolbar label {
+	.switch {
 		display: grid;
 		gap: 0.4rem;
-		flex: 1;
-		max-width: 24rem;
+		max-width: 22rem;
+		margin-bottom: 1rem;
 	}
-	.toolbar select {
-		width: 100%;
+	.switch select {
 		font: inherit;
 		padding: 0.7rem;
-		background: var(--color-surface);
 		border: 1px solid var(--color-border);
 		border-radius: 0.35rem;
-	}
-	.toolbar button {
-		padding: 0.7rem 1rem;
-		border: 1px solid var(--color-border);
 		background: var(--color-surface);
-		border-radius: 0.35rem;
-	}
-	.toolbar a {
-		display: flex;
-		align-items: center;
-		color: var(--color-primary);
 	}
 	.balance-card {
 		padding: 1.5rem;
 		background: var(--color-primary);
 		color: var(--color-on-primary);
-		border-radius: 0;
 		--color-muted: rgb(255 255 255 / 0.72);
 	}
 	.balance-card > p {
@@ -444,102 +483,68 @@
 	}
 	.balance {
 		display: block;
-		margin: 0.5rem 0;
-		font-size: clamp(2.1rem, 6vw, 3.5rem);
-		line-height: 1.2;
+		margin: 0.4rem 0 1rem;
+		font-size: clamp(2.1rem, 7vw, 3.2rem);
+		line-height: 1.15;
 		letter-spacing: -0.03em;
 		font-variant-numeric: tabular-nums;
 		overflow-wrap: anywhere;
 	}
-	.balance-caption {
-		font-size: 0.9rem;
-	}
-	.late-strip {
-		display: flex;
+	.figures {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
 		gap: 1rem;
-		align-items: center;
-		flex-wrap: wrap;
-		margin: 1.5rem -0.5rem -0.5rem;
-		padding: 1rem;
-		border-radius: 0.35rem;
-		background: var(--color-background);
-		color: var(--color-overdue);
-		text-decoration: none;
+		padding-top: 1rem;
+		border-top: 1px solid rgb(255 255 255 / 0.2);
 	}
-	.late-strip strong {
-		margin-left: auto;
+	.figures span {
+		display: grid;
+		gap: 0.2rem;
 	}
-	.checked-state {
-		margin-top: 1rem !important;
-		font-size: 0.9rem;
-	}
-	.attention-section,
-	.recent-sales {
-		margin-block: 2rem;
-	}
-	.section-heading {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 1rem;
-		margin-bottom: 1rem;
-	}
-	.section-heading h2 {
-		font-size: 1.25rem;
-		margin: 0;
-	}
-	.section-heading p {
-		font-size: 0.9rem;
+	.figures small {
 		color: var(--color-muted);
-		margin: 0.4rem 0 0;
 	}
-	.section-heading a {
-		color: var(--color-primary);
+	.figures strong {
+		font-size: 1.2rem;
+		font-variant-numeric: tabular-nums;
+	}
+	section.attention,
+	section.owing {
+		margin-top: 2rem;
+	}
+	h2 {
+		margin: 0 0 0.75rem;
+		font-size: 1.25rem;
 	}
 	.action-list {
-		border: 1px solid var(--color-border);
-		border-radius: 0.5rem;
-		background: var(--color-surface);
-		overflow: hidden;
-	}
-	.action-list article {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1.5rem;
-		padding: 1rem 1.25rem;
-		border-bottom: 1px solid var(--color-border);
-	}
-	.action-list article:last-child {
-		border: 0;
-	}
-	.action-list h3 {
-		font-family: inherit;
-		font-size: 1rem;
-		margin: 0;
-	}
-	.action-list p {
-		font-size: 0.9rem;
-		line-height: 1.5;
-		color: var(--color-muted);
-		margin: 0.35rem 0 0;
+		display: grid;
+		gap: 0.5rem;
+		margin-bottom: 0.75rem;
 	}
 	.action-list a {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		color: var(--color-primary);
-		font-weight: 650;
-		white-space: nowrap;
-	}
-	.show-more {
-		margin-top: 1rem;
-		padding: 0.75rem 1rem;
-		background: transparent;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.9rem 1rem;
 		border: 1px solid var(--color-border);
-		border-radius: 0.35rem;
+		border-left: 4px solid var(--color-accent);
+		border-radius: 0.4rem;
+		background: var(--color-surface);
+		color: inherit;
+		text-decoration: none;
+	}
+	.action-list span:first-child,
+	.record-row span {
+		display: grid;
+		gap: 0.2rem;
+	}
+	.action-list small,
+	.record-row small {
+		color: var(--color-muted);
 	}
 	.record-list {
+		display: grid;
 		border-top: 1px solid var(--color-border);
 	}
 	.record-row {
@@ -547,25 +552,29 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		padding: 1rem 0.25rem;
+		min-height: 3.5rem;
+		padding: 0.8rem 0.25rem;
 		border-bottom: 1px solid var(--color-border);
+		color: inherit;
 		text-decoration: none;
-	}
-	.record-row span {
-		display: grid;
-		gap: 0.4rem;
-	}
-	.record-row small {
-		color: var(--color-muted);
 	}
 	.record-row > strong {
 		font-variant-numeric: tabular-nums;
-		text-align: right;
+		white-space: nowrap;
+	}
+	.pending {
+		font-weight: 500;
+	}
+	.record-row.late small {
+		color: var(--color-overdue, var(--color-accent));
+		font-weight: 600;
 	}
 	.onboarding {
 		padding: 1.5rem;
-		max-width: 48rem;
-		margin: auto;
+	}
+	.onboarding .small {
+		color: var(--color-muted);
+		font-size: 0.9rem;
 	}
 	.form-grid {
 		display: grid;
@@ -577,8 +586,7 @@
 		gap: 0.45rem;
 	}
 	.form-grid input,
-	.form-grid select,
-	.form-grid textarea {
+	.form-grid select {
 		box-sizing: border-box;
 		width: 100%;
 		font: inherit;
@@ -606,27 +614,10 @@
 	@media (max-width: 560px) {
 		.task-heading {
 			align-items: start;
-			flex-wrap: wrap;
-		}
-		.action-list article {
-			align-items: start;
 			flex-direction: column;
-			gap: 0.4rem;
-		}
-		.action-list a {
-			min-height: 2.75rem;
 		}
 		.form-grid {
 			grid-template-columns: 1fr;
-		}
-		.record-row {
-			align-items: start;
-		}
-		.record-row > strong {
-			font-size: 0.95rem;
-		}
-		.section-heading {
-			flex-wrap: wrap;
 		}
 	}
 </style>

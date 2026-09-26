@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { readableDate } from '$lib/datetime';
-	import { workspaceHref } from '$lib/workspace-navigation';
 	import { checkedJSON, LatestRequest, record, rows, text, publicError } from '$lib/api/reliable';
 	import { kobo } from '$lib/records';
 	import { page } from '$app/state';
@@ -181,11 +180,6 @@
 			</article>
 		</section>
 		<h2>Your payment days</h2>
-		<p>
-			<a href={workspaceHref('/workspace/purchases/amendments', page.url)}
-				>See any changes to your payment days, and what you agreed to →</a
-			>
-		</p>
 		{#if data.schedule_items.length}
 			<div class="table">
 				<table>
