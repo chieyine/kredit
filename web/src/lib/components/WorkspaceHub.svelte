@@ -15,85 +15,74 @@
 </script>
 
 <svelte:head><title>{title} — Kredit</title></svelte:head>
-<main class="shell workspace workspace-hub">
-	<header>
-		{#if eyebrow}<p class="eyebrow">{eyebrow}</p>{/if}
-		<h1>{title}</h1>
-		{#if description}<p class="lede">{description}</p>{/if}
+<main class="shell k-page workspace-hub">
+	<header class="k-head">
+		<div>
+			{#if eyebrow}<p class="k-eyebrow">{eyebrow}</p>{/if}
+			<h1>{title}</h1>
+			{#if description}<p>{description}</p>{/if}
+		</div>
 	</header>
-	{#each groups as group, groupIndex (groupIndex)}<section>
-			<h2>{group.title}</h2>
-			<p>{group.description}</p>
-			<div class="hub-cards">
-				{#each group.links as [label, href, body], linkIndex (linkIndex)}<a href={workspaceHref(href, page.url)}
-						><h3>{label}</h3>
-						<p>{body}</p>
-						<span aria-hidden="true">→</span></a
+	{#each groups as group, groupIndex (groupIndex)}<section class="k-section">
+			<div class="k-section-head">
+				<h2>{group.title}</h2>
+			</div>
+			{#if group.description}<p class="group-note">{group.description}</p>{/if}
+			<div class="k-ledger hub-cards">
+				{#each group.links as [label, href, body], linkIndex (linkIndex)}<a
+						class="hub-row"
+						href={workspaceHref(href, page.url)}
+						><span class="text"
+							><h3>{label}</h3>
+							<small>{body}</small></span
+						><span aria-hidden="true">→</span></a
 					>{/each}
 			</div>
 		</section>{/each}
 </main>
 
 <style>
-	.workspace-hub {
-		max-width: 66rem;
-		padding-bottom: 3rem;
+	.workspace-hub .k-section:first-of-type {
+		margin-top: 0;
 	}
-	header {
-		padding-block: 1.5rem;
+	.group-note {
+		margin: -0.4rem 0 1rem;
+		color: var(--color-muted);
+		line-height: 1.55;
 	}
-	h1 {
-		font-size: clamp(2rem, 4vw, 3rem);
-		letter-spacing: -0.035em;
-		line-height: 1.1;
-		margin: 0.6rem 0;
+	.hub-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		min-height: 4.5rem;
+		padding: 1rem 1.25rem;
+		border-top: 1px solid var(--color-border);
+		color: inherit;
+		text-decoration: none;
+		transition: background-color 160ms ease;
 	}
-	h2 {
-		font-size: 1.3rem;
-		margin: 0 0 0.5rem;
+	.hub-row:first-child {
+		border-top: 0;
+	}
+	.hub-row:hover {
+		background: var(--color-surface-muted);
+	}
+	.text {
+		display: grid;
+		gap: 0.25rem;
 	}
 	h3 {
-		font-size: 1.1rem;
 		margin: 0;
+		font-size: 1.02rem;
 	}
-	p {
+	small {
 		color: var(--color-muted);
-		line-height: 1.65;
+		font-size: 0.9rem;
+		line-height: 1.45;
 	}
-	.lede {
-		max-width: 65ch;
-	}
-	.workspace-hub section {
-		padding-block: 1.5rem;
-		border-top: 1px solid var(--color-border);
-	}
-	.hub-cards {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 1rem;
-		margin-top: 1.25rem;
-	}
-	.hub-cards a {
-		padding: 1.5rem;
-		border: 1px solid var(--color-border);
-		border-radius: 0.8rem;
-		background: var(--color-surface);
-		text-decoration: none;
-	}
-	.hub-cards a:hover {
-		border-color: var(--color-primary);
-	}
-	.hub-cards span {
+	.hub-row > span:last-child {
 		color: var(--color-primary);
-		font-size: 1.2rem;
-	}
-	.hub-cards p {
-		font-size: 0.95rem;
-		margin: 0.6rem 0 1rem;
-	}
-	@media (max-width: 760px) {
-		.hub-cards {
-			grid-template-columns: 1fr;
-		}
+		font-weight: 600;
 	}
 </style>

@@ -35,7 +35,7 @@
 	rowTitle={(view) => view.request?.supplier_trading_name || view.request?.supplier_legal_name || 'Supplier'}
 	rowDetail={(view) =>
 		[view.request?.goods_description, waiting(view) ? 'Waiting for you to accept' : ''].filter(Boolean).join(' · ')}
-	rowStatus={(view) => view.obligation?.payment_status ?? view.request?.state ?? ''}
+	rowStatus={(view) => (waiting(view) ? '' : (view.obligation?.payment_status ?? view.request?.state ?? ''))}
 	rowAmount={(view) => view.obligation?.outstanding_kobo ?? view.request?.principal_kobo ?? null}
 	rowAmountLabel="Left to pay"
 	rowHref={creditHref}

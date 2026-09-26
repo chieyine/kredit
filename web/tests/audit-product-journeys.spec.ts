@@ -99,7 +99,7 @@ test('switching businesses cannot show an earlier balance under the new name', a
 	);
 	await page.goto('/workspace/today');
 	await page.getByRole('combobox', { name: 'Business', exact: true }).selectOption('org-b');
-	await expect(page.locator('.task-heading .eyebrow')).toHaveText('Borno Supplies');
+	await expect(page.locator('.k-head .k-eyebrow')).toHaveText('Borno Supplies');
 	await expect(page.getByLabel('What you are owed')).toContainText('₦98,765.49');
 	finishA?.();
 	await expect(page.getByLabel('What you are owed')).not.toContainText('₦123,456.00');
@@ -244,7 +244,7 @@ test('giving credit uses the server timing preview, exact kobo, and sends it', a
 	await page.getByLabel('What goods?').fill('40 cartons of cooking oil');
 	await page.getByLabel('How much? (₦)').fill('127,500.49');
 	await page.getByLabel('Pay by').fill('2026-12-18');
-	await expect(page.locator('.summary')).toContainText('₦127,500.49');
+	await expect(page.getByLabel('What your customer will see')).toContainText('₦127,500.49');
 	await page.getByRole('button', { name: 'Send to customer' }).click();
 	await expect.poll(() => body).toBeTruthy();
 	expect(body).toMatchObject({
@@ -430,5 +430,5 @@ test('giving credit never presents an unavailable customer list as empty', async
 	await page.getByText('A business', { exact: true }).click();
 	await expect(page.getByRole('alert')).toContainText('Your customers unavailable');
 	await expect(page.getByRole('heading', { name: 'New business customer' })).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Send to customer' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: /Send to customer/ })).toBeDisabled();
 });

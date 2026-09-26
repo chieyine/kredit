@@ -489,16 +489,15 @@
 	}
 	/* Giving credit is the one action; it reads as a button, not a tab. */
 	.desktop-primary a.give {
-		margin-left: 0.5rem;
-		padding-inline: 1rem;
-		border-radius: 999px;
-		background: var(--color-accent);
-		color: #fff;
+		margin-left: 0.75rem;
+		padding-inline: 1.1rem;
+		background: #e2603a;
+		color: #0b0d12;
 	}
 	.desktop-primary a.give:hover,
 	.desktop-primary a.give[aria-current='page'] {
-		color: #fff;
-		filter: brightness(1.08);
+		background: #ef7049;
+		color: #0b0d12;
 	}
 	.desktop-primary a.give[aria-current='page']::after {
 		display: none;
@@ -509,8 +508,8 @@
 		left: 0.68rem;
 		right: 0.68rem;
 		bottom: 0.3rem;
-		height: 1px;
-		background: var(--color-primary);
+		height: 2px;
+		background: #e2603a;
 	}
 	.mobile-nav {
 		display: none;
@@ -723,9 +722,9 @@
 			grid-template-columns: repeat(var(--nav-count, 4), minmax(0, 1fr));
 			min-height: 4.7rem;
 			padding: 0 0.25rem max(0.35rem, env(safe-area-inset-bottom));
-			border-top: 1px solid var(--color-border);
-			background: rgba(250, 248, 242, 0.98);
-			box-shadow: 0 -8px 28px rgba(23, 24, 27, 0.09);
+			border-top: 1px solid #272c38;
+			background: #0b0d12;
+			box-shadow: 0 -10px 30px rgba(11, 13, 18, 0.18);
 			backdrop-filter: none;
 		}
 		.mobile-nav a {
@@ -740,7 +739,7 @@
 			padding: 0.48rem 0.15rem 0.25rem;
 			border: 0;
 			background: transparent;
-			color: var(--color-foreground);
+			color: #a9a69e;
 			font: inherit;
 			font-size: 0.78rem;
 			font-weight: 760;
@@ -762,11 +761,11 @@
 			background: transparent;
 		}
 		.mobile-nav a[aria-current='page'] {
-			background: var(--color-background);
-			color: var(--color-primary);
+			background: transparent;
+			color: #f4f1ea;
 		}
 		.mobile-nav a[aria-current='page']::after {
-			background: var(--color-primary);
+			background: #e2603a;
 		}
 		.mobile-icon {
 			position: relative;
@@ -777,12 +776,25 @@
 			transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
 		}
 		.mobile-nav a.give {
-			color: var(--color-accent);
+			color: #f4f1ea;
 		}
 		.mobile-nav a.give .mobile-icon {
-			border-radius: 999px;
-			background: var(--color-accent);
-			color: #fff;
+			width: 2rem;
+			height: 2rem;
+			margin-top: -0.25rem;
+			background: #e2603a;
+			color: #0b0d12;
+		}
+		.mobile-nav a.give .mobile-icon::before {
+			left: 7px;
+			top: 15px;
+		}
+		.mobile-nav a.give .mobile-icon::after {
+			left: 15px;
+			top: 7px;
+		}
+		.mobile-nav a.give::after {
+			display: none;
 		}
 		.mobile-nav a[aria-current='page'] .mobile-icon {
 			transform: translateY(-1px) scale(1.06);

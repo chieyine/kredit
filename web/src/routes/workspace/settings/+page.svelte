@@ -18,4 +18,4 @@
 	] as { title: string; description: string; links: [string, string, string][] }[];
 </script>
 
-<WorkspaceHub title="Settings" description="" eyebrow="" {groups} />
+<WorkspaceHub title="Settings" description="" eyebrow="Your business" {groups} />

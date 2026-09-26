@@ -119,8 +119,8 @@
 {#if loading}<div class="shell purchase-context" role="status">Opening your purchasing workspace…</div>
 {:else}
 	<div class="shell purchase-context">
-		{#if businesses.length}<label
-				>Purchasing business<select bind:value={selected} onchange={change}
+		{#if businesses.length > 1}<label
+				>Buying as<select bind:value={selected} onchange={change}
 					><option value="" disabled>Choose your business</option>{#each businesses as business (business.id)}<option
 							value={business.id}>{business.name}</option
 						>{/each}</select
@@ -143,8 +143,11 @@
 
 <style>
 	.purchase-context {
-		max-width: 66rem;
-		padding-block: 1rem;
+		max-width: 60rem;
+		padding-block: 1.5rem 0;
+	}
+	.purchase-context:empty {
+		display: none;
 	}
 	.purchase-context label {
 		display: grid;
@@ -155,9 +158,8 @@
 	.purchase-context select {
 		padding: 0.65rem;
 		font: inherit;
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--color-border-strong);
 		background: var(--color-surface);
-		border-radius: 0.4rem;
 	}
 	.purchase-context section {
 		padding: 2rem 0;

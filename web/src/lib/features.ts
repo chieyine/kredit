@@ -42,6 +42,7 @@ export const parkedPages: Parked[] = [
 	{ path: '/workspace/purchases/permissions', to: '/workspace/purchases/obligations' },
 	{ path: '/workspace/purchases/access', to: '/workspace/purchases/obligations' },
 	{ path: '/workspace/purchases/trade-lines', to: '/workspace/purchases/obligations' },
+	{ path: '/workspace/purchases/mandates', to: '/workspace/purchases/obligations' },
 	{ path: '/workspace/purchases/amendments', to: '/workspace/purchases/obligations' },
 	{ path: '/workspace/purchases/history', to: '/workspace/purchases/obligations' },
 	{ path: '/workspace/purchases/disputes', to: '/workspace/purchases/obligations', exact: true },

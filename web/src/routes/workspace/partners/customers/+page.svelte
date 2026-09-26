@@ -12,12 +12,32 @@
 		organizationID = $state(''),
 		list = $state<Row[]>([]),
 		search = $state(''),
+		kindFilter = $state('all'),
 		loading = $state(true),
 		error = $state(''),
 		peopleError = $state('');
 	const reads = new LatestRequest();
 	const query = $derived(`?organization=${encodeURIComponent(organizationID)}`);
-	const shown = $derived(list.filter((row) => row.name.toLowerCase().includes(search.trim().toLowerCase())));
+	const shown = $derived(
+		list.filter(
+			(row) =>
+				(kindFilter === 'all' || row.kind === kindFilter) &&
+				row.name.toLowerCase().includes(search.trim().toLowerCase())
+		)
+	);
+	const totalOwed = $derived(list.reduce((sum, row) => sum + row.owed, 0n));
+	const businessName = $derived(
+		businesses.find((org) => org.id === organizationID)?.trading_name ||
+			businesses.find((org) => org.id === organizationID)?.legal_name ||
+			''
+	);
+	const initials = (name: string) =>
+		name
+			.split(/\s+/)
+			.filter((part) => /[A-Za-z]/.test(part[0] ?? ''))
+			.slice(0, 2)
+			.map((part) => part[0]!.toUpperCase())
+			.join('') || '#';
 
 	async function load() {
 		const request = reads.begin();
@@ -93,12 +113,18 @@
 </script>
 
 <svelte:head><title>Customers — Kredit</title></svelte:head>
-<main class="shell customers">
-	<header>
-		<h1>Customers</h1>
-		<a class="primary" href="/workspace/give{query}">Give goods on credit</a>
+<main class="shell k-page">
+	<header class="k-head">
+		<div>
+			<p class="k-eyebrow">{businessName || 'Your business'}</p>
+			<h1>Customers</h1>
+			{#if list.length}<p>
+					{list.length} customer{list.length === 1 ? '' : 's'} · <Money amountKobo={totalOwed} /> owed to you
+				</p>{/if}
+		</div>
+		<a class="primary" href="/workspace/give{query}">Give goods on credit <span aria-hidden="true">→</span></a>
 	</header>
-	{#if businesses.length > 1}<label class="switch"
+	{#if businesses.length > 1}<label class="field"
 			>Business<select bind:value={organizationID} onchange={() => chooseWorkspace(organizationID)}
 				>{#each businesses as org (org.id)}<option value={org.id}>{org.trading_name || org.legal_name}</option
 					>{/each}</select
@@ -106,96 +132,89 @@
 		>{/if}
 	{#if error}<p class="error" role="alert">{error} <button onclick={load}>Try again</button></p>{/if}
 	{#if peopleError}<p class="error" role="alert">{peopleError}</p>{/if}
-	{#if loading}<p role="status">Opening your customers…</p>
-	{:else if !list.length && !error}<div class="empty-state">
-			<h2>No customers yet</h2>
+	{#if loading}<p role="status" class="loading">Opening your customers…</p>
+	{:else if !list.length && !error}<div class="k-ledger k-empty">
+			<h3>No customers yet</h3>
 			<p>Give goods on credit to a business or a person, and he will show here.</p>
+			<a class="primary" href="/workspace/give{query}">Give goods on credit</a>
 		</div>
 	{:else if list.length}
-		{#if list.length > 8}<label class="search">Find a customer<input type="search" bind:value={search} /></label>{/if}
-		<div class="record-list">
-			{#each shown as row (row.key)}<a class="record-row" href={row.href}
-					><span><strong>{row.name}</strong><small>{row.kind}{row.note ? ` · ${row.note}` : ''}</small></span><span
-						class="owed"><small>Owes you</small><strong><Money amountKobo={row.owed} /></strong></span
-					></a
-				>{:else}<p>No customer matches “{search}”.</p>{/each}
+		<div class="tools">
+			<label class="field search"
+				>Find a customer<input type="search" bind:value={search} placeholder="Name or phone number" /></label
+			>
+			<div class="filters" role="group" aria-label="Show">
+				{#each [['all', 'All'], ['Business', 'Businesses'], ['Person', 'Persons']] as [value, label] (value)}<button
+						type="button"
+						class:on={kindFilter === value}
+						aria-pressed={kindFilter === value}
+						onclick={() => (kindFilter = value)}>{label}</button
+					>{/each}
+			</div>
+		</div>
+		<div class="k-ledger record-list">
+			<div class="k-ledger-head"><span>Customer</span><span>Owes you</span></div>
+			{#each shown as row (row.key)}<a class="k-row" href={row.href}
+					><span class="k-mark" class:person={row.kind === 'Person'} aria-hidden="true">{initials(row.name)}</span><span
+						class="k-who"><strong>{row.name}</strong><small>{row.kind}{row.note ? ` · ${row.note}` : ''}</small></span
+					><span class="k-amount"><strong><Money amountKobo={row.owed} /></strong></span></a
+				>{:else}<p class="none">No customer matches that.</p>{/each}
 		</div>
 	{/if}
 </main>
 
 <style>
-	.customers {
-		max-width: 48rem;
-		padding-bottom: 3rem;
-	}
-	header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding-block: 1rem 1.25rem;
-	}
-	h1 {
-		margin: 0;
-		font-size: clamp(1.8rem, 5vw, 2.4rem);
-	}
-	.switch,
-	.search {
+	.field {
 		display: grid;
 		gap: 0.4rem;
 		max-width: 22rem;
 		margin-bottom: 1rem;
+		font-weight: 600;
+		font-size: 0.9rem;
 	}
 	select,
 	input {
 		font: inherit;
-		padding: 0.7rem;
-		border: 1px solid var(--color-border);
-		border-radius: 0.35rem;
+		font-weight: 400;
+		padding: 0.75rem 0.9rem;
+		border: 1px solid var(--color-border-strong);
 		background: var(--color-surface);
 	}
-	.record-list {
-		display: grid;
-		border-top: 1px solid var(--color-border);
-	}
-	.record-row {
+	.tools {
 		display: flex;
-		align-items: center;
+		align-items: flex-end;
 		justify-content: space-between;
 		gap: 1rem;
-		min-height: 3.5rem;
-		padding: 0.8rem 0.25rem;
-		border-bottom: 1px solid var(--color-border);
-		color: inherit;
-		text-decoration: none;
+		flex-wrap: wrap;
+		margin-bottom: 1rem;
 	}
-	.record-row span {
-		display: grid;
-		gap: 0.2rem;
-	}
-	.record-row small {
-		color: var(--color-muted);
-	}
-	.owed {
-		text-align: right;
-		font-variant-numeric: tabular-nums;
-	}
-	.empty-state {
-		padding: 1.5rem;
-		border: 1px dashed var(--color-border);
-		border-radius: 0.5rem;
-	}
-	.empty-state h2 {
+	.tools .search {
+		flex: 1 1 18rem;
 		margin: 0;
-		font-size: 1.1rem;
 	}
-	.empty-state p {
+	.filters {
+		display: flex;
+		border: 1px solid var(--color-border-strong);
+	}
+	.filters button {
+		min-height: 3rem;
+		padding: 0 1rem;
+		border: 0;
+		border-left: 1px solid var(--color-border-strong);
+		background: var(--color-surface);
 		color: var(--color-muted);
+		font-weight: 600;
 	}
-	@media (max-width: 560px) {
-		header {
-			align-items: start;
-			flex-direction: column;
-		}
+	.filters button:first-child {
+		border-left: 0;
+	}
+	.filters button.on {
+		background: var(--kredit-ink);
+		color: var(--kredit-cream);
+	}
+	.loading,
+	.none {
+		padding: 1.5rem 1.25rem;
+		color: var(--color-muted);
 	}
 </style>

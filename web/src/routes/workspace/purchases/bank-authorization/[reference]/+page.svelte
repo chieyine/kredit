@@ -134,7 +134,7 @@
 
 <svelte:head><title>Set up bank permission — Kredit</title></svelte:head>
 <main class="shell workspace">
-	<a class="back" href={workspaceHref('/workspace/purchases/mandates', page.url)}>← Bank permissions</a>
+	<a class="back" href={workspaceHref('/workspace/purchases/obligations', page.url)}>← What I owe</a>
 	<p class="eyebrow">Bank permission</p>
 	<h1>Review bank authorisation</h1>
 	<p class="lede">
@@ -244,7 +244,7 @@
 				After authorizing, open your bank permissions and select “Check bank confirmation”. Bank activation may take
 				some time.
 			</p>
-			<a href={workspaceHref('/workspace/purchases/mandates', page.url)}>Check bank permission →</a>
+			<a href={workspaceHref('/workspace/purchases/obligations', page.url)}>Back to what I owe →</a>
 		</section>{/if}
 </main>
 

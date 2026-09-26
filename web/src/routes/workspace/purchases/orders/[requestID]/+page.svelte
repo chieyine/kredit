@@ -526,11 +526,7 @@
 			<section class="bank-panel" aria-labelledby="bank-heading">
 				<h2 id="bank-heading">How you will pay</h2>
 				{#if view.mandate?.status === 'ACTIVE'}<p class="permission-state">Permission active</p>
-					<p>
-						<a href={`/workspace/purchases/mandates?business_id=${encodeURIComponent(view.request.buyer_business_id)}`}
-							>Stop or check this bank debit →</a
-						>
-					</p>
+
 					{#if view.request.state === 'READY_TO_RELEASE'}<p>The seller can now arrange the goods.</p>{:else}<p>
 							Permission is active. Any debit still depends on the agreed date, amount and payment checks.
 						</p>{/if}

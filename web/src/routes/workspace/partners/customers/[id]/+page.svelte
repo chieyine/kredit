@@ -132,40 +132,48 @@
 </script>
 
 <svelte:head><title>Customer — Kredit</title></svelte:head>
-<main class="shell workspace">
-	<a href={`/workspace/partners/customers?organization=${encodeURIComponent(organizationID)}`}>← Customers</a>
-	<p class="eyebrow">Customer</p>
-	<h1>{customerName()}</h1>
-	<p class="lede">
-		You only see sales this customer made with you. No other seller can see your records, and you cannot see theirs.
-	</p>
+<main class="shell k-page">
+	<a class="k-back" href={`/workspace/partners/customers?organization=${encodeURIComponent(organizationID)}`}
+		><span aria-hidden="true">←</span> Customers</a
+	>
+	<header class="k-head">
+		<div>
+			<p class="k-eyebrow">Business customer</p>
+			<h1>{customerName()}</h1>
+			<p>Only you see what this customer owes you. No other seller sees your records.</p>
+		</div>
+		{#if history}<a
+				class="primary"
+				href={`/workspace/give?customer=${encodeURIComponent(buyerUserID)}&customer_business=${encodeURIComponent(page.params.id ?? '')}&organization=${encodeURIComponent(organizationID)}`}
+				>Give him more goods <span aria-hidden="true">→</span></a
+			>{/if}
+	</header>
 	{#if error}<p class="error" role="alert">
 			{error} <button type="button" onclick={() => loadCustomer()}>Try again</button>
-		</p>{:else if !history}<p>Opening this customer…</p>{:else}<div class="customer-actions">
-			<a
-				class="primary-link"
-				href={`/workspace/sales/new?customer=${encodeURIComponent(buyerUserID)}&customer_business=${encodeURIComponent(page.params.id ?? '')}&organization=${encodeURIComponent(organizationID)}`}
-				>Sell to them again</a
-			><button type="button" onclick={() => window.print()}>Print this page</button>
-		</div>
-		<ShareActions
-			title="Kredit customer statement"
-			text={`Kredit statement: ${money(history.current_active_principal_kobo)} is still owed across ${history.active_obligations ?? 0} open sale(s). ${history.completed_obligations ?? 0} sale(s) fully paid.`}
-		/>
-		<section class="stats">
-			<article><span>Sales still open</span><strong>{history.active_obligations ?? 0}</strong></article>
-			<article>
-				<span>Money they still owe you</span><strong>{money(history.current_active_principal_kobo)}</strong>
-			</article>
-			<article><span>Sales fully paid</span><strong>{history.completed_obligations ?? 0}</strong></article>
-			<article>
-				<span>Paid on time</span><strong
-					>{history.completed_obligations
-						? `${Number(history.on_time_percentage ?? 0).toFixed(0)}%`
-						: 'No record yet'}</strong
+		</p>{:else if !history}<p>Opening this customer…</p>{:else}
+		<section class="k-ink stats" aria-label="This customer">
+			<div class="k-ink-bar"><span>Account with you</span><span class="k-mono">Statement</span></div>
+			<p class="k-figure">
+				<small>Owes you</small><strong>{money(history.current_active_principal_kobo)}</strong>
+			</p>
+			<div class="k-stats">
+				<span><small>Credits still open</small><strong>{history.active_obligations ?? 0}</strong></span>
+				<span><small>Paid in full</small><strong>{history.completed_obligations ?? 0}</strong></span>
+				<span
+					><small>Paid on time</small><strong
+						>{history.completed_obligations
+							? `${Number(history.on_time_percentage ?? 0).toFixed(0)}%`
+							: 'No record yet'}</strong
+					></span
 				>
-			</article>
+			</div>
 		</section>
+		<div class="customer-actions">
+			<ShareActions
+				title="Kredit customer statement"
+				text={`Kredit statement: ${money(history.current_active_principal_kobo)} is still owed across ${history.active_obligations ?? 0} open credit(s). ${history.completed_obligations ?? 0} fully paid.`}
+			/><button type="button" class="secondary" onclick={() => window.print()}>Print this page</button>
+		</div>
 		<section class="card">
 			<h2>Your private note</h2>
 			<p>
@@ -197,12 +205,12 @@
 
 <style>
 	.customer-actions {
+		align-items: center;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.7rem;
 		margin-top: 1.25rem;
 	}
-	.customer-actions a,
 	.customer-actions button,
 	.card button {
 		padding: 0.7rem 0.9rem;
@@ -213,22 +221,12 @@
 		font-weight: 750;
 		text-decoration: none;
 	}
-	.customer-actions .primary-link {
-		border-color: var(--color-primary);
-		background: var(--color-primary);
-		color: var(--color-on-primary);
-	}
 	.stats {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-		gap: 1rem;
-		margin: 2rem 0;
+		margin: 0 0 1rem;
 	}
-	.stats article,
 	.card {
-		padding: 1.2rem;
+		padding: 1.25rem;
 		border: 1px solid var(--color-border);
-		border-radius: 1rem;
 		background: var(--color-surface);
 	}
 	.card {
@@ -246,15 +244,6 @@
 		padding: 0.75rem;
 		border: 1px solid var(--color-border);
 		font: inherit;
-	}
-	.stats span {
-		display: block;
-		color: var(--color-muted);
-	}
-	.stats strong {
-		display: block;
-		font-size: 1.45rem;
-		margin-top: 0.4rem;
 	}
 	.table {
 		display: grid;

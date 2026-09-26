@@ -2,8 +2,8 @@
 	import WorkspaceHub from '$lib/components/WorkspaceHub.svelte';
 	const groups = [
 		{
-			title: 'Your account',
-			description: 'These settings apply to you whether you buy, sell or use Kredit for personal purchases.',
+			title: 'Account',
+			description: '',
 			links: [
 				['Security', '/account/security', 'Manage extra sign-in checks, recovery codes and signed-in devices.'],
 				['Notifications', '/account/notifications', 'Choose your channels and quiet hours.'],
@@ -17,9 +17,4 @@
 	] as { title: string; description: string; links: [string, string, string][] }[];
 </script>
 
-<WorkspaceHub
-	eyebrow="Your Kredit account"
-	title="Account settings"
-	description="One set of preferences for your Kredit account. Business terms and staff access are managed separately in the workspace."
-	{groups}
-/>
+<WorkspaceHub eyebrow="You" title="My account" description="Your sign-in, security, messages and privacy." {groups} />

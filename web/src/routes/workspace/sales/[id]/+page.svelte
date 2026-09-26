@@ -551,16 +551,49 @@
 </script>
 
 <svelte:head><title>Sale {id} — Kredit</title></svelte:head>
-<section class="page-shell">
-	<a href="/workspace/today">← Your sales</a>
+<section class="page-shell k-page">
+	<a class="k-back" href={`/workspace/today?organization=${encodeURIComponent(organizationID)}`}
+		><span aria-hidden="true">←</span> Who owes me</a
+	>
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	{#if notice}<p class="success notice" role="status">{notice}</p>{/if}
 	{#if !view}{#if loading}<p role="status">Opening sale…</p>{:else}<button onclick={() => load()}>Try again</button
 			>{/if}{:else}
-		<p class="eyebrow">Sale · {productLabel(view.request.state)}</p>
-		<h1>{view.request.buyer_legal_name}</h1>
-		<p class="muted">The sale, the goods and every payment stay together here.</p>
-		<SaleProgress {view} audience="seller" /><SaleCosts {view} />
+		<header class="k-head">
+			<div>
+				<p class="k-eyebrow">Credit · {productLabel(view.request.state)}</p>
+				<h1>{view.request.buyer_legal_name}</h1>
+				<p>{view.request.goods_description}</p>
+			</div>
+		</header>
+		<section class="k-ink record" aria-label="This credit">
+			<div class="k-ink-bar">
+				<span>Credit record</span><span class="k-mono">KR-{view.request.id.slice(0, 6).toUpperCase()}</span>
+			</div>
+			<p class="k-figure">
+				<small>{view.obligation ? 'Left to pay' : 'Amount of this credit'}</small><strong
+					><Money amountKobo={view.obligation?.outstanding_kobo ?? view.request.principal_kobo} /></strong
+				>
+			</p>
+			<div class="k-stats">
+				<span><small>Given</small><strong><Money amountKobo={view.request.principal_kobo} /></strong></span>
+				<span
+					><small>Paid so far</small><strong
+						><Money
+							amountKobo={view.obligation
+								? (exactKobo(view.request.principal_kobo) ?? 0n) - (exactKobo(view.obligation.outstanding_kobo) ?? 0n)
+								: 0}
+						/></strong
+					></span
+				>
+				<span><small>Pay by</small><strong>{readableDate(nextDueItem?.due_at ?? view.request.due_date)}</strong></span>
+			</div>
+		</section>
+		<SaleProgress {view} audience="seller" />
+		<details class="costs">
+			<summary>What this credit costs you</summary>
+			<SaleCosts {view} />
+		</details>
 		<div class="quick-actions">
 			<a
 				class="repeat"
@@ -1082,5 +1115,23 @@
 			align-items: flex-start;
 			flex-direction: column;
 		}
+	}
+	.record {
+		margin-bottom: 1.5rem;
+	}
+	.costs {
+		margin: 1rem 0 1.5rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+	}
+	.costs > summary {
+		padding: 1rem 1.25rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.costs :global(section) {
+		margin: 0;
+		border: 0;
+		border-top: 1px solid var(--color-border);
 	}
 </style>

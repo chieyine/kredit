@@ -241,7 +241,7 @@ test('giving credit stays closed until who, what, how much and when are filled',
 	await expect(send).toBeDisabled();
 	await page.getByLabel('How much? (₦)').fill('150000');
 	await expect(send).toBeEnabled();
-	await expect(page.getByText('owes you')).toBeVisible();
+	await expect(page.getByLabel('What your customer will see')).toContainText('₦150,000.00');
 });
 
 test('offline mode is announced and financial actions remain unqueued', async ({ page, context }) => {

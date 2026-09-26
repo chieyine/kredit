@@ -172,6 +172,21 @@
 					).length
 				: 0)
 	);
+	const pastDue = $derived(summary.state === 'ready' ? (exactKobo(summary.data.overdue_kobo) ?? 0n) : 0n);
+	const todayLabel = new Intl.DateTimeFormat('en-NG', {
+		day: 'numeric',
+		month: 'short',
+		year: 'numeric',
+		timeZone: 'Africa/Lagos'
+	}).format(new Date());
+	const initials = (name: string) =>
+		name
+			.replace(/^\+?\d[\d\s]*$/, '#')
+			.split(/\s+/)
+			.filter((part) => /[A-Za-z#]/.test(part[0] ?? ''))
+			.slice(0, 2)
+			.map((part) => part[0]!.toUpperCase())
+			.join('') || '•';
 	const scopeQuery = $derived(`?organization=${encodeURIComponent(organizationID)}`);
 	async function loadRequests() {
 		const scope = organizationID;
@@ -289,13 +304,15 @@
 </script>
 
 <svelte:head><title>Who owes me — Kredit</title></svelte:head>
-<main class="shell workspace account-home">
-	<header class="task-heading">
+<main class="shell k-page">
+	<header class="k-head">
 		<div>
-			<p class="eyebrow">{businessTitle}</p>
+			<p class="k-eyebrow">{businessTitle}</p>
 			<h1>Who owes me</h1>
 		</div>
-		{#if organizationID}<a class="primary give" href="/workspace/give{scopeQuery}">Give goods on credit</a>{/if}
+		{#if organizationID}<a class="primary" href="/workspace/give{scopeQuery}"
+				>Give goods on credit <span aria-hidden="true">→</span></a
+			>{/if}
 	</header>
 	<ResourceNotice resource={businesses} label="Businesses" retry={load} />
 	{#if businesses.state === 'ready' && !organizations.length}
@@ -369,62 +386,76 @@
 				></label
 			>{/if}
 		<BusinessNextSteps {organizationID} />
-		<section class="balance-card" aria-label="What you are owed" aria-busy={summary.state === 'loading'}>
-			<p>Customers owe you</p>
-			{#if totalOwed !== null}
-				<strong class="balance"><Money amountKobo={totalOwed} /></strong>
-				<div class="figures">
-					<span
-						><small>Past due date</small><strong
-							>{#if summary.state === 'ready'}<Money amountKobo={summary.data.overdue_kobo} />{/if}</strong
-						></span
-					>
-					<span><small>Due in the next 7 days</small><strong>{dueThisWeek}</strong></span>
-				</div>
-			{:else}<strong class="balance" aria-hidden="true">—</strong>{/if}
+		<section class="k-ink hero" aria-label="What you are owed" aria-busy={summary.state === 'loading'}>
+			<div class="k-ink-bar"><span>Your balance</span><span class="k-mono">{todayLabel}</span></div>
+			<p class="k-figure">
+				<small>Customers owe you</small>
+				{#if totalOwed !== null}<strong class="balance"><Money amountKobo={totalOwed} /></strong>{:else}<strong
+						class="balance"
+						aria-hidden="true">—</strong
+					>{/if}
+			</p>
+			<div class="k-stats">
+				<span class:alert={pastDue > 0n}
+					><small>Past due date</small><strong
+						>{#if summary.state === 'ready'}<Money amountKobo={summary.data.overdue_kobo} />{:else}—{/if}</strong
+					></span
+				>
+				<span><small>Due in 7 days</small><strong>{dueThisWeek}</strong></span>
+				<span><small>Customers owing</small><strong>{owing.filter((row) => row.owed > 0n).length}</strong></span>
+			</div>
 		</section>
 		{#if totalOwed === null}<ResourceNotice resource={summary} label="Balance" retry={loadRequests} />{/if}
 
-		{#if allChecked && attention.length}<section class="attention" aria-labelledby="attention-heading">
-				<h2 id="attention-heading">Check these</h2>
-				<div class="action-list">
-					{#each attention.slice(0, visibleCount) as item (item.id)}<a href={item.href}
-							><span><strong>{item.title}</strong><small>{item.detail}</small></span><span aria-hidden="true">→</span
+		{#if allChecked && attention.length}<section class="k-section" aria-labelledby="attention-heading">
+				<div class="k-section-head">
+					<h2 id="attention-heading">Check these</h2>
+					<span>{attention.length} to look at</span>
+				</div>
+				<div class="k-ledger">
+					{#each attention.slice(0, visibleCount) as item (item.id)}<a class="k-todo" href={item.href}
+							><span><strong>{item.title}</strong><small>{item.detail}</small></span><span
+								>{item.action} <span aria-hidden="true">→</span></span
 							></a
 						>{/each}
 				</div>
 				{#if attention.length > visibleCount}<button
-						class="secondary"
+						class="secondary more"
 						type="button"
 						onclick={() => (visibleCount += 10)}>Show {attention.length - visibleCount} more</button
 					>{/if}
 			</section>{/if}
 
-		<section class="owing" aria-labelledby="owing-heading">
-			<h2 id="owing-heading">Customers</h2>
+		<section class="k-section" aria-labelledby="owing-heading">
+			<div class="k-section-head">
+				<h2 id="owing-heading">Customers</h2>
+				<a href="/workspace/partners/customers{scopeQuery}">All customers <span aria-hidden="true">→</span></a>
+			</div>
 			{#each [{ resource: sales, label: 'Credit to businesses' }, { resource: people, label: 'Credit to persons' }, { resource: overdue, label: 'Past due dates' }, { resource: payments, label: 'Payments' }, { resource: claims, label: 'Reported transfers' }, { resource: disputes, label: 'Reported problems' }] as item, i (i)}<ResourceNotice
 					resource={item.resource}
 					label={item.label}
 					retry={loadRequests}
 				/>{/each}
-			{#if owing.length}<div class="record-list">
-					{#each owing as row (row.key)}<a class="record-row" class:late={row.late} href={row.href}
-							><span
+			{#if owing.length}<div class="k-ledger record-list">
+					<div class="k-ledger-head"><span>Customer</span><span>Owes you</span></div>
+					{#each owing as row (row.key)}<a class="k-row record-row" class:late={row.late} href={row.href}
+							><span class="k-mark" class:person={row.kind === 'Person'} aria-hidden="true">{initials(row.name)}</span
+							><span class="k-who"
 								><strong>{row.name}</strong><small
-									>{row.kind}{row.late ? ' · Past due date' : ''}{row.waiting
+									>{#if row.late}<span class="k-tag">Past due</span>{' · '}{/if}{row.kind}{row.waiting
 										? ` · ${row.waiting} not yet accepted`
 										: ''}</small
 								></span
-							><strong
-								>{#if row.owed > 0n}<Money amountKobo={row.owed} />{:else}<small class="pending"
-										>Waiting: <Money amountKobo={row.waitingKobo} /></small
-									>{/if}</strong
+							><span class="k-amount"
+								>{#if row.owed > 0n}<strong><Money amountKobo={row.owed} /></strong>{:else}<strong class="pending"
+										><Money amountKobo={row.waitingKobo} /></strong
+									><small>Waiting to accept</small>{/if}</span
 							></a
 						>{/each}
 				</div>
-			{:else if sales.state === 'ready' && people.state === 'ready'}<div class="empty-state">
+			{:else if sales.state === 'ready' && people.state === 'ready'}<div class="k-ledger k-empty">
 					<h3>Nobody owes you yet</h3>
-					<p>When you give goods on credit, the customer shows here with what he owes and when.</p>
+					<p>Give goods on credit and the customer shows here, with what he owes and when.</p>
 					<a class="primary" href="/workspace/give{scopeQuery}">Give goods on credit</a>
 				</div>{/if}
 		</section>
@@ -433,138 +464,46 @@
 </main>
 
 <style>
-	.account-home {
-		max-width: 48rem;
-		padding-bottom: 3rem;
-	}
-	.task-heading {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding-block: 1rem 1.25rem;
-	}
-	.task-heading h1 {
-		margin: 0.25rem 0 0;
-		font-size: clamp(1.8rem, 5vw, 2.4rem);
-		line-height: 1.15;
-	}
-	.give {
-		white-space: nowrap;
+	.hero .balance {
+		color: var(--kredit-cream);
 	}
 	.switch {
 		display: grid;
 		gap: 0.4rem;
 		max-width: 22rem;
-		margin-bottom: 1rem;
+		margin-bottom: 1.25rem;
+		font-weight: 600;
 	}
 	.switch select {
 		font: inherit;
+		font-weight: 400;
 		padding: 0.7rem;
 		border: 1px solid var(--color-border);
-		border-radius: 0.35rem;
 		background: var(--color-surface);
 	}
-	.balance-card {
-		padding: 1.5rem;
-		background: var(--color-primary);
-		color: var(--color-on-primary);
-		--color-muted: rgb(255 255 255 / 0.72);
-	}
-	.balance-card > p {
-		margin: 0;
-		color: var(--color-muted);
-	}
-	.balance {
-		display: block;
-		margin: 0.4rem 0 1rem;
-		font-size: clamp(2.1rem, 7vw, 3.2rem);
-		line-height: 1.15;
-		letter-spacing: -0.03em;
-		font-variant-numeric: tabular-nums;
-		overflow-wrap: anywhere;
-	}
-	.figures {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1rem;
-		padding-top: 1rem;
-		border-top: 1px solid rgb(255 255 255 / 0.2);
-	}
-	.figures span {
-		display: grid;
-		gap: 0.2rem;
-	}
-	.figures small {
-		color: var(--color-muted);
-	}
-	.figures strong {
-		font-size: 1.2rem;
-		font-variant-numeric: tabular-nums;
-	}
-	section.attention,
-	section.owing {
-		margin-top: 2rem;
-	}
-	h2 {
-		margin: 0 0 0.75rem;
-		font-size: 1.25rem;
-	}
-	.action-list {
-		display: grid;
-		gap: 0.5rem;
-		margin-bottom: 0.75rem;
-	}
-	.action-list a {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.9rem 1rem;
-		border: 1px solid var(--color-border);
-		border-left: 4px solid var(--color-accent);
-		border-radius: 0.4rem;
-		background: var(--color-surface);
-		color: inherit;
+	.k-section-head a {
+		color: var(--color-primary);
+		font-weight: 600;
+		font-size: 0.9rem;
 		text-decoration: none;
-	}
-	.action-list span:first-child,
-	.record-row span {
-		display: grid;
-		gap: 0.2rem;
-	}
-	.action-list small,
-	.record-row small {
-		color: var(--color-muted);
-	}
-	.record-list {
-		display: grid;
-		border-top: 1px solid var(--color-border);
-	}
-	.record-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		min-height: 3.5rem;
-		padding: 0.8rem 0.25rem;
-		border-bottom: 1px solid var(--color-border);
-		color: inherit;
-		text-decoration: none;
-	}
-	.record-row > strong {
-		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
 	}
 	.pending {
-		font-weight: 500;
+		color: var(--color-muted);
+		font-weight: 550;
 	}
-	.record-row.late small {
-		color: var(--color-overdue, var(--color-accent));
-		font-weight: 600;
+	.more {
+		margin-top: 0.75rem;
 	}
 	.onboarding {
-		padding: 1.5rem;
+		padding: 2rem;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+	}
+	.onboarding h2 {
+		margin-top: 0;
+		font-family: var(--font-display);
+		font-weight: 450;
+		font-size: 1.6rem;
 	}
 	.onboarding .small {
 		color: var(--color-muted);
@@ -574,44 +513,32 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 1rem;
+		margin-top: 1.5rem;
 	}
 	.form-grid label {
 		display: grid;
 		gap: 0.45rem;
+		font-weight: 600;
 	}
 	.form-grid input,
 	.form-grid select {
 		box-sizing: border-box;
 		width: 100%;
 		font: inherit;
+		font-weight: 400;
 		padding: 0.8rem;
-		border: 1px solid var(--color-border);
-		border-radius: 0.35rem;
+		border: 1px solid var(--color-border-strong);
 		background: var(--color-surface);
 	}
 	.wide {
 		grid-column: 1/-1;
 	}
-	.empty-state {
-		padding: 1.5rem;
-		border: 1px dashed var(--color-border);
-		border-radius: 0.5rem;
-	}
-	.empty-state h3 {
-		margin: 0;
-		font-size: 1rem;
-	}
-	.empty-state p {
-		line-height: 1.6;
-		color: var(--color-muted);
-	}
 	@media (max-width: 560px) {
-		.task-heading {
-			align-items: start;
-			flex-direction: column;
-		}
 		.form-grid {
 			grid-template-columns: 1fr;
+		}
+		.onboarding {
+			padding: 1.25rem;
 		}
 	}
 </style>

@@ -64,6 +64,11 @@
 		customers.state === 'ready' ? customers.data.find((item) => key(item) === selected) : undefined
 	);
 	const today = paymentDateAfter(0);
+	const seller = $derived(
+		organizations.state === 'ready' ? organizations.data.find((org) => org.id === organizationID) : undefined
+	);
+	const sellerName = $derived(seller?.trading_name || seller?.legal_name || '');
+	const dueValid = $derived(/^\d{4}-\d{2}-\d{2}$/.test(dueDate));
 	const scope = $derived(`?organization=${encodeURIComponent(organizationID)}`);
 	const ready = $derived(
 		goods.trim().length >= 3 &&
@@ -270,9 +275,15 @@
 </script>
 
 <svelte:head><title>Give goods on credit — Kredit</title></svelte:head>
-<main class="shell give">
-	<p><a href="/workspace/today{scope}">← Who owes me</a></p>
-	<h1>Give goods on credit</h1>
+<main class="shell k-page give">
+	<a class="k-back" href="/workspace/today{scope}"><span aria-hidden="true">←</span> Who owes me</a>
+	<header class="k-head">
+		<div>
+			<p class="k-eyebrow">New credit</p>
+			<h1>Give goods on credit</h1>
+			<p>Record the goods, the amount and the day to pay. Your customer gets it on WhatsApp and says yes.</p>
+		</div>
+	</header>
 	<ResourceNotice resource={organizations} label="Your business" retry={load} />
 
 	{#if organizations.state === 'ready' && !organizations.data.length}
@@ -297,156 +308,200 @@
 			<p><a href="/workspace/give{scope}">Give another credit</a></p>
 		</section>
 	{:else if organizationID}
-		<form class="card" onsubmit={give} aria-busy={busy}>
-			<fieldset class="who" disabled={busy}>
-				<legend>Who is taking the goods?</legend>
-				<div class="choice">
-					<label class:on={kind === 'business'}
-						><input type="radio" bind:group={kind} value="business" /><strong>A business</strong><small
-							>Shop, supermarket, distributor</small
-						></label
-					>
-					<label class:on={kind === 'person'}
-						><input type="radio" bind:group={kind} value="person" /><strong>A person</strong><small
-							>Buying for himself or his home</small
-						></label
-					>
-				</div>
-			</fieldset>
-
-			{#if kind === 'business'}
-				<ResourceNotice resource={customers} label="Your customers" retry={load} />
-				{#if customers.state === 'ready'}
-					{#if customers.data.length && !addingNew}
-						<label
-							>Customer<select bind:value={selected} disabled={busy}
-								><option value="">Choose the customer</option>{#each customers.data as item (key(item))}<option
-										value={key(item)}>{item.trading_name || item.legal_name}</option
-									>{/each}</select
+		<div class="layout">
+			<form id="give-form" class="sheet" onsubmit={give} aria-busy={busy}>
+				<fieldset class="who" disabled={busy}>
+					<legend>Who is taking the goods?</legend>
+					<div class="choice">
+						<label class:on={kind === 'business'}
+							><input type="radio" bind:group={kind} value="business" /><strong>A business</strong><small
+								>Shop, supermarket, distributor</small
 							></label
 						>
-						{#if buyer?.overdue}<p class="warn">
-								This customer is owing past his due date. Think before giving more.
-							</p>{/if}
-						<button type="button" class="link" onclick={() => (addingNew = true)}>New customer? Add him here</button>
-					{:else}
-						<div class="new-customer">
-							{#if inviteLink}
-								<h2>Send him this link first</h2>
-								<p>
-									He opens it and confirms his business. Once he has done that, come back here and his name will be on
-									the list.
-								</p>
-								<input value={inviteLink} readonly aria-label="Customer link" />
-								<ShareActions
-									title="Your Kredit customer link"
-									text={`Hello ${newName}, please open this link to confirm your business so I can give you goods on credit.`}
-									url={inviteLink}
-								/>
-							{:else}
-								<h2>New business customer</h2>
-								<p>He gets a link on WhatsApp to confirm his business. This is done once.</p>
-								<label>Business name<input bind:value={newName} autocomplete="off" disabled={busy} /></label>
-								<label
-									>WhatsApp number<input
-										bind:value={newPhone}
-										type="tel"
-										inputmode="tel"
-										placeholder="0803 000 0000"
-										disabled={busy}
-									/></label
-								>
-								<label
-									>Shop address<input
-										bind:value={newAddress}
-										placeholder="Shop number, street, town"
-										disabled={busy}
-									/></label
-								>
-								<label
-									>What does he sell?<input
-										bind:value={newIndustry}
-										placeholder="Provisions, drinks, building materials…"
-										disabled={busy}
-									/></label
-								>
-								<label
-									>Is the business registered?<select bind:value={newType} disabled={busy}
-										><option value="unregistered_business">Not registered</option><option value="registered_business"
-											>Business name (CAC)</option
-										><option value="limited_company">Limited company</option></select
-									></label
-								>
-								<button
-									type="button"
-									class="secondary"
-									disabled={busy || !newName.trim() || !newPhone.trim() || !newAddress.trim() || !newIndustry.trim()}
-									onclick={inviteBusiness}>Send him the link</button
-								>
-							{/if}
-							{#if customers.data.length}<button type="button" class="link" onclick={() => (addingNew = false)}
-									>Back to my customer list</button
-								>{/if}
-						</div>
-					{/if}
-				{/if}
-			{:else if kind === 'person'}
-				<label
-					>His WhatsApp number<input
-						bind:value={personPhone}
-						type="tel"
-						inputmode="tel"
-						placeholder="0803 000 0000"
-						disabled={busy}
-					/></label
-				>
-			{/if}
-
-			{#if (kind === 'business' && buyer) || kind === 'person'}
-				<fieldset class="credit" disabled={busy}>
-					<legend>The goods</legend>
-					<label
-						>What goods?<textarea
-							bind:value={goods}
-							rows="2"
-							maxlength="500"
-							placeholder="For example: 20 cartons of Indomie, 5 bags of rice"
-						></textarea></label
-					>
-					<label
-						>How much? (₦)<input
-							bind:value={amountText}
-							inputmode="decimal"
-							placeholder="150,000"
-						/>{#if amountWords}<small>{amountWords}</small>{/if}</label
-					>
-					<label>Pay by<input type="date" bind:value={dueDate} min={today} /></label>
+						<label class:on={kind === 'person'}
+							><input type="radio" bind:group={kind} value="person" /><strong>A person</strong><small
+								>Buying for himself or his home</small
+							></label
+						>
+					</div>
 				</fieldset>
-				{#if ready}<p class="summary">
-						<strong>{kind === 'business' ? buyer?.trading_name || buyer?.legal_name : personPhone}</strong> owes you
-						<strong><Money amountKobo={amount} /></strong> by <strong>{dateLabel(dueDate)}</strong>.
-					</p>{/if}
-				{#if error}<p class="error" role="alert">{error}</p>{/if}
-				<button class="primary big" disabled={busy || !ready}>{busy ? 'Sending…' : 'Send to customer'}</button>
-			{:else if error}<p class="error" role="alert">{error}</p>{/if}
-		</form>
+
+				{#if kind === 'business'}
+					<ResourceNotice resource={customers} label="Your customers" retry={load} />
+					{#if customers.state === 'ready'}
+						{#if customers.data.length && !addingNew}
+							<label
+								>Customer<select bind:value={selected} disabled={busy}
+									><option value="">Choose the customer</option>{#each customers.data as item (key(item))}<option
+											value={key(item)}>{item.trading_name || item.legal_name}</option
+										>{/each}</select
+								></label
+							>
+							{#if buyer?.overdue}<p class="warn">
+									This customer is owing past his due date. Think before giving more.
+								</p>{/if}
+							<button type="button" class="link" onclick={() => (addingNew = true)}>New customer? Add him here</button>
+						{:else}
+							<div class="new-customer">
+								{#if inviteLink}
+									<h2>Send him this link first</h2>
+									<p>
+										He opens it and confirms his business. Once he has done that, come back here and his name will be on
+										the list.
+									</p>
+									<input value={inviteLink} readonly aria-label="Customer link" />
+									<ShareActions
+										title="Your Kredit customer link"
+										text={`Hello ${newName}, please open this link to confirm your business so I can give you goods on credit.`}
+										url={inviteLink}
+									/>
+								{:else}
+									<h2>New business customer</h2>
+									<p>He gets a link on WhatsApp to confirm his business. This is done once.</p>
+									<label>Business name<input bind:value={newName} autocomplete="off" disabled={busy} /></label>
+									<label
+										>WhatsApp number<input
+											bind:value={newPhone}
+											type="tel"
+											inputmode="tel"
+											placeholder="0803 000 0000"
+											disabled={busy}
+										/></label
+									>
+									<label
+										>Shop address<input
+											bind:value={newAddress}
+											placeholder="Shop number, street, town"
+											disabled={busy}
+										/></label
+									>
+									<label
+										>What does he sell?<input
+											bind:value={newIndustry}
+											placeholder="Provisions, drinks, building materials…"
+											disabled={busy}
+										/></label
+									>
+									<label
+										>Is the business registered?<select bind:value={newType} disabled={busy}
+											><option value="unregistered_business">Not registered</option><option value="registered_business"
+												>Business name (CAC)</option
+											><option value="limited_company">Limited company</option></select
+										></label
+									>
+									<button
+										type="button"
+										class="secondary"
+										disabled={busy || !newName.trim() || !newPhone.trim() || !newAddress.trim() || !newIndustry.trim()}
+										onclick={inviteBusiness}>Send him the link</button
+									>
+								{/if}
+								{#if customers.data.length}<button type="button" class="link" onclick={() => (addingNew = false)}
+										>Back to my customer list</button
+									>{/if}
+							</div>
+						{/if}
+					{/if}
+				{:else if kind === 'person'}
+					<label
+						>His WhatsApp number<input
+							bind:value={personPhone}
+							type="tel"
+							inputmode="tel"
+							placeholder="0803 000 0000"
+							disabled={busy}
+						/></label
+					>
+				{/if}
+
+				{#if (kind === 'business' && buyer) || kind === 'person'}
+					<fieldset class="credit" disabled={busy}>
+						<legend>The goods</legend>
+						<label
+							>What goods?<textarea
+								bind:value={goods}
+								rows="2"
+								maxlength="500"
+								placeholder="For example: 20 cartons of Indomie, 5 bags of rice"
+							></textarea></label
+						>
+						<label
+							>How much? (₦)<input
+								bind:value={amountText}
+								inputmode="decimal"
+								placeholder="150,000"
+							/>{#if amountWords}<small>{amountWords}</small>{/if}</label
+						>
+						<label>Pay by<input type="date" bind:value={dueDate} min={today} /></label>
+					</fieldset>
+				{/if}
+			</form>
+			<aside class="k-ink receipt" aria-label="What your customer will see">
+				<div class="k-ink-bar"><span>Credit record</span><span class="k-mono">{ready ? 'Ready' : 'Draft'}</span></div>
+				<dl>
+					<div>
+						<dt>From</dt>
+						<dd>{sellerName || '—'}</dd>
+					</div>
+					<div>
+						<dt>To</dt>
+						<dd>
+							{kind === 'business'
+								? buyer?.trading_name || buyer?.legal_name || '—'
+								: kind === 'person'
+									? personPhone.trim() || '—'
+									: '—'}
+						</dd>
+					</div>
+					<div class="wide">
+						<dt>Goods</dt>
+						<dd>{goods.trim() || '—'}</dd>
+					</div>
+					<div>
+						<dt>Pay by</dt>
+						<dd>{dueValid ? dateLabel(dueDate) : '—'}</dd>
+					</div>
+					<div>
+						<dt>Paid so far</dt>
+						<dd>₦0.00</dd>
+					</div>
+				</dl>
+				<div class="total">
+					<small>To pay</small>
+					<strong
+						>{#if amount > 0}<Money amountKobo={amount} />{:else}₦0.00{/if}</strong
+					>
+				</div>
+				<div class="send">
+					{#if error}<p class="error" role="alert">{error}</p>{/if}
+					<button form="give-form" class="primary big" disabled={busy || !ready}
+						>{busy ? 'Sending…' : 'Send to customer'} <span aria-hidden="true">→</span></button
+					>
+					<p class="note">It only counts once your customer says yes.</p>
+				</div>
+			</aside>
+		</div>
 	{/if}
 </main>
 
 <style>
 	.give {
-		max-width: 38rem;
-		padding-bottom: 3rem;
+		max-width: 68rem;
 	}
-	h1 {
-		margin: 0.5rem 0 1.25rem;
-		font-size: clamp(1.8rem, 5vw, 2.4rem);
-		line-height: 1.15;
+	.layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+		gap: 1.5rem;
+		align-items: start;
 	}
-	form,
+	.sheet,
 	.done {
 		display: grid;
-		gap: 1.1rem;
+		gap: 1.25rem;
+		padding: 1.75rem;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		box-shadow: var(--edge-lit);
 	}
 	fieldset {
 		display: grid;
@@ -457,14 +512,21 @@
 		min-width: 0;
 	}
 	legend {
-		margin-bottom: 0.6rem;
-		font-weight: 700;
-		font-size: 1.1rem;
+		margin-bottom: 0.75rem;
+		font-family: var(--font-display);
+		font-weight: 450;
+		font-size: 1.35rem;
+		letter-spacing: -0.02em;
+	}
+	fieldset.credit {
+		padding-top: 1.25rem;
+		border-top: 1px solid var(--color-border);
 	}
 	label {
 		display: grid;
-		gap: 0.4rem;
+		gap: 0.45rem;
 		font-weight: 600;
+		font-size: 0.95rem;
 	}
 	label small {
 		color: var(--color-muted);
@@ -475,12 +537,19 @@
 	textarea {
 		font: inherit;
 		font-weight: 400;
-		padding: 0.75rem;
-		border: 1px solid var(--color-border);
-		border-radius: 0.4rem;
+		padding: 0.8rem 0.9rem;
+		border: 1px solid var(--color-border-strong);
 		background: var(--color-surface);
 		width: 100%;
 		box-sizing: border-box;
+		transition: border-color 160ms ease;
+	}
+	input:focus,
+	select:focus,
+	textarea:focus {
+		border-color: var(--kredit-ink);
+		outline: 2px solid var(--kredit-orange);
+		outline-offset: 1px;
 	}
 	.choice {
 		display: grid;
@@ -488,19 +557,48 @@
 		gap: 0.75rem;
 	}
 	.choice label {
-		gap: 0.2rem;
-		padding: 1rem;
-		border: 2px solid var(--color-border);
-		border-radius: 0.6rem;
+		position: relative;
+		gap: 0.25rem;
+		padding: 1.1rem 1.1rem 1.1rem 2.9rem;
+		border: 1px solid var(--color-border-strong);
+		background: var(--color-surface);
 		cursor: pointer;
+		transition:
+			border-color 160ms ease,
+			background-color 160ms ease;
+	}
+	.choice label::before {
+		content: '';
+		position: absolute;
+		left: 1.1rem;
+		top: 1.35rem;
+		width: 0.7rem;
+		height: 0.7rem;
+		border: 1.5px solid var(--color-border-strong);
+		transform: rotate(45deg);
 	}
 	.choice label.on {
-		border-color: var(--color-primary);
+		border-color: var(--kredit-ink);
+		background: var(--color-background);
+		box-shadow: inset 0 0 0 1px var(--kredit-ink);
+	}
+	.choice label.on::before {
+		border-color: var(--kredit-orange);
+		background: var(--kredit-orange);
+	}
+	.choice strong {
+		font-size: 1.02rem;
+	}
+	.choice small {
+		color: var(--color-muted);
+		font-weight: 400;
 	}
 	.choice input {
 		position: absolute;
 		opacity: 0;
 		width: 1px;
+		height: 1px;
+		min-height: 0;
 	}
 	.choice label:focus-within {
 		outline: 2px solid var(--focus-ring);
@@ -509,9 +607,9 @@
 	.new-customer {
 		display: grid;
 		gap: 0.9rem;
-		padding: 1rem;
-		border: 1px dashed var(--color-border);
-		border-radius: 0.6rem;
+		padding: 1.25rem;
+		background: var(--color-background);
+		border: 1px dashed var(--color-border-strong);
 	}
 	.new-customer h2 {
 		margin: 0;
@@ -520,35 +618,110 @@
 	.new-customer p {
 		margin: 0;
 		color: var(--color-muted);
+		line-height: 1.5;
 	}
 	.link {
 		justify-self: start;
+		min-height: 2.75rem;
 		padding: 0.4rem 0;
 		border: 0;
 		background: none;
 		color: var(--color-primary);
 		font: inherit;
-		text-decoration: underline;
+		font-weight: 600;
 		cursor: pointer;
+	}
+	.link:hover {
+		text-decoration: underline;
 	}
 	.warn {
 		margin: 0;
-		color: var(--color-accent);
+		color: var(--color-overdue);
+		font-weight: 550;
 	}
-	.summary {
+	.receipt {
+		position: sticky;
+		top: 5.5rem;
+	}
+	.receipt dl {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem 1.25rem;
 		margin: 0;
-		padding: 1rem;
-		background: var(--color-background);
-		border-radius: 0.5rem;
-		line-height: 1.6;
+		padding: 1.25rem 1.5rem;
+	}
+	.receipt dl .wide {
+		grid-column: 1 / -1;
+	}
+	.receipt dt {
+		color: var(--kredit-cream-muted);
+		font-size: 0.8rem;
+	}
+	.receipt dd {
+		margin: 0.2rem 0 0;
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.total {
+		padding: 1.1rem 1.5rem;
+		border-top: 1px solid var(--kredit-ink-line);
+	}
+	.total small {
+		display: block;
+		color: var(--kredit-cream-muted);
+		font-size: 0.82rem;
+	}
+	.total strong {
+		display: block;
+		margin-top: 0.2rem;
+		font-size: 2rem;
+		font-weight: 650;
+		letter-spacing: -0.035em;
+		font-variant-numeric: tabular-nums;
+	}
+	.send {
+		display: grid;
+		gap: 0.75rem;
+		padding: 0 1.5rem 1.5rem;
 	}
 	.big {
-		min-height: 3.25rem;
-		font-size: 1.05rem;
+		width: 100%;
+		min-height: 3.4rem;
+		font-size: 1.02rem;
 	}
-	@media (max-width: 420px) {
+	.send :global(button.primary:disabled) {
+		background: #1f232d;
+		color: #6f6d68;
+		border: 0;
+	}
+	.note {
+		margin: 0;
+		color: var(--kredit-cream-muted);
+		font-size: 0.85rem;
+		text-align: center;
+	}
+	.send .error {
+		margin: 0;
+		color: #f8a58a;
+	}
+	.done input {
+		font-family: ui-monospace, Menlo, monospace;
+		font-size: 0.9rem;
+	}
+	@media (max-width: 860px) {
+		.layout {
+			grid-template-columns: 1fr;
+		}
+		.receipt {
+			position: static;
+		}
+	}
+	@media (max-width: 480px) {
 		.choice {
 			grid-template-columns: 1fr;
+		}
+		.sheet {
+			padding: 1.25rem;
 		}
 	}
 </style>

@@ -152,18 +152,26 @@
 			controller?.abort();
 		};
 	});
+	const initial = (title: string) =>
+		title
+			.split(/\s+/)
+			.filter((part) => /[A-Za-z]/.test(part[0] ?? ''))
+			.slice(0, 2)
+			.map((part) => part[0]!.toUpperCase())
+			.join('') || '#';
 </script>
 
 <svelte:head><title>{title} — Kredit</title></svelte:head>
 
-<main class="shell workspace">
-	<header class="page-head">
+<main class="shell k-page">
+	<header class="k-head">
 		<div>
-			{#if eyebrow}<p class="eyebrow">{eyebrow}</p>{/if}
+			{#if eyebrow}<p class="k-eyebrow">{eyebrow}</p>{/if}
 			<h1>{title}</h1>
-			<p class="lede">{description}</p>
+			{#if description}<p>{description}</p>{/if}
 		</div>
-		{#if primaryHref}<a class="primary" href={scopedPrimaryHref}>{primaryLabel}</a>{/if}
+		{#if primaryHref}<a class="primary" href={scopedPrimaryHref}>{primaryLabel} <span aria-hidden="true">→</span></a
+			>{/if}
 	</header>
 
 	{#if endpoint || organizationPath}
@@ -204,13 +212,14 @@
 				? `${mine.length} ${mine.length === 1 ? 'item' : 'items'}`
 				: `${filtered.length} of ${mine.length}`}
 		</p>
-		<ul class="records">
+		<ul class="records k-ledger">
 			<!-- Several attempts or businesses can legitimately link to the same detail page. -->
 			{#each visible as record, i (i)}
 				{@const href = workspaceHref(rowHref(record, organizationID), page.url)}
 				{@const amount = rowAmount(record)}
 				<li>
 					<svelte:element this={href ? 'a' : 'div'} href={href || undefined} class="record">
+						<span class="k-mark" aria-hidden="true">{initial(rowTitle(record))}</span>
 						<span class="who">
 							<strong>{rowTitle(record)}</strong>
 							{#if rowDetail(record)}<small>{rowDetail(record)}</small>{/if}
@@ -233,7 +242,7 @@
 			</nav>
 		{/if}
 	{:else}
-		<section class="empty">
+		<section class="empty k-ledger">
 			<h2>{query ? 'Nothing matches that' : emptyTitle}</h2>
 			<p>{query ? 'Try a different name or word.' : emptyCopy}</p>
 			{#if primaryHref && !query}<a class="primary" href={scopedPrimaryHref}>{primaryLabel}</a>{/if}
@@ -242,25 +251,6 @@
 </main>
 
 <style>
-	.page-head {
-		display: flex;
-		align-items: end;
-		justify-content: space-between;
-		gap: 2rem;
-		padding: 1.5rem 0;
-		border-bottom: 1px solid var(--color-border);
-	}
-	.page-head h1 {
-		margin: 0.3rem 0;
-		font-size: 1.9rem;
-		line-height: 1.2;
-	}
-	.lede {
-		max-width: 60ch;
-		margin: 0.4rem 0 0;
-		color: var(--color-muted);
-		line-height: 1.6;
-	}
 	.toolbar {
 		display: flex;
 		align-items: end;
@@ -282,8 +272,8 @@
 		box-sizing: border-box;
 		width: 100%;
 		min-height: 3rem;
-		padding: 0.7rem;
-		border: 1px solid var(--color-border);
+		padding: 0.7rem 0.9rem;
+		border: 1px solid var(--color-border-strong);
 		background: var(--color-surface);
 		color: inherit;
 		font: inherit;
@@ -305,18 +295,20 @@
 		margin: 0.5rem 0 0;
 		padding: 0;
 		list-style: none;
+	}
+	.records li + li {
 		border-top: 1px solid var(--color-border);
 	}
 	.record {
-		display: flex;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto auto;
 		align-items: center;
-		justify-content: space-between;
-		gap: 1.25rem;
-		min-height: 4rem;
-		padding: 0.9rem 0.25rem;
-		border-bottom: 1px solid var(--color-border);
+		gap: 1rem;
+		min-height: 4.25rem;
+		padding: 0.85rem 1.25rem;
 		color: inherit;
 		text-decoration: none;
+		transition: background-color 160ms ease;
 	}
 	a.record:hover {
 		background: var(--color-surface-muted);
@@ -358,12 +350,14 @@
 	}
 	.empty {
 		margin-top: 1.5rem;
-		padding: 2rem;
-		border: 1px dashed var(--color-border);
+		padding: 2.5rem 1.5rem;
+		text-align: center;
 	}
 	.empty h2 {
 		margin: 0 0 0.4rem;
-		font-size: 1.15rem;
+		font-family: var(--font-display);
+		font-weight: 450;
+		font-size: 1.4rem;
 	}
 	.empty p {
 		margin: 0 0 1rem;
@@ -394,23 +388,17 @@
 		font: inherit;
 	}
 	@media (max-width: 640px) {
-		.page-head {
-			display: block;
-		}
-		.page-head .primary {
-			margin-top: 1rem;
-		}
 		.toolbar label,
 		.toolbar button {
 			width: 100%;
 		}
 		.record {
-			align-items: start;
-			flex-direction: column;
-			gap: 0.5rem;
+			grid-template-columns: auto minmax(0, 1fr) auto;
+			padding-inline: 1rem;
 		}
-		.amount {
-			text-align: left;
+		.record :global(.status) {
+			grid-column: 2 / -1;
+			justify-self: start;
 		}
 	}
 </style>

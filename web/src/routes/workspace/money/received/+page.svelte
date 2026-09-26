@@ -220,9 +220,10 @@
 </script>
 
 <svelte:head><title>Money in — Kredit</title></svelte:head>
-<main class="shell workspace payments-page">
+<main class="shell k-page payments-page">
 	<header class="page-heading">
 		<div>
+			<p class="k-eyebrow">Your business</p>
 			<h1>Money in</h1>
 			<p class="lede">
 				What your customers have paid, and transfers they say they sent. Check your bank before you confirm a transfer.
@@ -259,47 +260,43 @@
 			<a href="/workspace/today">Add business details</a>
 		</section>{:else if !error}
 		{#if done}<p class="notice" role="status">{done}</p>{/if}
-		<section class="money-summary" aria-label="Payment summary">
-			<article class="total">
-				<span>Money received</span><strong><Money amountKobo={receivedTotal} /></strong><small
-					>Every payment you confirmed</small
+		<section class="k-ink" aria-label="Payment summary">
+			<div class="k-ink-bar"><span>Money in</span><span class="k-mono">Confirmed payments</span></div>
+			<p class="k-figure">
+				<small>Money received</small><strong><Money amountKobo={receivedTotal} /></strong>
+			</p>
+			<div class="k-stats">
+				<span class:alert={pendingClaims.length > 0}
+					><small>Waiting for your answer</small><strong><Money amountKobo={pendingTotal} /></strong></span
 				>
-			</article>
-			<article class:needs-action={pendingClaims.length > 0}>
-				<span>Waiting for your answer</span><strong><Money amountKobo={pendingTotal} /></strong><small
-					>{pendingClaims.length} {pendingClaims.length === 1 ? 'payment' : 'payments'} to check</small
-				>
-			</article>
-			<article>
-				<span>Payments saved</span><strong>{payments.length}</strong><small>Payments in this checked record</small>
-			</article>
+				<span><small>Transfers to check</small><strong>{pendingClaims.length}</strong></span>
+				<span><small>Payments saved</small><strong>{payments.length}</strong></span>
+			</div>
 		</section>
-		<section class="review-section" aria-labelledby="review-title">
-			<header>
-				<div>
-					<p class="eyebrow">Needs your answer</p>
-					<h2 id="review-title">Check your bank for these</h2>
-				</div>
-				<span>{pendingClaims.length}</span>
-			</header>
-			{#if pendingClaims.length}<div class="claim-list">
-					{#each pendingClaims as claim (claim.id)}<article>
-							<div class="claim-amount">
-								<span>{claim.buyer_legal_name || 'A customer'} says they sent</span><strong
-									><Money amountKobo={claim.amount_kobo} /></strong
-								>
+
+		<section class="k-section" aria-labelledby="review-title">
+			<div class="k-section-head">
+				<h2 id="review-title">Check your bank for these</h2>
+				<span>{pendingClaims.length ? `${pendingClaims.length} to answer` : 'All answered'}</span>
+			</div>
+			{#if pendingClaims.length}<div class="claims">
+					{#each pendingClaims as claim (claim.id)}<article class="k-ledger claim">
+							<div class="claim-top">
+								<span class="k-eyebrow">{claim.buyer_legal_name || 'A customer'} says he sent</span>
+								<strong class="claim-figure"><Money amountKobo={claim.amount_kobo} /></strong>
+								{#if claim.goods_description}<p class="claim-sale">
+										For {claim.goods_description}{#if claim.credit_request_id}<span class="sep" aria-hidden="true"
+												>·</span
+											><a
+												href={`/workspace/sales/${encodeURIComponent(claim.credit_request_id)}?organization=${encodeURIComponent(organizationID)}`}
+												>Open sale</a
+											>{/if}
+									</p>{/if}
 							</div>
-							{#if claim.goods_description}<p class="claim-sale">
-									For {claim.goods_description}{#if claim.credit_request_id}<span class="sep" aria-hidden="true">·</span
-										><a
-											href={`/workspace/sales/${encodeURIComponent(claim.credit_request_id)}?organization=${encodeURIComponent(organizationID)}`}
-											>Open sale</a
-										>{/if}
-								</p>{/if}
 							<dl>
 								<div>
 									<dt>Transfer number</dt>
-									<dd>{claim.transfer_reference}</dd>
+									<dd class="k-code">{claim.transfer_reference}</dd>
 								</div>
 								<div>
 									<dt>Payment day</dt>
@@ -310,16 +307,16 @@
 									<dd>{date(claim.hold_expires_at)}</dd>
 								</div>
 							</dl>
-							<p>Open your bank app and look for the money before you answer.</p>
+							<p class="hint">Open your bank app and look for the money before you answer.</p>
 							<div class="claim-actions">
-								<button disabled={!!busy} onclick={() => decide(claim, 'confirmed')}
+								<button class="primary" disabled={!!busy} onclick={() => decide(claim, 'confirmed')}
 									>{busy === claim.id ? 'Saving…' : 'Yes, I got the money'}</button
 								><button class="secondary" disabled={!!busy} onclick={() => decide(claim, 'rejected')}
 									>I cannot find this money</button
 								>
 							</div>
 						</article>{/each}
-				</div>{:else}<div class="all-clear">
+				</div>{:else}<div class="k-ledger all-clear">
 					<span aria-hidden="true">✓</span>
 					<div>
 						<h3>Nothing to check right now.</h3>
@@ -327,57 +324,56 @@
 					</div>
 				</div>{/if}
 		</section>
-		<section class="history" aria-labelledby="history-title">
-			<header>
-				<div>
-					<p class="eyebrow">Your records</p>
-					<h2 id="history-title">Money received</h2>
-				</div>
-				<div class="filters">
-					<label
-						><span>Find a payment</span><input
-							type="search"
-							bind:value={query}
-							placeholder="Customer or transfer number"
-						/></label
-					><label
-						><span>Show</span><select bind:value={status}
-							><option value="all">All payments</option><option value="recognized">Received</option><option
-								value="reversed">Reversed</option
-							></select
-						></label
-					>
-				</div>
-			</header>
-			{#if visiblePayments.length}<div class="payment-table" role="table" aria-label="Payments received">
-					<div class="table-head" role="row">
+
+		<section class="k-section" aria-labelledby="history-title">
+			<div class="k-section-head">
+				<h2 id="history-title">Money received</h2>
+			</div>
+			<div class="filters">
+				<label
+					><span>Find a payment</span><input
+						type="search"
+						bind:value={query}
+						placeholder="Customer or transfer number"
+					/></label
+				><label
+					><span>Show</span><select bind:value={status}
+						><option value="all">All payments</option><option value="recognized">Received</option><option
+							value="reversed">Reversed</option
+						></select
+					></label
+				>
+			</div>
+			{#if visiblePayments.length}<div class="k-ledger payment-table" role="table" aria-label="Payments received">
+					<div class="k-ledger-head table-head" role="row">
 						<span role="columnheader">Customer</span><span role="columnheader">Amount</span><span role="columnheader"
 							>How</span
 						><span role="columnheader">Date</span><span role="columnheader">Status</span><span aria-hidden="true"
 						></span>
 					</div>
 					{#each visiblePayments as payment (payment.id)}<div class="payment-row" role="row">
-							<div role="cell">
+							<div role="cell" class="who">
 								<strong>{payment.buyer_legal_name || 'Customer'}</strong><small
 									>{payment.description || payment.reference || 'Sale payment'}</small
 								>
 							</div>
-							<div role="cell"><strong><Money amountKobo={payment.amount_kobo} /></strong></div>
-							<span role="cell">{source(payment.source_type)}</span><span role="cell">{date(payment.paid_at)}</span
-							><span role="cell" class:reversed={payment.state === 'reversed'} class="payment-state"
+							<div role="cell" class="amount"><strong><Money amountKobo={payment.amount_kobo} /></strong></div>
+							<span role="cell" class="muted">{source(payment.source_type)}</span><span role="cell" class="muted"
+								>{date(payment.paid_at)}</span
+							><span role="cell" class:reversed={payment.state === 'reversed'} class="k-tag quiet payment-state"
 								>{stateLabel(payment.state)}</span
 							><a
 								role="cell"
+								class="open"
 								href={`/workspace/sales/${encodeURIComponent(payment.id)}?organization=${encodeURIComponent(organizationID)}`}
-								>Open sale →</a
+								>Open sale <span aria-hidden="true">→</span></a
 							>
 						</div>{/each}
 				</div>
-			{:else if payments.length}<div class="empty-history">
+			{:else if payments.length}<div class="k-ledger k-empty">
 					<h3>No payment matches that.</h3>
 					<p>Try a different customer name, transfer number or status.</p>
-				</div>{:else}<div class="empty-history">
-					<span aria-hidden="true">₦</span>
+				</div>{:else}<div class="k-ledger k-empty">
 					<h3>No confirmed payments yet.</h3>
 					<p>Verified payments appear here. A reported transfer stays separate until it is confirmed.</p>
 					<a class="primary" href={`/workspace/give?organization=${encodeURIComponent(organizationID)}`}
@@ -401,199 +397,159 @@
 	/>{/if}
 
 <style>
-	.claim-sale .sep {
-		margin-inline: 0.35rem;
-	}
-	.claim-sale {
-		margin: 0.4rem 0 0;
-		color: var(--color-muted);
-		font-size: 0.9rem;
-	}
 	.payments-page {
-		max-width: 76rem;
-		padding-bottom: 5rem;
+		max-width: 60rem;
 	}
 	.page-heading {
 		display: flex;
 		justify-content: space-between;
 		align-items: end;
-		gap: 2rem;
-		padding-bottom: 2.2rem;
-		border-bottom: 3px solid var(--color-primary);
-	}
-	.page-heading > div {
-		max-width: 48rem;
+		gap: 1rem 2rem;
+		flex-wrap: wrap;
+		padding-bottom: 1.75rem;
 	}
 	.page-heading h1 {
-		max-width: 11ch;
-		margin: 0.45rem 0;
-		font-family: var(--font-serif);
-		font-size: clamp(1.9rem, 3.4vw, 2.6rem);
-		line-height: 1.1;
-		letter-spacing: -0.03em;
+		margin: 0.35rem 0 0.5rem;
+		font-size: clamp(2.1rem, 5vw, 3rem);
+		line-height: 1.02;
+		letter-spacing: -0.04em;
+	}
+	.page-heading .lede {
+		margin: 0;
+		color: var(--color-muted);
+		max-width: 56ch;
+		line-height: 1.55;
 	}
 	.page-heading label,
 	.filters label {
 		display: grid;
 		gap: 0.35rem;
-		font-size: 0.82rem;
-		font-weight: 750;
+		font-size: 0.85rem;
+		font-weight: 650;
 	}
 	.page-heading select,
 	.filters input,
 	.filters select {
 		box-sizing: border-box;
 		min-height: 3rem;
-		padding: 0.65rem 0.75rem;
-		border: 1px solid var(--color-border);
-		border-radius: 0;
+		padding: 0.65rem 0.8rem;
+		border: 1px solid var(--color-border-strong);
 		background: var(--color-surface);
-		color: var(--color-primary);
+		color: var(--color-foreground);
 		font: inherit;
+		font-weight: 400;
+	}
+	.money-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		margin: 1.1rem 0 0;
+	}
+	.money-links a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 2.75rem;
+		padding: 0 1rem;
+		border: 1px solid var(--color-border-strong);
+		background: var(--color-surface);
+		color: var(--color-foreground);
+		font-size: 0.9rem;
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.money-links a:hover {
+		border-color: var(--kredit-ink);
 	}
 	.error-box {
 		display: flex;
+		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		align-items: center;
-		margin: 1.5rem 0;
-		padding: 1rem;
-		color: var(--color-overdue);
-		background: var(--color-surface-muted);
-		border-left: 2px solid var(--color-overdue);
+		flex-wrap: wrap;
+		padding: 1rem 1.25rem;
+		border-left: 3px solid var(--color-destructive);
+		background: var(--color-surface);
+		color: var(--color-destructive);
 	}
 	.error-box p {
-		margin: 0.25rem 0;
+		margin: 0.25rem 0 0;
 	}
 	.error-box button {
-		padding: 0.65rem 1rem;
-		border: 1px solid var(--color-overdue);
-		border-radius: 0;
+		border: 1px solid currentColor;
 		background: transparent;
-		color: var(--color-overdue);
-		font-weight: 700;
+		color: inherit;
 	}
-	.loading {
-		padding: 2rem 0;
-	}
-	.money-summary {
-		display: grid;
-		grid-template-columns: 1.4fr 1fr 1fr;
-		margin: 2rem 0 4rem;
-		border-top: 1px solid var(--color-border);
-		border-left: 1px solid var(--color-border);
-	}
-	.money-summary article {
-		display: grid;
-		align-content: start;
-		min-height: 9rem;
-		padding: 1.35rem;
-		border-right: 1px solid var(--color-border);
-		border-bottom: 1px solid var(--color-border);
+	.notice {
+		padding: 0.9rem 1.1rem;
+		border-left: 3px solid var(--color-positive);
 		background: var(--color-surface);
+		color: var(--color-positive);
+		font-weight: 600;
 	}
-	.money-summary article.total {
-		color: var(--color-on-primary);
-		background: var(--color-primary);
-		--color-muted: rgb(255 255 255 / 0.72);
-	}
-	.money-summary article.needs-action {
-		box-shadow: inset 0 0.35rem var(--color-accent);
-	}
-	.money-summary span,
-	.money-summary small {
-		font-size: 0.82rem;
-	}
-	.money-summary strong {
-		margin: 0.6rem 0;
-		font-family: var(--font-serif);
-		font-size: clamp(2rem, 4vw, 3.3rem);
-		font-weight: 500;
-		letter-spacing: -0.04em;
-	}
-	.money-summary .total > span,
-	.money-summary .total strong,
-	.money-summary .total strong :global(span) {
-		color: var(--color-on-primary);
-	}
-	.money-summary .total small {
-		color: var(--color-surface-muted);
-	}
-	.review-section {
-		margin-bottom: 5rem;
-	}
-	.review-section > header,
-	.history > header {
-		display: flex;
-		justify-content: space-between;
-		align-items: end;
-		gap: 2rem;
-		padding-bottom: 1rem;
-		border-bottom: 1px solid var(--color-border);
-	}
-	.review-section h2,
-	.history h2 {
-		margin: 0.2rem 0;
-		font-family: var(--font-serif);
-		font-size: clamp(2rem, 4vw, 3.4rem);
-		font-weight: 500;
-		letter-spacing: -0.04em;
-	}
-	.review-section > header > span {
+	.claims {
 		display: grid;
-		place-items: center;
-		width: 2.6rem;
-		height: 2.6rem;
-		background: var(--color-accent);
-		color: var(--color-on-primary);
-		font-weight: 850;
-	}
-	.claim-list {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 1rem;
-		margin-top: 1rem;
-	}
-	.claim-list article {
-		padding: 1.4rem;
-		border: 1px solid var(--color-border);
-		background: var(--color-surface);
-		box-shadow: 6px 6px 0 var(--color-border);
-	}
-	.claim-amount {
-		display: grid;
-		gap: 0.3rem;
-		padding-bottom: 1rem;
-		border-bottom: 2px solid var(--color-primary);
-	}
-	.claim-amount span {
-		color: var(--color-muted);
-	}
-	.claim-amount strong {
-		font-family: var(--font-serif);
-		font-size: 1.7rem;
-		font-weight: 500;
-	}
-	.claim-list dl {
-		display: grid;
-		gap: 0.6rem;
-	}
-	.claim-list dl div {
-		display: flex;
-		justify-content: space-between;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
 		gap: 1rem;
 	}
-	.claim-list dt {
-		color: var(--color-muted);
+	.claim {
+		display: grid;
+		gap: 1rem;
+		padding: 1.25rem;
+		border-top: 3px solid var(--kredit-orange);
 	}
-	.claim-list dd {
+	.claim-top {
+		display: grid;
+		gap: 0.35rem;
+	}
+	.claim-figure {
+		font-size: 1.9rem;
+		font-weight: 650;
+		letter-spacing: -0.035em;
+		font-variant-numeric: tabular-nums;
+	}
+	.claim-sale {
 		margin: 0;
-		text-align: right;
-		font-weight: 700;
+		color: var(--color-muted);
+		font-size: 0.9rem;
 	}
-	.claim-list > article > p {
-		padding: 0.7rem;
+	.claim-sale .sep {
+		margin-inline: 0.35rem;
+	}
+	.claim-sale a {
+		color: var(--color-primary);
+		font-weight: 600;
+	}
+	.claim dl {
+		display: grid;
+		gap: 0.55rem;
+		margin: 0;
+		padding-top: 1rem;
+		border-top: 1px solid var(--color-border);
+	}
+	.claim dl div {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+	.claim dt {
+		color: var(--color-muted);
+	}
+	.claim dd {
+		margin: 0;
+		font-weight: 600;
+		text-align: right;
+	}
+	.k-code {
+		font-family: ui-monospace, Menlo, Consolas, monospace;
+		font-size: 0.9rem;
+	}
+	.hint {
+		margin: 0;
+		padding: 0.75rem 0.9rem;
 		background: var(--color-background);
+		color: var(--color-muted);
+		font-size: 0.9rem;
+		line-height: 1.5;
 	}
 	.claim-actions {
 		display: grid;
@@ -601,209 +557,92 @@
 		gap: 0.6rem;
 	}
 	.claim-actions button {
-		min-height: 3rem;
-		padding: 0.65rem;
-		border: 1px solid var(--color-primary);
-		border-radius: 0;
-		background: var(--color-primary);
-		color: var(--color-on-primary);
-		font: inherit;
-		font-weight: 750;
-		--color-muted: rgb(255 255 255 / 0.72);
-	}
-	.claim-actions .secondary {
-		border-color: var(--color-primary);
-		background: var(--color-surface);
-		color: var(--color-primary);
+		width: 100%;
 	}
 	.all-clear {
 		display: flex;
-		gap: 1rem;
 		align-items: center;
-		padding: 2rem 0;
+		gap: 1rem;
+		padding: 1.25rem;
 	}
 	.all-clear > span {
 		display: grid;
 		place-items: center;
-		width: 3.2rem;
-		height: 3.2rem;
-		background: var(--color-background);
-		color: var(--color-positive);
-		font-size: 1.4rem;
-		font-weight: 900;
+		width: 2.4rem;
+		height: 2.4rem;
+		background: var(--kredit-ink);
+		color: var(--kredit-orange);
+		font-weight: 700;
 	}
-	.all-clear h3,
+	.all-clear h3 {
+		margin: 0;
+	}
 	.all-clear p {
-		margin: 0.2rem 0;
+		margin: 0.2rem 0 0;
+		color: var(--color-muted);
 	}
 	.filters {
-		display: flex;
-		gap: 0.7rem;
-	}
-	.filters label:first-child {
-		min-width: min(19rem, 50vw);
-	}
-	.payment-table {
-		margin-top: 1rem;
-		border-top: 1px solid var(--color-border);
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 12rem;
+		gap: 0.75rem;
+		margin-bottom: 1rem;
 	}
 	.table-head,
 	.payment-row {
 		display: grid;
-		grid-template-columns:
-			minmax(11rem, 1.5fr) minmax(8rem, 0.8fr) minmax(9rem, 1fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr)
-			auto;
-		gap: 1rem;
+		grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.1fr) minmax(0, 0.9fr) auto;
 		align-items: center;
-		padding: 0.85rem;
-		border-right: 1px solid var(--color-border);
-		border-bottom: 1px solid var(--color-border);
-		border-left: 1px solid var(--color-border);
-	}
-	.table-head {
-		background: var(--color-primary);
-		color: var(--color-on-primary);
-		font-size: 0.75rem;
-		font-weight: 750;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		--color-muted: rgb(255 255 255 / 0.72);
+		gap: 1rem;
 	}
 	.payment-row {
-		background: var(--color-surface);
+		min-height: 4.25rem;
+		padding: 0.85rem 1.25rem;
+		border-top: 1px solid var(--color-border);
 	}
-	.payment-row > div {
+	.payment-row .who {
 		display: grid;
 		gap: 0.2rem;
+		min-width: 0;
 	}
-	.payment-row small {
+	.payment-row small,
+	.muted {
 		color: var(--color-muted);
+		font-size: 0.88rem;
 	}
-	.payment-row a {
-		color: var(--color-primary);
-		font-weight: 750;
-		text-decoration: none;
-		white-space: nowrap;
-	}
-	.payment-state {
-		width: max-content;
-		padding: 0.3rem 0.5rem;
-		background: var(--color-background);
-		color: var(--color-positive);
-		font-size: 0.78rem;
-		font-weight: 800;
+	.amount {
+		font-variant-numeric: tabular-nums;
 	}
 	.payment-state.reversed {
-		background: var(--color-background);
 		color: var(--color-overdue);
 	}
-	.empty-history {
-		margin-top: 1rem;
-		padding: clamp(2rem, 6vw, 4rem);
-		border: 1px solid var(--color-border);
-		background: var(--color-background);
-	}
-	.empty-history > span {
-		font-family: var(--font-serif);
-		font-size: 3rem;
+	.open {
 		color: var(--color-primary);
+		font-weight: 600;
+		font-size: 0.9rem;
+		white-space: nowrap;
+		text-decoration: none;
 	}
-	.empty-history h3 {
-		margin: 0.5rem 0;
-		font-family: var(--font-serif);
-		font-size: 2rem;
-		font-weight: 500;
-	}
-	.empty-history p {
-		max-width: 34rem;
-		color: var(--color-muted);
-	}
-	@media (max-width: 800px) {
-		.page-heading,
-		.review-section > header,
-		.history > header {
-			display: block;
-		}
-		.page-heading > label {
-			margin-top: 1rem;
-		}
-		.money-summary {
-			grid-template-columns: 1fr;
-		}
-		.claim-list {
-			grid-template-columns: 1fr;
-		}
-		.filters {
-			display: grid;
-			margin-top: 1rem;
-		}
-		.filters label:first-child {
-			min-width: 0;
-		}
-		.payment-table {
-			border: 0;
-		}
+	@media (max-width: 760px) {
 		.table-head {
 			display: none;
 		}
 		.payment-row {
-			grid-template-columns: 1fr auto;
-			gap: 0.65rem;
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: 0.35rem 1rem;
 		}
-		.payment-row > [role='cell'] {
-			grid-column: 1;
+		.payment-row .amount {
+			text-align: right;
 		}
-		.payment-row > [role='cell']:nth-child(2) {
-			grid-column: 2;
-			grid-row: 1;
+		.payment-row .muted,
+		.payment-state,
+		.open {
+			grid-column: 1 / -1;
 		}
-		.payment-row > [role='cell']:nth-child(3),
-		.payment-row > [role='cell']:nth-child(4) {
-			display: inline;
-		}
-		.payment-row > [role='cell']:nth-child(5) {
-			grid-column: 1;
-		}
-		.payment-row > a[role='cell'] {
-			grid-column: 2;
-			grid-row: 3;
+		.filters {
+			grid-template-columns: 1fr;
 		}
 		.claim-actions {
 			grid-template-columns: 1fr;
 		}
-		.error-box {
-			align-items: stretch;
-			flex-direction: column;
-		}
-		.error-box button {
-			width: 100%;
-		}
-	}
-	/* The most important number uses the strongest contrast in the product. */
-	.money-summary article.total {
-		color: var(--color-on-primary);
-		background: var(--color-primary);
-		box-shadow: inset 0 0.4rem var(--color-accent);
-		--color-muted: rgb(255 255 255 / 0.72);
-	}
-	.money-summary .total > span,
-	.money-summary .total strong,
-	.money-summary .total strong :global(span) {
-		color: var(--color-on-primary) !important;
-	}
-	.money-summary .total small {
-		color: var(--color-muted);
-	}
-	.money-links {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem 1.5rem;
-	}
-	.money-links a {
-		display: inline-flex;
-		align-items: center;
-		min-height: 2.75rem;
-		color: var(--color-primary);
-		font-weight: 600;
 	}
 </style>

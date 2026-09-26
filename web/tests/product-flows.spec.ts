@@ -550,6 +550,7 @@ test('a viewer without purchasing authority cannot report a transfer', async ({ 
 });
 
 test('buyer can cancel an active mandate', async ({ page }) => {
+	test.skip(PARKED, PARKED_REASON);
 	let cancelled = false;
 	await page.route('**/api/v1/buyer/mandates*', async (route) =>
 		route.fulfill({
@@ -588,7 +589,7 @@ test('mobile customer navigation keeps important pages below and every other pag
 	await page.route('**/api/v1/buyer/mandates*', async (route) =>
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mandates: [] }) })
 	);
-	await page.goto('/workspace/purchases/mandates');
+	await page.goto('/workspace/purchases/obligations');
 	const account = page.getByRole('navigation', { name: 'Your business' });
 	await expect(account.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
 	const mainPages = page.getByRole('navigation', { name: 'Your business main pages' });

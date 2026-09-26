@@ -141,9 +141,9 @@ test('customer history and repeat-sale link preserve the selected business', asy
 		});
 	});
 	await page.goto('/workspace/partners/customers/business-1?organization=org-b');
-	await expect(page.getByRole('link', { name: 'Sell to them again' })).toHaveAttribute(
+	await expect(page.getByRole('link', { name: 'Give him more goods' })).toHaveAttribute(
 		'href',
-		'/workspace/sales/new?customer=customer-1&customer_business=business-1&organization=org-b'
+		'/workspace/give?customer=customer-1&customer_business=business-1&organization=org-b'
 	);
 	expect(requested.length).toBe(2);
 	expect(requested.every((url) => url.includes('/organizations/org-b/'))).toBe(true);

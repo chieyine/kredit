@@ -77,7 +77,7 @@ test('one account opens personal purchases without business registration', async
 	await expect(page.getByText('No matching purchases yet.')).toBeVisible();
 	await page.getByRole('link', { name: 'Account settings', exact: true }).first().click();
 	await expect(page).toHaveURL(/\/account$/);
-	await expect(page.getByRole('heading', { name: 'Account settings', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'My account', exact: true })).toBeVisible();
 });
 test('workspace navigation keeps the selected business across both sides of trade', async ({
 	page,
@@ -134,7 +134,7 @@ test('a direct purchase link resolves the actual business and rejects a conflict
 		})
 	);
 	await page.goto('/workspace/purchases/obligations/debt-2');
-	await expect(page.getByRole('combobox', { name: 'Purchasing business' })).toHaveValue('profile-1');
+	await expect(page.getByRole('combobox', { name: 'Buying as' })).toHaveValue('profile-1');
 	await expect(page.getByRole('heading', { name: 'Goods for Distributor Limited' })).toBeVisible();
 	await expect(page).toHaveURL(/business_id=profile-1&organization=org-b/);
 	await page.goto('/workspace/purchases/obligations/debt-2?business_id=profile-0');
