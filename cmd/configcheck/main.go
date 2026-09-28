@@ -16,7 +16,11 @@ import (
 func main() {
 	stored := flag.Bool("stored", false, "include encrypted admin configuration from the database")
 	flag.Parse()
-	cfg, err := config.Load()
+	load := config.Load
+	if *stored {
+		load = config.LoadBootstrap
+	}
+	cfg, err := load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "production configuration rejected: %v\n", err)
 		os.Exit(1)

@@ -212,8 +212,7 @@
 					billing_configured: 'How you pay Kredit fees',
 					credit_policy: 'Your normal sale settings',
 					current_consents: 'Agree to the terms',
-					owner_mfa: 'Extra sign-in safety for you',
-					finance_mfa: 'Extra safety for staff who touch money'
+					owner_mfa: 'Extra sign-in safety for you'
 				} as Record<string, string>
 			)[code] ?? label
 		);

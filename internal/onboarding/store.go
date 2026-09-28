@@ -57,7 +57,6 @@ type Profile struct {
 	PrivacyVersion                string    `json:"privacy_version,omitempty"`
 	PrivacyAcceptedAt             time.Time `json:"privacy_accepted_at,omitzero"`
 	OwnerMFAVerifiedAt            time.Time `json:"owner_mfa_verified_at,omitzero"`
-	FinanceMFAComplete            bool      `json:"finance_mfa_complete"`
 	ReadinessState                string    `json:"readiness_state"`
 	ReadinessChangedAt            time.Time `json:"readiness_changed_at"`
 	CreatedAt                     time.Time `json:"created_at"`
@@ -124,7 +123,7 @@ type Service interface {
 	ApproveInvoiceBilling(organizationID, actorUserID, reference string, version int64, instructions string) (Profile, Summary, error)
 	UpdateCreditPolicy(organizationID, actorUserID string, input CreditPolicyInput) (Profile, Summary, error)
 	AcceptConsents(organizationID, actorUserID string, expectedVersion int64, termsVersion, privacyVersion string) (Profile, Summary, error)
-	SyncSecurity(organizationID, actorUserID string, ownerMFA, financeMFAComplete bool) (Profile, Summary, error)
+	SyncSecurity(organizationID, actorUserID string, ownerMFA bool) (Profile, Summary, error)
 	Reconcile(now time.Time) []Profile
 }
 
@@ -150,7 +149,7 @@ func (s *Store) Ensure(org, actor string, email, phone bool) (Profile, error) {
 		return *p, nil
 	}
 	now := s.now()
-	p := &Profile{OrganizationID: org, Version: 1, KYBState: "not_started", SettlementState: "not_started", BillingState: "not_started", FinanceMFAComplete: true, ReadinessState: StateIncomplete, ReadinessChangedAt: now, CreatedAt: now, UpdatedAt: now}
+	p := &Profile{OrganizationID: org, Version: 1, KYBState: "not_started", SettlementState: "not_started", BillingState: "not_started", ReadinessState: StateIncomplete, ReadinessChangedAt: now, CreatedAt: now, UpdatedAt: now}
 	if email {
 		p.OwnerEmailVerifiedAt = now
 	}
@@ -354,10 +353,10 @@ func (s *Store) AcceptConsents(org, actor string, expected int64, terms, privacy
 		return nil
 	})
 }
-func (s *Store) SyncSecurity(org, actor string, ownerMFA, financeMFA bool) (Profile, Summary, error) {
+func (s *Store) SyncSecurity(org, actor string, ownerMFA bool) (Profile, Summary, error) {
 	s.mu.RLock()
 	current := s.profiles[org]
-	if current != nil && (!current.OwnerMFAVerifiedAt.IsZero()) == ownerMFA && current.FinanceMFAComplete == financeMFA {
+	if current != nil && (!current.OwnerMFAVerifiedAt.IsZero()) == ownerMFA {
 		profile := *current
 		s.mu.RUnlock()
 		versions, err := legalpublication.Resolve(s.legalReader)
@@ -373,7 +372,6 @@ func (s *Store) SyncSecurity(org, actor string, ownerMFA, financeMFA bool) (Prof
 		} else if !ownerMFA {
 			p.OwnerMFAVerifiedAt = time.Time{}
 		}
-		p.FinanceMFAComplete = financeMFA
 		return nil
 	})
 }
@@ -420,7 +418,6 @@ func summarize(p Profile, now time.Time, selected ...legalpublication.Versions) 
 		{Code: "credit_policy", Label: "Set your default credit terms", Complete: !p.DefaultCreditPolicyUpdatedAt.IsZero(), ManagePath: "/workspace/settings/credit-policy"},
 		{Code: "current_consents", Label: "Accept the current terms and privacy notice", Complete: p.TermsVersion == versions.Terms && p.PrivacyVersion == versions.Privacy, ManagePath: "/workspace/onboarding"},
 		{Code: "owner_mfa", Label: "Turn on two-step sign-in for the owner", Complete: !p.OwnerMFAVerifiedAt.IsZero(), ManagePath: "/account/security"},
-		{Code: "finance_mfa", Label: "Turn on two-step sign-in for finance staff", Complete: p.FinanceMFAComplete, ManagePath: "/workspace/team"},
 	}
 	missing := []Requirement{}
 	for _, r := range reqs {

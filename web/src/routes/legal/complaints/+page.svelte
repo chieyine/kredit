@@ -27,10 +27,10 @@
 			</p>
 			<p>Write to {data.legal.entityName} ({data.legal.registrationNumber}), {data.legal.serviceAddress}.</p>
 			<p>
-				For an existing transaction, use the dispute controls in your <a href="/workspace/purchases/disputes"
+				For an existing transaction, use the dispute controls in your <a href="/workspace/purchases/obligations"
 					>buyer account</a
 				>
-				or <a href="/workspace/disputes">supplier account</a> to attach the concern to its record.
+				or <a href="/workspace/today">supplier account</a> to attach the concern to its record.
 			</p>
 		</section>
 		<section id="details">

@@ -9,8 +9,8 @@
 			'Every figure is held in kobo, not rounded naira. Payment references and balance checks stop the same payment being counted twice.'
 		],
 		[
-			'Your staff see their own work',
-			'What a member of staff can open depends on the role you give them. Private document links expire.'
+			'One person runs each business',
+			'Your business workspace belongs to its owner. Customers see their own agreements, and private document links expire.'
 		],
 		[
 			'Nothing changes quietly',
@@ -34,13 +34,13 @@
 		</div>
 		<div class="hero-side">
 			<p>
-				Sign-in codes, staff roles and a record of every money action. If you see something on your account you did not
-				do, tell us and it will be looked into.
+				Sign-in codes, private records and a history of every money action. If you see something on your account you did
+				not do, tell us and it will be looked into.
 			</p>
 			<dl>
 				<div>
-					<dt>Your staff</dt>
-					<dd>See only their own work</dd>
+					<dt>Your business</dt>
+					<dd>Managed by you</dd>
 				</div>
 				<div>
 					<dt>Your sale</dt>

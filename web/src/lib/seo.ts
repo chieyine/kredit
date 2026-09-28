@@ -81,7 +81,7 @@ export const pageSEOByPath: Record<string, PageSEO> = {
 	'/security': {
 		title: 'Is Kredit safe? What we do to protect your money',
 		description:
-			'How we protect your sign-in and your private records, what your staff can and cannot see, and what happens to a link once you have shared it.'
+			'How we protect your sign-in and your private records, who can see your agreements, and what happens to a link once you have shared it.'
 	},
 	'/faq': {
 		title: 'The questions people ask — Kredit',

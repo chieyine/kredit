@@ -717,7 +717,7 @@ func NewRuntimeWithDB(cfg config.Config, database *db.Pool) *Runtime {
 		auditStore = audit.NewPostgresStore(database.Raw())
 		idempotencyStore = idempotency.NewPostgresStore(database.Raw())
 		authStore = auth.NewPostgresStoreWithKeys(database.Raw(), sessionKey, otpKey, runtimeDomainKey(fieldKey, "", "auth"))
-		organizationStore = organizations.NewPostgresStore(database.Raw(), runtimeDomainKey(fieldKey, "", "organizations"))
+		organizationStore = organizations.NewPostgresStore(database.Raw())
 		onboardingStore = onboarding.NewPostgresStore(database.Raw())
 		buyerStore = buyers.NewPostgresStore(database.Raw(), runtimeDomainKey(fieldKey, "", "buyers"), identityProvider)
 		correctionStore = corrections.NewPostgresStore(database.Raw())

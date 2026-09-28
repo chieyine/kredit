@@ -77,9 +77,12 @@ function refusal(status: number, code: string): string {
 		return 'This request was already recorded. Refresh the record to check its result before making another change.';
 	if (code === 'idempotency_ambiguous')
 		return 'This request needs review. Contact support with the request key before submitting it again.';
+	if (code === 'mfa_invalid') return 'That authenticator code did not work. Check the six digits and try again.';
+	if (code === 'recovery_codes_unavailable')
+		return 'Backup codes could not be created. Refresh your safety settings and try again.';
 	if (status === 401) return 'Your session has ended. Sign in again to continue.';
 	if (code === 'step_up_required') return 'Confirm it is you with your authenticator code, then try again.';
-	if (status === 403) return 'Your role in this business does not allow this. Ask the owner if you need it.';
+	if (status === 403) return 'This business is not available to your account.';
 	if (status === 404 || status === 410)
 		return 'We could not find this. It may have been removed or the link has expired.';
 	if (status === 423)
@@ -105,7 +108,7 @@ export async function checkedJSON<T>(url: string, decode: Decoder<T>, init: Requ
 		});
 		let payload: unknown;
 		try {
-			payload = await response.json();
+			payload = response.status === 204 ? {} : await response.json();
 		} catch {
 			throw new RequestError(
 				'We could not verify the response.',

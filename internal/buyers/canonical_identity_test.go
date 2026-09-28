@@ -2,11 +2,8 @@ package buyers
 
 import (
 	"context"
-	"kredit/internal/identity"
-	"kredit/internal/purchasing"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -56,71 +53,5 @@ func TestCanonicalIdentityProjectsWithoutRewritingAuthority(t *testing.T) {
 	}
 	if _, err = pool.Exec(ctx, `INSERT INTO app.businesses(organization_id,owner_user_id,legal_name,business_type,business_address,industry) VALUES($1::uuid,$2::uuid,'Forged','limited_company','Kano','food')`, foreign, owner); err == nil {
 		t.Fatal("unrelated owner bound competitor business")
-	}
-	if err = pool.QueryRow(ctx, `SELECT display_name FROM app.users WHERE id=$1::uuid`, owner).Scan(&name); err != nil || name != "Personal identity retained" {
-		t.Fatalf("personal details changed: %s %v", name, err)
-	}
-}
-
-func TestStaffEnrollmentKeepsPersonalIdentityAndRequiresGrant(t *testing.T) {
-	if os.Getenv("KREDIT_INTEGRATION") != "1" {
-		t.Skip("isolated database required")
-	}
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer admin.Close()
-	owner, staff, profile := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	exec := func(q string, args ...any) {
-		t.Helper()
-		if _, e := admin.Exec(ctx, q, args...); e != nil {
-			t.Fatal(e)
-		}
-	}
-	for _, u := range []string{owner, staff} {
-		exec(`INSERT INTO app.users(id,normalized_email,display_name) VALUES($1::uuid,$2,'Keep personal name')`, u, u+"@staff.test")
-	}
-	exec(`INSERT INTO app.businesses(id,owner_user_id,legal_name,business_type,business_address,industry,status) VALUES($1::uuid,$2::uuid,'Staff business','limited_company','Lagos','food','verified')`, profile, owner)
-	exec(`INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'sales','active')`, profile, staff)
-	cfg, _ := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
-	cfg.ConnConfig.RuntimeParams["role"] = "kredit_app"
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
-	s := NewPostgresStore(pool, "staff-test", identity.NewMockProvider())
-	input := AcceptInput{FullName: "Acting Staff", ConsentsAccepted: true, TermsVersion: "terms", PrivacyVersion: "privacy", IdentityNoticeVersion: IdentityNoticeVersion}
-	if _, err = s.EnrollPurchasingStaff(ctx, staff, profile, input); err == nil {
-		t.Fatal("membership implicitly granted purchasing")
-	}
-	grants := purchasing.Store{Pool: pool}
-	if _, err = grants.Save(ctx, owner, profile, purchasing.Grant{UserID: staff, Actions: []string{"read", "accept"}, CeilingKobo: 10000, ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
-		t.Fatal(err)
-	}
-	portal, err := s.EnrollPurchasingStaff(ctx, staff, profile, input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if portal.Person.UserID != staff || portal.Representative.PersonID != portal.Person.ID || portal.Business.OwnerUserID != owner || portal.Representative.AuthorityStatus != "pending" {
-		t.Fatalf("incorrect actor or invented verification: %#v", portal)
-	}
-	input.FullName = "Replacement name"
-	replay, err := s.EnrollPurchasingStaff(ctx, staff, profile, input)
-	if err != nil || replay.Person.ID != portal.Person.ID || replay.Person.FullName != "Acting Staff" || replay.Representative.ID != portal.Representative.ID {
-		t.Fatalf("enrollment replay: %#v %v", replay, err)
-	}
-	if _, err = s.RefreshBusinessVerification(ctx, staff, profile); err != nil {
-		t.Fatal(err)
-	}
-	profiles, err := s.ListBusinessProfiles(ctx, staff)
-	if err != nil || len(profiles) != 1 || profiles[0].ID != profile {
-		t.Fatalf("staff profiles: %#v %v", profiles, err)
-	}
-	exec(`UPDATE app.memberships SET status='removed' WHERE organization_id=$1::uuid AND user_id=$2::uuid`, profile, staff)
-	if _, err = s.ReadBusinessPortal(ctx, staff, profile); err == nil {
-		t.Fatal("removed staff retained portal")
 	}
 }

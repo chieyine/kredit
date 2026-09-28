@@ -102,9 +102,7 @@
 	}
 	function change() {
 		const business = businesses.find((item) => item.id === selected);
-		const destination = ['/workspace/purchases/permissions', '/workspace/purchases/access'].includes(page.url.pathname)
-			? page.url.pathname
-			: '/workspace/purchases';
+		const destination = '/workspace/purchases';
 		if (business)
 			void goto(
 				`${destination}?business_id=${encodeURIComponent(business.id)}${business.workspaceID ? '&organization=' + encodeURIComponent(business.workspaceID) : ''}`

@@ -187,6 +187,15 @@ func (s *Sale) Calculate() {
 			frozen = true
 		}
 	}
+	s.calculateBalances()
+	if eligibleAt != nil {
+		d := eligibleAt.AddDate(0, 0, s.Terms.DeliveryDays)
+		s.DeliveryDue = &d
+	}
+}
+
+// Shared by detailed history and the aggregate-only workspace projection.
+func (s *Sale) calculateBalances() {
 	net := s.Paid - s.Refunded
 	price := s.Terms.Total - s.Reduction
 	s.Outstanding = max(int64(0), price-net)
@@ -196,10 +205,6 @@ func (s *Sale) Calculate() {
 		s.RefundDue = max(int64(0), net)
 	}
 	s.Eligible = s.State == "active" && s.ReleasedAt == nil && s.CaseState != "requested" && s.CaseState != "escalated" && net >= s.releaseAmount()
-	if eligibleAt != nil {
-		d := eligibleAt.AddDate(0, 0, s.Terms.DeliveryDays)
-		s.DeliveryDue = &d
-	}
 	remaining := net
 	s.Schedule = append([]Due(nil), s.Terms.Schedule...)
 	for i := range s.Schedule {

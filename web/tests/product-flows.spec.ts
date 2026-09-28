@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { PARKED, PARKED_REASON } from './parked';
 
 test.beforeEach(async ({ page, context, baseURL }) => {
 	await context.addCookies([
@@ -171,7 +170,6 @@ test('operator places an expiring scoped buyer risk hold', async ({ page }) => {
 });
 
 test('supplier can create exact credit terms with a replay-safe request', async ({ page }) => {
-	test.skip(PARKED, PARKED_REASON);
 	let submitted: Record<string, unknown> | undefined;
 	let idempotency = '';
 	await page.route('**/api/v1/organizations', async (route) =>
@@ -629,7 +627,6 @@ test('public receipt renders only the approved projection', async ({ page }) => 
 });
 
 test('supplier reserves exact drawdown terms and releases only after buyer confirmation', async ({ page }) => {
-	test.skip(PARKED, PARKED_REASON);
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 390, height: 844 });
 	let reserved: Record<string, unknown> | undefined;
@@ -721,7 +718,6 @@ test('supplier reserves exact drawdown terms and releases only after buyer confi
 });
 
 test('buyer confirms the exact hash and no-issue receipt activates the drawdown once', async ({ page }) => {
-	test.skip(PARKED, PARKED_REASON);
 	let confirmation: Record<string, unknown> | undefined;
 	let receipt: Record<string, unknown> | undefined;
 	let feesReady = false;
@@ -799,7 +795,6 @@ test('buyer confirms the exact hash and no-issue receipt activates the drawdown 
 });
 
 test('buyer receipt issue opens a case without activating an obligation', async ({ page }) => {
-	test.skip(PARKED, PARKED_REASON);
 	let receipt: Record<string, unknown> | undefined;
 	const line = {
 		id: 'line-issue',
@@ -855,7 +850,6 @@ test('buyer receipt issue opens a case without activating an obligation', async 
 });
 
 test('pilot-ready owner reviews mobile readiness and invites a sales user', async ({ page }) => {
-	test.skip(PARKED, PARKED_REASON);
 	await page.setViewportSize({ width: 390, height: 844 });
 	let invited: Record<string, unknown> | undefined;
 	await page.route('**/api/v1/organizations', async (route) =>
@@ -1102,7 +1096,6 @@ test('recovery start is enumeration-safe and explains independent proof', async 
 });
 
 test('owner changes a role, suspends access, and restores it from the team interface', async ({ page }) => {
-	test.skip(PARKED, PARKED_REASON);
 	const changes: Record<string, unknown>[] = [];
 	let member = { user_id: 'team-user', role: 'sales', status: 'active' };
 	await page.route('**/api/v1/organizations', async (route) =>
@@ -1135,7 +1128,6 @@ test('owner changes a role, suspends access, and restores it from the team inter
 });
 
 test('supplier creates a mandate-backed trade line and sees provider validation safely', async ({ page }) => {
-	test.skip(PARKED, PARKED_REASON);
 	let submitted: Record<string, unknown> | undefined;
 	let attempts = 0;
 	await page.route('**/api/v1/organizations', async (route) =>

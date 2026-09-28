@@ -26,7 +26,7 @@ if (listing.status !== 0) {
 	process.exit(1);
 }
 
-const files = listing.stdout.trim().split('\n').filter(Boolean).sort();
+const files = listing.stdout.trim().split('\n').filter(Boolean).filter((file) => existsSync(resolve(root, file))).sort();
 const routes = new Set(files.filter((file) => /^web\/src\/routes\/.*\/\+page\.svelte$|^web\/src\/routes\/\+page\.svelte$/.test(file)).map((file) => {
 	const path = file.slice('web/src/routes'.length).replace(/\/\+page\.svelte$/, '') || '/';
 	return path;

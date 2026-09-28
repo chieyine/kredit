@@ -19,7 +19,7 @@ import (
 // ErrKeyReused means an idempotency key arrived again with a different request body.
 var ErrKeyReused = errors.New("idempotency key was reused for a different request")
 
-// ErrAmbiguous preserves legacy duplicate reservations for explicit recovery.
+// ErrAmbiguous rejects duplicate command identities instead of choosing a result.
 var ErrAmbiguous = errors.New("multiple outcomes exist for this idempotency key")
 
 // commandScope retains actor, route and method while separating mutable

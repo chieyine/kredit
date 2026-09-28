@@ -171,7 +171,7 @@ func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {
 						if !assistant {
 							// Without the assistant there is nothing that can read a
 							// voice note, so say so rather than downloading it.
-							if !s.sendMetaReply(w, r, message.ID, message.From, "We cannot read voice notes right now. Send the goods, the amount and the payment day as a message, or record the sale in Kredit: "+strings.TrimRight(s.config.AppBaseURL, "/")+"/workspace/sales/new") {
+							if !s.sendMetaReply(w, r, message.ID, message.From, "We cannot read voice notes right now. Send the goods, the amount and the payment day as a message, or record the sale in Kredit: "+strings.TrimRight(s.config.AppBaseURL, "/")+"/workspace/give") {
 								return
 							}
 							continue
@@ -280,7 +280,7 @@ func formatKoboAmount(kobo int64) string {
 // one thing a trade-credit product must never say.
 func assistantReply(result whatsapp.AIResult, readErr error, appURL string) string {
 	if readErr != nil {
-		return "Sorry, we could not read that message. Open Kredit to record the sale yourself: " + appURL + "/workspace/sales/new"
+		return "Sorry, we could not read that message. Open Kredit to record the sale yourself: " + appURL + "/workspace/give"
 	}
 	switch result.Intent {
 	case whatsapp.IntentCreateCredit:
@@ -292,10 +292,10 @@ func assistantReply(result whatsapp.AIResult, readErr error, appURL string) stri
 		if result.DueDate != "" {
 			dueLine = fmt.Sprintf("• *Payment day:* %s\n", result.DueDate)
 		}
-		return fmt.Sprintf("📋 *This is what we understood. Nothing is saved yet.*\n• *Customer:* %s\n• *Amount:* ₦%s\n%s%s\nOpen Kredit to check these details and send the sale to your customer: %s/workspace/sales/new",
+		return fmt.Sprintf("📋 *This is what we understood. Nothing is saved yet.*\n• *Customer:* %s\n• *Amount:* ₦%s\n%s%s\nOpen Kredit to check these details and send the sale to your customer: %s/workspace/give",
 			result.BuyerName, formatKoboAmount(result.AmountKobo), itemsLine, dueLine, appURL)
 	case whatsapp.IntentConfirm:
-		return "A sale cannot be confirmed over WhatsApp. Open Kredit to check the goods, amount and payment day, then send it to your customer: " + appURL + "/workspace/sales/new"
+		return "A sale cannot be confirmed over WhatsApp. Open Kredit to check the goods, amount and payment day, then send it to your customer: " + appURL + "/workspace/give"
 	case whatsapp.IntentRecordPayment:
 		return "Nothing is saved yet. Check and record payments in Kredit against your bank account: " + appURL + "/workspace/money/received"
 	case whatsapp.IntentQueryBalance:
@@ -303,6 +303,6 @@ func assistantReply(result whatsapp.AIResult, readErr error, appURL string) stri
 	case whatsapp.IntentHelp:
 		return "👋 *Kredit on WhatsApp.*\nSend a message or voice note and we will read the details back to you. Recording a sale, confirming it and recording a payment all happen in Kredit, where your account is protected.\n\nOpen Kredit: " + appURL + "/signin"
 	default:
-		return "Send the goods, the amount and the payment day and we will read them back to you. Sales are recorded in Kredit: " + appURL + "/workspace/sales/new"
+		return "Send the goods, the amount and the payment day and we will read them back to you. Sales are recorded in Kredit: " + appURL + "/workspace/give"
 	}
 }

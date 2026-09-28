@@ -137,51 +137,6 @@ func (s *Server) exportReceivables(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-func (s *Server) reportEnterprise(w http.ResponseWriter, r *http.Request) {
-	orgID, err := pathID(r, "organizationID")
-	if err != nil {
-		writeProblem(w, 400, "invalid_path", err.Error())
-		return
-	}
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
-	if !ok {
-		return
-	}
-	s.trackOptionalActivity(r, user.ID, "report.enterprise.viewed", orgID, "supplier enterprise reporting", nil)
-	report, err := s.runtime.Reports.EnterpriseReport(r.Context(), orgID)
-	if err != nil {
-		writeProblem(w, 503, "report_unavailable", "We could not open that enterprise report. Please try again.")
-		return
-	}
-	writeJSON(w, 200, report)
-}
-
-func (s *Server) exportEnterpriseCSV(w http.ResponseWriter, r *http.Request) {
-	orgID, err := pathID(r, "organizationID")
-	if err != nil {
-		writeProblem(w, 400, "invalid_path", err.Error())
-		return
-	}
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionReadFinancial)
-	if !ok {
-		return
-	}
-	if !s.requireCSRF(w, r) {
-		return
-	}
-	data, checksum, err := s.runtime.Reports.ExportEnterpriseCSV(r.Context(), orgID)
-	if err != nil {
-		writeProblem(w, 503, "export_failed", "We could not build that enterprise report file. Please try again.")
-		return
-	}
-	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: orgID, Action: "report.enterprise.exported", ResourceType: "report", ResourceID: "enterprise_csv", Outcome: "success", RequestID: requestIDFromContext(r.Context())})
-	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", "attachment; filename=enterprise-exposure.csv")
-	w.Header().Set("X-Report-Checksum", checksum)
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
-}
-
 func (s *Server) buyerHistory(w http.ResponseWriter, r *http.Request) {
 	_, user, ok := s.requireAuth(w, r)
 	if !ok {

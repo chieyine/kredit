@@ -2,7 +2,7 @@
 
 ## Production V1 Product, Architecture, Engineering, Security, Operations, and AI-Agent Build Specification
 
-Current network flow: [public and account journeys](docs/redesign/current-user-flow.md), [active pages](docs/redesign/current-pages.md), and [implementation status and remaining enterprise work](docs/redesign/implementation-status.md). The flow uses one business workspace for buying and selling, with separate personal purchases. Old frontend routes have been removed without compatibility redirects.
+Current product: **one person per business**, three daily destinations and one sale form. Use the [current user flow](docs/redesign/current-user-flow.md), [page map](docs/redesign/current-pages.md) and [audit implementation](docs/audits/2026-09-27-platform-audit/IMPLEMENTATION.md). These supersede staff/delegation/internal-review requirements in the historical specification below. A business can buy and sell; personal purchases remain separate. The platform is pre-launch. Old sale/staff screens and compatibility redirects are removed; only the current one-owner model is supported. Migration 213 is required; apply it only through the [production cutover procedure](docs/operations/production-cutover-runbook.md).
 
 > **Canonical product name:** Kredit  
 > **Product category:** Business-network trade credit with separate personal purchase accounts<br>
@@ -16,14 +16,14 @@ Current network flow: [public and account journeys](docs/redesign/current-user-f
 > **Frontend:** SvelteKit + Svelte 5 + TypeScript  
 > **Backend:** Go 1.26  
 > **Database:** PostgreSQL 18  
-> **Document status:** Binding source of truth for the first production release  
+> **Document status:** Historical build specification; current product guidance is linked above<br>
 > **Baseline verified:** 16 August 2026
 
 ---
 
 Mono Sweep sandbox backend: see the [setup and certification runbook](docs/runbooks/mono-sweep.md). Use the full current migration chain; migration 052 is the historical introduction of Sweep. Real Mono sandbox authorization and provider proof remain pending. Production Sweep remains disabled.
 
-Current direct audit: [file ledger and outstanding fixes](docs/launch-audit-2026-09-08/FILE-BY-FILE.md). Historical completion reports do not certify the current working tree. The owner has requested all supported operational and provider controls through admin; infrastructure bootstrap still uses deployment configuration.
+Current code audit: [findings, fixes and review limits](docs/audits/2026-09-27-platform-audit/REPORT.md), with a [file-by-file register](docs/audits/2026-09-27-platform-audit/FILES.csv). Historical completion reports do not certify the current working tree. The owner has requested all supported operational and provider controls through admin; infrastructure bootstrap still uses deployment configuration.
 
 ## Table of contents
 

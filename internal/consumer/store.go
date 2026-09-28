@@ -20,10 +20,14 @@ import (
 type Store struct{ Pool *pgxpool.Pool }
 
 func (s *Store) begin(ctx context.Context, actor, org string) (pgx.Tx, error) {
+	return s.beginOptions(ctx, actor, org, pgx.TxOptions{})
+}
+
+func (s *Store) beginOptions(ctx context.Context, actor, org string, options pgx.TxOptions) (pgx.Tx, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("consumer purchases require the database")
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.Pool.BeginTx(ctx, options)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +255,7 @@ func (s *Store) Get(ctx context.Context, actor, org, id string, admin bool) (Sal
 	return v, e
 }
 func (s *Store) List(ctx context.Context, actor, org string, admin bool, before string) ([]Sale, error) {
-	tx, e := s.begin(ctx, actor, org)
+	tx, e := s.beginOptions(ctx, actor, org, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if e != nil {
 		return nil, e
 	}
@@ -289,10 +293,8 @@ func (s *Store) List(ctx context.Context, actor, org string, admin bool, before 
 	if e != nil {
 		return nil, e
 	}
-	for i := range items {
-		if e = history(ctx, tx, &items[i]); e != nil {
-			return nil, e
-		}
+	if e = histories(ctx, tx, items); e != nil {
+		return nil, e
 	}
 	return items, nil
 }

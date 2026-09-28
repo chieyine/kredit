@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"kredit/internal/identity"
 	"kredit/internal/notifications"
 	"kredit/internal/onboarding"
-	"kredit/internal/organizations"
 	"kredit/internal/settlement"
 )
 
@@ -78,7 +78,6 @@ func (s *Server) getSupplierOnboarding(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 404, "onboarding_not_found", err.Error())
 		return
 	}
-	profile = visibleOnboardingProfile(profile, membership.Role)
 	writeJSON(w, 200, map[string]any{"profile": profile, "readiness": summary, "current_terms_version": summary.CurrentTermsVersion, "current_privacy_version": summary.CurrentPrivacyVersion, "permissions": onboardingPermissions(membership.Role)})
 }
 
@@ -410,49 +409,20 @@ func (s *Server) finishOnboardingChange(w http.ResponseWriter, r *http.Request, 
 		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-kyb:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierVerificationOutcome", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: p.KYBState, NextAction: "Review your business verification result.", SecurePath: "/workspace/onboarding"})
 	}
 	if sum.Ready && p.ReadinessChangedAt.Equal(p.UpdatedAt) {
-		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Invite your team or create a credit request.", SecurePath: "/workspace/onboarding"})
+		_, _ = s.runtime.EmitNotification(r.Context(), notifications.Event{ID: "supplier-pilot-ready:" + orgID + ":" + fmt.Sprint(p.Version), Type: "SupplierPilotReady", OrganizationID: orgID, Priority: notifications.PriorityCritical, Reference: orgID, NextAction: "Create your first sale.", SecurePath: "/workspace/onboarding"})
 	}
 	writeJSON(w, 200, map[string]any{"profile": p, "readiness": sum})
 }
 
 func (s *Server) syncOnboardingSecurity(orgID, actor string) error {
-	var members []organizations.Membership
-	if source, ok := s.runtime.Organizations.(interface {
-		ReadMembers(string) ([]organizations.Membership, error)
-	}); ok {
-		var err error
-		members, err = source.ReadMembers(orgID)
-		if err != nil {
-			return err
-		}
-	} else {
-		members = s.runtime.Organizations.ListMembers(orgID)
+	owner, err := s.runtime.Organizations.ReadOwner(context.Background(), orgID)
+	if err != nil {
+		return err
 	}
-	ownerMFA := false
-	financeMFA := true
-	for _, m := range members {
-		if m.Status != "active" {
-			continue
-		}
-		if m.Role == access.RoleOwner {
-			ownerMFA = s.runtime.Auth.IsMFAEnrolled(m.UserID)
-		}
-		if m.Role == access.RoleFinance && !s.runtime.Auth.IsMFAEnrolled(m.UserID) {
-			financeMFA = false
-		}
-	}
-	_, _, err := s.runtime.Onboarding.SyncSecurity(orgID, actor, ownerMFA, financeMFA)
+	_, _, err = s.runtime.Onboarding.SyncSecurity(orgID, actor, s.runtime.Auth.IsMFAEnrolled(owner.UserID))
 	return err
 }
-func visibleOnboardingProfile(p onboarding.Profile, role access.Role) onboarding.Profile {
-	if role != access.RoleOwner && role != access.RoleAdministrator && role != access.RoleFinance {
-		p.KYBProviderReference = ""
-		p.SettlementProviderReference = ""
-		p.BillingProviderReference = ""
-		p.SettlementAccountName = ""
-	}
-	return p
-}
+
 func onboardingPermissions(role access.Role) map[string]bool {
 	return map[string]bool{"business": access.Can(role, access.PermissionManageOrganization), "settlement": access.Can(role, access.PermissionManageFinancial), "billing": access.Can(role, access.PermissionManageFinancial), "credit_policy": access.Can(role, access.PermissionManageOrganization), "consents": role == access.RoleOwner}
 }

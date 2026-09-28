@@ -248,38 +248,6 @@ resource "kubernetes_deployment_v1" "web" {
             name  = "API_INTERNAL_URL"
             value = "http://api:8080"
           }
-          env {
-            name  = "LEGAL_DOCUMENTS_ACTIVE"
-            value = "true"
-          }
-          env {
-            name  = "LEGAL_ENTITY_NAME"
-            value = var.legal_entity_name
-          }
-          env {
-            name  = "LEGAL_SERVICE_ADDRESS"
-            value = var.legal_service_address
-          }
-          env {
-            name  = "LEGAL_CONTACT_EMAIL"
-            value = var.legal_contact_email
-          }
-          env {
-            name  = "PRIVACY_CONTACT_EMAIL"
-            value = var.privacy_contact_email
-          }
-          env {
-            name  = "LEGAL_EFFECTIVE_DATE"
-            value = var.legal_effective_date
-          }
-          env {
-            name  = "TERMS_VERSION"
-            value = var.terms_version
-          }
-          env {
-            name  = "PRIVACY_VERSION"
-            value = var.privacy_version
-          }
           readiness_probe {
             http_get {
               path = "/healthz"

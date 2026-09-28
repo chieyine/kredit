@@ -15,8 +15,6 @@ import (
 // must never be reported as ready.
 var RequiredPersistenceObjects = []string{
 	"app.order_line_items", "app.order_shipments", "app.order_shipment_items", "app.order_delivery_receipts",
-	"app.partner_terms_import_batches", "app.partner_terms_import_rows",
-	"app.member_branch_scopes", "app.member_branch_scope_history",
 	"app.bank_debit_enrollments",
 	"app.fee_authorizations", "app.fee_debits", "app.fee_bank_receipts",
 	"app.dsa_program", "app.dsa_agents", "app.dsa_referrals", "app.dsa_earnings", "app.dsa_payouts", "app.consumer_sales", "app.consumer_events", "app.consumer_settings", "app.consumer_restrictions", "app.split_fee_allocations", "app.native_identity_history",
@@ -26,7 +24,7 @@ var RequiredPersistenceObjects = []string{
 	"app.platform_settings", "app.platform_settings_history", "app.platform_governance", "app.platform_owner_guard",
 	"app.admin_review_queue", "app.admin_change_history", "app.admin_change_requests", "app.admin_change_events", "app.admin_review_assignments", "app.admin_assignment_events",
 	"app.business_policy_defaults", "app.business_policy_changes", "app.business_policy_events",
-	"app.notification_delivery_receipts", "app.message_submissions", "app.message_routes", "app.runtime_process_status", "app.settlement_registrations",
+	"app.notification_delivery_receipts", "app.message_submissions", "app.message_routes", "app.runtime_process_instances", "app.settlement_registrations",
 	"app.collection_notice_acknowledgements",
 	"app.financial_review_cases",
 	"app.financial_review_events",
@@ -37,7 +35,6 @@ var RequiredPersistenceObjects = []string{
 	"app.mfa_methods",
 	"app.organizations",
 	"app.memberships",
-	"app.organization_invitations",
 	"app.audit_events",
 	"app.persons",
 	"app.businesses",
@@ -239,7 +236,7 @@ func (p *Pool) CheckPersistenceContract(ctx context.Context) error {
 	// that lags lets a partially migrated database pass startup and serve
 	// traffic: at 167 it was 32 versions behind, which included the branch
 	// row-level security added in 189.
-	const requiredMigration = 212
+	const requiredMigration = 213
 	if version < requiredMigration {
 		return fmt.Errorf("database migrations are incomplete: version %d, require at least %d", version, requiredMigration)
 	}

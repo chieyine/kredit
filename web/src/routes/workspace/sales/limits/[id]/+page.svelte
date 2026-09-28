@@ -351,7 +351,7 @@
 					Selling from a customer limit is switched off for this account, so there is nothing to fill in here. You can
 					still record a normal sale, and the balance below stays up to date.
 				</p>
-				<a class="primary" href="/workspace/sales/new">Record a sale</a>
+				<a class="primary" href="/workspace/give">Record a sale</a>
 			</section>
 		{/if}
 		<section class="card compact">

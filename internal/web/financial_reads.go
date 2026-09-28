@@ -19,16 +19,7 @@ import (
 // reported to a business owner as a refusal, and must not be written to the
 // audit trail as a denial nobody decided.
 func (r *Runtime) readMembership(ctx context.Context, organizationID, userID string) (organizations.Membership, error) {
-	if source, ok := r.Organizations.(interface {
-		ReadMembership(context.Context, string, string) (organizations.Membership, error)
-	}); ok {
-		return source.ReadMembership(ctx, organizationID, userID)
-	}
-	membership, found := r.Organizations.Membership(organizationID, userID)
-	if !found {
-		return organizations.Membership{}, organizations.ErrMembershipNotFound
-	}
-	return membership, nil
+	return r.Organizations.ReadMembership(ctx, organizationID, userID)
 }
 
 func (r *Runtime) getCreditForSupplier(ctx context.Context, requestID, organizationID string) (credit.View, error) {

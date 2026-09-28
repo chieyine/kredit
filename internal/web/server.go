@@ -225,7 +225,7 @@ func (s *Server) withIdempotency(next http.Handler) http.Handler {
 							writeProblem(w, http.StatusServiceUnavailable, "organization_unavailable", "Business access could not be checked")
 							return
 						}
-						if membershipErr != nil || membership.Status != "active" {
+						if membershipErr != nil || membership.Status != "active" || membership.Role != access.RoleOwner {
 							writeProblem(w, http.StatusForbidden, "organization_forbidden", "organization access could not be verified")
 							return
 						}
@@ -361,10 +361,10 @@ func requiresIdempotencyKey(r *http.Request) bool {
 		"/credit-requests/", "/payments", "/reverse", "/collection", "/retry", "/reconcile", "/disputes", "/decide", "/write-off", "/fee-waiver", "/drawdowns", "/activate", "/suspend", "/resume", "/exports", "/trade-lines",
 		// These routes mutate financial state or create durable authority and
 		// therefore must be safe to replay after a client timeout.
-		"/bank-authorization/", "/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/members", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
+		"/bank-authorization/", "/accept", "/release", "/receipt", "/adjust", "/settlement", "/mandates", "/confirm", "/send", "/evidence", "/schedule", "/documents", "/payment-claims",
 		"/onboarding/", "/notification-preferences", "/recovery-codes", "/account-recovery/", "/privacy-requests", "/support-cases", "/product-feedback",
 		"/ops/seller-settlements/", "/identity/checks/", "/ops/billing-review/", "/ops/message-submissions/", "/ops/verification-requests/", "/ops/mandate-authorizations/",
-		"/terms-imports", "/credit-notes/", "/dsa", "/consumer-bank", "/consumer-sales", "/consumer-settings", "/purchases", "/fee-operations/", "/fee-authorizations", "/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
+		"/credit-notes/", "/dsa", "/consumer-bank", "/consumer-sales", "/consumer-settings", "/purchases", "/fee-operations/", "/fee-authorizations", "/repayment-customer", "/ops/financial-reconciliation/", "/ops/commands", "/ops/business-policies", "/ops/admin-changes", "/ops/review-assignments", "/buyer/amendments/", "/ops/cases/", "/ops/team/",
 	} {
 		if strings.Contains(path, suffix) {
 			return true
@@ -442,9 +442,6 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/organizations", s.listOrganizations)
 	s.mux.HandleFunc("POST /api/v1/organizations", s.createOrganization)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}", s.getOrganization)
-	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/members", s.listMembers)
-	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/members", s.inviteMember)
-	s.mux.HandleFunc("PATCH /api/v1/organizations/{organizationID}/members/{userID}", s.changeMemberRole)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/audit-events", s.listAuditEvents)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/onboarding", s.getSupplierOnboarding)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/onboarding/contacts/challenges", s.requestOnboardingContactOTP)
@@ -482,21 +479,6 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/buyer/me", s.buyerPortal)
 	s.mux.HandleFunc("GET /api/v1/buyer/businesses", s.listBuyerBusinesses)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/distributor-invitations", s.distributorInvitationPipeline)
-	s.mux.HandleFunc("GET /api/v1/buyer/me/purchasing-access", s.purchasingStaffSetup)
-	s.mux.HandleFunc("POST /api/v1/buyer/me/purchasing-access", s.purchasingStaffSetup)
-	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/purchasing-authority", s.purchasingAuthority)
-	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/purchasing-authority/{memberID}", s.purchasingAuthority)
-	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/network-operations", s.networkOperations)
-	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/branch-access", s.networkOperations)
-	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/branch-access/{memberID}", s.networkOperations)
-	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/branches/{branchID}", s.networkOperations)
-	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/customers/{businessID}/assignment", s.networkOperations)
-	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/credit-approvals", s.businessCreditApprovals)
-	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/credit-approvals/policy", s.businessCreditApprovals)
-	s.mux.HandleFunc("PUT /api/v1/organizations/{organizationID}/credit-approvals/reviewers/{reviewerID}", s.businessCreditApprovals)
-	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/approval", s.businessCreditApprovals)
-	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/drawdowns/{drawdownID}/approval", s.businessCreditApprovals)
-	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-approvals/{approvalID}", s.businessCreditApprovals)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/distributor-imports", s.distributorImports)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/distributor-imports", s.distributorImports)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/distributor-imports/{batchID}", s.distributorImports)
@@ -591,6 +573,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/v1/ops/dsa", s.dsa)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/dsa", s.dsa)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/consumer-bank", s.consumerSales)
+	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/consumer-sales/summary", s.consumerSummary)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/consumer-sales", s.consumerSales)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/consumer-sales", s.consumerSales)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/consumer-sales/{saleID}", s.consumerSales)
@@ -705,8 +688,6 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/reports/ageing", s.reportAgeing)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/reports/fees", s.reportFees)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/reports/exports", s.exportReceivables)
-	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/reports/enterprise", s.reportEnterprise)
-	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/reports/enterprise/exports", s.exportEnterpriseCSV)
 	s.mux.HandleFunc("GET /api/v1/buyer/history", s.buyerHistory)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/customers/{buyerUserID}/history", s.supplierCustomerHistory)
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/customers/{buyerUserID}/statement", s.supplierCustomerStatement)
@@ -716,14 +697,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/credit-requests/{requestID}/deliveries", s.orderDeliveries)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/line-items", s.createLineItems)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/shipments", s.createShipment)
-	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/receipts", s.recordReceipt)
 	s.mux.HandleFunc("POST /api/v1/buyer/credit-requests/{requestID}/shipments/{shipmentID}/receipt", s.recordReceipt)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-requests/{requestID}/credit-notes", s.createCreditNote)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/credit-notes/{noteID}/approve", s.approveCreditNote)
-	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/terms-imports", s.termsImports)
-	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/terms-imports", s.termsImports)
-	s.mux.HandleFunc("GET /api/v1/organizations/{organizationID}/terms-imports/{batchID}", s.termsImports)
-	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/terms-imports/{batchID}", s.termsImports)
 	s.mux.HandleFunc("POST /api/v1/organizations/{organizationID}/erp/reconcile", s.erpReconcile)
 }
 

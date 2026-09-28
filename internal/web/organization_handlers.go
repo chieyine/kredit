@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"kredit/internal/access"
@@ -25,17 +24,6 @@ type organizationRequest struct {
 	Industry         string `json:"industry"`
 	Timezone         string `json:"timezone"`
 	Currency         string `json:"currency"`
-}
-
-type memberInvitationRequest struct {
-	Target  string `json:"target"`
-	Channel string `json:"channel"`
-	Role    string `json:"role"`
-}
-
-type memberRoleRequest struct {
-	Role   string `json:"role"`
-	Status string `json:"status"`
 }
 
 func (s *Server) listOrganizations(w http.ResponseWriter, r *http.Request) {
@@ -98,126 +86,6 @@ func (s *Server) getOrganization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"organization": organization, "membership": membership, "user_id": user.ID})
-}
-
-func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
-	organizationID, err := pathID(r, "organizationID")
-	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_path", err.Error())
-		return
-	}
-	if _, _, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionReadOrganization); !ok {
-		return
-	}
-	var members []organizations.Membership
-	if source, ok := s.runtime.Organizations.(interface {
-		ReadMembers(string) ([]organizations.Membership, error)
-	}); ok {
-		members, err = source.ReadMembers(organizationID)
-	} else {
-		members = s.runtime.Organizations.ListMembers(organizationID)
-	}
-	if err != nil {
-		writeProblem(w, http.StatusServiceUnavailable, "members_unavailable", "We could not load your staff list")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"members": members})
-}
-
-func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request) {
-	organizationID, err := pathID(r, "organizationID")
-	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_path", err.Error())
-		return
-	}
-	session, user, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionInviteMembers)
-	if !ok {
-		return
-	}
-	if session.AuthenticationLevel != auth.AAL2 {
-		writeProblem(w, http.StatusForbidden, "step_up_required", "MFA step-up is required for member invitations")
-		return
-	}
-	if !s.requireCSRF(w, r) {
-		return
-	}
-	var input memberInvitationRequest
-	if err := decodeJSON(w, r, &input); err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
-	role, err := access.ParseRole(strings.ToLower(input.Role))
-	if err != nil {
-		writeProblem(w, http.StatusUnprocessableEntity, "role_invalid", err.Error())
-		return
-	}
-	targetUser, err := s.runtime.Auth.FindOrCreateUser(input.Target, input.Channel)
-	if err != nil {
-		writeProblem(w, http.StatusUnprocessableEntity, "invite_target_invalid", err.Error())
-		return
-	}
-	invitation, membership, err := s.runtime.Organizations.Invite(user.ID, organizationID, input.Target, input.Channel, targetUser.ID, role)
-	if err != nil {
-		writeProblem(w, http.StatusConflict, "member_invite_failed", err.Error())
-		return
-	}
-	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "organization.member.invited", ResourceType: "membership", ResourceID: membership.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"role": string(role), "target_type": input.Channel}})
-	writeJSON(w, http.StatusAccepted, map[string]any{"invitation": invitation, "membership": membership})
-}
-
-func (s *Server) changeMemberRole(w http.ResponseWriter, r *http.Request) {
-	organizationID, err := pathID(r, "organizationID")
-	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_path", err.Error())
-		return
-	}
-	targetUserID, err := pathID(r, "userID")
-	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_path", err.Error())
-		return
-	}
-	session, user, _, ok := s.requireOrganizationAccess(w, r, organizationID, access.PermissionManageMembers)
-	if !ok {
-		return
-	}
-	if session.AuthenticationLevel != auth.AAL2 {
-		writeProblem(w, http.StatusForbidden, "step_up_required", "MFA step-up is required for role changes")
-		return
-	}
-	if !s.requireCSRF(w, r) {
-		return
-	}
-	var input memberRoleRequest
-	if err := decodeJSON(w, r, &input); err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
-	if input.Status != "" && input.Role != "" {
-		writeProblem(w, http.StatusBadRequest, "member_change_ambiguous", "Change either the role or access status in one request")
-		return
-	}
-	var membership organizations.Membership
-	var action string
-	var metadata map[string]string
-	if input.Status != "" {
-		membership, err = s.runtime.Organizations.ChangeStatus(organizationID, user.ID, targetUserID, strings.ToLower(input.Status))
-		action = "organization.member." + strings.ToLower(input.Status)
-		metadata = map[string]string{"status": strings.ToLower(input.Status)}
-	} else {
-		var role access.Role
-		role, err = access.ParseRole(strings.ToLower(input.Role))
-		if err == nil {
-			membership, err = s.runtime.Organizations.ChangeRole(organizationID, user.ID, targetUserID, role)
-		}
-		action = "organization.member.role_changed"
-		metadata = map[string]string{"role": string(role)}
-	}
-	if err != nil {
-		writeProblem(w, http.StatusConflict, "member_access_change_failed", err.Error())
-		return
-	}
-	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: action, ResourceType: "membership", ResourceID: membership.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Severity: "notice", Metadata: metadata})
-	writeJSON(w, http.StatusOK, map[string]any{"membership": membership})
 }
 
 func (s *Server) listAuditEvents(w http.ResponseWriter, r *http.Request) {
@@ -294,17 +162,6 @@ func (s *Server) requireOrganizationAccess(w http.ResponseWriter, r *http.Reques
 		s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, OrganizationID: organizationID, Action: "authorization.step_up_required", ResourceType: "organization", ResourceID: organizationID, Outcome: "denied", Severity: "warning", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"permission": string(permission)}})
 		writeProblem(w, http.StatusForbidden, "step_up_required", "step-up authentication is required")
 		return auth.Session{}, auth.User{}, organizations.Membership{}, false
-	}
-	if membership.Role != access.RoleOwner && membership.Role != access.RoleAdministrator && !branchScopedRoute(r.Pattern) {
-		all, err := s.hasCompanyWideAccess(r.Context(), user.ID, organizationID)
-		if err != nil {
-			writeProblem(w, 503, "branch_access_unavailable", "Your business access could not be verified.")
-			return auth.Session{}, auth.User{}, organizations.Membership{}, false
-		}
-		if !all {
-			writeProblem(w, 403, "company_wide_access_required", "This page requires company-wide access. Your branch access covers assigned business customers and their sales records.")
-			return auth.Session{}, auth.User{}, organizations.Membership{}, false
-		}
 	}
 	*r = *r.WithContext(db.WithTenantContext(r.Context(), user.ID, organizationID))
 	return session, user, membership, true

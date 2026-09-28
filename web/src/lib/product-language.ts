@@ -95,11 +95,6 @@ const labels: Record<string, string> = {
 
 	// Roles. A role is a name, not a description of the job.
 	OWNER: 'Owner',
-	ADMINISTRATOR: 'Administrator',
-	FINANCE: 'Finance',
-	SALES: 'Sales',
-	COLLECTIONS: 'Collections',
-	VIEWER: 'View only',
 	REMOVED: 'Removed',
 
 	// Privacy requests, named from the operator's side of the desk.
@@ -110,19 +105,6 @@ const labels: Record<string, string> = {
 	OBJECTION: 'Objection to use',
 	CONSENT_WITHDRAWAL: 'Consent withdrawn',
 	PORTABILITY: 'Portable copy'
-};
-
-/**
- * What a role or permission lets someone do. Shown beside the role name where
- * there is room to explain, never inside the pill that names it.
- */
-export const roleDescriptions: Record<string, string> = {
-	OWNER: 'Everything, including staff and settings',
-	ADMINISTRATOR: 'Staff, customers and business settings',
-	FINANCE: 'Payments, balances and corrections',
-	SALES: 'Add customers and record sales',
-	COLLECTIONS: 'Follow up late payments',
-	VIEWER: 'Can look at records but change nothing'
 };
 
 /**

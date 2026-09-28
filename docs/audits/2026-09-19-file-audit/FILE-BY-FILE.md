@@ -975,8 +975,8 @@ Notes were recorded as the audit progressed. Earlier references to pending cross
 
 | File | Review | Notes |
 | --- | --- | --- |
-| [audit_postgres_test.go](../../../internal/organizations/audit_postgres_test.go) | read-complete | Test source only; not executed. Reviewed organization creation limits, initial onboarding atomicity, membership authority locking, owner protection and invitation lifecycle. |
-| [invitation_lifecycle_test.go](../../../internal/organizations/invitation_lifecycle_test.go) | read-complete | Test source only; not executed. Reviewed organization creation limits, initial onboarding atomicity, membership authority locking, owner protection and invitation lifecycle. |
+| `audit_postgres_test.go` (removed before launch) | read-complete | Test source only; not executed. Reviewed organization creation limits, initial onboarding atomicity, membership authority locking, owner protection and invitation lifecycle. |
+| `invitation_lifecycle_test.go` (removed before launch) | read-complete | Test source only; not executed. Reviewed organization creation limits, initial onboarding atomicity, membership authority locking, owner protection and invitation lifecycle. |
 | [limit_postgres_test.go](../../../internal/organizations/limit_postgres_test.go) | read-complete | Test source only; not executed. Reviewed organization creation limits, initial onboarding atomicity, membership authority locking, owner protection and invitation lifecycle. |
 | [postgres.go](../../../internal/organizations/postgres.go) | read-complete | Reviewed organization creation limits, initial onboarding atomicity, membership authority locking, owner protection and invitation lifecycle. |
 | [postgres_test.go](../../../internal/organizations/postgres_test.go) | read-complete | Test source only; not executed. Reviewed organization creation limits, initial onboarding atomicity, membership authority locking, owner protection and invitation lifecycle. |
@@ -1221,7 +1221,7 @@ Notes were recorded as the audit progressed. Earlier references to pending cross
 | [consumer_handlers.go](../../../internal/web/consumer_handlers.go) | read-complete | Read complete in source-only audit. Cross-file and final-schema conclusions remain in progress; see FINDINGS.md for confirmed issues. |
 | [credit_handlers.go](../../../internal/web/credit_handlers.go) | read-complete | Read complete. Reviewed request authorization, state transitions, runtime wiring and provider/persistence handoffs where applicable. Cross-file domain tracing remains in progress; no additional confirmed defect from this read. |
 | [credit_terms_handlers.go](../../../internal/web/credit_terms_handlers.go) | read-complete | Read complete source/configuration. Reviewed input and role boundaries, error handling and dependent calls where applicable. No additional confirmed defect in this pass; no commands or tests executed. |
-| [customer_access_test.go](../../../internal/web/customer_access_test.go) | read-complete | Read complete as source only; not executed. Reviewed assertions, fixtures, authorization boundaries and failure coverage. Integration assertions are not runtime evidence. |
+| `customer_access_test.go` (removed before launch) | read-complete | Read complete as source only; not executed. Reviewed assertions, fixtures, authorization boundaries and failure coverage. Integration assertions are not runtime evidence. |
 | [customer_registration_recovery.go](../../../internal/web/customer_registration_recovery.go) | read-complete | Read all. Provider-pinned lookup, identity HMAC match, authority lock, maturity and ownership recheck reviewed. Nil-database behavior needs runtime route context; not reported as production defect. |
 | [dashboard_handlers.go](../../../internal/web/dashboard_handlers.go) | read-complete | Read complete source/configuration. Reviewed input and role boundaries, error handling and dependent calls where applicable. No additional confirmed defect in this pass; no commands or tests executed. |
 | [dispute_document_handlers.go](../../../internal/web/dispute_document_handlers.go) | read-complete | Read all. Traced ownership, immutable object keys, upload completion/hash validation, scan state and download gating. No additional confirmed defect in this pass; external scanner/storage behavior unverified. |
@@ -1520,7 +1520,7 @@ Notes were recorded as the audit progressed. Earlier references to pending cross
 | [product-language.ts](../../../web/src/lib/product-language.ts) | read-complete | Reviewed status/role/privacy vocabulary and fallback behavior. |
 | [product-tools.ts](../../../web/src/lib/product-tools.ts) | read-complete | Reviewed optional local storage, recent sale items, sharing and display preference handling. Local JSON is cast without shape validation, so malformed saved items can break the optional recent-item helper. |
 | [records.ts](../../../web/src/lib/records.ts) | read-complete | Reviewed money/date validation, sale projection, evidence timeline and list decoders. |
-| [sale-drafts.ts](../../../web/src/lib/sale-drafts.ts) | read-complete | Read all: opt-in versioned draft keys, user/business scope, TTL, validation and deletion. No confirmed defect. |
+| `sale-drafts.ts` (removed before launch) | read-complete | Read all: opt-in versioned draft keys, user/business scope, TTL, validation and deletion. No confirmed defect. |
 | [sale-progress.ts](../../../web/src/lib/sale-progress.ts) | read-complete | Reviewed state-to-next-step mapping and settled-balance precedence. |
 | [seo.ts](../../../web/src/lib/seo.ts) | read-complete | Reviewed public URL inventory, canonical origin, metadata and JSON-LD escaping. |
 
@@ -1791,7 +1791,7 @@ Notes were recorded as the audit progressed. Earlier references to pending cross
 
 | File | Review | Notes |
 | --- | --- | --- |
-| [+page.svelte](../../../web/src/routes/agents/+page.svelte) | read-complete | Reviewed complete public route/source: state, rendering, navigation, metadata, sample-only interactions and responsive styles as applicable; no executable verification. |
+| `+page.svelte` (removed before launch) | read-complete | Reviewed complete public route/source: state, rendering, navigation, metadata, sample-only interactions and responsive styles as applicable; no executable verification. |
 
 ## web/src/routes/app
 
@@ -2335,7 +2335,7 @@ Notes were recorded as the audit progressed. Earlier references to pending cross
 | [article-drafts.spec.ts](../../../web/tests/article-drafts.spec.ts) | read-complete | Read complete test source, fixtures, expected behavior and failure paths; not executed. |
 | [audit-completion.spec.ts](../../../web/tests/audit-completion.spec.ts) | read-complete | Read all test source and mock responses; reviewed assertions, isolation, mutation retry and failure handling where applicable. Not executed; mocked success does not verify backend behavior. |
 | [audit-fixes.spec.ts](../../../web/tests/audit-fixes.spec.ts) | read-complete | Read complete test source, fixtures, expected behavior and failure paths; not executed. Invitation fixtures omit required legal versions and identity-notice fields; current decoder rejects them before OTP. Acceptance scenario also omits required consent. |
-| [audit-full-form.spec.ts](../../../web/tests/audit-full-form.spec.ts) | read-complete | Read complete test source, fixtures, expected behavior and failure paths; not executed. Upload-success fixture provides sha256 without document id; current form requires id and will not create the request asserted by this scenario. |
+| `audit-full-form.spec.ts` (removed before launch) | read-complete | Read complete test source, fixtures, expected behavior and failure paths; not executed. Upload-success fixture provides sha256 without document id; current form requires id and will not create the request asserted by this scenario. |
 | [audit-product-journeys.spec.ts](../../../web/tests/audit-product-journeys.spec.ts) | read-complete | Read all test source and mock responses; reviewed assertions, isolation, mutation retry and failure handling where applicable. Not executed; mocked success does not verify backend behavior. Logout failure scenario covers 503 but not backend revocation failure mapped to 401 (F002). |
 | [audit-reliability-unit.spec.ts](../../../web/tests/audit-reliability-unit.spec.ts) | read-complete | Read all test source and mock responses; reviewed assertions, isolation, mutation retry and failure handling where applicable. Not executed; mocked success does not verify backend behavior. |
 | [business-settings.spec.ts](../../../web/tests/business-settings.spec.ts) | read-complete | Read complete test source, fixtures, expected behavior and failure paths; not executed. |

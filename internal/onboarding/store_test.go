@@ -56,7 +56,7 @@ func TestReadinessIsDerivedAndProviderExpiryRevokesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, summary, err := s.SyncSecurity("org-1", "owner-1", true, true)
+	p, summary, err := s.SyncSecurity("org-1", "owner-1", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,18 +126,18 @@ func TestFinanceMFAChangesPreserveOwnerVerification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, _, err = s.SyncSecurity("org", "owner", true, false)
+	p, _, err = s.SyncSecurity("org", "owner", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	original := p.OwnerMFAVerifiedAt
-	for _, finance := range []bool{true, false, true} {
-		p, _, err = s.SyncSecurity("org", "owner", true, finance)
+	for range 3 {
+		p, _, err = s.SyncSecurity("org", "owner", true)
 		if err != nil || p.OwnerMFAVerifiedAt.IsZero() || !p.OwnerMFAVerifiedAt.Equal(original) {
 			t.Fatalf("owner MFA lost: %+v %v", p, err)
 		}
 	}
-	p, _, err = s.SyncSecurity("org", "owner", false, true)
+	p, _, err = s.SyncSecurity("org", "owner", false)
 	if err != nil || !p.OwnerMFAVerifiedAt.IsZero() {
 		t.Fatal("owner revocation was ignored")
 	}

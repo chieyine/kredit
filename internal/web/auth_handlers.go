@@ -92,14 +92,13 @@ func (s *Server) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusUnauthorized, "otp_invalid", err.Error())
 		return
 	}
-	activated := s.runtime.Organizations.ActivateInvitations(user.ID)
 	s.runtime.UserControl.BindUser(user.ID, user.Email, user.Phone)
 	if !setSessionCookies(w, s.config.Environment != "development", token) {
 		writeProblem(w, http.StatusServiceUnavailable, "session_unavailable", "We could not sign you in safely. Please try again.")
 		return
 	}
 	s.runtime.Audit.Append(audit.Event{ActorUserID: user.ID, Action: "auth.login.succeeded", ResourceType: "session", ResourceID: session.ID, Outcome: "success", RequestID: requestIDFromContext(r.Context()), Metadata: map[string]string{"authentication_level": session.AuthenticationLevel}})
-	writeJSON(w, http.StatusOK, map[string]any{"user": user, "session": session, "activated_memberships": activated})
+	writeJSON(w, http.StatusOK, map[string]any{"user": user, "session": session})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {

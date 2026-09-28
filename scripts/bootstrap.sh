@@ -16,7 +16,7 @@ printf '%s\n' 'Checking local toolchain...'
 bash scripts/check-tools.sh
 
 printf '%s\n' 'Starting local infrastructure...'
-docker compose up -d postgres minio mailpit provider-simulator
+bash scripts/prepare-local-infrastructure.sh
 
 printf '%s\n' 'Preparing Go dependencies and schema...'
 go mod download

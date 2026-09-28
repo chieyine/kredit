@@ -2325,8 +2325,7 @@ html.low-data *::after {
 	transition: none !important;
 	backdrop-filter: none !important;
 }
-html.low-data .site-header,
-html.low-data .mobile-nav {
+html.low-data .site-header {
 	background: #0b0d12;
 }
 html.low-data .public-route::before {

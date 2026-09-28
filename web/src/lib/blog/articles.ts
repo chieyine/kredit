@@ -154,7 +154,7 @@ export const articleCategoryDetails: Record<ArticleCategory, { slug: string; tit
 		slug: 'business-records',
 		title: 'Business record guides',
 		description:
-			'Decide what belongs in a customer record, control staff access and prepare for a lost phone or a change in your team.'
+			'Decide what belongs in a customer record, keep a useful payment history, protect your account and prepare for a lost phone.'
 	},
 	'Safe payments': {
 		slug: 'safe-payments',

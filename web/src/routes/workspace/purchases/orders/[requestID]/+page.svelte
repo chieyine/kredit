@@ -372,10 +372,7 @@
 		</div>{/if}
 	{#if message}<p class="inline-notice" role="status">{message}</p>{/if}
 	{#if view}
-		<SaleProgress {view} audience="buyer" />{#if view.request.buyer_user_id !== account.userID}<p class="inline-notice">
-				You are acting for this business. Your current purchasing permissions and acceptance limit control the actions
-				below. Bank authorizations and payment-management actions remain with the purchasing owner.
-			</p>{/if}
+		<SaleProgress {view} audience="buyer" />
 		{#if view.request.system_acceptance_id}<p class="inline-notice" role="status">
 				The waiting period after your delivery notice ended without a response. Kredit activated this sale under its
 				agreed terms using a system record. This is not recorded as your receipt confirmation. You can still report a
@@ -450,6 +447,11 @@
 			<SaleCosts {view} />
 			<section class="consent-panel">
 				<h2>Your decision</h2>
+				<p>
+					<a href={`/workspace/purchases?business_id=${encodeURIComponent(view.request.buyer_business_id)}`}
+						>Review identity and business checks</a
+					>
+				</p>
 				<p>
 					If anything here is wrong, do not accept. Tell the seller to correct it first. After you accept, you set up
 					how you will pay.

@@ -100,7 +100,7 @@
 	<p class="eyebrow">Settings / Access</p>
 	<h1>Account security</h1>
 	<p class="lede">
-		Ask for a six-digit code from an app on your phone before anybody can change money, bank or staff details. This adds
+		Ask for a six-digit code from an app on your phone before anybody can change money or bank details. This adds
 		protection if somebody gains access to your phone number.
 	</p>
 	{#if message}<p class="notice" role="status">{message}</p>{/if}

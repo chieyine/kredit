@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { MutationIntent, MutationError } from '../src/lib/api/mutation';
 import { LatestRequest, rows, record, readResource, normalizeNigerianPhone, safeNext } from '../src/lib/api/reliable';
-import { readDraft, saveDraft } from '../src/lib/sale-drafts';
 import { acceptanceMessage, hostedAuthorizationURL, disputeEffectCopy } from '../src/lib/financial-copy';
 import { feeDisclosure, feeForKobo, baseFeeForKobo } from '../src/lib/fee-terms';
 import { dateLabel, receivables, saleView, workRow } from '../src/lib/records';
@@ -212,29 +211,6 @@ test('request storage contains a digest, not personal or financial form fields',
 	expect(saved).not.toContain('DO-NOT-RETAIN');
 	expect(saved).not.toContain('9876543');
 	expect(Object.keys(JSON.parse(saved)).sort()).toEqual(['createdAt', 'fingerprint', 'key', 'version']);
-});
-
-test('drafts are isolated by account and business and expire', () => {
-	const store = new MemoryStorage(),
-		now = Date.now(),
-		draft = { goods: '40 cartons', principal: '127,500.49', dueDate: '2026-09-18' };
-	expect(saveDraft('u-a', 'org-a', draft, store, now)).toBe(true);
-	expect(readDraft('u-a', 'org-a', store, now)).toEqual(draft);
-	expect(readDraft('u-b', 'org-a', store, now)).toBeNull();
-	expect(readDraft('u-a', 'org-b', store, now)).toBeNull();
-	expect(readDraft('u-a', 'org-a', store, now + 12 * 3600000)).toBeNull();
-});
-
-test('drafts reject tampering and discard the legacy unscoped record', () => {
-	const store = new MemoryStorage();
-	store.setItem('kredit.quick-sale.draft.v1', JSON.stringify({ goods: 'old private draft' }));
-	saveDraft('a', 'one', { goods: 'test', principal: '100', dueDate: '' }, store);
-	const key = store.key(1)!;
-	const value = JSON.parse(store.getItem(key)!);
-	value.userID = 'b';
-	store.setItem(key, JSON.stringify(value));
-	expect(readDraft('a', 'one', store)).toBeNull();
-	expect(store.getItem('kredit.quick-sale.draft.v1')).toBeNull();
 });
 
 for (const phone of ['0803 123 4567', '2348031234567', '+234 (803) 123-4567'])

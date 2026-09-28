@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"kredit/internal/buyers"
 	"kredit/internal/db"
 	"kredit/internal/ledger"
 	"kredit/internal/schedules"
@@ -109,66 +108,6 @@ func (f *auditFixture) scalar(t *testing.T, q string, args ...any) int64 {
 		t.Fatal(err)
 	}
 	return n
-}
-
-func TestAuditPostgresTermsPermissionsAndReviewOnly(t *testing.T) {
-	f := newAuditFixture(t)
-	s := buyers.NewPostgresTermsImportStore(f.runtime.Raw(), ledger.NewPostgresStore(f.runtime.Raw()))
-	rows := []buyers.TermsImportRowInput{{CustomerName: "Customer A", OpeningBalanceKobo: 500000, OpeningBalanceReference: "LEGACY-1", ProposedGraceHours: 24}}
-	first, err := s.StageTermsBatch(f.as(f.sales), f.sales, f.org, "", rows)
-	if err != nil {
-		t.Fatal(err)
-	}
-	again, err := s.StageTermsBatch(f.as(f.sales), f.sales, f.org, "", rows)
-	if err != nil || again.ID != first.ID {
-		t.Fatalf("stage retry: %+v %v", again, err)
-	}
-	rows[0].CustomerName = "Customer B"
-	different, err := s.StageTermsBatch(f.as(f.sales), f.sales, f.org, "", rows)
-	if err != nil || different.ID == first.ID {
-		t.Fatalf("same-row-count source collision: %v", err)
-	}
-	list, err := s.ListTermsBatches(f.as(f.finance), f.finance, f.org)
-	if err != nil || len(list) != 2 {
-		t.Fatalf("tenant-scoped read missing real rows: %d %v", len(list), err)
-	}
-	for _, actor := range []string{f.sales, f.other} {
-		if _, err = s.ReviewTermsBatch(f.as(actor), actor, f.org, first.ID, "approved"); err == nil {
-			t.Fatal("sales/nonmember approved import")
-		}
-	}
-	if _, err = s.ListTermsBatches(f.as(f.other), f.other, f.org); err == nil {
-		t.Fatal("nonmember read imports")
-	}
-	// Reject a direct SQL attempt as sales too, not only the HTTP/service layer.
-	scoped := &db.ScopedDatabase{Pool: f.runtime.Raw()}
-	if _, err = scoped.Exec(f.as(f.sales), `UPDATE app.partner_terms_import_batches SET state='approved',approved_by=$2::uuid,approved_at=now() WHERE id=$1::uuid`, first.ID, f.sales); err == nil {
-		t.Fatal("database allowed sales/self approval")
-	}
-	approved, err := s.ReviewTermsBatch(f.as(f.finance), f.finance, f.org, first.ID, "approved")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if approved.FinancialApplication != "not_applied" {
-		t.Fatalf("review presented as applied: %+v", approved)
-	}
-	same, err := s.ReviewTermsBatch(f.as(f.finance), f.finance, f.org, first.ID, "approved")
-	if err != nil || !same.ApprovedAt.Equal(*approved.ApprovedAt) {
-		t.Fatalf("review retry: %v", err)
-	}
-	_, stored, err := s.GetTermsBatch(f.as(f.finance), f.finance, f.org, first.ID)
-	if err != nil || len(stored) != 1 || stored[0].ValidationStatus != "valid" {
-		t.Fatalf("validation/application mixed: %+v %v", stored, err)
-	}
-	if n := f.scalar(t, `SELECT count(*) FROM ledger.transactions WHERE reference_id=$1`, stored[0].ID); n != 0 {
-		t.Fatal("import row became a financial obligation")
-	}
-	if _, err = scoped.Exec(f.as(f.owner), `UPDATE app.partner_terms_import_rows SET opening_balance_kobo=1 WHERE batch_id=$1::uuid`, first.ID); err == nil {
-		t.Fatal("approved source rows were mutable")
-	}
-	if _, _, err = s.GetTermsBatch(db.WithTenantContext(f.ctx, f.finance, f.buyerOrg), f.finance, f.org, first.ID); err == nil {
-		t.Fatal("explicit tenant overrode authenticated tenant")
-	}
 }
 
 func TestAuditPostgresShipmentRelationsConcurrencyAndReceipts(t *testing.T) {
@@ -361,60 +300,5 @@ func TestAuditPostgresCreditNoteBindsOrderAndRollsBackFinancialAggregate(t *test
 		if _, err = workerDB.Exec(workerCtx, query, note.ID); err == nil {
 			t.Fatal("worker mutated financial evidence")
 		}
-	}
-}
-
-func TestAuditPostgresChildRowsRespectBranchAndRevokedMembership(t *testing.T) {
-	f := newAuditFixture(t)
-	s := f.store()
-	if err := s.CreateLineItems(f.as(f.owner), f.order[0], []LineItem{{Description: "cartons", Quantity: 10, UnitPriceKobo: 1000}}); err != nil {
-		t.Fatal(err)
-	}
-	lines, err := s.ListLineItems(f.as(f.owner), f.order[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = s.DispatchShipment(f.as(f.owner), DispatchInput{OrderID: f.order[0], SupplierOrganizationID: f.org, DispatchedBy: f.owner, Items: []ShipmentItem{{LineItemID: lines[0].ID, Quantity: 1}}}); err != nil {
-		t.Fatal(err)
-	}
-	note, err := s.CreateCreditNote(f.as(f.owner), CreditNoteInput{OrderID: f.order[0], SupplierOrganizationID: f.org, IssuedBy: f.owner, AmountKobo: 100, Reason: "test"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// A restricted staff member with no assigned branches must not inherit
-	// organization-wide rights to existing shipment/note rows.
-	tx, err := f.admin.Begin(f.ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = tx.Rollback(f.ctx) }()
-	if _, err = tx.Exec(f.ctx, `SELECT set_config('app.current_user_id',$1,true),set_config('app.current_organization_id',$2,true)`, f.owner, f.org); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = tx.Exec(f.ctx, `INSERT INTO app.member_branch_scopes(organization_id,user_id,membership_id,membership_version,mode,branch_ids,updated_by) SELECT organization_id,user_id,id,purchasing_authority_version,'branches','{}',$3::uuid FROM app.memberships WHERE organization_id=$1::uuid AND user_id=$2::uuid`, f.org, f.sales, f.owner); err != nil {
-		t.Fatal(err)
-	}
-	if err = tx.Commit(f.ctx); err != nil {
-		t.Fatal(err)
-	}
-	ships, err := s.ListShipments(f.as(f.sales), f.order[0])
-	if err != nil || len(ships) != 0 {
-		t.Fatalf("branch shipment leak: %+v %v", ships, err)
-	}
-	notes, err := s.ListCreditNotes(f.as(f.sales), f.order[0])
-	if err != nil || len(notes) != 0 {
-		t.Fatalf("branch credit-note leak: %+v %v", notes, err)
-	}
-	if _, err = s.CreateCreditNote(f.as(f.sales), CreditNoteInput{OrderID: f.order[0], SupplierOrganizationID: f.org, IssuedBy: f.sales, AmountKobo: 100, Reason: "test"}); err == nil {
-		t.Fatal("branch staff changed another branch's order")
-	}
-	if err = s.ApproveCreditNote(f.as(f.sales), note.ID, f.sales); err == nil {
-		t.Fatal("branch staff reviewed unavailable note")
-	}
-	if _, err = f.admin.Exec(f.ctx, `UPDATE app.memberships SET status='removed' WHERE organization_id=$1::uuid AND user_id=$2::uuid`, f.org, f.finance); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.ApproveCreditNote(f.as(f.finance), note.ID, f.finance); err == nil {
-		t.Fatal("revoked reviewer retained authority")
 	}
 }

@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { PARKED, PARKED_REASON } from './parked';
 test.beforeEach(async ({ page, context, baseURL }) => {
 	await context.addCookies([{ name: 'kredit_session', value: 'history-fixture', url: baseURL! }]);
 	await page.route('**/api/v1/buyer/businesses', (route) =>
@@ -12,7 +11,6 @@ test.beforeEach(async ({ page, context, baseURL }) => {
 	);
 });
 test('buyer sees the approved correction note beside the original financial history', async ({ page }) => {
-	test.skip(PARKED, PARKED_REASON);
 	await page.route('**/api/v1/buyer/history*', (r) =>
 		r.fulfill({
 			json: {

@@ -124,6 +124,14 @@ func (s *Server) listOrganizationCustomers(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
+	if s.runtime.Database != nil {
+		items, err := s.runtime.Reports.CustomerBalances(r.Context(), organizationID)
+		if financialReadError(w, err) {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"customers": items})
+		return
+	}
 	type customerSummary struct {
 		fields       map[string]any
 		requestCount int
@@ -197,7 +205,7 @@ func (s *Server) listBuyerMandates(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	businessID, scopedOK := s.buyerOwnerWorkspaceScope(w, r, user.ID)
+	businessID, scopedOK := s.buyerWorkspaceScope(w, r, user.ID)
 	if !scopedOK {
 		return
 	}
@@ -232,7 +240,7 @@ func (s *Server) listBuyerTradeLines(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	businessID, scopedOK := s.buyerOwnerWorkspaceScope(w, r, user.ID)
+	businessID, scopedOK := s.buyerWorkspaceScope(w, r, user.ID)
 	if !scopedOK {
 		return
 	}
@@ -258,7 +266,7 @@ func (s *Server) listBuyerDisputes(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	businessID, scopedOK := s.buyerOwnerWorkspaceScope(w, r, user.ID)
+	businessID, scopedOK := s.buyerWorkspaceScope(w, r, user.ID)
 	if !scopedOK {
 		return
 	}

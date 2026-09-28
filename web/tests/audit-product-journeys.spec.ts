@@ -1,6 +1,5 @@
 import { test, expect, type Page, type Route, type BrowserContext } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { PARKED, PARKED_REASON } from './parked';
 
 const orgs = [
 	{ id: 'org-a', legal_name: 'Kora Wholesale', trading_name: 'Kora Wholesale' },
@@ -360,7 +359,6 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 	context,
 	baseURL
 }) => {
-	test.skip(PARKED, PARKED_REASON);
 	await signedIn(page, context, baseURL);
 	await page.route('**/api/v1/organizations/org-a/customers', (route) =>
 		send(route, {

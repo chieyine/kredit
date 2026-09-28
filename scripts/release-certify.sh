@@ -29,6 +29,7 @@ run_gate() {
 }
 
 require_command go
+require_command node
 require_command pnpm
 require_command docker
 require_command psql
@@ -60,39 +61,13 @@ else
 	run_gate 'Production runtime configuration' go run ./cmd/configcheck --stored
 fi
 
-for legal_value in LEGAL_ENTITY_NAME LEGAL_SERVICE_ADDRESS LEGAL_CONTACT_EMAIL PRIVACY_CONTACT_EMAIL LEGAL_EFFECTIVE_DATE TERMS_VERSION PRIVACY_VERSION; do
-	if [[ -z "${!legal_value:-}" ]]; then
-		printf 'MISSING PUBLIC LEGAL VALUE: %s\n' "$legal_value" >&2
-		failures=$((failures + 1))
-	fi
-done
-if [[ "${LEGAL_DOCUMENTS_ACTIVE:-}" != "true" ]]; then
-	printf 'MISSING LEGAL ACTIVATION: LEGAL_DOCUMENTS_ACTIVE=true is required.\n' >&2
-	failures=$((failures + 1))
-fi
+run_gate 'Published legal metadata' node scripts/legal-publication-check.mjs
 for launch_flag in FEATURE_APPROVED_RETENTION_POLICY FEATURE_PRODUCTION_PILOT FEATURE_REAL_IDENTITY FEATURE_REAL_COLLECTIONS; do
 	if [[ "${!launch_flag:-}" != "true" ]]; then
 		printf 'MISSING LAUNCH CAPABILITY: %s=true is required.\n' "$launch_flag" >&2
 		failures=$((failures + 1))
 	fi
 done
-if [[ -n "${LEGAL_EFFECTIVE_DATE:-}" && ! "${LEGAL_EFFECTIVE_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-	printf 'INVALID LEGAL DATE: LEGAL_EFFECTIVE_DATE must use YYYY-MM-DD.\n' >&2
-	failures=$((failures + 1))
-fi
-if [[ "${TERMS_VERSION:-}" != "supplier-terms-v2-2026-09-07" || "${PRIVACY_VERSION:-}" != "privacy-v2-2026-09-07" ]]; then
-	printf 'LEGAL VERSION MISMATCH: document versions must match supplier onboarding.\n' >&2
-	failures=$((failures + 1))
-fi
-if [[ -n "${LEGAL_CONTACT_EMAIL:-}" && ! "${LEGAL_CONTACT_EMAIL}" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
-	printf 'INVALID LEGAL EMAIL: LEGAL_CONTACT_EMAIL is not a valid email address.\n' >&2
-	failures=$((failures + 1))
-fi
-if [[ -n "${PRIVACY_CONTACT_EMAIL:-}" && ! "${PRIVACY_CONTACT_EMAIL}" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
-	printf 'INVALID PRIVACY EMAIL: PRIVACY_CONTACT_EMAIL is not a valid email address.\n' >&2
-	failures=$((failures + 1))
-fi
-
 if [[ -d web/node_modules ]]; then
 	run_gate 'Svelte checks' pnpm --dir web check
 	run_gate 'Production web build' pnpm --dir web build

@@ -26,9 +26,3 @@ func TestComplianceCannotExecuteOperationalCommands(t *testing.T) {
 		}
 	}
 }
-
-func TestViewerCannotMutateDisputes(t *testing.T) {
-	if !Can(RoleViewer, PermissionReadFinancial) || Can(RoleViewer, PermissionManageDisputes) {
-		t.Fatal("viewer financial read access leaked into dispute mutation access")
-	}
-}

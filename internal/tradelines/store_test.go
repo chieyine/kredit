@@ -204,23 +204,6 @@ func TestTradeLineRejectsClientAssertedMandateState(t *testing.T) {
 	}
 }
 
-func TestFeeDisclosurePreservesAcceptedLegacyHash(t *testing.T) {
-	d := Drawdown{ID: "drawdown", PrincipalKobo: 10000}
-	l := TradeLine{ID: "line"}
-	d.AgreementHash = drawdownHashWithFee(d, l, legacyFeeDisclosure)
-	if !VerifyAgreementHash(d, l) || DrawdownFeeDisclosure(d, l) != legacyFeeDisclosure {
-		t.Fatal("legacy evidence was rewritten")
-	}
-	d.AgreementHash = drawdownHash(d, l)
-	if !VerifyAgreementHash(d, l) || DrawdownFeeDisclosure(d, l) != currentFeeDisclosure {
-		t.Fatal("new agreement uses incorrect fee")
-	}
-	d.PrincipalKobo++
-	if VerifyAgreementHash(d, l) {
-		t.Fatal("changed terms verified")
-	}
-}
-
 func TestPublicationChangePreservesReservedOfferAndHash(t *testing.T) {
 	s := NewStore()
 	now := time.Now().UTC()

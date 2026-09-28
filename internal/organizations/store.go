@@ -34,22 +34,6 @@ type Membership struct {
 	UserID         string      `json:"user_id"`
 	Role           access.Role `json:"role"`
 	Status         string      `json:"status"`
-	InvitedBy      string      `json:"invited_by,omitempty"`
-	InvitedAt      time.Time   `json:"invited_at,omitzero"`
-	AcceptedAt     time.Time   `json:"accepted_at,omitzero"`
-	CreatedAt      time.Time   `json:"created_at"`
-}
-
-type Invitation struct {
-	membershipID   string
-	ID             string      `json:"id"`
-	OrganizationID string      `json:"organization_id"`
-	Target         string      `json:"target"`
-	TargetType     string      `json:"target_type"`
-	Role           access.Role `json:"role"`
-	Status         string      `json:"status"`
-	InvitedBy      string      `json:"invited_by"`
-	ExpiresAt      time.Time   `json:"expires_at"`
 	CreatedAt      time.Time   `json:"created_at"`
 }
 
@@ -70,7 +54,6 @@ type Store struct {
 	memberships   map[string]*Membership
 	byOrg         map[string][]string
 	byUser        map[string][]string
-	invitations   map[string]*Invitation
 	newID         func() string
 	now           func() time.Time
 	createGuard   func(string, CreateInput) error
@@ -87,11 +70,8 @@ type Service interface {
 	ListForUser(string) []Organization
 	ReadForUser(context.Context, string) ([]Organization, error)
 	Membership(string, string) (Membership, bool)
-	ListMembers(string) []Membership
-	Invite(string, string, string, string, string, access.Role) (Invitation, Membership, error)
-	ActivateInvitations(string) []Membership
-	ChangeRole(string, string, string, access.Role) (Membership, error)
-	ChangeStatus(string, string, string, string) (Membership, error)
+	ReadMembership(context.Context, string, string) (Membership, error)
+	ReadOwner(context.Context, string) (Membership, error)
 }
 
 var _ Service = (*Store)(nil)
@@ -114,7 +94,6 @@ func NewStore() *Store {
 		memberships:   make(map[string]*Membership),
 		byOrg:         make(map[string][]string),
 		byUser:        make(map[string][]string),
-		invitations:   make(map[string]*Invitation),
 		newID:         newIdentifier,
 		now:           func() time.Time { return time.Now().UTC() },
 	}
@@ -153,7 +132,7 @@ func (s *Store) Create(ownerUserID string, input CreateInput) (Organization, Mem
 		UpdatedAt:        now,
 		Version:          1,
 	}
-	membership := &Membership{ID: s.newID(), OrganizationID: organization.ID, UserID: ownerUserID, Role: access.RoleOwner, Status: "active", AcceptedAt: now, CreatedAt: now}
+	membership := &Membership{ID: s.newID(), OrganizationID: organization.ID, UserID: ownerUserID, Role: access.RoleOwner, Status: "active", CreatedAt: now}
 	s.organizations[organization.ID] = organization
 	s.addMembership(membership)
 	return cloneOrganization(*organization), cloneMembership(*membership), nil
@@ -182,7 +161,7 @@ func (s *Store) ListForUser(userID string) []Organization {
 	result := make([]Organization, 0)
 	for _, membershipID := range s.byUser[userID] {
 		membership := s.memberships[membershipID]
-		if membership.Status == "removed" || membership.Status == "suspended" {
+		if membership.Status != "active" || membership.Role != access.RoleOwner {
 			continue
 		}
 		if organization, ok := s.organizations[membership.OrganizationID]; ok {
@@ -197,6 +176,7 @@ func (s *Store) ListForUser(userID string) []Organization {
 // must not read it as a refusal: telling someone they have no access to their
 // own business because a query failed is a wrong answer, and recording it as
 // an authorization denial puts a decision in the audit trail that nobody made.
+
 var ErrMembershipNotFound = errors.New("membership not found")
 
 // ReadMembership separates "not a member" from "could not tell".
@@ -216,144 +196,11 @@ func (s *Store) Membership(organizationID, userID string) (Membership, bool) {
 	defer s.mu.RUnlock()
 	for _, membershipID := range s.byOrg[organizationID] {
 		membership := s.memberships[membershipID]
-		if membership.UserID == userID && membership.Status != "removed" {
+		if membership.UserID == userID && membership.Status == "active" && membership.Role == access.RoleOwner {
 			return cloneMembership(*membership), true
 		}
 	}
 	return Membership{}, false
-}
-
-func (s *Store) ListMembers(organizationID string) []Membership {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]Membership, 0, len(s.byOrg[organizationID]))
-	for _, membershipID := range s.byOrg[organizationID] {
-		result = append(result, cloneMembership(*s.memberships[membershipID]))
-	}
-	return result
-}
-
-func (s *Store) Invite(actorUserID, organizationID, target, targetType string, targetUserID string, role access.Role) (Invitation, Membership, error) {
-	if !role.Valid() || role == access.RoleOwner {
-		return Invitation{}, Membership{}, errors.New("only non-owner roles may be invited")
-	}
-	if strings.TrimSpace(target) == "" || targetUserID == "" || (targetType != "phone" && targetType != "email") {
-		return Invitation{}, Membership{}, errors.New("invitation target is required")
-	}
-	now := s.now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.canManageMembersLocked(organizationID, actorUserID, access.PermissionInviteMembers) {
-		return Invitation{}, Membership{}, errors.New("active owner or administrator authority is required")
-	}
-	if _, ok := s.organizations[organizationID]; !ok {
-		return Invitation{}, Membership{}, errors.New("organisation not found")
-	}
-	for _, membershipID := range s.byOrg[organizationID] {
-		membership := s.memberships[membershipID]
-		if membership.UserID == targetUserID && membership.Status == "invited" && !now.Before(membership.InvitedAt.Add(7*24*time.Hour)) {
-			membership.Status = "removed"
-			s.closeInvitationLocked(membership.ID, "expired")
-		}
-		if membership.UserID == targetUserID && membership.Status != "removed" {
-			return Invitation{}, Membership{}, errors.New("user already belongs to organisation")
-		}
-	}
-	invitation := &Invitation{ID: s.newID(), OrganizationID: organizationID, Target: strings.TrimSpace(target), TargetType: targetType, Role: role, Status: "pending", InvitedBy: actorUserID, ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now}
-	membership := &Membership{ID: s.newID(), OrganizationID: organizationID, UserID: targetUserID, Role: role, Status: "invited", InvitedBy: actorUserID, InvitedAt: now, CreatedAt: now}
-	invitation.membershipID = membership.ID
-	s.invitations[invitation.ID] = invitation
-	s.addMembership(membership)
-	return cloneInvitation(*invitation), cloneMembership(*membership), nil
-}
-
-func (s *Store) ActivateInvitations(userID string) []Membership {
-	now := s.now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	activated := make([]Membership, 0)
-	for _, membershipID := range s.byUser[userID] {
-		membership := s.memberships[membershipID]
-		if membership.Status != "invited" {
-			continue
-		}
-		if membership.InvitedAt.IsZero() || !now.Before(membership.InvitedAt.Add(7*24*time.Hour)) {
-			membership.Status = "removed"
-			s.closeInvitationLocked(membership.ID, "expired")
-			continue
-		}
-		membership.Status = "active"
-		membership.AcceptedAt = now
-		s.closeInvitationLocked(membership.ID, "accepted")
-		activated = append(activated, cloneMembership(*membership))
-	}
-	return activated
-}
-
-func (s *Store) ChangeRole(organizationID, actorUserID, targetUserID string, role access.Role) (Membership, error) {
-	if !role.Valid() || role == access.RoleOwner {
-		return Membership{}, errors.New("invalid target role")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.canManageMembersLocked(organizationID, actorUserID, access.PermissionManageMembers) {
-		return Membership{}, errors.New("active owner or administrator authority is required")
-	}
-	var target *Membership
-	for _, membershipID := range s.byOrg[organizationID] {
-		membership := s.memberships[membershipID]
-		if membership.UserID == targetUserID && membership.Status == "active" {
-			target = membership
-			break
-		}
-	}
-	if target == nil {
-		return Membership{}, errors.New("membership not found")
-	}
-	if target.Role == access.RoleOwner {
-		return Membership{}, errors.New("owner role cannot be changed")
-	}
-	if target.UserID == actorUserID {
-		return Membership{}, errors.New("members cannot change their own role")
-	}
-	target.Role = role
-	return cloneMembership(*target), nil
-}
-
-func (s *Store) ChangeStatus(organizationID, actorUserID, targetUserID, status string) (Membership, error) {
-	if status != "active" && status != "suspended" && status != "removed" {
-		return Membership{}, errors.New("invalid membership status")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.canManageMembersLocked(organizationID, actorUserID, access.PermissionManageMembers) {
-		return Membership{}, errors.New("active owner or administrator authority is required")
-	}
-	var target *Membership
-	for _, membershipID := range s.byOrg[organizationID] {
-		membership := s.memberships[membershipID]
-		if membership.UserID == targetUserID && membership.Status != "removed" {
-			target = membership
-			break
-		}
-	}
-	if target == nil {
-		return Membership{}, errors.New("membership not found")
-	}
-	if target.Role == access.RoleOwner {
-		return Membership{}, errors.New("the owner membership cannot be suspended or removed")
-	}
-	if target.UserID == actorUserID {
-		return Membership{}, errors.New("members cannot change their own access status")
-	}
-	if target.Status == "invited" && status != "removed" {
-		return Membership{}, errors.New("an invitation must be accepted by the invited user")
-	}
-	if target.Status == "invited" && status == "removed" {
-		s.closeInvitationLocked(target.ID, "revoked")
-	}
-	target.Status = status
-	return cloneMembership(*target), nil
 }
 
 func (s *Store) addMembership(membership *Membership) {
@@ -389,22 +236,19 @@ func newIdentifier() string {
 
 func cloneOrganization(value Organization) Organization { return value }
 func cloneMembership(value Membership) Membership       { return value }
-func cloneInvitation(value Invitation) Invitation       { return value }
 
-func (s *Store) canManageMembersLocked(orgID, actorID string, permission access.Permission) bool {
-	for _, id := range s.byOrg[orgID] {
-		m := s.memberships[id]
-		if m.UserID == actorID && m.Status == "active" && access.Can(m.Role, permission) {
-			return true
+// ReadOwner returns the sole active operator for business-level notifications and setup.
+func (s *Store) ReadOwner(ctx context.Context, organizationID string) (Membership, error) {
+	if err := ctx.Err(); err != nil {
+		return Membership{}, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, id := range s.byOrg[organizationID] {
+		member := s.memberships[id]
+		if member.Role == access.RoleOwner && member.Status == "active" {
+			return *member, nil
 		}
 	}
-	return false
-}
-
-func (s *Store) closeInvitationLocked(membershipID, status string) {
-	for _, invitation := range s.invitations {
-		if invitation.membershipID == membershipID && invitation.Status == "pending" {
-			invitation.Status = status
-		}
-	}
+	return Membership{}, ErrMembershipNotFound
 }

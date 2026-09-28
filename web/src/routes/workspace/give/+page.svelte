@@ -10,23 +10,29 @@
 		normalizeNigerianPhone,
 		readResource,
 		record,
+		publicError,
 		RequestError,
 		rows,
 		text,
 		type Resource
 	} from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { customer, organization, dateLabel, type Customer, type Organization } from '$lib/records';
+	import { customer, organization, saleView, dateLabel, type Customer, type Organization } from '$lib/records';
 	import { parseNaira, verbalizeNaira } from '$lib/money';
 	import { loadSaleDefaults, paymentDateAfter } from '$lib/sale-defaults';
-	import { Mutation, purchase, type Purchase } from '$lib/consumer';
+	import { Mutation, purchase, kobo, type Purchase } from '$lib/consumer';
+	import PersonalSaleOptions from '$lib/components/PersonalSaleOptions.svelte';
+	import { defaultPersonalOptions } from '$lib/personal-sale-options';
+	import SaleOptions from '$lib/components/SaleOptions.svelte';
+	import { defaultSaleOptions, scheduleTerms, InvoiceUpload } from '$lib/sale-options';
 	import Money from '$lib/components/Money.svelte';
 	import ResourceNotice from '$lib/components/ResourceNotice.svelte';
 	import ShareActions from '$lib/components/ShareActions.svelte';
+	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
 	const RETURNS =
-		'The goods were handed over at the time of sale. Report any fault or shortage to the seller straight away. Your statutory rights are unaffected.';
+		'Before release, cancellation receives a full refund. Contact the seller about incorrect, defective or undelivered goods. Other returns are reviewed individually. Your statutory rights are unaffected.';
 
 	let organizations = $state<Resource<Organization[]>>({ state: 'loading', scope: '' });
 	let customers = $state<Resource<Customer[]>>({ state: 'loading', scope: '' });
@@ -42,20 +48,27 @@
 		newType = $state('unregistered_business'),
 		inviteLink = $state('');
 	// Person
-	let personPhone = $state('');
+	let personPhone = $state(''),
+		stockReserved = $state(false);
 	// The credit
 	let goods = $state(''),
 		amountText = $state(''),
-		dueDate = $state(paymentDateAfter(30)),
+		dueDate = $state(''),
 		graceHours = $state(24);
 	let busy = $state(false),
 		error = $state(''),
-		personLink = $state('');
+		personLink = $state(''),
+		savedSale = $state(''),
+		settingsReady = $state(false),
+		settingsError = $state('');
 	let creation: MutationIntent | null = null,
-		sending: MutationIntent | null = null,
 		invitation: MutationIntent | null = null;
 	const personMutation = new Mutation();
 	const reads = new LatestRequest();
+
+	let options = $state(defaultSaleOptions());
+	let personal = $state(defaultPersonalOptions(RETURNS));
+	const invoiceUpload = new InvoiceUpload();
 
 	const amount = $derived(parseNaira(amountText));
 	const amountWords = $derived(verbalizeNaira(amount));
@@ -70,7 +83,13 @@
 			amount >= 100 &&
 			/^\d{4}-\d{2}-\d{2}$/.test(dueDate) &&
 			dueDate >= today &&
-			((kind === 'business' && Boolean(buyer)) || (kind === 'person' && personPhone.trim().length >= 10))
+			((kind === 'business' && settingsReady && !addingNew && Boolean(buyer)) ||
+				(kind === 'person' &&
+					stockReserved &&
+					amount <= 2_500_000_000 &&
+					(personal.channel === 'phone'
+						? personPhone.trim().length >= 10
+						: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personPhone))))
 	);
 
 	async function load() {
@@ -98,14 +117,19 @@
 			return;
 		}
 		if (!organizationID) return;
+		settingsError = '';
+		settingsReady = false;
 		try {
 			const defaults = await loadSaleDefaults(organizationID, request.signal);
+			if (!request.current()) return;
 			graceHours = defaults.graceHours;
-			dueDate = defaults.dueDate;
-		} catch {
-			// The 30-day default above stands; the server checks the date again.
+			if (!dueDate) dueDate = defaults.dueDate;
+			settingsReady = true;
+		} catch (cause) {
+			if (!request.current()) return;
+			settingsError = publicError(cause, 'your saved payment settings');
 		}
-		customers = await readResource(
+		const customerResult = await readResource(
 			organizationID,
 			`/api/v1/organizations/${encodeURIComponent(organizationID)}/customers`,
 			rows('customers', customer),
@@ -113,11 +137,13 @@
 			'your customers'
 		);
 		if (!request.current()) return;
+		customers = customerResult;
 		// Coming from a customer's page, or "give again" on an old credit.
 		const params = new URLSearchParams(location.search);
 		if (params.has('goods')) goods = (params.get('goods') ?? '').slice(0, 500);
 		if (params.has('amount')) amountText = (params.get('amount') ?? '').slice(0, 40);
 		if (params.get('kind') === 'person') kind = 'person';
+		if (!dueDate) dueDate = paymentDateAfter(30);
 		if (customers.state === 'ready' && params.get('customer')) {
 			const match = customers.data.filter(
 				(item) =>
@@ -163,8 +189,9 @@
 	}
 
 	async function giveToBusiness() {
-		if (!buyer) throw new Error('Choose the customer.');
+		if (!buyer || !settingsReady) throw new Error('Choose a customer and confirm your payment settings.');
 		const org = organizationID;
+		const schedule = scheduleTerms(options, amount, dueDate);
 		const collectionAt = await checkedJSON(
 			`/api/v1/organizations/${encodeURIComponent(org)}/credit-terms/preview`,
 			(value) => {
@@ -177,11 +204,12 @@
 			{
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-				body: JSON.stringify({ due_date: dueDate, grace_hours: graceHours })
+				body: JSON.stringify({ due_date: dueDate, grace_hours: graceHours, principal_kobo: amount, ...schedule })
 			}
 		);
 		const base = `/api/v1/organizations/${encodeURIComponent(org)}/credit-requests`;
 		creation ??= new MutationIntent(`${account.userID}:${org}`, base);
+		const invoice = await invoiceUpload.upload(account.userID, org, options.invoiceFile);
 		const id = await creation.run(
 			{
 				buyer_user_id: buyer.buyer_user_id,
@@ -190,54 +218,47 @@
 				buyer_trading_name: buyer.trading_name,
 				principal_kobo: amount,
 				goods_description: goods.trim(),
-				invoice_reference: '',
-				invoice_document_hash: '',
+				invoice_reference: options.invoiceReference.trim(),
+				invoice_document_hash: invoice.hash,
+				invoice_document_id: invoice.id,
 				due_date: dueDate,
 				grace_hours: graceHours,
 				collection_at: collectionAt,
 				timing_mode: 'lagos_end_of_day',
-				schedule_type: 'one_time',
-				schedule_count: 1,
-				schedule_cadence: 'custom',
-				month_end_policy: 'last_day',
-				custom_schedule_items: []
+				...schedule
 			},
 			(value) => {
-				const id = text(record(record(value).request).id);
-				if (!id) throw new Error('The credit was not confirmed.');
-				return id;
+				const view = saleView(value);
+				if (!view.request.id || view.request.state !== 'DRAFT') throw new Error('The saved draft was not confirmed.');
+				return view.request.id;
 			}
 		);
-		sending ??= new MutationIntent(`${account.userID}:${org}`, `${base}/${encodeURIComponent(id)}/send`);
-		try {
-			await sending.run(undefined, (value) => record(record(value).request));
-		} catch {
-			// Saved but not sent: the credit page shows the Send button.
-		}
-		await goto(`/workspace/sales/${encodeURIComponent(id)}?organization=${encodeURIComponent(org)}&given=1`);
+		savedSale = `/workspace/sales/${encodeURIComponent(id)}?organization=${encodeURIComponent(org)}&created=1`;
+		// The saved record displays exact fees and terms before its Send action.
+		await goto(savedSale);
 	}
 
 	async function giveToPerson() {
 		const data = (await personMutation.send(
 			`/api/v1/organizations/${encodeURIComponent(organizationID)}/consumer-sales`,
 			{
-				target_type: 'phone',
-				target: normalizeNigerianPhone(personPhone),
+				target_type: personal.channel,
+				target: personal.channel === 'phone' ? normalizeNigerianPhone(personPhone) : personPhone.trim(),
 				terms: {
 					item: goods.trim(),
-					quantity: 1,
+					quantity: personal.quantity,
 					total_kobo: amount,
-					deposit_kobo: 0,
-					deposit_date: '',
+					deposit_kobo: kobo(personal.deposit),
+					deposit_date: personal.depositDate,
 					first_date: dueDate,
-					count: 1,
-					cadence: 'monthly',
-					fulfillment: 'immediate',
-					threshold_percent: 0,
-					delivery_days: 1,
-					stock_reference: 'Handed over at the shop',
-					stock_reserved: true,
-					returns_policy: RETURNS
+					count: personal.count,
+					cadence: personal.cadence,
+					fulfillment: personal.fulfillment,
+					threshold_percent: personal.threshold,
+					delivery_days: personal.days,
+					stock_reference: 'Stock reserved for the agreed delivery terms',
+					stock_reserved: stockReserved,
+					returns_policy: personal.returns
 				}
 			},
 			purchase
@@ -247,7 +268,7 @@
 
 	async function give(event: SubmitEvent) {
 		event.preventDefault();
-		if (busy || !ready) return;
+		if (busy || !ready || savedSale || personLink) return;
 		busy = true;
 		error = '';
 		try {
@@ -255,11 +276,9 @@
 			else await giveToPerson();
 		} catch (cause) {
 			error =
-				cause instanceof RequestError && [401, 403, 423].includes(cause.status)
+				cause instanceof RequestError && cause.code === 'invalid_phone'
 					? cause.message
-					: cause instanceof Error
-						? cause.message
-						: 'We could not confirm this credit. Check your list before trying again.';
+					: publicError(cause, 'We could not confirm this credit. Check your list before trying again.');
 		} finally {
 			busy = false;
 		}
@@ -283,20 +302,40 @@
 			<p>We need your business name and the bank account your money goes to.</p>
 			<a class="primary" href="/workspace/today">Add my business</a>
 		</section>
+	{:else if savedSale}
+		<section class="card done" aria-live="polite">
+			<h2>Your draft is saved</h2>
+			<p>Review the exact terms and fees before sending it to your customer.</p>
+			<a class="primary" href={savedSale}>Review saved sale</a>
+		</section>
 	{:else if personLink}
 		<section class="card done" aria-live="polite">
-			<h2>Done. Send him the link.</h2>
+			<h2>Purchase saved. Share the link.</h2>
 			<p>
-				Your customer opens this link, confirms his phone number, and says yes to the credit. You will see it on
+				Your customer opens this link, signs in with the contact you invited, and reviews the terms. You will see it on
 				<a href="/workspace/today{scope}">Who owes me</a>.
 			</p>
 			<input value={personLink} readonly aria-label="Customer link" />
 			<ShareActions
 				title="Goods on credit"
-				text={`Hello, this is the record of the goods you took on credit (${goods}). Please open the link to confirm.`}
+				text={`Hello, please review this offer for goods on credit (${goods}). Please open the link to confirm.`}
 				url={personLink}
 			/>
-			<p><a href="/workspace/give{scope}">Give another credit</a></p>
+			<p>
+				<button
+					type="button"
+					class="secondary"
+					onclick={() => {
+						personLink = '';
+						personPhone = '';
+						personal = defaultPersonalOptions(RETURNS);
+						goods = '';
+						amountText = '';
+						stockReserved = false;
+						error = '';
+					}}>Give another credit</button
+				>
+			</p>
 		</section>
 	{:else if organizationID}
 		<form class="card" onsubmit={give} aria-busy={busy}>
@@ -310,7 +349,7 @@
 					>
 					<label class:on={kind === 'person'}
 						><input type="radio" bind:group={kind} value="person" /><strong>A person</strong><small
-							>Buying for himself or his home</small
+							>Buying for themselves or their home</small
 						></label
 					>
 				</div>
@@ -328,26 +367,41 @@
 							></label
 						>
 						{#if buyer?.overdue}<p class="warn">
-								This customer is owing past his due date. Think before giving more.
+								This customer has overdue payments. Review them before giving more credit.
 							</p>{/if}
-						<button type="button" class="link" onclick={() => (addingNew = true)}>New customer? Add him here</button>
+						<button
+							type="button"
+							class="link"
+							disabled={busy}
+							onclick={() => {
+								addingNew = true;
+								selected = '';
+								inviteLink = '';
+							}}>Add a new customer</button
+						>
 					{:else}
 						<div class="new-customer">
 							{#if inviteLink}
-								<h2>Send him this link first</h2>
-								<p>
-									He opens it and confirms his business. Once he has done that, come back here and his name will be on
-									the list.
-								</p>
+								<h2>Share this customer link first</h2>
+								<p>They open it and confirm their business. Then refresh your customers to find them on the list.</p>
 								<input value={inviteLink} readonly aria-label="Customer link" />
 								<ShareActions
 									title="Your Kredit customer link"
 									text={`Hello ${newName}, please open this link to confirm your business so I can give you goods on credit.`}
 									url={inviteLink}
 								/>
+								<button
+									type="button"
+									class="secondary"
+									disabled={busy}
+									onclick={() => {
+										addingNew = false;
+										void load();
+									}}>Refresh customers</button
+								>
 							{:else}
 								<h2>New business customer</h2>
-								<p>He gets a link on WhatsApp to confirm his business. This is done once.</p>
+								<p>Create a link and share it with your customer to confirm their business.</p>
 								<label>Business name<input bind:value={newName} autocomplete="off" disabled={busy} /></label>
 								<label
 									>WhatsApp number<input
@@ -366,7 +420,7 @@
 									/></label
 								>
 								<label
-									>What does he sell?<input
+									>What do they sell?<input
 										bind:value={newIndustry}
 										placeholder="Provisions, drinks, building materials…"
 										disabled={busy}
@@ -383,28 +437,31 @@
 									type="button"
 									class="secondary"
 									disabled={busy || !newName.trim() || !newPhone.trim() || !newAddress.trim() || !newIndustry.trim()}
-									onclick={inviteBusiness}>Send him the link</button
+									onclick={inviteBusiness}>Create customer link</button
 								>
 							{/if}
-							{#if customers.data.length}<button type="button" class="link" onclick={() => (addingNew = false)}
-									>Back to my customer list</button
+							{#if customers.data.length}<button
+									type="button"
+									class="link"
+									disabled={busy}
+									onclick={() => (addingNew = false)}>Back to my customer list</button
 								>{/if}
 						</div>
 					{/if}
 				{/if}
 			{:else if kind === 'person'}
 				<label
-					>His WhatsApp number<input
+					>{personal.channel === 'phone' ? 'Customer’s WhatsApp number' : 'Customer’s email'}<input
 						bind:value={personPhone}
-						type="tel"
-						inputmode="tel"
-						placeholder="0803 000 0000"
+						type={personal.channel === 'phone' ? 'tel' : 'email'}
+						inputmode={personal.channel === 'phone' ? 'tel' : 'email'}
+						placeholder={personal.channel === 'phone' ? '0803 000 0000' : 'customer@example.com'}
 						disabled={busy}
 					/></label
 				>
 			{/if}
 
-			{#if (kind === 'business' && buyer) || kind === 'person'}
+			{#if (kind === 'business' && buyer && !addingNew) || kind === 'person'}
 				<fieldset class="credit" disabled={busy}>
 					<legend>The goods</legend>
 					<label
@@ -424,15 +481,53 @@
 					>
 					<label>Pay by<input type="date" bind:value={dueDate} min={today} /></label>
 				</fieldset>
+				{#if kind === 'business'}
+					<SaleOptions bind:options disabled={busy} />
+					{#if settingsError}<p role="alert">
+							{settingsError} <button type="button" disabled={busy} onclick={load}>Check again</button>
+						</p>{/if}
+					<p>You will review the exact fees and terms on the next page before sending the sale.</p>
+				{:else}
+					<PersonalSaleOptions bind:options={personal} disabled={busy} />
+					<p>
+						Goods are reserved for handover within {personal.days}
+						{personal.days === 1 ? 'day' : 'days'}
+						after {personal.fulfillment === 'immediate'
+							? 'acceptance'
+							: personal.fulfillment === 'on_full_payment'
+								? 'full payment'
+								: `${personal.threshold}% is paid`}. {personal.returns}
+					</p>
+					<label
+						><input type="checkbox" bind:checked={stockReserved} disabled={busy} />I have reserved these goods and can
+						meet these delivery and return terms.</label
+					>
+				{/if}
 				{#if ready}<p class="summary">
-						<strong>{kind === 'business' ? buyer?.trading_name || buyer?.legal_name : personPhone}</strong> owes you
-						<strong><Money amountKobo={amount} /></strong> by <strong>{dateLabel(dueDate)}</strong>.
+						<strong>{kind === 'business' ? buyer?.trading_name || buyer?.legal_name : personPhone}</strong> will be
+						asked to pay
+						<strong><Money amountKobo={amount} /></strong>
+						{(
+							kind === 'business'
+								? options.scheduleType !== 'one_time'
+								: personal.count > 1 || parseNaira(personal.deposit) > 0
+						)
+							? 'starting'
+							: 'by'}
+						<strong
+							>{dateLabel(
+								kind === 'person' && parseNaira(personal.deposit) > 0 ? personal.depositDate : dueDate
+							)}</strong
+						>.
 					</p>{/if}
 				{#if error}<p class="error" role="alert">{error}</p>{/if}
-				<button class="primary big" disabled={busy || !ready}>{busy ? 'Sending…' : 'Send to customer'}</button>
+				<button class="primary big" disabled={busy || !ready}
+					>{busy ? 'Saving…' : kind === 'business' ? 'Review credit sale' : 'Create purchase link'}</button
+				>
 			{:else if error}<p class="error" role="alert">{error}</p>{/if}
 		</form>
 	{/if}
+	{#if organizationID && !personLink && !savedSale}<VerifyIdentity />{/if}
 </main>
 
 <style>
@@ -479,10 +574,14 @@
 		font-weight: 400;
 		padding: 0.75rem;
 		border: 1px solid var(--color-border);
-		border-radius: 0.4rem;
+		border-radius: var(--radius);
 		background: var(--color-surface);
 		width: 100%;
 		box-sizing: border-box;
+	}
+	input[type='checkbox'] {
+		width: auto;
+		justify-self: start;
 	}
 	.choice {
 		display: grid;
@@ -493,7 +592,7 @@
 		gap: 0.2rem;
 		padding: 1rem;
 		border: 2px solid var(--color-border);
-		border-radius: 0.6rem;
+		border-radius: var(--radius);
 		cursor: pointer;
 	}
 	.choice label.on {
@@ -513,7 +612,7 @@
 		gap: 0.9rem;
 		padding: 1rem;
 		border: 1px dashed var(--color-border);
-		border-radius: 0.6rem;
+		border-radius: var(--radius);
 	}
 	.new-customer h2 {
 		margin: 0;
@@ -541,7 +640,7 @@
 		margin: 0;
 		padding: 1rem;
 		background: var(--color-background);
-		border-radius: 0.5rem;
+		border-radius: var(--radius);
 		line-height: 1.6;
 	}
 	.big {

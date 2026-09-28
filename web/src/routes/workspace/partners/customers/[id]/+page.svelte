@@ -144,7 +144,7 @@
 		</p>{:else if !history}<p>Opening this customer…</p>{:else}<div class="customer-actions">
 			<a
 				class="primary-link"
-				href={`/workspace/sales/new?customer=${encodeURIComponent(buyerUserID)}&customer_business=${encodeURIComponent(page.params.id ?? '')}&organization=${encodeURIComponent(organizationID)}`}
+				href={`/workspace/give?customer=${encodeURIComponent(buyerUserID)}&customer_business=${encodeURIComponent(page.params.id ?? '')}&organization=${encodeURIComponent(organizationID)}`}
 				>Sell to them again</a
 			><button type="button" onclick={() => window.print()}>Print this page</button>
 		</div>

@@ -36,15 +36,13 @@ func LoadLedgerMovements(ctx context.Context, pool *pgxpool.Pool, org string, fr
 	if err = db.SetTenantContext(ctx, tx); err != nil {
 		return nil, err
 	}
-	// Explicit authority prevents revoked staff from receiving a misleading empty
-	// successful reconciliation when RLS hides every obligation.
+	// Check current ownership before returning business financial information.
 	var role string
-	var companyWide bool
-	if err = tx.QueryRow(ctx, `SELECT m.role,app.branch_scope_all($1::uuid) FROM app.memberships m JOIN app.users u ON u.id=m.user_id WHERE m.organization_id=$1::uuid AND m.user_id=app.current_user_id() AND m.status='active' AND u.status='active'`, org).Scan(&role, &companyWide); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT m.role FROM app.memberships m JOIN app.users u ON u.id=m.user_id WHERE m.organization_id=$1::uuid AND m.user_id=app.current_user_id() AND m.status='active' AND u.status='active'`, org).Scan(&role); err != nil {
 		return nil, err
 	}
-	if !companyWide || !access.Can(access.Role(role), access.PermissionReadFinancial) {
-		return nil, errors.New("current company-wide financial authority is required")
+	if !access.Can(access.Role(role), access.PermissionReadFinancial) {
+		return nil, errors.New("current owner financial authority is required")
 	}
 	rows, err := tx.Query(ctx, ledgerMovementsSQL, org, from, to, MaxReconciliationRecords+1)
 	if err != nil {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { workRow } from '$lib/records';
 	import type { KoboValue } from '$lib/money';
 	import WorkspacePage from '$lib/components/WorkspacePage.svelte';
 	import { readableDateTime } from '$lib/datetime';
@@ -13,6 +14,7 @@
 </script>
 
 <WorkspacePage
+	decodeRow={workRow}
 	eyebrow="Bank debits"
 	title="Bank debits"
 	description="Every time Kredit asked a customer’s bank for a payment, and what the bank said."

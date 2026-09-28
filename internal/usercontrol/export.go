@@ -27,7 +27,7 @@ func privacyExportPayload(ctx context.Context, tx pgx.Tx, requestID, userID stri
 		{"dsa_rewards", `SELECT id,organization_id,kind,amount_kobo,reason,available_at,created_at FROM app.dsa_earnings WHERE agent_id=$1::uuid ORDER BY created_at,id`},
 		{"dsa_payouts", `SELECT id,amount_kobo,bank_name,account_name,account_number,state,bank_reference,created_at,completed_at FROM app.dsa_payouts WHERE agent_id=$1::uuid ORDER BY created_at,id`},
 		{"dsa_referrals", `SELECT organization_id,business_name,created_at,terms,qualified_at,activated_at,share_ends_at,blocked,progress FROM app.dsa_referrals WHERE agent_id=$1::uuid OR confirmed_by=$1::uuid ORDER BY created_at,organization_id`},
-		{"memberships", `SELECT id,organization_id,role,status,invited_at,accepted_at,created_at FROM app.memberships WHERE user_id=$1::uuid ORDER BY id`},
+		{"memberships", `SELECT id,organization_id,role,status,created_at FROM app.memberships WHERE user_id=$1::uuid ORDER BY id`},
 		{"native_identity_checks", `SELECT id,provider,subject_id,kind,full_name,state,safe_result,consent_version,consent_at,created_at,updated_at,expires_at FROM app.native_identity_sessions WHERE user_id=$1::uuid ORDER BY created_at,id`},
 		{"identity_decision_history", `SELECT session_id,previous_version,previous_decision->>'state' AS previous_state,previous_decision->'safe_result' AS verified_details,recorded_at FROM app.native_identity_history WHERE user_id=$1::uuid ORDER BY recorded_at,id`},
 		{"fee_bank_consents", `SELECT id,organization_id,provider,state,ceiling_kobo,starts_at,ends_at,consent_version,created_at FROM app.fee_authorizations WHERE created_by=$1::uuid ORDER BY created_at,id`},

@@ -285,7 +285,7 @@ func (s *Server) buyerChanges(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 503, "workflow_unavailable", "Changes could not be loaded")
 		return
 	}
-	businessID, scopedOK := s.buyerOwnerWorkspaceScope(w, r, user.ID)
+	businessID, scopedOK := s.buyerWorkspaceScope(w, r, user.ID)
 	if !scopedOK {
 		return
 	}

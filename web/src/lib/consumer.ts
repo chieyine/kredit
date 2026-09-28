@@ -1,4 +1,4 @@
-import { parseNaira } from '$lib/money';
+import { parseNaira, formatKobo } from '$lib/money';
 import { MutationIntent } from '$lib/api/mutation';
 import { checkedJSON, record, type Decoder } from '$lib/api/reliable';
 export type Due = { date: string; amount_kobo: number; paid_kobo: number };
@@ -61,8 +61,7 @@ export type Purchase = {
 	delivery_due_at: string | null;
 	role: string;
 };
-export const money = (n: number) =>
-	new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(n / 100);
+export const money = (n: number) => formatKobo(n);
 const words: Record<string, string> = {
 	offered: 'Waiting for the customer',
 	active: 'Being paid',
@@ -124,17 +123,110 @@ export function kobo(v: string) {
 }
 export function purchase(v: unknown): Purchase {
 	const r = record(v);
+	const terms = record(r.terms);
+	const validAmount = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+	const validSchedule = (value: unknown) =>
+		Array.isArray(value) &&
+		value.every((entry) => {
+			const due = record(entry);
+			return (
+				typeof due.date === 'string' &&
+				/^\d{4}-\d{2}-\d{2}$/.test(due.date) &&
+				validAmount(due.amount_kobo) &&
+				validAmount(due.paid_kobo)
+			);
+		});
+	const validEvents =
+		Array.isArray(r.events) &&
+		r.events.every((value) => {
+			const event = record(value);
+			return (
+				['id', 'action', 'reference', 'related_id', 'note', 'occurred_at'].every(
+					(key) => typeof event[key] === 'string'
+				) && validAmount(event.amount_kobo)
+			);
+		});
 	if (
 		typeof r.id !== 'string' ||
-		typeof r.version !== 'number' ||
-		!Array.isArray(r.events) ||
-		!Array.isArray(record(r.terms).schedule)
+		!r.id ||
+		typeof r.organization_id !== 'string' ||
+		typeof r.target !== 'string' ||
+		typeof r.state !== 'string' ||
+		typeof r.customer_name !== 'string' ||
+		typeof r.case_state !== 'string' ||
+		typeof r.release_eligible !== 'boolean' ||
+		typeof terms.item !== 'string' ||
+		!Number.isSafeInteger(r.version) ||
+		!validEvents ||
+		!validAmount(terms.total_kobo) ||
+		!['paid_kobo', 'refunded_kobo', 'reduction_kobo', 'outstanding_kobo', 'refund_due_kobo'].every((key) =>
+			validAmount(r[key])
+		) ||
+		!validSchedule(terms.schedule) ||
+		!validSchedule(r.schedule_progress)
 	)
 		throw new Error('The purchase response could not be verified. Refresh before acting.');
 	return r as unknown as Purchase;
 }
 export async function read(url: string) {
 	return checkedJSON(url, record);
+}
+
+/** Totals require every page. Never return a partial list as a complete balance. */
+export async function readAllPurchases(url: string, signal?: AbortSignal): Promise<Purchase[]> {
+	const deadline = AbortSignal.timeout(20_000);
+	const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+	const items: Purchase[] = [];
+	const cursors = new Set<string>();
+	const ids = new Set<string>();
+	let cursor = '';
+	do {
+		const path = cursor ? `${url}${url.includes('?') ? '&' : '?'}before=${encodeURIComponent(cursor)}` : url;
+		const page = await checkedJSON(
+			path,
+			(value) => {
+				const body = record(value);
+				if (!Array.isArray(body.items) || typeof body.next_cursor !== 'string')
+					throw new Error('The complete purchase list could not be verified.');
+				return { items: body.items.map(purchase), cursor: body.next_cursor };
+			},
+			{ signal: requestSignal }
+		);
+		for (const item of page.items) {
+			if (ids.has(item.id)) throw new Error('The purchase list changed. Refresh before using its total.');
+			ids.add(item.id);
+			items.push(item);
+		}
+		cursor = page.cursor;
+		if (cursor && (cursors.has(cursor) || !page.items.length))
+			throw new Error('The complete purchase list could not be verified.');
+		cursors.add(cursor);
+	} while (cursor);
+	return items;
+}
+
+export function activePurchase(sale: Pick<Purchase, 'state'>): boolean {
+	return sale.state === 'active' || sale.state === 'received';
+}
+
+export function pendingPurchaseClaims(sale: Purchase): SaleEvent[] {
+	const resolved = new Set(
+		sale.events.filter((event) => ['payment', 'reject_claim'].includes(event.action)).map((event) => event.related_id)
+	);
+	return sale.events.filter((event) => event.action === 'claim' && !resolved.has(event.id));
+}
+
+/** Price reductions cap what is due even when the original schedule is retained. */
+export function purchaseOverdue(
+	sale: Pick<Purchase, 'state' | 'schedule_progress' | 'outstanding_kobo'>,
+	today: string
+): bigint {
+	if (!activePurchase(sale)) return 0n;
+	const due = sale.schedule_progress
+		.filter((item) => item.date < today)
+		.reduce((sum, item) => sum + BigInt(Math.max(0, item.amount_kobo - item.paid_kobo)), 0n);
+	const outstanding = BigInt(sale.outstanding_kobo);
+	return due < outstanding ? due : outstanding;
 }
 // Persist request identities/digests, never purchase or banking evidence.
 export class Mutation {

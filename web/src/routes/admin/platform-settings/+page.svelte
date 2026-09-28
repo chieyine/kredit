@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PlatformGovernance from '$lib/components/PlatformGovernance.svelte';
 	import RetainedAccounts from '$lib/components/RetainedAccounts.svelte';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import OwnerDialog from '$lib/components/OwnerDialog.svelte';
@@ -45,8 +46,6 @@
 	}
 
 	let settingIntent: MutationIntent | null = null;
-	let governanceIntent: MutationIntent | null = null;
-	let transferIntent: MutationIntent | null = null;
 	let settings: Setting[] = $state([]);
 	let governance: Governance | null = $state(null);
 	let selectedCategory = $state('all');
@@ -77,10 +76,6 @@
 	let historyLoading = $state(false);
 	let historyGeneration = 0;
 	let historyError = $state('');
-
-	let governanceModal = $state(false);
-	let newGovMode: 'solo_owner' | 'delegated_team' = $state('solo_owner');
-	let govReason = $state('');
 
 	let filteredSettings = $derived.by(() => {
 		return settings.filter((s) => {
@@ -147,7 +142,6 @@
 				updated_by: typeof verifiedGovernance.updated_by === 'string' ? verifiedGovernance.updated_by : undefined,
 				reason: typeof verifiedGovernance.reason === 'string' ? verifiedGovernance.reason : ''
 			};
-			newGovMode = mode;
 		} catch (e) {
 			governance = null;
 			isOwner = false;
@@ -267,77 +261,6 @@
 		}
 	}
 
-	async function submitGovernanceChange() {
-		if (busy) return;
-		busy = true;
-		error = '';
-		message = '';
-		try {
-			governanceIntent ??= new MutationIntent('platform-governance', '/api/v1/ops/governance');
-			await governanceIntent.run(
-				{
-					mode: newGovMode,
-					reason: govReason
-				},
-				(value) => {
-					const gov = record(record(value).governance);
-					if (gov.mode !== newGovMode) throw new Error('Approval rule change was not confirmed');
-					return gov;
-				}
-			);
-			message =
-				newGovMode === 'solo_owner'
-					? 'You can now approve your own changes.'
-					: 'Changes now need a second administrator.';
-			governanceModal = false;
-			govReason = '';
-			await load();
-		} catch (e) {
-			error = errorMessage(e, 'That change was not saved.');
-		} finally {
-			busy = false;
-		}
-	}
-
-	let transferModal = $state(false);
-	let transferTargetUserId = $state('');
-	let transferReason = $state('');
-	let transferConfirmed = $state(false);
-
-	async function submitTransferOwnership() {
-		if (busy) return;
-		const targetUserId = transferTargetUserId.trim().toLowerCase();
-		busy = true;
-		error = '';
-		message = '';
-		try {
-			transferIntent ??= new MutationIntent('platform-transfer', '/api/v1/ops/ownership/transfer');
-			await transferIntent.run(
-				{
-					target_user_id: targetUserId,
-					reason: transferReason,
-					confirm: transferConfirmed
-				},
-				(value) => {
-					const result = record(value);
-					if (result.transferred !== true || result.new_owner_user_id !== targetUserId)
-						throw new Error('Ownership transfer was not confirmed');
-					return result;
-				}
-			);
-			message = 'Ownership handed over.';
-			transferModal = false;
-			transferTargetUserId = '';
-			transferReason = '';
-			transferConfirmed = false;
-			await load();
-		} catch (e) {
-			error = errorMessage(e, 'Ownership was not handed over.');
-		} finally {
-			busy = false;
-		}
-	}
-
 	onMount(load);
 </script>
 
@@ -351,36 +274,7 @@
 			<p class="eyebrow">Admin / Platform</p>
 			<h1>Platform settings</h1>
 		</div>
-		<div class="gov-pill-container">
-			<div class="gov-badge {governance?.mode}">
-				<span class="dot"></span>
-				<strong
-					>{!governance
-						? 'Approval rules unavailable'
-						: governance.mode === 'solo_owner'
-							? 'Solo owner'
-							: 'Delegated team'}</strong
-				>
-			</div>
-			{#if isOwner}
-				<button
-					class="small-btn"
-					onclick={() => {
-						governanceModal = true;
-						govReason = '';
-					}}>Change this</button
-				>
-				<button
-					class="small-btn danger"
-					onclick={() => {
-						transferModal = true;
-						transferReason = '';
-						transferConfirmed = false;
-						transferTargetUserId = '';
-					}}>Hand over ownership</button
-				>
-			{/if}
-		</div>
+		<PlatformGovernance {governance} {isOwner} bind:busy bind:error bind:message onchanged={load} />
 	</div>
 
 	<VerifyIdentity />
@@ -837,71 +731,6 @@
 	{/if}
 
 	<!-- Governance Switcher Modal -->
-	{#if governanceModal}
-		<OwnerDialog
-			{busy}
-			open={governanceModal}
-			title="Who approves changes"
-			description="This decides whether you can approve your own changes, or whether a second administrator has to."
-			onclose={() => (governanceModal = false)}
-		>
-			<form
-				onsubmit={(e) => {
-					e.preventDefault();
-					submitGovernanceChange();
-				}}
-			>
-				<fieldset disabled={busy}>
-					<div class="form-group">
-						<span class="group-label">Choose one</span>
-						<div class="mode-options">
-							<label class="mode-radio">
-								<input type="radio" name="gov-mode" value="solo_owner" bind:group={newGovMode} />
-								<div>
-									<strong>I run Kredit alone</strong>
-									<p>
-										You approve your own changes. Each one still needs a fresh authenticator code and a written reason.
-									</p>
-								</div>
-							</label>
-							<label class="mode-radio">
-								<input type="radio" name="gov-mode" value="delegated_team" bind:group={newGovMode} />
-								<div>
-									<strong>A second person approves</strong>
-									<p>
-										Nobody approves their own change, including you. Choose this once you have a second administrator.
-									</p>
-								</div>
-							</label>
-						</div>
-					</div>
-
-					<div class="form-group">
-						<label for="gov-reason">Why are you changing this?</label>
-						<textarea
-							id="gov-reason"
-							rows="3"
-							bind:value={govReason}
-							placeholder="This is recorded permanently and cannot be edited later."
-							required
-							minlength="8"
-							maxlength="2000"
-						></textarea>
-					</div>
-
-					{#if error}<p role="alert" class="error">{error}</p>{/if}
-					<div class="modal-actions">
-						<button type="button" class="cancel-btn" onclick={() => (governanceModal = false)} disabled={busy}
-							>Cancel</button
-						>
-						<button type="submit" class="save-btn" disabled={busy || govReason.trim().length < 8}>
-							{busy ? 'Saving…' : 'Save this'}
-						</button>
-					</div>
-				</fieldset>
-			</form>
-		</OwnerDialog>
-	{/if}
 
 	<!-- History Drawer / Modal -->
 	{#if historySettingKey}
@@ -915,73 +744,6 @@
 			onclose={() => (historySettingKey = null)}
 		/>
 	{/if}
-
-	<!-- Ownership Transfer Modal -->
-	{#if transferModal}
-		<OwnerDialog
-			{busy}
-			open={transferModal}
-			title="Hand over ownership"
-			description="The person you choose becomes the owner of Kredit and you stop being the owner. It happens straight away and it is recorded permanently."
-			onclose={() => (transferModal = false)}
-		>
-			<form
-				onsubmit={(e) => {
-					e.preventDefault();
-					submitTransferOwnership();
-				}}
-			>
-				<fieldset disabled={busy}>
-					<div class="form-group">
-						<label for="transfer-target">Who takes over</label>
-						<input
-							id="transfer-target"
-							type="text"
-							bind:value={transferTargetUserId}
-							placeholder="Their Kredit user reference"
-							aria-describedby="transfer-target-help"
-							required
-						/>
-						<small id="transfer-target-help">Find it on the Users page, under the person's name.</small>
-					</div>
-
-					<div class="form-group">
-						<label for="transfer-reason">Why are you handing it over?</label>
-						<textarea
-							id="transfer-reason"
-							rows="3"
-							bind:value={transferReason}
-							placeholder="This is recorded permanently and cannot be edited later."
-							required
-							minlength="8"
-							maxlength="2000"
-						></textarea>
-					</div>
-
-					<div class="form-group checkbox-group">
-						<label class="checkbox-label">
-							<input type="checkbox" bind:checked={transferConfirmed} required />
-							<span>I understand that I will no longer be the owner of Kredit.</span>
-						</label>
-					</div>
-
-					{#if error}<p role="alert" class="error">{error}</p>{/if}
-					<div class="modal-actions">
-						<button type="button" class="cancel-btn" onclick={() => (transferModal = false)} disabled={busy}
-							>Cancel</button
-						>
-						<button
-							type="submit"
-							class="danger-btn"
-							disabled={busy || !transferConfirmed || transferReason.trim().length < 8 || !transferTargetUserId.trim()}
-						>
-							{busy ? 'Handing over…' : 'Hand over ownership'}
-						</button>
-					</div>
-				</fieldset>
-			</form>
-		</OwnerDialog>
-	{/if}
 </main>
 
 <style>
@@ -990,9 +752,6 @@
 		margin: 0;
 		padding: 0;
 		min-width: 0;
-	}
-	.gov-pill-container {
-		flex-wrap: wrap;
 	}
 	main {
 		max-width: 1200px;
@@ -1016,53 +775,12 @@
 		margin-bottom: 1.5rem;
 	}
 
-	.gov-pill-container {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.gov-badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.4rem 0.8rem;
-		border-radius: 2rem;
-		font-size: 0.85rem;
-		font-weight: 600;
-	}
-
-	.gov-badge.solo_owner {
-		background: var(--color-surface-muted);
-		color: var(--color-overdue);
-		border: 1px solid var(--color-surface-muted);
-	}
-
-	.gov-badge.delegated_team {
-		background: var(--color-background);
-		color: var(--color-primary);
-		border: 1px solid var(--color-surface-muted);
-	}
-
-	.dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: currentColor;
-	}
-
 	.banner {
 		padding: 1rem 1.25rem;
 		border-radius: 0.6rem;
 		margin-bottom: 1.5rem;
 		font-size: 0.9rem;
 		line-height: 1.4;
-	}
-
-	.banner-warning {
-		background: var(--color-surface);
-		border: 1px solid var(--color-surface-muted);
-		color: var(--color-overdue);
 	}
 
 	.banner-info {
@@ -1122,13 +840,6 @@
 	}
 
 	.settings-table,
-	.history-table {
-		width: 100%;
-		border-collapse: collapse;
-		text-align: left;
-		font-size: 0.9rem;
-	}
-
 	th {
 		background: var(--color-surface);
 		padding: 0.8rem 1rem;
@@ -1235,48 +946,6 @@
 		margin-top: 0.2rem;
 	}
 
-	/* Modals */
-	.modal-overlay {
-		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: 1rem;
-	}
-
-	.modal-card {
-		background: var(--color-surface);
-		border-radius: 0.8rem;
-		padding: 1.5rem;
-		max-width: 540px;
-		width: 100%;
-		max-height: 90vh;
-		overflow-y: auto;
-		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-	}
-
-	.modal-card.wide {
-		max-width: 850px;
-	}
-
-	.modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		margin-bottom: 1rem;
-	}
-
-	.close-btn {
-		background: none;
-		border: none;
-		font-size: 1.25rem;
-		cursor: pointer;
-		padding: 0.2rem 0.5rem;
-	}
-
 	.credential-clear {
 		display: flex !important;
 		gap: 0.5rem;
@@ -1342,39 +1011,6 @@
 		color: var(--color-positive);
 	}
 
-	.security-note {
-		background: var(--color-background);
-		border: 1px solid var(--color-surface-muted);
-		color: var(--color-primary);
-		padding: 0.75rem;
-		border-radius: 0.4rem;
-		font-size: 0.8rem;
-		margin: 1rem 0;
-		line-height: 1.4;
-	}
-
-	.mode-options {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.mode-radio {
-		display: flex;
-		gap: 0.75rem;
-		align-items: flex-start;
-		border: 1px solid var(--color-border);
-		padding: 0.75rem;
-		border-radius: 0.5rem;
-		cursor: pointer;
-	}
-
-	.mode-radio p {
-		font-size: 0.8rem;
-		color: var(--color-primary);
-		margin-top: 0.2rem;
-	}
-
 	.modal-actions {
 		display: flex;
 		justify-content: flex-end;
@@ -1392,10 +1028,6 @@
 		cursor: pointer;
 	}
 
-	.save-btn.warn {
-		background: var(--color-overdue);
-	}
-
 	.save-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
@@ -1407,55 +1039,6 @@
 		padding: 0.6rem 1.2rem;
 		border-radius: 0.4rem;
 		cursor: pointer;
-	}
-
-	.small-btn {
-		background: var(--color-background);
-		border: 1px solid var(--color-border);
-		padding: 0.35rem 0.75rem;
-		border-radius: 0.375rem;
-		font-size: 0.8rem;
-		font-weight: 500;
-		cursor: pointer;
-	}
-
-	.small-btn.danger {
-		background: var(--color-background);
-		color: var(--color-overdue);
-		border-color: var(--color-surface-muted);
-	}
-
-	.danger-btn {
-		background: var(--color-overdue);
-		color: var(--color-on-primary);
-		border: none;
-		padding: 0.6rem 1.2rem;
-		border-radius: 0.4rem;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	.danger-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.checkbox-group {
-		margin: 1rem 0;
-	}
-
-	.checkbox-label {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.5rem;
-		font-size: 0.85rem;
-		color: var(--color-primary);
-		cursor: pointer;
-	}
-
-	.checkbox-label input {
-		width: auto;
-		margin-top: 0.2rem;
 	}
 
 	.alert {
@@ -1474,16 +1057,6 @@
 		background: var(--color-background);
 		color: var(--color-positive);
 		border: 1px solid var(--color-surface-muted);
-	}
-
-	.mono {
-		font-family: monospace;
-		font-weight: 600;
-	}
-
-	.desc {
-		color: var(--color-primary);
-		font-size: 0.85rem;
 	}
 
 	.empty-state,

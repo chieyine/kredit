@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { saleView } from '$lib/records';
 	import type { KoboValue } from '$lib/money';
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import WorkspacePage from '$lib/components/WorkspacePage.svelte';
@@ -18,6 +19,7 @@
 </script>
 
 <WorkspacePage
+	decodeRow={saleView}
 	eyebrow="Your business · Purchases"
 	title="Purchase offers"
 	description="Review the goods, price, payment dates and delivery terms before accepting a supplier’s offer."

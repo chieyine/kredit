@@ -1,5 +1,7 @@
 <script lang="ts">
+	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { readableDate } from '$lib/datetime';
+	import SaleOverview from '$lib/components/SaleOverview.svelte';
 	import SaleProgress from '$lib/components/SaleProgress.svelte';
 	import SaleCosts from '$lib/components/SaleCosts.svelte';
 	import { actualPaymentTime } from '$lib/financial-input';
@@ -154,8 +156,8 @@
 		collectionAttempts: CollectionAttempt[] = $state([]),
 		eligibility: Eligibility | null = $state(null),
 		notice = $state(
-			page.url.searchParams.get('given') === '1'
-				? 'Sent. Your customer gets a message to open it and say yes. You will see it on Who owes me.'
+			page.url.searchParams.get('created') === '1'
+				? 'Sale saved. Check its status below before sharing the link or releasing goods.'
 				: ''
 		);
 	const nextDueItem = $derived(scheduleItems.find(hasUnpaid));
@@ -508,30 +510,6 @@
 			operationReason = '';
 		}
 	}
-	async function openInvoice() {
-		const documentID = view?.request.invoice_document_id;
-		if (busy || loading || !documentID) return;
-		error = '';
-		try {
-			const url = await checkedJSON(
-				`/api/v1/organizations/${encodeURIComponent(organizationID)}/documents/${encodeURIComponent(documentID)}/download`,
-				(value) => {
-					const url = new URL(text(record(value).url), location.origin);
-					if (
-						!['https:', 'http:'].includes(url.protocol) ||
-						url.username ||
-						url.password ||
-						(location.protocol === 'https:' && url.protocol !== 'https:')
-					)
-						throw new Error('Invalid invoice link');
-					return url.href;
-				}
-			);
-			window.location.assign(url);
-		} catch {
-			error = 'We could not open that invoice. Please try again.';
-		}
-	}
 
 	$effect(() => {
 		const requestID = id,
@@ -564,7 +542,7 @@
 		<div class="quick-actions">
 			<a
 				class="repeat"
-				href={`/workspace/sales/new?organization=${encodeURIComponent(organizationID)}&customer=${encodeURIComponent(view.request.buyer_user_id ?? '')}&goods=${encodeURIComponent(view.request.goods_description)}&amount=${encodeURIComponent(nairaInput(view.request.principal_kobo))}`}
+				href={`/workspace/give?organization=${encodeURIComponent(organizationID)}&customer=${encodeURIComponent(view.request.buyer_user_id ?? '')}&customer_business=${encodeURIComponent(view.request.buyer_business_id ?? '')}&goods=${encodeURIComponent(view.request.goods_description)}&amount=${encodeURIComponent(nairaInput(view.request.principal_kobo))}`}
 				>Sell these same goods again</a
 			><a class="repeat" href={`/workspace/sales/${id}/deliveries?organization=${encodeURIComponent(organizationID)}`}
 				>Deliveries and credit notes →</a
@@ -574,53 +552,7 @@
 				text={`Hello ${view.request.buyer_legal_name}, this is a reminder that ${formatKobo(view.obligation?.outstanding_kobo ?? view.request.principal_kobo)} is left for ${view.request.goods_description}. Payment day: ${nextDueItem?.due_at ? readableDate(nextDueItem.due_at) : view.obligation ? 'check your current payment schedule' : readableDate(view.request.due_date)}.`}
 			/>
 		</div>
-		<section class="detail-grid">
-			<article class="card">
-				<h2>The sale</h2>
-				<dl>
-					<div>
-						<dt>Money to pay</dt>
-						<dd><Money amountKobo={view.request.principal_kobo} /></dd>
-					</div>
-					<div>
-						<dt>Goods</dt>
-						<dd>{view.request.goods_description}</dd>
-					</div>
-					<div>
-						<dt>{view.obligation ? 'Original payment day' : 'Pay before'}</dt>
-						<dd>{readableDate(view.request.due_date)}</dd>
-					</div>
-					<div>
-						<dt>{view.obligation ? 'Original bank debit date' : 'Bank debit after'}</dt>
-						<dd>{timeLabel(view.request.collection_at)}</dd>
-					</div>
-					<div>
-						<dt>Extra time</dt>
-						<dd>{view.request.grace_hours} hours</dd>
-					</div>
-				</dl>
-				{#if view.request.invoice_document_id}<p>
-						<button type="button" onclick={openInvoice}>Open the invoice →</button>
-					</p>{/if}
-			</article>
-			<article class="card">
-				<h2>What has happened so far</h2>
-				<p><strong>{productLabel(view.request.state)}</strong></p>
-				{#if view.agreement?.document_hash}<details>
-						<summary>Technical record (for reference)</summary>
-						<p>Sale record code<br /><code>{view.agreement.document_hash}</code></p>
-					</details>{/if}{#if view.obligation}<p>
-						Money left<br /><strong><Money amountKobo={view.obligation.outstanding_kobo} /></strong>
-					</p>
-					<p>
-						<a
-							href={`/api/v1/organizations/${encodeURIComponent(organizationID)}/credit-requests/${encodeURIComponent(id)}/agreement-document`}
-							target="_blank"
-							rel="noreferrer">Print or save a copy of this sale →</a
-						>
-					</p>{/if}
-			</article>
-		</section>
+		<SaleOverview {view} {organizationID} disabled={busy || loading} />
 		{#if view.request.state === 'DRAFT'}<section class="card action">
 				<h2>Check it before you send</h2>
 				<p>You can still change anything now. Once you send it, your customer must see exactly this sale.</p>
@@ -880,6 +812,7 @@
 				</form>
 			</details>
 		{/if}
+		<VerifyIdentity />
 	{/if}
 </section>
 {#if review}<PaymentReview
@@ -931,12 +864,6 @@
 		padding-bottom: 0.75rem;
 		border-bottom: 1px solid var(--color-border, var(--color-border));
 	}
-	.detail-grid {
-		display: grid;
-		grid-template-columns: 2fr 1fr;
-		gap: 1rem;
-		margin: 1.5rem 0;
-	}
 	.card {
 		padding: 1.5rem;
 	}
@@ -965,18 +892,6 @@
 	.repeat:hover {
 		border-color: var(--color-primary);
 	}
-	dl div {
-		display: flex;
-		justify-content: space-between;
-		gap: 2rem;
-		border-bottom: 1px solid var(--color-border);
-		padding: 0.7rem 0;
-	}
-	dd {
-		margin: 0;
-		text-align: right;
-		font-weight: 700;
-	}
 	.action,
 	.action form {
 		display: grid;
@@ -996,7 +911,7 @@
 	.action textarea {
 		padding: 0.75rem;
 		border: 1px solid var(--color-border);
-		border-radius: 0.7rem;
+		border-radius: var(--radius);
 		font: inherit;
 	}
 	.button-row {
@@ -1047,7 +962,7 @@
 		gap: 1rem;
 		padding: 0.8rem;
 		border: 1px solid var(--color-border);
-		border-radius: 0.75rem;
+		border-radius: var(--radius);
 	}
 	.plain-list span,
 	.claim-list article > div {
@@ -1071,13 +986,7 @@
 		border: 0;
 		border-top: 1px solid var(--color-border);
 	}
-	code {
-		overflow-wrap: anywhere;
-	}
 	@media (max-width: 720px) {
-		.detail-grid {
-			grid-template-columns: 1fr;
-		}
 		.plain-list li {
 			align-items: flex-start;
 			flex-direction: column;

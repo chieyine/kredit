@@ -4,14 +4,7 @@ import "errors"
 
 type Role string
 
-const (
-	RoleOwner         Role = "owner"
-	RoleAdministrator Role = "administrator"
-	RoleFinance       Role = "finance"
-	RoleSales         Role = "sales"
-	RoleCollections   Role = "collections"
-	RoleViewer        Role = "viewer"
-)
+const RoleOwner Role = "owner"
 
 // PlatformRole is intentionally separate from supplier organisation
 // membership. Platform operators never inherit supplier permissions by
@@ -42,37 +35,34 @@ func (r PlatformRole) Valid() bool {
 type Permission string
 
 const (
-	PermissionApproveBusinessCredit Permission = "credit:approve"
-	PermissionApproveChanges        Permission = "changes:approve"
-	PermissionAdminFinancial        Permission = "platform_financial:manage"
-	PermissionManageAccess          Permission = "platform_access:manage"
-	PermissionManagePolicies        Permission = "business_policy:manage"
-	PermissionReadOrganization      Permission = "organization:read"
-	PermissionManageOrganization    Permission = "organization:manage"
-	PermissionInviteMembers         Permission = "members:invite"
-	PermissionManageMembers         Permission = "members:manage"
-	PermissionInviteBuyers          Permission = "buyers:invite"
-	PermissionReadConsumerSales     Permission = "consumer:read"
-	PermissionCreateCredit          Permission = "credit:create"
-	PermissionReleaseGoods          Permission = "goods:release"
-	PermissionReadAudit             Permission = "audit:read"
-	PermissionReadFinancial         Permission = "financial:read"
-	PermissionManageFinancial       Permission = "financial:manage"
-	PermissionManageDisputes        Permission = "disputes:manage"
-	PermissionSupportSearch         Permission = "support:search"
-	PermissionManageCases           Permission = "support:cases:manage"
-	PermissionReviewCompliance      Permission = "compliance:review"
-	PermissionReviewDisputes        Permission = "disputes:review"
-	PermissionProviderOperations    Permission = "providers:operate"
-	PermissionOperateJobs           Permission = "operations:jobs"
-	PermissionOperateCollections    Permission = "operations:collections"
-	PermissionSuspendAccounts       Permission = "operations:accounts"
-	PermissionBreakGlass            Permission = "platform:break_glass"
-	PermissionRecoverAccounts       Permission = "accounts:recover"
-	PermissionReviewPrivacy         Permission = "privacy:review"
-	PermissionManageRiskHold        Permission = "risk_hold:manage"
-	PermissionPlatformOwner         Permission = "platform_owner:manage"
-	PermissionPlatformSettings      Permission = "platform_settings:manage"
+	PermissionApproveChanges     Permission = "changes:approve"
+	PermissionAdminFinancial     Permission = "platform_financial:manage"
+	PermissionManageAccess       Permission = "platform_access:manage"
+	PermissionManagePolicies     Permission = "business_policy:manage"
+	PermissionReadOrganization   Permission = "organization:read"
+	PermissionManageOrganization Permission = "organization:manage"
+	PermissionInviteBuyers       Permission = "buyers:invite"
+	PermissionReadConsumerSales  Permission = "consumer:read"
+	PermissionCreateCredit       Permission = "credit:create"
+	PermissionReleaseGoods       Permission = "goods:release"
+	PermissionReadAudit          Permission = "audit:read"
+	PermissionReadFinancial      Permission = "financial:read"
+	PermissionManageFinancial    Permission = "financial:manage"
+	PermissionManageDisputes     Permission = "disputes:manage"
+	PermissionSupportSearch      Permission = "support:search"
+	PermissionManageCases        Permission = "support:cases:manage"
+	PermissionReviewCompliance   Permission = "compliance:review"
+	PermissionReviewDisputes     Permission = "disputes:review"
+	PermissionProviderOperations Permission = "providers:operate"
+	PermissionOperateJobs        Permission = "operations:jobs"
+	PermissionOperateCollections Permission = "operations:collections"
+	PermissionSuspendAccounts    Permission = "operations:accounts"
+	PermissionBreakGlass         Permission = "platform:break_glass"
+	PermissionRecoverAccounts    Permission = "accounts:recover"
+	PermissionReviewPrivacy      Permission = "privacy:review"
+	PermissionManageRiskHold     Permission = "risk_hold:manage"
+	PermissionPlatformOwner      Permission = "platform_owner:manage"
+	PermissionPlatformSettings   Permission = "platform_settings:manage"
 )
 
 func ParseRole(value string) (Role, error) {
@@ -126,40 +116,18 @@ func CanPlatform(role PlatformRole, permission Permission) bool {
 	}
 }
 
-func (r Role) Valid() bool {
-	switch r {
-	case RoleOwner, RoleAdministrator, RoleFinance, RoleSales, RoleCollections, RoleViewer:
-		return true
-	default:
+func (r Role) Valid() bool { return r == RoleOwner }
+
+// Can authorizes the sole operator of a business.
+func Can(role Role, permission Permission) bool {
+	if role != RoleOwner {
 		return false
 	}
-}
-
-func Can(role Role, permission Permission) bool {
-	if role == RoleOwner {
-		return true
-	}
 	switch permission {
-	case PermissionApproveBusinessCredit:
-		return role == RoleAdministrator || role == RoleFinance
-	case PermissionReadOrganization:
-		return role.Valid()
-	case PermissionManageOrganization:
-		return role == RoleAdministrator
-	case PermissionInviteMembers, PermissionManageMembers:
-		return role == RoleAdministrator
-	case PermissionInviteBuyers:
-		return role == RoleAdministrator || role == RoleSales
-	case PermissionCreateCredit, PermissionReleaseGoods:
-		return role == RoleAdministrator || role == RoleSales
-	case PermissionReadAudit:
-		return role == RoleAdministrator || role == RoleFinance || role == RoleViewer
-	case PermissionReadConsumerSales:
-		return role == RoleAdministrator || role == RoleSales || role == RoleFinance || role == RoleCollections || role == RoleViewer
-	case PermissionReadFinancial:
-		return role == RoleFinance || role == RoleCollections || role == RoleViewer
-	case PermissionManageFinancial, PermissionManageDisputes:
-		return role == RoleFinance || role == RoleCollections
+	case PermissionReadOrganization, PermissionManageOrganization, PermissionInviteBuyers,
+		PermissionReadConsumerSales, PermissionCreateCredit, PermissionReleaseGoods,
+		PermissionReadAudit, PermissionReadFinancial, PermissionManageFinancial, PermissionManageDisputes:
+		return true
 	default:
 		return false
 	}
@@ -171,7 +139,7 @@ func Can(role Role, permission Permission) bool {
 // so these entries describe the policy rather than drive it there.
 func RequiresStepUp(permission Permission) bool {
 	switch permission {
-	case PermissionApproveBusinessCredit, PermissionManageOrganization, PermissionInviteMembers, PermissionManageMembers, PermissionInviteBuyers, PermissionCreateCredit, PermissionReleaseGoods, PermissionManageFinancial, PermissionManageDisputes:
+	case PermissionManageOrganization, PermissionInviteBuyers, PermissionCreateCredit, PermissionReleaseGoods, PermissionManageFinancial, PermissionManageDisputes:
 		return true
 	case PermissionPlatformOwner, PermissionPlatformSettings, PermissionBreakGlass, PermissionManageAccess,
 		PermissionSuspendAccounts, PermissionRecoverAccounts, PermissionAdminFinancial, PermissionApproveChanges,

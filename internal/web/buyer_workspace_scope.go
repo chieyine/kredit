@@ -19,7 +19,7 @@ func (s *Server) buyerWorkspaceScope(w http.ResponseWriter, r *http.Request, use
 		return "", false
 	}
 	for _, profile := range profiles {
-		if (businessID == "" || profile.ID == businessID) && (workspaceID == "" || profile.WorkspaceID == workspaceID) {
+		if profile.OwnerUserID == userID && (businessID == "" || profile.ID == businessID) && (workspaceID == "" || profile.WorkspaceID == workspaceID) {
 			return profile.ID, true
 		}
 	}
@@ -52,25 +52,4 @@ func purchasingRows[T any](items []T, keep func(T) bool) []T {
 		}
 	}
 	return result
-}
-
-// Bank and specialized account-management workflows require the recorded
-// purchasing owner. Report a restriction instead of an apparently empty account.
-func (s *Server) buyerOwnerWorkspaceScope(w http.ResponseWriter, r *http.Request, userID string) (string, bool) {
-	profile, ok := s.buyerWorkspaceScope(w, r, userID)
-	if !ok || profile == "" {
-		return profile, ok
-	}
-	profiles, err := s.runtime.Buyers.ListBusinessProfiles(r.Context(), userID)
-	if err != nil {
-		writeProblem(w, 503, "business_scope_unavailable", "Purchasing authority could not be checked.")
-		return "", false
-	}
-	for _, b := range profiles {
-		if b.ID == profile && b.OwnerUserID == userID {
-			return profile, true
-		}
-	}
-	writeProblem(w, 403, "purchasing_owner_required", "This account-management workflow requires the recorded purchasing owner. Your delegated purchase and delivery permissions remain available on each sale.")
-	return "", false
 }

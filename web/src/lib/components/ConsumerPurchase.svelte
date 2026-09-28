@@ -2,7 +2,18 @@
 	import { readableDate, readableDateTime } from '$lib/datetime';
 	import { nairaInput } from '$lib/money';
 	import { onMount, tick } from 'svelte';
-	import { purchase, read, Mutation, money, label, actionLabel, eventLabel, kobo, type Purchase } from '$lib/consumer';
+	import {
+		purchase,
+		read,
+		Mutation,
+		money,
+		label,
+		actionLabel,
+		eventLabel,
+		kobo,
+		pendingPurchaseClaims,
+		type Purchase
+	} from '$lib/consumer';
 	let { id, organization = '', admin = false }: { id: string; organization?: string; admin?: boolean } = $props();
 	let sale = $state<Purchase | null>(null),
 		error = $state(''),
@@ -26,13 +37,7 @@
 				: `/api/v1/buyer/purchases/${encodeURIComponent(id)}`
 	);
 	const buyer = $derived(!admin && !organization);
-	const pendingClaims = $derived(
-		sale?.events.filter(
-			(e) =>
-				e.action === 'claim' &&
-				!sale?.events.some((d) => d.related_id === e.id && ['payment', 'reject_claim'].includes(d.action))
-		) ?? []
-	);
+	const pendingClaims = $derived(sale ? pendingPurchaseClaims(sale) : []);
 	const payments = $derived(
 		sale?.events.filter(
 			(e) =>

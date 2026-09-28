@@ -1,5 +1,7 @@
 # Network redesign implementation status
 
+Historical implementation notes. For the current simple workspace and the 27 September source review, use [current user flow](current-user-flow.md) and [audit implementation](../audits/2026-09-27-platform-audit/IMPLEMENTATION.md). The statements below describe their original review state.
+
 The public and signed-in network flow has been implemented locally. The larger enterprise blueprint still has architectural work listed below; this is not a claim that every proposed capability is complete. Work is uncommitted. No production deployment, provider transaction, production reset or customer-data deletion was performed. Backward compatibility for old frontend routes is intentionally not provided.
 
 ## Implemented

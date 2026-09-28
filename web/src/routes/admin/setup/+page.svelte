@@ -11,7 +11,6 @@
 		instance_name: string;
 		version: string;
 		revision: string;
-		legacy: boolean;
 		versions: Record<string, number>;
 		state: string;
 		updated_at: string;
@@ -57,7 +56,6 @@
 	};
 	function applied(item: Process) {
 		return (
-			!item.legacy &&
 			item.fresh &&
 			item.state === 'current' &&
 			Object.entries(versions).every(([key, version]) => item.versions[key] === version) &&
@@ -87,9 +85,7 @@
 				const item = record(value);
 				const process = text(item.process);
 				if (process !== 'api' && process !== 'worker') throw new Error('Unknown service status');
-				// An older API reports one shared slot, not a verified instance.
-				const legacy = item.instance_id === undefined || item.legacy === true;
-				const instanceID = item.instance_id === undefined ? `legacy:${process}` : text(item.instance_id);
+				const instanceID = text(item.instance_id);
 				if (!instanceID || observedIDs.has(instanceID)) throw new Error('Invalid service instance identity');
 				observedIDs.add(instanceID);
 				const appliedVersions = record(item.versions);
@@ -99,10 +95,9 @@
 				return {
 					process,
 					instance_id: instanceID,
-					instance_name: legacy ? 'Untracked instances' : text(item.instance_name),
-					version: legacy ? 'unknown' : text(item.version),
-					revision: legacy ? 'unknown' : text(item.revision),
-					legacy,
+					instance_name: text(item.instance_name),
+					version: text(item.version),
+					revision: text(item.revision),
 					versions: appliedVersions as Record<string, number>,
 					state: text(item.state),
 					updated_at: text(item.updated_at),
@@ -166,19 +161,17 @@
 				{#each instances as item (item.instance_id)}
 					<p>
 						<strong>{item.instance_name} · {item.instance_id.slice(0, 12)}:</strong>
-						{item.legacy
-							? 'Legacy shared status; individual instances cannot be verified'
-							: item.state === 'stopped'
-								? 'This instance has stopped'
-								: !item.fresh
-									? 'Status is out of date'
-									: applied(item)
-										? 'Latest settings applied on this instance'
-										: item.state === 'saved_configuration_unavailable'
-											? 'Saved configuration could not be applied'
-											: item.state === 'restart_required'
-												? 'Restart required to apply saved settings'
-												: 'Saved settings are not yet confirmed on this instance'}
+						{item.state === 'stopped'
+							? 'This instance has stopped'
+							: !item.fresh
+								? 'Status is out of date'
+								: applied(item)
+									? 'Latest settings applied on this instance'
+									: item.state === 'saved_configuration_unavailable'
+										? 'Saved configuration could not be applied'
+										: item.state === 'restart_required'
+											? 'Restart required to apply saved settings'
+											: 'Saved settings are not yet confirmed on this instance'}
 						<br />Version {item.version} · revision {item.revision.slice(0, 12)} · last reported {localTime(
 							item.updated_at
 						)}

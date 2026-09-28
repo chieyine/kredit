@@ -7,7 +7,7 @@ cd "$root_dir"
 source "$root_dir/scripts/load-env.sh"
 load_env_defaults "$root_dir/.env"
 
-docker compose up -d postgres minio mailpit provider-simulator
+bash scripts/prepare-local-infrastructure.sh
 
 tmp_dir="${TMPDIR:-/tmp}/kredit-dev"
 mkdir -p "$tmp_dir"

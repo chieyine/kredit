@@ -49,5 +49,4 @@ infra/environments/db-certs/
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
 infra/environments/backend.hcl

@@ -1,10 +1,10 @@
-# Active page inventory
+# Current page map
 
-Generated from the final page tree. This inventories routes; it does not claim every retained transaction screen or operations workflow was rewritten. All public and signed-in entry points use the shared network/account structure described in `current-user-flow.md`.
+Generated from the page tree on 27 September 2026 after the pre-launch cleanup. Removed screens have no compatibility redirects or hidden-workspace override. Normal account, root and authentication navigation still applies. This is source inventory, not browser verification.
 
-| Page | Area |
+| Route | Area |
 |---|---|
-| `/` | Public |
+| `/` | Public / entry |
 | `/account` | Shared account |
 | `/account/display` | Shared account |
 | `/account/messages` | Shared account |
@@ -48,87 +48,72 @@ Generated from the final page tree. This inventories routes; it does not claim e
 | `/admin/settlement-review` | Operations |
 | `/admin/setup` | Operations |
 | `/admin/team` | Operations |
+| `/admin/tools` | Operations |
 | `/admin/users` | Operations |
 | `/admin/verification-requests` | Operations |
 | `/admin/website` | Operations |
-| `/agents` | Field agents |
-| `/blog` | Public |
-| `/blog/[slug]` | Public |
-| `/blog/topic/[topic]` | Public |
-| `/buyer-invitations/[token]` | Private invitation |
-| `/c/[token]` | Account entry and access |
-| `/consumers` | Public |
-| `/contact` | Public |
-| `/demo` | Public |
-| `/demo/consumer` | Public |
-| `/distributors` | Public |
-| `/faq` | Public |
-| `/glossary` | Public |
-| `/how-it-works` | Public |
-| `/join` | Public |
-| `/legal/complaints` | Public |
-| `/legal/privacy` | Public |
-| `/legal/terms` | Public |
-| `/manufacturers` | Public |
-| `/pay/[token]` | Private payment |
+| `/blog` | Public / entry |
+| `/blog/[slug]` | Public / entry |
+| `/blog/topic/[topic]` | Public / entry |
+| `/buyer-invitations/[token]` | Public / entry |
+| `/c/[token]` | Public / entry |
+| `/consumers` | Public / entry |
+| `/contact` | Public / entry |
+| `/deck` | Public / entry |
+| `/deck/investor` | Public / entry |
+| `/demo` | Public / entry |
+| `/demo/consumer` | Public / entry |
+| `/distributors` | Public / entry |
+| `/faq` | Public / entry |
+| `/glossary` | Public / entry |
+| `/how-it-works` | Public / entry |
+| `/join` | Public / entry |
+| `/legal/complaints` | Public / entry |
+| `/legal/privacy` | Public / entry |
+| `/legal/terms` | Public / entry |
+| `/manufacturers` | Public / entry |
+| `/pay/[token]` | Public / entry |
 | `/personal/purchases` | Personal purchases |
 | `/personal/purchases/[saleID]` | Personal purchases |
-| `/pricing` | Public |
-| `/receipt/[public_token]` | Private receipt |
-| `/recover` | Account entry and access |
-| `/retailers` | Public |
-| `/secure` | Account entry and access |
-| `/security` | Public |
-| `/signin` | Account entry and access |
-| `/start` | Account entry and access |
-| `/workspace/activity` | Business workspace |
-| `/workspace/disputes` | Business workspace |
-| `/workspace/disputes/[id]` | Business workspace |
-| `/workspace/help` | Business workspace |
-| `/workspace/money` | Business workspace |
-| `/workspace/money/collections` | Business workspace |
-| `/workspace/money/received` | Business workspace |
-| `/workspace/onboarding` | Business workspace |
-| `/workspace/overdue` | Business workspace |
-| `/workspace/partners` | Business workspace |
-| `/workspace/partners/customers` | Business workspace |
-| `/workspace/partners/customers/[id]` | Business workspace |
-| `/workspace/partners/customers/new` | Business workspace |
-| `/workspace/partners/import` | Business workspace |
-| `/workspace/partners/invitations` | Business workspace |
-| `/workspace/purchases` | Business workspace |
-| `/workspace/purchases/access` | Business workspace |
-| `/workspace/purchases/permissions` | Business workspace |
-| `/workspace/purchases/amendments` | Business workspace |
-| `/workspace/purchases/bank-authorization/[reference]` | Business workspace |
-| `/workspace/purchases/disputes` | Business workspace |
-| `/workspace/purchases/disputes/[id]` | Business workspace |
-| `/workspace/purchases/history` | Business workspace |
-| `/workspace/purchases/mandates` | Business workspace |
-| `/workspace/purchases/obligations` | Business workspace |
-| `/workspace/purchases/obligations/[id]` | Business workspace |
-| `/workspace/purchases/orders` | Business workspace |
-| `/workspace/purchases/orders/[requestID]` | Business workspace |
-| `/workspace/purchases/payments` | Business workspace |
-| `/workspace/purchases/trade-lines` | Business workspace |
-| `/workspace/referral` | Business workspace |
-| `/workspace/reports` | Business workspace |
-| `/workspace/sales` | Business workspace |
-| `/workspace/sales/[id]` | Business workspace |
-| `/workspace/sales/consumers` | Business workspace |
-| `/workspace/sales/consumers/[saleID]` | Business workspace |
-| `/workspace/sales/limits` | Business workspace |
-| `/workspace/sales/limits/[id]` | Business workspace |
-| `/workspace/sales/new` | Business workspace |
-| `/workspace/sales/quick` | Business workspace |
-| `/workspace/search` | Business workspace |
-| `/workspace/settings` | Business workspace |
-| `/workspace/settings/billing` | Business workspace |
-| `/workspace/settings/credit-policy` | Business workspace |
-| `/workspace/settings/settlement` | Business workspace |
-| `/workspace/team` | Business workspace |
-| `/workspace/today` | Business workspace |
+| `/pricing` | Public / entry |
+| `/receipt/[public_token]` | Public / entry |
+| `/recover` | Public / entry |
+| `/retailers` | Public / entry |
+| `/secure` | Public / entry |
+| `/security` | Public / entry |
+| `/signin` | Public / entry |
+| `/start` | Public / entry |
+| `/workspace/disputes/[id]` | Business |
+| `/workspace/give` | Business |
+| `/workspace/help` | Business |
+| `/workspace/money/collections` | Business |
+| `/workspace/money/received` | Business |
+| `/workspace/onboarding` | Business |
+| `/workspace/partners/customers` | Business |
+| `/workspace/partners/customers/[id]` | Business |
+| `/workspace/partners/customers/new` | Business |
+| `/workspace/purchases` | Business |
+| `/workspace/purchases/amendments` | Business |
+| `/workspace/purchases/bank-authorization/[reference]` | Business |
+| `/workspace/purchases/disputes/[id]` | Business |
+| `/workspace/purchases/history` | Business |
+| `/workspace/purchases/mandates` | Business |
+| `/workspace/purchases/obligations` | Business |
+| `/workspace/purchases/obligations/[id]` | Business |
+| `/workspace/purchases/orders` | Business |
+| `/workspace/purchases/orders/[requestID]` | Business |
+| `/workspace/purchases/payments` | Business |
+| `/workspace/purchases/trade-lines` | Business |
+| `/workspace/sales/[id]` | Business |
+| `/workspace/sales/[id]/deliveries` | Business |
+| `/workspace/sales/consumers` | Business |
+| `/workspace/sales/consumers/[saleID]` | Business |
+| `/workspace/sales/limits` | Business |
+| `/workspace/sales/limits/[id]` | Business |
+| `/workspace/settings` | Business |
+| `/workspace/settings/billing` | Business |
+| `/workspace/settings/credit-policy` | Business |
+| `/workspace/settings/settlement` | Business |
+| `/workspace/today` | Business |
 
-`/workspace` and `/personal` open their corresponding overview. Old `/app`, `/buyer`, `/for-suppliers` and `/for-buyers` routes are removed. API, sitemap, robots, manifest and server endpoints are outside this page inventory.
-
-- `/workspace/partners/access`: owner-managed branch scopes, current-membership status, empty-scope restriction and staff self-view. Company-wide specialist workflows remain explicitly restricted.
+111 page entries. Give is the only sale-entry form; each business has one operator.

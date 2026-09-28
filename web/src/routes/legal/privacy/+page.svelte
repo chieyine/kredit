@@ -190,10 +190,6 @@
 					<strong>The seller and customer:</strong> each side sees the sale, agreed dates, delivery, payments and problems
 					they are allowed to see.
 				</li>
-				<li>
-					<strong>Authorised business staff:</strong> a business owner may give staff limited roles. Staff see only the pages
-					needed for that role.
-				</li>
 				<li><strong>Identity and business-check companies:</strong> to confirm a person or business when required.</li>
 				<li>
 					<strong>Banks and licensed payment companies:</strong> to set up an authorised mandate, process a payment or bank
@@ -304,11 +300,11 @@
 		<section id="safety">
 			<h2>How we protect information</h2>
 			<p>
-				Protection includes encrypted connections, restricted staff roles, extra sign-in checks for sensitive work,
-				expiring private links, audit history, protected storage, provider-signature checks, backups and monitoring.
-				Bank and regulated payment work is performed through appropriately approved providers. No system can promise
-				that a breach will never happen. Kredit must investigate suspected incidents, reduce harm and notify affected
-				people or regulators where the law requires it.
+				Protection includes encrypted connections, access limited to each business owner, extra sign-in checks for
+				sensitive work, expiring private links, audit history, protected storage, provider-signature checks, backups and
+				monitoring. Bank and regulated payment work is performed through appropriately approved providers. No system can
+				promise that a breach will never happen. Kredit must investigate suspected incidents, reduce harm and notify
+				affected people or regulators where the law requires it.
 			</p>
 			<p>
 				You also help by keeping your phone, email, password, OTP and recovery codes safe. Tell Kredit quickly if you

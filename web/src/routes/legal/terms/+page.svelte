@@ -92,8 +92,8 @@
 				</li>
 			</ul>
 			<p>
-				A business owner may invite staff and choose their roles. The owner is responsible for removing access when a
-				staff member should no longer act. Kredit records important access and account actions.
+				One person manages each business account. The owner is responsible for its activity and must keep sign-in
+				details private. Kredit records important access and account actions.
 			</p>
 			<p>
 				Keep your device, sign-in method, OTP, authenticator and recovery codes secure. Do not share them. Tell Kredit

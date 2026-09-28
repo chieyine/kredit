@@ -48,6 +48,7 @@ export interface SaleRequest {
 	id: string;
 	state: string;
 	supplier_legal_name: string;
+	supplier_trading_name: string;
 	buyer_legal_name: string;
 	buyer_user_id: string;
 	buyer_business_id: string;
@@ -68,7 +69,7 @@ export interface SaleView {
 	request: SaleRequest;
 	agreement: { id: string; document_hash: string; terms_version: string; privacy_version: string } | null;
 	mandate: { id: string; provider_id: string; provider: string; status: string; authorization_url: string } | null;
-	obligation: { id: string; outstanding_kobo: KoboValue } | null;
+	obligation: { id: string; outstanding_kobo: KoboValue; payment_status: string } | null;
 }
 export function saleView(value: unknown): SaleView {
 	const view = record(value);
@@ -114,6 +115,7 @@ export function saleView(value: unknown): SaleView {
 			id: text(row.id),
 			state: text(row.state),
 			supplier_legal_name: optionalText(row.supplier_legal_name),
+			supplier_trading_name: optionalText(row.supplier_trading_name),
 			buyer_legal_name: text(row.buyer_legal_name),
 			buyer_user_id: optionalText(row.buyer_user_id),
 			buyer_business_id: optionalText(row.buyer_business_id),
@@ -150,7 +152,13 @@ export function saleView(value: unknown): SaleView {
 					authorization_url: optionalText(mandate.authorization_url)
 				}
 			: null,
-		obligation: obligation ? { id: text(obligation.id), outstanding_kobo: kobo(obligation.outstanding_kobo) } : null
+		obligation: obligation
+			? {
+					id: text(obligation.id),
+					outstanding_kobo: kobo(obligation.outstanding_kobo),
+					payment_status: optionalText(obligation.payment_status)
+				}
+			: null
 	};
 }
 export interface PaymentRow {
@@ -171,6 +179,8 @@ export function paymentRow(value: unknown): PaymentRow {
 	};
 }
 export interface WorkRow {
+	due_date: string;
+	created_at: string;
 	id: string;
 	state: string;
 	buyer_legal_name: string;
@@ -186,6 +196,8 @@ export function workRow(value: unknown): WorkRow {
 	const amount = row.amount_kobo ?? row.outstanding_kobo ?? row.disputed_amount_kobo;
 	return {
 		id: text(row.id),
+		due_date: optionalText(row.due_date),
+		created_at: optionalText(row.created_at),
 		state: optionalText(row.state),
 		buyer_legal_name: optionalText(row.buyer_legal_name),
 		buyer_user_id: optionalText(row.buyer_user_id),
@@ -236,4 +248,37 @@ export function timeLabel(value: string): string {
 				timeZoneName: 'short'
 			}).format(date)
 		: 'Time unavailable';
+}
+
+/** The directory handler adds an authorized balance to the customer identity. */
+export function customerBalance(value: unknown): Customer & { outstanding_kobo: KoboValue } {
+	return { ...customer(value), outstanding_kobo: kobo(record(value).outstanding_kobo) };
+}
+
+export function problemRow(value: unknown) {
+	const row = record(value);
+	return {
+		...row,
+		id: text(row.id),
+		state: text(row.state),
+		reason: optionalText(row.reason),
+		explanation: optionalText(row.explanation),
+		opened_at: optionalText(row.opened_at),
+		remaining_disputed_kobo: kobo(row.remaining_disputed_kobo),
+		total_disputed_kobo: kobo(row.total_disputed_kobo)
+	};
+}
+export function invitationRow(value: unknown) {
+	const row = record(value);
+	for (const key of ['trades', 'zero_balance_obligations'])
+		if (!Number.isSafeInteger(row[key]) || Number(row[key]) < 0)
+			throw new RequestError('Invitation progress could not be verified.');
+	return {
+		name: text(row.name),
+		state: text(row.state),
+		source_reference: optionalText(row.source_reference),
+		trades: Number(row.trades),
+		zero_balance_obligations: Number(row.zero_balance_obligations),
+		expires_at: optionalText(row.expires_at)
+	};
 }

@@ -1,8 +1,8 @@
 <script lang="ts">
+	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { productLabel } from '$lib/product-language';
 	import { readableDate } from '$lib/datetime';
-	import { getContext, onMount } from 'svelte';
-	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { formatKobo, parseNaira, type KoboValue } from '$lib/money';
 	import { checkedJSON, LatestRequest, record, rows, text } from '$lib/api/reliable';
@@ -59,7 +59,6 @@
 		creditReason = $state('');
 
 	const reads = new LatestRequest();
-	const account = getContext<AccountContext | undefined>(ACCOUNT_CONTEXT);
 
 	function decodeLineItem(value: unknown): LineItem {
 		const r = record(value);
@@ -194,7 +193,7 @@
 				'POST'
 			);
 
-			message = 'Credit note draft created. A second person must approve it before it takes effect.';
+			message = 'Adjustment saved for review. Check the amount and reason, then apply it.';
 			creditAmount = '';
 			creditReason = '';
 			await load();
@@ -205,8 +204,7 @@
 		}
 	}
 
-	// The second of the two people a credit note needs. Whoever drafted it is
-	// never offered this; the server refuses it too.
+	// Applying the reviewed draft changes the balance once, in one transaction.
 	async function approveCreditNote(note: CreditNote) {
 		if (busy || loading || !loaded) return;
 		busy = true;
@@ -220,16 +218,15 @@
 				{},
 				(value) => {
 					const result = record(value);
-					if (result.id !== note.id || result.status !== 'approved')
-						throw new Error('Credit note approval not confirmed');
+					if (result.id !== note.id || result.status !== 'approved') throw new Error('Adjustment not confirmed');
 					return result;
 				},
 				'POST'
 			);
-			message = `Credit note approved. What the customer owes has gone down by ${formatKobo(note.amount_kobo)}.`;
+			message = `Adjustment applied. The recorded credit is ${formatKobo(note.amount_kobo)}.`;
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'The credit note could not be approved.';
+			error = cause instanceof Error ? cause.message : 'The adjustment could not be applied.';
 		} finally {
 			busy = false;
 		}
@@ -369,8 +366,8 @@
 		<section class="card">
 			<h2>Credit notes</h2>
 			<p class="muted">
-				A credit note reduces what the customer owes, for example after a return or a discount. A second person must
-				approve it: whoever drafts a credit note cannot approve it.
+				A credit note reduces what the customer owes, for example after a return or a discount. Save a draft, check the
+				amount and reason, then apply it yourself.
 			</p>
 
 			{#if creditNotes.length}
@@ -380,20 +377,18 @@
 							<div>
 								<strong>{formatKobo(cn.amount_kobo)}</strong>: {cn.reason}
 								<p class="muted">Created {readableDate(cn.created_at)}</p>
-								{#if cn.status === 'draft' && account?.userID && cn.issued_by !== account.userID}<button
+								{#if cn.status === 'draft'}<button
 										type="button"
 										class="approve"
 										disabled={busy}
-										onclick={() => approveCreditNote(cn)}>Approve this credit note</button
-									>{:else if cn.status === 'draft'}<p class="muted">
-										You drafted this, so someone else in your business must approve it.
-									</p>{/if}
+										onclick={() => approveCreditNote(cn)}>Apply this adjustment</button
+									>{/if}
 							</div>
 							<span class={`badge ${cn.status === 'approved' ? 'success' : 'warning'}`}
 								>{cn.status === 'approved'
-									? 'Approved'
+									? 'Applied'
 									: cn.status === 'draft'
-										? 'Waiting for approval'
+										? 'Ready for your review'
 										: productLabel(cn.status)}</span
 							>
 						</div>
@@ -434,6 +429,7 @@
 			</form>
 		</section>
 	{/if}
+	<VerifyIdentity />
 </main>
 
 <style>

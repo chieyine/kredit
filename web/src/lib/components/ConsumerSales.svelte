@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
-	import { read, purchase, Mutation, money, kobo, label, type Purchase } from '$lib/consumer';
-	import { record, normalizeNigerianPhone } from '$lib/api/reliable';
+	import { read, readAllPurchases, purchase, Mutation, money, label, type Purchase } from '$lib/consumer';
+	import { record } from '$lib/api/reliable';
 	import { organization, type Organization } from '$lib/records';
 	let { mode = 'buyer' }: { mode?: 'buyer' | 'seller' | 'admin' } = $props();
 	let items = $state<Purchase[]>([]),
@@ -13,33 +14,17 @@
 		busy = $state(false),
 		loaded = $state(false),
 		search = $state('');
-	let channel = $state('email'),
-		target = $state(''),
-		item = $state(''),
-		quantity = $state(1),
-		total = $state(''),
-		deposit = $state('0'),
-		depositDate = $state(''),
-		firstDate = $state(''),
-		count = $state(4),
-		cadence = $state('weekly'),
-		fulfillment = $state('on_full_payment'),
-		threshold = $state(50),
-		days = $state(7),
-		stock = $state(''),
-		reserved = $state(false),
-		returns = $state(
-			'Before release, cancellation receives a full refund. Contact us to arrange return of incorrect, defective or undelivered goods. We review other returns individually. Your statutory rights are unaffected.'
-		);
 	let enabled = $state(true),
 		number = $state(''),
 		evidence = $state('');
 	let cursor = $state('');
-	const mutation = new Mutation(),
-		settingsMutation = new Mutation();
+	const settingsMutation = new Mutation();
+	const customerContact = $derived(mode === 'seller' ? (page.url.searchParams.get('customer') ?? '') : '');
 	const matching = $derived(
-		items.filter((i) =>
-			`${i.terms.item} ${i.customer_name} ${i.target} ${i.id}`.toLowerCase().includes(search.toLowerCase())
+		items.filter(
+			(i) =>
+				(!customerContact || i.target === customerContact) &&
+				`${i.terms.item} ${i.customer_name} ${i.target} ${i.id}`.toLowerCase().includes(search.toLowerCase())
 		)
 	);
 	const endpoint = $derived(
@@ -63,6 +48,12 @@
 		items = [];
 		try {
 			if (mode === 'seller' && !org) return;
+			if (customerContact) {
+				items = await readAllPurchases(endpoint);
+				cursor = '';
+				loaded = true;
+				return;
+			}
 			const data = record(await read(endpoint));
 			if (!Array.isArray(data.items)) throw new Error('The purchase list could not be verified.');
 			items = data.items.map(purchase);
@@ -92,13 +83,8 @@
 		busy = true;
 		error = '';
 		try {
-			if (mutation.pending) {
-				const data = purchase(await mutation.retry());
-				message = `Offer confirmed: ${location.origin}/personal/purchases/${data.id}`;
-			} else {
-				await settingsMutation.retry();
-				message = 'Settings confirmed.';
-			}
+			await settingsMutation.retry();
+			message = 'Settings confirmed.';
 			await load();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not confirm previous action.';
@@ -117,44 +103,6 @@
 			await load();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Could not load businesses.';
-		}
-	}
-	async function create() {
-		busy = true;
-		error = '';
-		try {
-			const data = purchase(
-				await mutation.send(
-					endpoint,
-					{
-						target_type: channel,
-						target: channel === 'phone' ? normalizeNigerianPhone(target) : target.trim(),
-						terms: {
-							item,
-							quantity,
-							total_kobo: kobo(total),
-							deposit_kobo: kobo(deposit),
-							deposit_date: depositDate,
-							first_date: firstDate,
-							count,
-							cadence,
-							fulfillment,
-							threshold_percent: threshold,
-							delivery_days: days,
-							stock_reference: stock,
-							stock_reserved: reserved,
-							returns_policy: returns
-						}
-					},
-					purchase
-				)
-			);
-			message = `Offer saved. Share this private sign-in link with ${data.target}: ${location.origin}/personal/purchases/${data.id}`;
-			items = [data, ...items];
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'The offer was not confirmed.';
-		} finally {
-			busy = false;
 		}
 	}
 	async function connectBank() {
@@ -225,7 +173,15 @@
 						? 'Super admin · Retailer → Consumer'
 						: 'Personal purchases'}
 			</p>
-			<h1>{mode === 'seller' ? 'Consumer sales' : mode === 'admin' ? 'Consumer purchases' : 'Your purchases'}</h1>
+			<h1>
+				{mode === 'seller'
+					? customerContact
+						? 'Customer purchases'
+						: 'Consumer sales'
+					: mode === 'admin'
+						? 'Consumer purchases'
+						: 'Your purchases'}
+			</h1>
 			<p class="lede">
 				{mode === 'seller'
 					? 'Sell goods to individuals for personal use, on installments or layaway. Customer payments go to your receiving account.'
@@ -234,15 +190,17 @@
 						: 'See what you have paid, what is due and when your goods will arrive.'}
 			</p>
 		</div>
-		<a class="secondary" href={mode === 'seller' ? '#new-consumer-offer' : '#purchase-list'}
-			>{mode === 'seller' ? 'Create an offer →' : 'View purchases →'}</a
+		<a
+			class="secondary"
+			href={mode === 'seller' && !customerContact
+				? `/workspace/give?organization=${encodeURIComponent(org)}&kind=person`
+				: '#purchase-list'}>{mode === 'seller' && !customerContact ? 'Create an offer →' : 'View purchases →'}</a
 		>
 	</header>
 	{#if error}<p class="error" role="alert">{error}</p>
-		{#if mutation.pending || settingsMutation.pending}<button onclick={retry} disabled={busy}
-				>Retry the same unconfirmed action</button
+		{#if settingsMutation.pending}<button onclick={retry} disabled={busy}>Retry the same unconfirmed action</button
 			>{/if}{/if}{#if message}<p role="status" class="message">{message}</p>{/if}
-	{#if mode === 'seller'}<label
+	{#if mode === 'seller' && !customerContact}<label
 			>Retailer business<select bind:value={org} onchange={() => chooseWorkspace(org)} disabled={busy}
 				>{#each businesses as b (b.id)}<option value={b.id}>{b.trading_name || b.legal_name}</option>{/each}</select
 			></label
@@ -271,89 +229,7 @@
 				><button disabled={busy || !org}>Use this account</button>
 			</form>
 		</details>
-		<details id="new-consumer-offer" class="offer-form">
-			<summary>Create a consumer offer<span>Set the item, payment dates and delivery terms</span></summary>
-			<form
-				onsubmit={(e) => {
-					e.preventDefault();
-					void create();
-				}}
-			>
-				<fieldset disabled={busy || !org}>
-					<div class="grid">
-						<label
-							>Contact channel<select bind:value={channel}
-								><option value="email">Email</option><option value="phone">WhatsApp</option></select
-							></label
-						><label
-							>Customer {channel === 'email' ? 'email' : 'WhatsApp number'}<input
-								bind:value={target}
-								type={channel === 'email' ? 'email' : 'tel'}
-								required
-							/></label
-						>
-						<label>Item or product description<input bind:value={item} required minlength="3" maxlength="500" /></label
-						><label>Quantity<input type="number" bind:value={quantity} min="1" max="10000" required /></label><label
-							>Total price for all items (₦)<input bind:value={total} inputmode="decimal" required /></label
-						><label>Deposit (₦; use 0 for none)<input bind:value={deposit} inputmode="decimal" required /></label><label
-							>Deposit due date (if any)<input type="date" bind:value={depositDate} /></label
-						><label>First installment date<input type="date" bind:value={firstDate} required /></label><label
-							>Number of installments after deposit<input
-								type="number"
-								bind:value={count}
-								min="1"
-								max="60"
-								required
-							/></label
-						><label
-							>Payment frequency<select bind:value={cadence}
-								><option value="weekly">Weekly</option><option value="fortnightly">Every two weeks</option><option
-									value="monthly">Monthly</option
-								></select
-							></label
-						>
-						<label
-							>Deliver goods<select bind:value={fulfillment}
-								><option value="on_full_payment">After full payment (layaway)</option><option value="on_percentage"
-									>After a percentage is paid</option
-								><option value="immediate">After the customer accepts</option></select
-							></label
-						>{#if fulfillment === 'on_percentage'}<label
-								>Percentage needed<input type="number" bind:value={threshold} min="1" max="99" required /></label
-							>{/if}
-						<label
-							>Deliver within this many days of eligibility<input
-								type="number"
-								bind:value={days}
-								min="1"
-								max="90"
-								required
-							/></label
-						><label
-							>Stock reservation reference<input bind:value={stock} required minlength="3" maxlength="200" /></label
-						>
-					</div>
-					<label
-						><input type="checkbox" bind:checked={reserved} required />I have reserved these goods and can meet the
-						delivery terms.</label
-					><label
-						>Return and refund arrangements<textarea
-							bind:value={returns}
-							required
-							minlength="20"
-							maxlength="2000"
-							rows="4"
-						></textarea></label
-					>
-					<p>
-						Use one installment for a single due-date payment. Monthly dates are capped at month-end. There are no added
-						interest or late fees. Payment instructions come from the registered receiving account matched by Kredit.
-						Confirm the offer before sharing; accepted terms cannot be edited.
-					</p>
-					<button class="primary">Create offer</button>
-				</fieldset>
-			</form>
-		</details>{/if}
+	{/if}
 	{#if mode === 'admin'}<details>
 			<summary>Restrict or restore a retailer when needed</summary>
 			<p>

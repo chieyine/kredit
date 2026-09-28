@@ -8,6 +8,38 @@ Commit the reviewed release. The deploy script refuses a dirty checkout and arch
 
 Set `LEGAL_ENTITY_NAME` to the approved operator name. Optional settings are `VPS_HOST`, `VPS_USER`, `SSH_KEY`, `API_URL` and `BASE_URL`. Then invoke `scripts/deploy-production.sh` from the repository when the operator has authorized cutover. A missing optional key file uses the SSH agent/configuration; authentication remains noninteractive.
 
+`LEGAL_ENTITY_NAME` here is the expected name checked by the post-deploy script, not a runtime override for the legal pages. Their initial metadata comes from `web/src/lib/server/legal-publication.ts`; release certification validates that publication against the backend versions and still requires separate legal-approval evidence.
+
+## Migration 213: one person per business
+
+The API and worker require migration 213. This is pre-launch cleanup for the one-owner product, not a customer-account conversion. It drops unused staff invitation, delegation, branch, internal credit-approval, proposed-terms import and history tables, along with the obsolete shared process-status table. It removes staff-only columns and constraints. Customer invitations, business ownership and financial records remain.
+
+Use the stopped-writer and backup sequence below for any existing installation. Before applying it, confirm the following ownership preflight returns no rows:
+
+```sql
+SELECT id, organization_id FROM app.memberships WHERE role <> 'owner' OR status = 'invited';
+
+SELECT organization_id, count(*) AS owners
+FROM app.memberships
+GROUP BY organization_id HAVING count(*) > 1;
+
+SELECT o.id
+FROM app.organizations o
+WHERE o.status NOT IN ('closed', 'suspended')
+  AND NOT EXISTS (
+    SELECT 1 FROM app.memberships m
+    WHERE m.organization_id = o.id AND m.role = 'owner' AND m.status = 'active'
+  );
+```
+
+The migration rejects inconsistent ownership rather than selecting an owner or silently deleting accounts. Staff feature data in the dropped tables is deliberately not archived. The owner reviews and applies credit notes; financial transaction guards remain. No migration or account reset was performed during this source cleanup. The migration is forward-only, and old binaries that depend on the deleted tables must not run after it.
+
+## Maintenance tooling
+
+For standalone Caddy, `scripts/refresh-cloudflare-ranges.sh` creates a validated `.candidate` file using the deployment's environment, certificate mounts and Caddy image. Inspect it, then run the same script with `--apply` to validate again, back up and activate. The script uses the release override when present and exits unsuccessfully after attempting restoration if activation fails. It does not use the disabled Caddy admin API. Keep the previous configuration until the proxy is confirmed healthy.
+
+Terraform uses the checked-in provider lockfile. Initialize with `-lockfile=readonly`; refresh provider selections deliberately with Terraform's `providers lock` command for `linux_amd64`, `linux_arm64`, `darwin_amd64` and `darwin_arm64`, then review the resulting checksums/version change. Static validation does not contact or certify the deployed cluster.
+
 ## What the script does
 
 1. Takes a deployment lock and stages the archive in a private, versioned directory under `/opt/kredit/releases`.

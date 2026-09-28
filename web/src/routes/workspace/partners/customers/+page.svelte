@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
-	import { checkedJSON, LatestRequest, publicError, record, rows, optionalText } from '$lib/api/reliable';
-	import { organization, type Organization } from '$lib/records';
-	import { read as readConsumer, purchase } from '$lib/consumer';
-	import { exactKobo, type KoboValue } from '$lib/money';
+	import { checkedJSON, LatestRequest, publicError, rows } from '$lib/api/reliable';
+	import { organization, customerBalance, type Organization } from '$lib/records';
+	import { readPurchaseSummaries } from '$lib/purchase-summary';
+	import { exactKobo } from '$lib/money';
 	import Money from '$lib/components/Money.svelte';
 
 	type Row = { key: string; name: string; kind: 'Business' | 'Person'; owed: bigint; href: string; note: string };
@@ -24,10 +24,12 @@
 		loading = true;
 		error = '';
 		peopleError = '';
+		list = [];
 		try {
 			businesses = await checkedJSON('/api/v1/organizations', rows('organizations', organization), {
 				signal: request.signal
 			});
+			if (!request.current()) return;
 			organizationID = requestedWorkspace(businesses);
 			if (!organizationID) {
 				list = [];
@@ -35,48 +37,41 @@
 			}
 			const scope = organizationID,
 				q = `?organization=${encodeURIComponent(scope)}`;
-			const firms = await checkedJSON(
-				`/api/v1/organizations/${encodeURIComponent(scope)}/customers`,
-				rows('customers', (value) => {
-					const row = record(value);
-					return {
-						id: optionalText(row.buyer_business_id) || optionalText(row.id),
-						name: optionalText(row.trading_name) || optionalText(row.legal_name) || 'Customer',
-						owed: exactKobo(row.outstanding_kobo as KoboValue) ?? 0n,
-						state: optionalText(row.state ?? row.status)
-					};
-				}),
-				{ signal: request.signal }
-			);
+			const root = `/api/v1/organizations/${encodeURIComponent(scope)}`;
+			const firms = await checkedJSON(`${root}/customers`, rows('customers', customerBalance), {
+				signal: request.signal
+			});
+			if (!request.current()) return;
 			const next: Row[] = firms.map((firm) => ({
-				key: `b:${firm.id}`,
-				name: firm.name,
+				key: `b:${firm.buyer_business_id}`,
+				name: firm.trading_name || firm.legal_name,
 				kind: 'Business',
-				owed: firm.owed,
-				href: `/workspace/partners/customers/${encodeURIComponent(firm.id)}${q}`,
+				owed: exactKobo(firm.outstanding_kobo)!,
+				href: `/workspace/partners/customers/${encodeURIComponent(firm.buyer_business_id)}${q}`,
 				note: ['invited', 'pending'].includes(firm.state.toLowerCase()) ? 'Has not finished joining' : ''
 			}));
 			try {
-				const data = record(await readConsumer(`/api/v1/organizations/${encodeURIComponent(scope)}/consumer-sales`));
+				const purchases = await readPurchaseSummaries(scope, request.signal);
+				if (!request.current()) return;
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a local tally, never rendered directly
 				const people = new Map<string, Row>();
-				for (const sale of (Array.isArray(data.items) ? data.items : []).map(purchase)) {
+				for (const sale of purchases) {
 					if (['cancelled', 'declined'].includes(sale.state)) continue;
 					const row = people.get(sale.target) ?? {
 						key: `p:${sale.target}`,
 						name: sale.customer_name || sale.target,
 						kind: 'Person' as const,
 						owed: 0n,
-						href: `/workspace/sales/consumers/${encodeURIComponent(sale.id)}${q}`,
+						href: `/workspace/sales/consumers${q}&customer=${encodeURIComponent(sale.target)}`,
 						note: ''
 					};
-					if (sale.state === 'offered') row.note = 'Waiting for him to accept';
-					else row.owed += BigInt(Math.trunc(sale.outstanding_kobo ?? 0));
+					if (sale.state === 'offered') row.note = 'Waiting for acceptance';
+					else row.owed += BigInt(sale.outstanding_kobo);
 					people.set(sale.target, row);
 				}
 				next.push(...people.values());
 			} catch (cause) {
-				peopleError = publicError(cause, 'credit given to persons');
+				if (request.current()) peopleError = publicError(cause, 'credit given to individuals');
 			}
 			if (request.current())
 				list = next.sort((a, b) => (b.owed > a.owed ? 1 : b.owed < a.owed ? -1 : a.name.localeCompare(b.name)));
@@ -105,11 +100,11 @@
 			></label
 		>{/if}
 	{#if error}<p class="error" role="alert">{error} <button onclick={load}>Try again</button></p>{/if}
-	{#if peopleError}<p class="error" role="alert">{peopleError}</p>{/if}
+	{#if peopleError}<p class="error" role="alert">{peopleError} <button onclick={load}>Try again</button></p>{/if}
 	{#if loading}<p role="status">Opening your customers…</p>
-	{:else if !list.length && !error}<div class="empty-state">
+	{:else if !list.length && !error && !peopleError}<div class="empty-state">
 			<h2>No customers yet</h2>
-			<p>Give goods on credit to a business or a person, and he will show here.</p>
+			<p>Give goods on credit to a business or a person, and they will appear here.</p>
 		</div>
 	{:else if list.length}
 		{#if list.length > 8}<label class="search">Find a customer<input type="search" bind:value={search} /></label>{/if}
@@ -183,7 +178,7 @@
 	.empty-state {
 		padding: 1.5rem;
 		border: 1px dashed var(--color-border);
-		border-radius: 0.5rem;
+		border-radius: var(--radius);
 	}
 	.empty-state h2 {
 		margin: 0;

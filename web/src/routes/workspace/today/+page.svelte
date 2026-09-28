@@ -2,17 +2,15 @@
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { getContext, onMount } from 'svelte';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
-	import { LatestRequest, readResource, record, rows, type Resource } from '$lib/api/reliable';
+	import { LatestRequest, publicError, readResource, record, rows, type Resource } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import {
 		organization,
 		saleView,
-		paymentRow,
 		workRow,
 		receivables,
 		type Organization,
 		type SaleView,
-		type PaymentRow,
 		type WorkRow,
 		type Receivables
 	} from '$lib/records';
@@ -23,7 +21,8 @@
 	import ResourceNotice from '$lib/components/ResourceNotice.svelte';
 	import BusinessNextSteps from '$lib/components/BusinessNextSteps.svelte';
 	import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
-	import { read as readConsumer, purchase, type Purchase } from '$lib/consumer';
+	import { activePurchase, purchaseOverdue } from '$lib/consumer';
+	import { readPurchaseSummaries, type PurchaseSummary } from '$lib/purchase-summary';
 	import { paymentDateAfter } from '$lib/sale-defaults';
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
 	let { data }: { data: PageData } = $props();
@@ -42,13 +41,12 @@
 	let businesses = $state<Resource<Organization[]>>(seeded ? fromServer(seeded.businesses) : pending());
 	let organizationID = $state(seeded?.organizationID ?? '');
 	let sales = $state<Resource<SaleView[]>>(seeded ? fromServer(seeded.sales) : pending());
-	let payments = $state<Resource<PaymentRow[]>>(seeded ? fromServer(seeded.payments) : pending());
 	let overdue = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.overdue) : pending());
 	let claims = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.claims) : pending());
 	let disputes = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.disputes) : pending());
 	let due = $state<Resource<WorkRow[]>>(seeded ? fromServer(seeded.due) : pending());
 	let summary = $state<Resource<Receivables>>(seeded ? fromServer(seeded.summary) : pending());
-	let people = $state<Resource<Purchase[]>>(pending());
+	let people = $state<Resource<PurchaseSummary[]>>(pending());
 	let visibleCount = $state(5),
 		legalName = $state(''),
 		tradingName = $state(''),
@@ -68,24 +66,38 @@
 			? currentBusiness.trading_name || currentBusiness.legal_name || 'Business overview'
 			: 'Business overview'
 	);
-	const allChecked = $derived(
-		[sales, payments, overdue, claims, disputes, summary, due].every(
-			(item) => item.state === 'ready' && item.scope === organizationID
-		)
-	);
-	// Only what the seller must do something about; late and waiting customers show in the list below.
-	// Only what the seller must do something about. Late and waiting customers
-	// already show in the customer list below, so they are not repeated here.
+	// Show actionable records even if an unrelated dashboard read fails.
 	const attention = $derived(
-		attentionItems(
-			organizationID,
-			sales.state === 'ready' ? sales.data : [],
-			claims.state === 'ready' ? claims.data : [],
-			overdue.state === 'ready' ? overdue.data : [],
-			disputes.state === 'ready' ? disputes.data : [],
-			due.state === 'ready' ? due.data : []
-		).filter((item) => /^(claim|dispute|release|receipt|draft)-/.test(item.id))
+		[
+			...attentionItems(
+				organizationID,
+				sales.state === 'ready' ? sales.data : [],
+				claims.state === 'ready' ? claims.data : [],
+				overdue.state === 'ready' ? overdue.data : [],
+				disputes.state === 'ready' ? disputes.data : [],
+				due.state === 'ready' ? due.data : []
+			).filter((item) => /^(claim|dispute|release|receipt|draft|bank)-/.test(item.id)),
+			...(people.state === 'ready' ? people.data : []).flatMap((sale) => {
+				const needsReview = ['requested', 'escalated'].includes(sale.case_state) || sale.refund_due_kobo > 0;
+				if (!needsReview && !sale.pending_claim_count && !sale.release_eligible) return [];
+				return [
+					{
+						id: `personal-${sale.id}`,
+						rank: needsReview ? 0 : 1,
+						title: needsReview
+							? 'Review a personal purchase problem or refund'
+							: sale.pending_claim_count
+								? 'An individual reported a payment'
+								: 'A personal purchase is ready for handover',
+						detail: `${sale.customer_name || sale.target} · ${sale.terms.item}`,
+						href: `/workspace/sales/consumers/${encodeURIComponent(sale.id)}?organization=${encodeURIComponent(organizationID)}`,
+						action: 'Review purchase'
+					}
+				];
+			})
+		].sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))
 	);
+
 	type Owing = {
 		key: string;
 		name: string;
@@ -140,37 +152,41 @@
 				waiting: 0,
 				waitingKobo: 0n,
 				late: false,
-				href: `/workspace/sales/consumers/${encodeURIComponent(sale.id)}${query}`
+				href: `/workspace/sales/consumers${query}&customer=${encodeURIComponent(sale.target)}`
 			};
 			if (sale.state === 'offered') {
 				row.waiting += 1;
-				row.waitingKobo += BigInt(Math.trunc(sale.terms?.total_kobo ?? 0));
-			} else row.owed += BigInt(Math.trunc(sale.outstanding_kobo ?? 0));
-			if (sale.schedule_progress?.some((item) => item.date < today && item.paid_kobo < item.amount_kobo))
-				row.late = true;
+				row.waitingKobo += BigInt(sale.terms.total_kobo);
+			} else row.owed += BigInt(sale.outstanding_kobo);
+			if (purchaseOverdue(sale, today) > 0n) row.late = true;
 			list.set(row.key, row);
 		}
 		return [...list.values()]
 			.filter((row) => row.owed > 0n || row.waiting > 0)
 			.sort((a, b) => Number(b.late) - Number(a.late) || (b.owed > a.owed ? 1 : b.owed < a.owed ? -1 : 0));
 	});
-	const personOwed = $derived(
-		(people.state === 'ready' ? people.data : [])
-			.filter((sale) => sale.state === 'active' || sale.state === 'received')
-			.reduce((sum, sale) => sum + BigInt(Math.trunc(sale.outstanding_kobo ?? 0)), 0n)
-	);
 	const totalOwed = $derived(
-		summary.state === 'ready' ? (exactKobo(summary.data.outstanding_kobo) ?? 0n) + personOwed : null
+		summary.state === 'ready' && people.state === 'ready'
+			? (exactKobo(summary.data.outstanding_kobo) ?? 0n) +
+					people.data.filter(activePurchase).reduce((sum, sale) => sum + BigInt(sale.outstanding_kobo), 0n)
+			: null
+	);
+	const totalOverdue = $derived(
+		summary.state === 'ready' && people.state === 'ready'
+			? (exactKobo(summary.data.overdue_kobo) ?? 0n) +
+					people.data.reduce((sum, sale) => sum + purchaseOverdue(sale, today), 0n)
+			: null
 	);
 	const dueThisWeek = $derived(
-		(due.state === 'ready' ? due.data.length : 0) +
-			(people.state === 'ready'
-				? people.data.filter((sale) =>
-						sale.schedule_progress?.some(
-							(item) => item.date >= today && item.date <= weekAhead && item.paid_kobo < item.amount_kobo
-						)
+		due.state === 'ready' && people.state === 'ready'
+			? due.data.length +
+					people.data.filter(
+						(sale) =>
+							activePurchase(sale) &&
+							sale.outstanding_kobo > 0 &&
+							sale.schedule_progress.some((item) => item.date <= weekAhead && item.paid_kobo < item.amount_kobo)
 					).length
-				: 0)
+			: null
 	);
 	const scopeQuery = $derived(`?organization=${encodeURIComponent(organizationID)}`);
 	async function loadRequests() {
@@ -179,7 +195,6 @@
 		visibleCount = 5;
 		sales = pending(scope);
 		people = pending(scope);
-		payments = pending(scope);
 		overdue = pending(scope);
 		claims = pending(scope);
 		disputes = pending(scope);
@@ -189,7 +204,6 @@
 		const root = `/api/v1/organizations/${encodeURIComponent(scope)}`;
 		const results = await Promise.all([
 			readResource(scope, `${root}/credit-requests`, rows('requests', saleView), request.signal, 'your sales'),
-			readResource(scope, `${root}/payments`, rows('payments', paymentRow), request.signal, 'your payments'),
 			readResource(scope, `${root}/overdue`, rows('overdue', workRow), request.signal, 'overdue sales'),
 			readResource(
 				scope,
@@ -200,27 +214,24 @@
 			),
 			readResource(scope, `${root}/disputes`, rows('disputes', workRow), request.signal, 'reported problems'),
 			readResource(scope, `${root}/reports/receivables`, receivables, request.signal, 'your balance'),
-			readResource(scope, `${root}/due`, rows('due', workRow), request.signal, 'upcoming payments')
+			readResource(scope, `${root}/due`, rows('due', workRow), request.signal, 'upcoming payments'),
+			readPeople(scope, request.signal)
 		]);
 		if (!request.current() || organizationID !== scope) return;
-		[sales, payments, overdue, claims, disputes, summary, due] = results;
-		await loadPeople(scope);
+		[sales, overdue, claims, disputes, summary, due, people] = results;
+	}
+	async function readPeople(scope: string, signal: AbortSignal): Promise<Resource<PurchaseSummary[]>> {
+		try {
+			const data = await readPurchaseSummaries(scope, signal);
+			return { state: 'ready', scope, data, checkedAt: new Date().toISOString() };
+		} catch (cause) {
+			return { state: 'error', scope, status: 0, message: publicError(cause, 'credit given to individuals') };
+		}
 	}
 	async function loadPeople(scope: string) {
-		try {
-			const data = record(await readConsumer(`/api/v1/organizations/${encodeURIComponent(scope)}/consumer-sales`));
-			if (!Array.isArray(data.items)) throw new Error('The list of persons could not be checked.');
-			if (organizationID === scope)
-				people = { state: 'ready', scope, data: data.items.map(purchase), checkedAt: new Date().toISOString() };
-		} catch (cause) {
-			if (organizationID === scope)
-				people = {
-					state: 'error',
-					scope,
-					status: 0,
-					message: cause instanceof Error ? cause.message : 'Credit given to persons could not be loaded.'
-				};
-		}
+		const request = dashboardRequest.begin();
+		const result = await readPeople(scope, request.signal);
+		if (request.current() && organizationID === scope) people = result;
 	}
 	async function load() {
 		const request = businessRequest.begin();
@@ -369,23 +380,24 @@
 				></label
 			>{/if}
 		<BusinessNextSteps {organizationID} />
-		<section class="balance-card" aria-label="What you are owed" aria-busy={summary.state === 'loading'}>
+		<section
+			class="balance-card"
+			aria-label="What you are owed"
+			aria-busy={summary.state === 'loading' || people.state === 'loading'}
+		>
 			<p>Customers owe you</p>
 			{#if totalOwed !== null}
 				<strong class="balance"><Money amountKobo={totalOwed} /></strong>
 				<div class="figures">
-					<span
-						><small>Past due date</small><strong
-							>{#if summary.state === 'ready'}<Money amountKobo={summary.data.overdue_kobo} />{/if}</strong
-						></span
-					>
-					<span><small>Due in the next 7 days</small><strong>{dueThisWeek}</strong></span>
+					<span><small>Past due date</small><strong><Money amountKobo={totalOverdue} /></strong></span>
+					<span><small>Due now or within 7 days</small><strong>{dueThisWeek ?? 'Not confirmed'}</strong></span>
 				</div>
-			{:else}<strong class="balance" aria-hidden="true">—</strong>{/if}
+			{:else}<strong class="balance">Not confirmed</strong>
+				<p>Checking business and personal sales before showing your total.</p>{/if}
 		</section>
 		{#if totalOwed === null}<ResourceNotice resource={summary} label="Balance" retry={loadRequests} />{/if}
 
-		{#if allChecked && attention.length}<section class="attention" aria-labelledby="attention-heading">
+		{#if attention.length}<section class="attention" aria-labelledby="attention-heading">
 				<h2 id="attention-heading">Check these</h2>
 				<div class="action-list">
 					{#each attention.slice(0, visibleCount) as item (item.id)}<a href={item.href}
@@ -402,7 +414,7 @@
 
 		<section class="owing" aria-labelledby="owing-heading">
 			<h2 id="owing-heading">Customers</h2>
-			{#each [{ resource: sales, label: 'Credit to businesses' }, { resource: people, label: 'Credit to persons' }, { resource: overdue, label: 'Past due dates' }, { resource: payments, label: 'Payments' }, { resource: claims, label: 'Reported transfers' }, { resource: disputes, label: 'Reported problems' }] as item, i (i)}<ResourceNotice
+			{#each [{ resource: sales, label: 'Credit to businesses' }, { resource: people, label: 'Credit to persons' }, { resource: overdue, label: 'Past due dates' }, { resource: due, label: 'Upcoming payments' }, { resource: claims, label: 'Reported transfers' }, { resource: disputes, label: 'Reported problems' }] as item, i (i)}<ResourceNotice
 					resource={item.resource}
 					label={item.label}
 					retry={loadRequests}
@@ -412,7 +424,7 @@
 							><span
 								><strong>{row.name}</strong><small
 									>{row.kind}{row.late ? ' · Past due date' : ''}{row.waiting
-										? ` · ${row.waiting} not yet accepted`
+										? ` · ${row.waiting} not active yet`
 										: ''}</small
 								></span
 							><strong
@@ -424,7 +436,7 @@
 				</div>
 			{:else if sales.state === 'ready' && people.state === 'ready'}<div class="empty-state">
 					<h3>Nobody owes you yet</h3>
-					<p>When you give goods on credit, the customer shows here with what he owes and when.</p>
+					<p>Your active sales and offers awaiting a customer’s decision appear here.</p>
 					<a class="primary" href="/workspace/give{scopeQuery}">Give goods on credit</a>
 				</div>{/if}
 		</section>
@@ -523,7 +535,7 @@
 		padding: 0.9rem 1rem;
 		border: 1px solid var(--color-border);
 		border-left: 4px solid var(--color-accent);
-		border-radius: 0.4rem;
+		border-radius: var(--radius);
 		background: var(--color-surface);
 		color: inherit;
 		text-decoration: none;
@@ -595,7 +607,7 @@
 	.empty-state {
 		padding: 1.5rem;
 		border: 1px dashed var(--color-border);
-		border-radius: 0.5rem;
+		border-radius: var(--radius);
 	}
 	.empty-state h3 {
 		margin: 0;

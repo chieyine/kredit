@@ -20,6 +20,6 @@
 <WorkspaceHub
 	eyebrow="Your Kredit account"
 	title="Account settings"
-	description="One set of preferences for your Kredit account. Business terms and staff access are managed separately in the workspace."
+	description="One set of preferences for your Kredit account. Business details and payment terms are managed in the workspace."
 	{groups}
 />

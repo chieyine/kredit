@@ -1,6 +1,5 @@
 /**
- * Simple Kredit: three tabs and one button. See $lib/features for the tools
- * that are switched off and where their addresses now lead.
+ * Simple Kredit: three daily views and one sale-entry button.
  */
 export const workspacePrimary: [string, string, string][] = [
 	['Who owes me', '/workspace/today', 'home'],

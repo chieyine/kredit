@@ -2,8 +2,6 @@ package organizations
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -18,11 +16,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PostgresStore persists organizations, memberships, and invitations while
+// PostgresStore persists businesses and their owners while
 // setting the request-local tenant context on every transaction.
 type PostgresStore struct {
 	pool              *pgxpool.Pool
-	tokenHashKey      []byte
 	guardMu           sync.RWMutex
 	createGuard       func(string, CreateInput) error
 	organizationLimit int64
@@ -30,11 +27,8 @@ type PostgresStore struct {
 
 var _ Service = (*PostgresStore)(nil)
 
-func NewPostgresStore(pool *pgxpool.Pool, tokenHashKey string) *PostgresStore {
-	if tokenHashKey == "" {
-		tokenHashKey = "development-only-change-me"
-	}
-	return &PostgresStore{pool: pool, tokenHashKey: []byte(tokenHashKey)}
+func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
+	return &PostgresStore{pool: pool}
 }
 
 func (s *PostgresStore) SetCreateGuard(guard func(string, CreateInput) error) {
@@ -109,11 +103,9 @@ func (s *PostgresStore) Create(ownerUserID string, input CreateInput) (Organizat
 	}
 	var membership Membership
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO app.memberships (id, organization_id, user_id, role, status, accepted_at, created_at)
-		VALUES ($1, $2, $3, $4, 'active', $5, $5)
-		RETURNING id::text, organization_id::text, user_id::text, role, status,
-		          COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
-		          COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at`, membershipID, organizationID, ownerUserID, access.RoleOwner, now).Scan(membershipScanArgs(&membership)...); err != nil {
+		INSERT INTO app.memberships (id, organization_id, user_id, role, status, created_at)
+		VALUES ($1, $2, $3, $4, 'active', $5)
+		RETURNING id::text, organization_id::text, user_id::text, role, status, created_at`, membershipID, organizationID, ownerUserID, access.RoleOwner, now).Scan(membershipScanArgs(&membership)...); err != nil {
 		return Organization{}, Membership{}, fmt.Errorf("create owner membership: %w", err)
 	}
 	var emailVerified, phoneVerified bool
@@ -179,7 +171,7 @@ func (s *PostgresStore) ReadForUser(ctx context.Context, userID string) ([]Organ
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, `SELECT organization_id::text FROM app.memberships WHERE user_id = $1 AND status NOT IN ('removed','suspended') ORDER BY created_at`, userID)
+	rows, err := tx.Query(ctx, `SELECT organization_id::text FROM app.memberships WHERE user_id = $1 AND status='active' AND role='owner' ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -217,8 +209,7 @@ func (s *PostgresStore) ReadForUser(ctx context.Context, userID string) ([]Organ
 	return result, nil
 }
 
-// Membership keeps the historical boolean shape for the Service interface.
-// New callers use ReadMembership, which can say why it failed.
+// Membership reports whether the account currently owns the business.
 func (s *PostgresStore) Membership(organizationID, userID string) (Membership, bool) {
 	membership, err := s.ReadMembership(context.Background(), organizationID, userID)
 	return membership, err == nil
@@ -235,10 +226,8 @@ func (s *PostgresStore) ReadMembership(ctx context.Context, organizationID, user
 	defer func() { _ = tx.Rollback(ctx) }()
 	var membership Membership
 	err = tx.QueryRow(ctx, `
-		SELECT id::text, organization_id::text, user_id::text, role, status,
-		       COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
-		       COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at
-		FROM app.memberships WHERE organization_id = $1 AND user_id = $2 AND status = 'active'`, organizationID, userID).Scan(membershipScanArgs(&membership)...)
+		SELECT id::text, organization_id::text, user_id::text, role, status, created_at
+		FROM app.memberships WHERE organization_id = $1 AND user_id = $2 AND status = 'active' AND role='owner'`, organizationID, userID).Scan(membershipScanArgs(&membership)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Membership{}, ErrMembershipNotFound
 	}
@@ -247,215 +236,6 @@ func (s *PostgresStore) ReadMembership(ctx context.Context, organizationID, user
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return Membership{}, err
-	}
-	return membership, nil
-}
-
-func (s *PostgresStore) ListMembers(organizationID string) []Membership {
-	tx, err := s.beginTenantTx("", organizationID)
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	rows, err := tx.Query(context.Background(), `
-		SELECT id::text, organization_id::text, user_id::text, role, status,
-		       COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
-		       COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at
-		FROM app.memberships WHERE organization_id = $1 ORDER BY created_at`, organizationID)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	result := make([]Membership, 0)
-	for rows.Next() {
-		var membership Membership
-		if err := rows.Scan(membershipScanArgs(&membership)...); err != nil {
-			return nil
-		}
-		result = append(result, membership)
-	}
-	if err := rows.Err(); err != nil {
-		return nil
-	}
-	_ = tx.Commit(context.Background())
-	return result
-}
-
-func (s *PostgresStore) Invite(actorUserID, organizationID, target, targetType string, targetUserID string, role access.Role) (Invitation, Membership, error) {
-	if !role.Valid() || role == access.RoleOwner {
-		return Invitation{}, Membership{}, errors.New("only non-owner roles may be invited")
-	}
-	if strings.TrimSpace(target) == "" || targetUserID == "" || (targetType != "phone" && targetType != "email") {
-		return Invitation{}, Membership{}, errors.New("invitation target is required")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	tx, err := s.beginTenantTxContext(ctx, actorUserID, organizationID)
-	if err != nil {
-		return Invitation{}, Membership{}, err
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if err := lockMemberAuthority(ctx, tx, organizationID, actorUserID, access.PermissionInviteMembers); err != nil {
-		return Invitation{}, Membership{}, err
-	}
-	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM app.organizations WHERE id = $1)`, organizationID).Scan(&exists); err != nil || !exists {
-		return Invitation{}, Membership{}, errors.New("organisation not found")
-	}
-	// Expired invitations cannot grant access or prevent a new invitation.
-	if _, err := tx.Exec(ctx, `UPDATE app.memberships SET status='removed' WHERE organization_id=$1 AND user_id=$2 AND status='invited' AND (invited_at IS NULL OR invited_at<=clock_timestamp()-interval '7 days')`, organizationID, targetUserID); err != nil {
-		return Invitation{}, Membership{}, err
-	}
-	var alreadyMember bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM app.memberships WHERE organization_id = $1 AND user_id = $2 AND status <> 'removed')`, organizationID, targetUserID).Scan(&alreadyMember); err != nil {
-		return Invitation{}, Membership{}, fmt.Errorf("check membership: %w", err)
-	}
-	if alreadyMember {
-		return Invitation{}, Membership{}, errors.New("user already belongs to organisation")
-	}
-	now := time.Now().UTC()
-	expiresAt := now.Add(7 * 24 * time.Hour)
-	invitationID, membershipID := newUUID(), newUUID()
-	var invitation Invitation
-	if err := tx.QueryRow(ctx, `
-		INSERT INTO app.organization_invitations (id, organization_id, target_type, target_hash, role, status, invited_by, created_at, expires_at, membership_id)
-		VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9)
-		RETURNING id::text, organization_id::text, target_type, role, status, invited_by::text, expires_at, created_at`, invitationID, organizationID, targetType, s.hashTarget(targetType, target), role, actorUserID, now, expiresAt, membershipID).Scan(&invitation.ID, &invitation.OrganizationID, &invitation.TargetType, &invitation.Role, &invitation.Status, &invitation.InvitedBy, &invitation.ExpiresAt, &invitation.CreatedAt); err != nil {
-		return Invitation{}, Membership{}, fmt.Errorf("create invitation: %w", err)
-	}
-	invitation.Target = strings.TrimSpace(target)
-	var membership Membership
-	if err := tx.QueryRow(ctx, `
-		INSERT INTO app.memberships (id, organization_id, user_id, role, status, invited_by, invited_at, created_at)
-		VALUES ($1, $2, $3, $4, 'invited', $5, $6, $6)
-		RETURNING id::text, organization_id::text, user_id::text, role, status,
-		          COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
-		          COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at`, membershipID, organizationID, targetUserID, role, actorUserID, now).Scan(membershipScanArgs(&membership)...); err != nil {
-		return Invitation{}, Membership{}, fmt.Errorf("create invited membership: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Invitation{}, Membership{}, fmt.Errorf("commit invitation: %w", err)
-	}
-	return invitation, membership, nil
-}
-
-func (s *PostgresStore) ActivateInvitations(userID string) []Membership {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	tx, err := s.beginTenantTxContext(ctx, userID, "")
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	rows, err := tx.Query(ctx, `
-		SELECT id::text, organization_id::text
-		FROM app.memberships WHERE user_id = $1 AND status = 'invited' ORDER BY organization_id, id FOR UPDATE`, userID)
-	if err != nil {
-		return nil
-	}
-	type pending struct{ id, organizationID string }
-	var memberships []pending
-	for rows.Next() {
-		var item pending
-		if err := rows.Scan(&item.id, &item.organizationID); err != nil {
-			rows.Close()
-			return nil
-		}
-		memberships = append(memberships, item)
-	}
-	if rows.Err() != nil {
-		rows.Close()
-		return nil
-	}
-	rows.Close()
-	now := time.Now().UTC()
-	result := make([]Membership, 0, len(memberships))
-	for _, item := range memberships {
-		if _, err := tx.Exec(ctx, `SELECT set_config('app.current_organization_id', $1, true)`, item.organizationID); err != nil {
-			return nil
-		}
-		var membership Membership
-		if err := tx.QueryRow(ctx, `
-			UPDATE app.memberships SET status = CASE WHEN invited_at>clock_timestamp()-interval '7 days' THEN 'active' ELSE 'removed' END, accepted_at = CASE WHEN invited_at>clock_timestamp()-interval '7 days' THEN $2::timestamptz END WHERE id = $1 AND status='invited'
-			RETURNING id::text, organization_id::text, user_id::text, role, status,
-			          COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
-			          COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at`, item.id, now).Scan(membershipScanArgs(&membership)...); err != nil {
-			return nil
-		}
-		if membership.Status == "active" {
-			result = append(result, membership)
-		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil
-	}
-	return result
-}
-
-func (s *PostgresStore) ChangeRole(organizationID, actorUserID, targetUserID string, role access.Role) (Membership, error) {
-	if !role.Valid() || role == access.RoleOwner {
-		return Membership{}, errors.New("invalid target role")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	tx, err := s.beginTenantTxContext(ctx, actorUserID, organizationID)
-	if err != nil {
-		return Membership{}, err
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if err := lockMemberAuthority(ctx, tx, organizationID, actorUserID, access.PermissionManageMembers); err != nil {
-		return Membership{}, err
-	}
-	var membership Membership
-	err = tx.QueryRow(ctx, `
-		UPDATE app.memberships SET role = $3
-		WHERE organization_id = $1 AND user_id = $2 AND status = 'active' AND role <> 'owner' AND user_id <> $4
-		RETURNING id::text, organization_id::text, user_id::text, role, status,
-		          COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
-		          COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at`, organizationID, targetUserID, role, actorUserID).Scan(membershipScanArgs(&membership)...)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Membership{}, errors.New("membership not found")
-	}
-	if err != nil {
-		return Membership{}, fmt.Errorf("change member role: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Membership{}, fmt.Errorf("commit member role: %w", err)
-	}
-	return membership, nil
-}
-
-func (s *PostgresStore) ChangeStatus(organizationID, actorUserID, targetUserID, status string) (Membership, error) {
-	if status != "active" && status != "suspended" && status != "removed" {
-		return Membership{}, errors.New("invalid membership status")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	tx, err := s.beginTenantTxContext(ctx, actorUserID, organizationID)
-	if err != nil {
-		return Membership{}, err
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if err := lockMemberAuthority(ctx, tx, organizationID, actorUserID, access.PermissionManageMembers); err != nil {
-		return Membership{}, err
-	}
-	var membership Membership
-	err = tx.QueryRow(ctx, `
-		UPDATE app.memberships SET status = $3
-		WHERE organization_id = $1 AND user_id = $2 AND status <> 'removed'
-		  AND role <> 'owner' AND user_id <> $4
-		  AND (status <> 'invited' OR $3 = 'removed')
-		RETURNING id::text, organization_id::text, user_id::text, role, status,
-		          COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
-		          COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at`, organizationID, targetUserID, status, actorUserID).Scan(membershipScanArgs(&membership)...)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Membership{}, errors.New("membership cannot be changed")
-	}
-	if err != nil {
-		return Membership{}, fmt.Errorf("change member status: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Membership{}, fmt.Errorf("commit member status: %w", err)
 	}
 	return membership, nil
 }
@@ -480,27 +260,7 @@ func (s *PostgresStore) beginTenantTxContext(ctx context.Context, userID, organi
 }
 
 func membershipScanArgs(membership *Membership) []any {
-	return []any{&membership.ID, &membership.OrganizationID, &membership.UserID, &membership.Role, &membership.Status, &membership.InvitedBy, &membership.InvitedAt, &membership.AcceptedAt, &membership.CreatedAt}
-}
-
-func (s *PostgresStore) hashTarget(channel, target string) []byte {
-	mac := hmac.New(sha256.New, s.tokenHashKey)
-	_, _ = mac.Write([]byte(channel + ":" + normalizeTarget(channel, target)))
-	return mac.Sum(nil)
-}
-
-func normalizeTarget(channel, target string) string {
-	target = strings.ToLower(strings.TrimSpace(target))
-	if channel != "phone" {
-		return target
-	}
-	var b strings.Builder
-	for _, r := range target {
-		if (r >= '0' && r <= '9') || (r == '+' && b.Len() == 0) {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return []any{&membership.ID, &membership.OrganizationID, &membership.UserID, &membership.Role, &membership.Status, &membership.CreatedAt}
 }
 
 func newUUID() string {
@@ -510,49 +270,23 @@ func newUUID() string {
 	return uuid.New().String()
 }
 
-func (s *PostgresStore) ReadMembers(organizationID string) ([]Membership, error) {
-	tx, err := s.beginTenantTx("", organizationID)
+func (s *PostgresStore) ReadOwner(ctx context.Context, organizationID string) (Membership, error) {
+	tx, err := s.beginTenantTxContext(ctx, "", organizationID)
 	if err != nil {
-		return nil, err
+		return Membership{}, err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	rows, err := tx.Query(context.Background(), `
-		SELECT id::text, organization_id::text, user_id::text, role, status,
-		       COALESCE(invited_by::text,''), COALESCE(invited_at, '0001-01-01'::timestamptz),
-		       COALESCE(accepted_at, '0001-01-01'::timestamptz), created_at
-		FROM app.memberships WHERE organization_id = $1 ORDER BY created_at`, organizationID)
+	defer func() { _ = tx.Rollback(ctx) }()
+	var owner Membership
+	err = tx.QueryRow(ctx, `SELECT id::text, organization_id::text, user_id::text, role, status, created_at
+ FROM app.memberships WHERE organization_id=$1::uuid AND role='owner' AND status='active'`, organizationID).Scan(membershipScanArgs(&owner)...)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Membership{}, ErrMembershipNotFound
+	}
 	if err != nil {
-		return nil, err
+		return Membership{}, err
 	}
-	defer rows.Close()
-	result := make([]Membership, 0)
-	for rows.Next() {
-		var membership Membership
-		if err := rows.Scan(membershipScanArgs(&membership)...); err != nil {
-			return nil, err
-		}
-		result = append(result, membership)
+	if err = tx.Commit(ctx); err != nil {
+		return Membership{}, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
-	if err = tx.Commit(context.Background()); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// All membership mutations share an organization lock, then verify current
-// authority inside the write transaction. Revocation cannot race a later change.
-func lockMemberAuthority(ctx context.Context, tx pgx.Tx, orgID, actorID string, permission access.Permission) error {
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "organization-membership:"+orgID); err != nil {
-		return err
-	}
-	var role access.Role
-	err := tx.QueryRow(ctx, `SELECT m.role FROM app.memberships m JOIN app.users u ON u.id=m.user_id JOIN app.organizations o ON o.id=m.organization_id WHERE m.organization_id=$1::uuid AND m.user_id=$2::uuid AND m.status='active' AND u.status='active' AND o.status<>'suspended' FOR SHARE OF m,u,o`, orgID, actorID).Scan(&role)
-	if errors.Is(err, pgx.ErrNoRows) || err == nil && !access.Can(role, permission) {
-		return errors.New("active owner or administrator authority is required")
-	}
-	return err
+	return owner, nil
 }

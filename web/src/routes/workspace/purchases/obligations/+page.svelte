@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { saleView } from '$lib/records';
 	import type { KoboValue } from '$lib/money';
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import WorkspacePage from '$lib/components/WorkspacePage.svelte';
@@ -23,6 +24,7 @@
 </script>
 
 <WorkspacePage
+	decodeRow={saleView}
 	eyebrow=""
 	title="What I owe"
 	description="Each supplier, what you took, how much is left and when to pay."

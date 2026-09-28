@@ -21,13 +21,13 @@
 	 * rendered as a row of identifiers.
 	 *
 	 * `Row` is the record shape the caller's row functions read. The component
-	 * only checks each record is an object; callers must treat fields as
-	 * optional and fall back when one is missing.
+	 * requires the caller’s response decoder before rendering any record.
 	 */
 	let {
 		eyebrow,
 		title,
 		description,
+		decodeRow,
 		primaryLabel = '',
 		primaryHref = '',
 		endpoint = '',
@@ -47,6 +47,7 @@
 		eyebrow: string;
 		title: string;
 		description: string;
+		decodeRow: (value: unknown) => Row;
 		primaryLabel?: string;
 		primaryHref?: string;
 		endpoint?: string;
@@ -134,7 +135,7 @@
 			if (version !== requestVersion) return;
 			const value = collectionKey ? data[collectionKey] : data;
 			if (!Array.isArray(value)) throw new Error('unavailable');
-			records = value.map((item) => objectRecord(item) as Row);
+			records = value.map(decodeRow);
 		} catch (cause) {
 			if (version === requestVersion && !signal.aborted) {
 				error = publicError(cause, title.toLowerCase());

@@ -347,7 +347,7 @@ func (s *Server) approveCreditNote(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, 400, "invalid_note", err.Error())
 		return
 	}
-	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionApproveBusinessCredit)
+	_, user, _, ok := s.requireOrganizationAccess(w, r, orgID, access.PermissionManageFinancial)
 	if !ok {
 		return
 	}
@@ -358,10 +358,6 @@ func (s *Server) approveCreditNote(w http.ResponseWriter, r *http.Request) {
 	svc := s.getOrdersService()
 	err = svc.ApproveCreditNote(r.Context(), noteID, user.ID)
 	if err != nil {
-		if errors.Is(err, orders.ErrDualControl) {
-			writeProblem(w, 403, "dual_control_required", "The issuer cannot approve their own credit note. A different authorized person must approve.")
-			return
-		}
 		s.writeOrderProblem(w, r, err)
 		return
 	}

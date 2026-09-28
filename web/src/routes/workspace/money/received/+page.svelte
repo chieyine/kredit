@@ -10,6 +10,7 @@
 	import Money from '$lib/components/Money.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import PaymentReview from '$lib/components/PaymentReview.svelte';
+	import ConsumerPayments from '$lib/components/ConsumerPayments.svelte';
 	type Payment = {
 		id: string;
 		payment_id: string;
@@ -263,8 +264,8 @@
 		{#if done}<p class="notice" role="status">{done}</p>{/if}
 		<section class="money-summary" aria-label="Payment summary">
 			<article class="total">
-				<span>Money received</span><strong><Money amountKobo={receivedTotal} /></strong><small
-					>Every payment you confirmed</small
+				<span>Business sale payments</span><strong><Money amountKobo={receivedTotal} /></strong><small
+					>Confirmed payments from business customers</small
 				>
 			</article>
 			<article class:needs-action={pendingClaims.length > 0}>
@@ -325,7 +326,7 @@
 					<span aria-hidden="true">✓</span>
 					<div>
 						<h3>Nothing to check right now.</h3>
-						<p>You have answered every payment your customers reported.</p>
+						<p>No business sale payments are waiting for confirmation.</p>
 					</div>
 				</div>{/if}
 		</section>
@@ -388,6 +389,7 @@
 				</div>{/if}
 		</section>
 	{/if}
+	{#if organizationID}<ConsumerPayments {organizationID} />{/if}
 </main>
 {#if review}<PaymentReview
 		amount={review.claim.amount_kobo}

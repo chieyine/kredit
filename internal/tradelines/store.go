@@ -834,7 +834,6 @@ func (s *Store) expireReservationsLocked() {
 }
 
 const currentFeeDisclosure = "0.5% supplier base service fee on activated principal; an additional 0.5% only on amounts Kredit successfully collects at or after the permitted collection time (up to 1% total on collected principal)"
-const legacyFeeDisclosure = "0.5% supplier base service fee on activated principal; 1% collection fee only on amounts Kredit successfully collects"
 
 func drawdownHash(drawdown Drawdown, line TradeLine) string {
 	if drawdown.FeeTerms != nil {
@@ -903,8 +902,7 @@ func defaultTerms(v string) string {
 }
 func newIdentifier() string { return identifier.New() }
 
-// Preserve the exact fee wording bound by older accepted hashes. New agreements
-// use the corrected disclosure; rendering never silently rewrites accepted terms.
+// Render only the fee disclosure verified against the accepted agreement hash.
 func DrawdownFeeDisclosure(drawdown Drawdown, line TradeLine) string {
 	if drawdown.AgreementHash == "" {
 		return ""
@@ -916,10 +914,8 @@ func DrawdownFeeDisclosure(drawdown Drawdown, line TradeLine) string {
 		}
 		return ""
 	}
-	for _, fee := range []string{currentFeeDisclosure, legacyFeeDisclosure} {
-		if drawdownHashWithFee(drawdown, line, fee) == drawdown.AgreementHash {
-			return fee
-		}
+	if drawdownHashWithFee(drawdown, line, currentFeeDisclosure) == drawdown.AgreementHash {
+		return currentFeeDisclosure
 	}
 	return ""
 }

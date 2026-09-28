@@ -36,7 +36,7 @@ func TestConcurrentOrganizationCreationHonorsLimit(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s := NewPostgresStore(pool, "isolated-limit-test")
+			s := NewPostgresStore(pool)
 			s.SetOrganizationLimit(count + 1)
 			<-start
 			_, _, err := s.Create(owner, CreateInput{LegalName: "Cap fixture", BusinessType: "limited_company", BusinessAddress: "Lagos", Industry: "retail"})

@@ -284,9 +284,6 @@ func (m *MemoryStore) ApproveCreditNote(ctx context.Context, noteID, reviewerID 
 	if cn.ObligationID != "" {
 		return ErrFinancialApplicationUnavailable
 	}
-	if cn.IssuedBy == reviewerID {
-		return ErrDualControl
-	}
 	if cn.Status != "draft" {
 		return ErrAlreadyDecided
 	}
@@ -532,7 +529,7 @@ func (p *PostgresStore) ApproveCreditNote(ctx context.Context, noteID, reviewerI
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var orderID, issuer, state, approvedBy string
+	var orderID, state, approvedBy string
 	err = tx.QueryRow(ctx, `SELECT order_id::text FROM app.order_credit_notes WHERE id=$1::uuid`, noteID).Scan(&orderID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
@@ -540,15 +537,12 @@ func (p *PostgresStore) ApproveCreditNote(ctx context.Context, noteID, reviewerI
 	if err != nil {
 		return err
 	}
-	if err = lockSupplierOrder(ctx, tx, orderID, []string{"owner", "administrator", "finance"}); err != nil {
+	if err = lockSupplierOrder(ctx, tx, orderID, []string{"owner"}); err != nil {
 		return err
 	}
-	err = tx.QueryRow(ctx, `SELECT issued_by::text,status,COALESCE(approved_by::text,'') FROM app.order_credit_notes WHERE id=$1::uuid FOR UPDATE`, noteID).Scan(&issuer, &state, &approvedBy)
+	err = tx.QueryRow(ctx, `SELECT status,COALESCE(approved_by::text,'') FROM app.order_credit_notes WHERE id=$1::uuid FOR UPDATE`, noteID).Scan(&state, &approvedBy)
 	if err != nil {
 		return err
-	}
-	if issuer == reviewerID {
-		return ErrDualControl
 	}
 	if state == "approved" && approvedBy == reviewerID {
 		return tx.Commit(ctx)
@@ -563,12 +557,12 @@ func (p *PostgresStore) ApproveCreditNote(ctx context.Context, noteID, reviewerI
 	err = tx.QueryRow(ctx, `
 		UPDATE app.order_credit_notes
 		SET status = 'approved', approved_by = $2::uuid, approved_at = now()
-		WHERE id = $1::uuid AND status = 'draft' AND issued_by <> $2::uuid
+		WHERE id = $1::uuid AND status = 'draft'
 		RETURNING obligation_id::text, supplier_organization_id::text, amount_kobo
 	`, noteID, reviewerID).Scan(&obID, &suppOrgID, &amountKobo)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrDualControl
+			return ErrAlreadyDecided
 		}
 		return err
 	}

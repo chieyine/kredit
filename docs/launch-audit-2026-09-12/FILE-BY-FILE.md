@@ -787,8 +787,8 @@ See [findings](FINDINGS.md), [provider research](PROVIDERS.md), [machine-readabl
 
 | File | Reviewed content | Result |
 | --- | --- | --- |
-| [internal/organizations/audit_postgres_test.go](../../internal/organizations/audit_postgres_test.go) | Membership authority, invitations, account limits and lifecycle; TestPostgresInactiveMembershipAndOwnerRoleAreProtected | No separate finding |
-| [internal/organizations/invitation_lifecycle_test.go](../../internal/organizations/invitation_lifecycle_test.go) | Membership authority, invitations, account limits and lifecycle; TestTeamInvitationLifecycle, TestRestrictedTeamInvitationLifecycle | No separate finding |
+| `internal/organizations/audit_postgres_test.go` (removed before launch) | Membership authority, invitations, account limits and lifecycle; TestPostgresInactiveMembershipAndOwnerRoleAreProtected | No separate finding |
+| `internal/organizations/invitation_lifecycle_test.go` (removed before launch) | Membership authority, invitations, account limits and lifecycle; TestTeamInvitationLifecycle, TestRestrictedTeamInvitationLifecycle | No separate finding |
 | [internal/organizations/limit_postgres_test.go](../../internal/organizations/limit_postgres_test.go) | Membership authority, invitations, account limits and lifecycle; TestConcurrentOrganizationCreationHonorsLimit | No separate finding |
 | [internal/organizations/postgres.go](../../internal/organizations/postgres.go) | Membership authority, invitations, account limits and lifecycle; NewPostgresStore, SetCreateGuard, SetOrganizationLimit, Count and 19 other declarations | No separate finding |
 | [internal/organizations/postgres_test.go](../../internal/organizations/postgres_test.go) | Membership authority, invitations, account limits and lifecycle; TestPostgresStoreUsesOpaqueTargetHashesAndUUIDv7IDs, TestPostgresStoreImplementsOrganizationService | No separate finding |
@@ -969,7 +969,7 @@ See [findings](FINDINGS.md), [provider research](PROVIDERS.md), [machine-readabl
 | [internal/web/completion_handlers_test.go](../../internal/web/completion_handlers_test.go) | HTTP authorization, payloads, status handling and actual service wiring; TestNotificationReceiptsAuthenticateExactBody, TestScrapeCredentialOnlyGrantsMetricsAccess, TestBuyerCanFindStandaloneBankPermission | No separate finding |
 | [internal/web/credit_handlers.go](../../internal/web/credit_handlers.go) | HTTP authorization, payloads, status handling and actual service wiring; createCreditRequest, listCreditRequests, getCreditRequest, updateDraftCreditRequest and 63 other declarations | [F022](FINDINGS.md#L97), [F023](FINDINGS.md#L101), [F024](FINDINGS.md#L105), [F030](FINDINGS.md#L129) |
 | [internal/web/credit_terms_handlers.go](../../internal/web/credit_terms_handlers.go) | HTTP authorization, payloads, status handling and actual service wiring; previewCreditTerms | No separate finding |
-| [internal/web/customer_access_test.go](../../internal/web/customer_access_test.go) | HTTP authorization, payloads, status handling and actual service wiring; ListCustomers, TestSalesCanSelectCustomersWithoutFinancialMutationAccess | No separate finding |
+| `internal/web/customer_access_test.go` (removed before launch) | HTTP authorization, payloads, status handling and actual service wiring; ListCustomers, TestSalesCanSelectCustomersWithoutFinancialMutationAccess | No separate finding |
 | [internal/web/customer_registration_recovery.go](../../internal/web/customer_registration_recovery.go) | HTTP authorization, payloads, status handling and actual service wiring; registrationFingerprint, listCustomerRegistrations, resolveCustomerRegistration | No separate finding |
 | [internal/web/dashboard_handlers.go](../../internal/web/dashboard_handlers.go) | HTTP authorization, payloads, status handling and actual service wiring; listOrganizationPayments, listOrganizationCollections, listOrganizationOverdue, listOrganizationCustomers and 3 other declarations | [F025](FINDINGS.md#L109) |
 | [internal/web/document_handlers.go](../../internal/web/document_handlers.go) | HTTP authorization, payloads, status handling and actual service wiring; uploadDocument, documentDownload | [F030](FINDINGS.md#L129) |
@@ -1187,7 +1187,7 @@ See [findings](FINDINGS.md), [provider research](PROVIDERS.md), [machine-readabl
 | [web/src/lib/product-language.ts](../../web/src/lib/product-language.ts) | product-language: shared UI/data contract, safe rendering and consumers; privacyRequestLabel, productLabel | No separate finding |
 | [web/src/lib/product-tools.ts](../../web/src/lib/product-tools.ts) | product-tools: shared UI/data contract, safe rendering and consumers; writeLocal, removeLocal, rememberSaleItem, whatsappURL and 3 other declarations | No separate finding |
 | [web/src/lib/records.ts](../../web/src/lib/records.ts) | records: shared UI/data contract, safe rendering and consumers; kobo, organization, customer, saleView and 5 other declarations | No separate finding |
-| [web/src/lib/sale-drafts.ts](../../web/src/lib/sale-drafts.ts) | sale-drafts: shared UI/data contract, safe rendering and consumers; key, readDraft, saveDraft, deleteDraft | No separate finding |
+| `web/src/lib/sale-drafts.ts` (removed before launch) | sale-drafts: shared UI/data contract, safe rendering and consumers; key, readDraft, saveDraft, deleteDraft | No separate finding |
 | [web/src/lib/seo.ts](../../web/src/lib/seo.ts) | seo: shared UI/data contract, safe rendering and consumers; seoForPath, jsonLd | No separate finding |
 | [web/src/lib/server/guides.ts](../../web/src/lib/server/guides.ts) | guides: shared UI/data contract, safe rendering and consumers; loadGuides | No separate finding |
 | [web/src/lib/server/legal-config.ts](../../web/src/lib/server/legal-config.ts) | legal-config: shared UI/data contract, safe rendering and consumers; loadLegalConfig, assertLaunchWebConfig | No separate finding |
@@ -1351,7 +1351,7 @@ See [findings](FINDINGS.md), [provider research](PROVIDERS.md), [machine-readabl
 | [web/tests/article-drafts.spec.ts](../../web/tests/article-drafts.spec.ts) | article-drafts.spec: fixtures, assertions and production equivalence | No separate finding |
 | [web/tests/audit-completion.spec.ts](../../web/tests/audit-completion.spec.ts) | audit-completion.spec: fixtures, assertions and production equivalence; signedIn, draftCount, saleDetail | No separate finding |
 | [web/tests/audit-fixes.spec.ts](../../web/tests/audit-fixes.spec.ts) | audit-fixes.spec: fixtures, assertions and production equivalence | [F040](FINDINGS.md#L169) |
-| [web/tests/audit-full-form.spec.ts](../../web/tests/audit-full-form.spec.ts) | audit-full-form.spec: fixtures, assertions and production equivalence; prepare | No separate finding |
+| `web/tests/audit-full-form.spec.ts` (removed before launch) | audit-full-form.spec: fixtures, assertions and production equivalence; prepare | No separate finding |
 | [web/tests/audit-product-journeys.spec.ts](../../web/tests/audit-product-journeys.spec.ts) | audit-product-journeys.spec: fixtures, assertions and production equivalence; signedIn | No separate finding |
 | [web/tests/audit-reliability-unit.spec.ts](../../web/tests/audit-reliability-unit.spec.ts) | audit-reliability-unit.spec: fixtures, assertions and production equivalence | No separate finding |
 | [web/tests/business-settings.spec.ts](../../web/tests/business-settings.spec.ts) | business-settings.spec: fixtures, assertions and production equivalence | No separate finding |
