@@ -86,7 +86,7 @@ See [findings](FINDINGS.md), [provider research](PROVIDERS.md), [machine-readabl
 | File | Reviewed content | Result |
 | --- | --- | --- |
 | [cmd/migrate/main.go](../../cmd/migrate/main.go) | main.go: configuration/data and current consumers; main, dbpool, extractUpSQL | No separate finding |
-| [cmd/migrate/main_test.go](../../cmd/migrate/main_test.go) | main_test: fixtures, assertions and production equivalence; TestExtractUpSQLStopsBeforeDownSection | No separate finding |
+| cmd/migrate/main_test.go (since removed) | main_test: fixtures, assertions and production equivalence; TestExtractUpSQLStopsBeforeDownSection | No separate finding |
 
 ## cmd/provider-simulator
 

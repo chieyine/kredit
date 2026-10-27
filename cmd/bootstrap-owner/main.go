@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -30,7 +31,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: bootstrap-owner -identifier <email|phone> [-reason <reason>]\nOr set OWNER_BOOTSTRAP_IDENTIFIER env var.\n")
 		os.Exit(1)
 	}
-
 	databaseURL := os.Getenv("DATABASE_DIRECT_URL")
 	if databaseURL == "" {
 		databaseURL = os.Getenv("DATABASE_URL")
@@ -39,91 +39,73 @@ func main() {
 		fmt.Fprintf(os.Stderr, "DATABASE_DIRECT_URL or DATABASE_URL is required\n")
 		os.Exit(1)
 	}
+	// run owns the connection and transaction, so its deferred rollback and
+	// close happen before the process exits.
+	if err := run(databaseURL, identifier, reason); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
 
+func run(databaseURL, identifier, reason string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to connect to database: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	defer pool.Close()
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to start transaction: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	// One deployment bootstrap, including concurrent invocations. Recovery uses
 	// the existing authenticated account recovery flow, never a second bootstrap.
 	if _, err = tx.Exec(ctx, `LOCK TABLE app.platform_role_assignments IN SHARE ROW EXCLUSIVE MODE`); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 	var used bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app.platform_role_assignments WHERE role='platform_owner')`).Scan(&used); err != nil || used {
-		fmt.Fprintln(os.Stderr, "Owner bootstrap has already been used or could not be checked.")
-		os.Exit(1)
+		return errors.New("owner bootstrap has already been used or could not be checked")
 	}
 	normID := auth.NormalizeIdentifier(identifier)
 	userID, err := eligibleOwner(ctx, tx, normID)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Owner must first sign in and complete MFA within the last 10 minutes.")
-		os.Exit(1)
+		return errors.New("owner must first sign in and complete MFA within the last 10 minutes")
 	}
-	// Assign platform_owner role
-	_, err = tx.Exec(ctx, `
+	// The owner also holds platform_admin for the base administrative workflows.
+	for _, role := range []string{"platform_owner", "platform_admin"} {
+		if _, err = tx.Exec(ctx, `
 		INSERT INTO app.platform_role_assignments(user_id, role, granted_by, reason)
-		VALUES($1::uuid, 'platform_owner', $1::uuid, $2)
+		VALUES($1::uuid, $2, $1::uuid, $3)
 		ON CONFLICT(user_id, role) WHERE revoked_at IS NULL
 		DO UPDATE SET reason = EXCLUDED.reason
-	`, userID, reason)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to assign platform_owner role: %v\n", err)
-		os.Exit(1)
+	`, userID, role, reason); err != nil {
+			return fmt.Errorf("failed to assign %s role: %w", role, err)
+		}
 	}
-
-	// Also assign platform_admin role for base administrative workflows
-	_, err = tx.Exec(ctx, `
-		INSERT INTO app.platform_role_assignments(user_id, role, granted_by, reason)
-		VALUES($1::uuid, 'platform_admin', $1::uuid, $2)
-		ON CONFLICT(user_id, role) WHERE revoked_at IS NULL
-		DO UPDATE SET reason = EXCLUDED.reason
-	`, userID, reason)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to assign platform_admin role: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Ensure platform governance is set to solo_owner initially
-	_, err = tx.Exec(ctx, `
+	// Platform governance starts in solo_owner mode.
+	if _, err = tx.Exec(ctx, `
 		INSERT INTO app.platform_governance(id, mode, updated_by, reason)
 		VALUES('singleton', 'solo_owner', $1::uuid, 'Initial owner bootstrap')
 		ON CONFLICT (id) DO NOTHING
-	`, userID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to ensure platform governance: %v\n", err)
-		os.Exit(1)
+	`, userID); err != nil {
+		return fmt.Errorf("failed to ensure platform governance: %w", err)
 	}
-
-	// Record audit event
-	_, err = tx.Exec(ctx, `
+	if _, err = tx.Exec(ctx, `
 		INSERT INTO app.audit_events(actor_user_id, action, resource_type, resource_id, outcome, severity, metadata)
 		VALUES($1::uuid, 'platform_owner.bootstrapped', 'user', $1::uuid, 'success', 'high', jsonb_build_object('identifier', $2::text, 'reason', $3::text))
-	`, userID, normID, reason)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Owner audit could not be recorded: %v\n", err)
-		os.Exit(1)
+	`, userID, normID, reason); err != nil {
+		return fmt.Errorf("owner audit could not be recorded: %w", err)
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to commit owner bootstrap: %v\n", err)
-		os.Exit(1)
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit owner bootstrap: %w", err)
 	}
-
 	fmt.Printf("Successfully bootstrapped platform owner %s (%s) in solo_owner mode.\n", userID, normID)
+	return nil
 }
 
 func eligibleOwner(ctx context.Context, tx pgx.Tx, identifier string) (string, error) {

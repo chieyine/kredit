@@ -89,8 +89,10 @@ func runBackup(ctx context.Context, directory string, keepDays int) (err error) 
 	config, err := awsconfig.LoadDefaultConfig(uploadCtx,
 		awsconfig.WithHTTPClient(client), awsconfig.WithRegion(envDefault("OBJECT_STORAGE_REGION", "auto")),
 		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")))
+	// The SDK's errors carry the operation, status and request ID, never the
+	// credentials, so they are kept: without them a failed upload is undiagnosable.
 	if err != nil {
-		return errors.New("R2 configuration failed; local backup retained")
+		return fmt.Errorf("R2 configuration failed; local backup retained: %w", err)
 	}
 	store := s3.NewFromConfig(config, func(o *s3.Options) { o.BaseEndpoint = aws.String(endpoint); o.UsePathStyle = true })
 	key := "database-backups/" + name
@@ -99,13 +101,13 @@ func runBackup(ctx context.Context, directory string, keepDays int) (err error) 
 		ContentLength: aws.Int64(archive.size), ContentType: aws.String("application/gzip"), IfNoneMatch: aws.String("*"),
 		Metadata: map[string]string{"sha256": archive.checksum, "created-at": timestamp, "environment": "production"},
 	}); err != nil {
-		return errors.New("R2 archive replication failed; local backup retained and retention skipped")
+		return fmt.Errorf("R2 archive replication failed; local backup retained and retention skipped: %w", err)
 	}
 	if _, err = store.PutObject(uploadCtx, &s3.PutObjectInput{
 		Bucket: aws.String(bucket), Key: aws.String(key + ".sha256"), Body: strings.NewReader(archive.sidecar()),
 		ContentType: aws.String("text/plain"), IfNoneMatch: aws.String("*"),
 	}); err != nil {
-		return errors.New("R2 checksum replication failed; local backup retained and retention skipped")
+		return fmt.Errorf("R2 checksum replication failed; local backup retained and retention skipped: %w", err)
 	}
 	if err = pruneBackups(root, now.AddDate(0, 0, -keepDays)); err != nil {
 		return err
