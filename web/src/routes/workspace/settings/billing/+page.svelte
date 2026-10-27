@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorText } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
 	import { adminPost } from '$lib/admin-client';
 	import { loadOnboardingSettings, settingsProfile } from '$lib/api/onboarding-settings';
@@ -31,7 +32,7 @@
 			reference = typeof profile.billing_provider_reference === 'string' ? profile.billing_provider_reference : '';
 			cycle = typeof profile.billing_cycle === 'string' && profile.billing_cycle ? profile.billing_cycle : cycle;
 		} catch (cause) {
-			loadError = cause instanceof Error ? cause.message : 'We could not load these settings.';
+			loadError = errorText(cause, 'We could not load these settings.');
 		} finally {
 			loading = false;
 		}
@@ -49,7 +50,7 @@
 			profile = settingsProfile(result.profile);
 			message = 'Preference saved. Kredit will review the arrangement before it becomes active.';
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'We could not confirm this change.';
+			message = errorText(cause, 'We could not confirm this change.');
 		} finally {
 			busy = false;
 		}

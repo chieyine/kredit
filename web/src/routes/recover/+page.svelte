@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorText } from '$lib/api/reliable';
 	import { page } from '$app/state';
 	import { adminPost } from '$lib/admin-client';
 	let identifier = $state(''),
@@ -29,8 +30,7 @@
 			message = typeof data.message === 'string' ? data.message : 'Saved.';
 			return data;
 		} catch (cause) {
-			error =
-				cause instanceof Error ? cause.message : 'We could not confirm this step. Check your connection and try again.';
+			error = errorText(cause, 'We could not confirm this step. Check your connection and try again.');
 			return null;
 		} finally {
 			busy = '';

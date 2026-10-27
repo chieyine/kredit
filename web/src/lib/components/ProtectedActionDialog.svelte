@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorText } from '$lib/api/reliable';
 	import { tick } from 'svelte';
 	let {
 		open = $bindable(false),
@@ -56,7 +57,7 @@
 				if (!impact) error = 'The impact preview could not be loaded. Nothing was changed.';
 			} else if (await onconfirm(reason.trim())) open = false;
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'That did not go through. Please try again.';
+			error = errorText(cause, 'That did not go through. Please try again.');
 		} finally {
 			busy = false;
 		}

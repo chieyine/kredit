@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { adminGet } from '$lib/admin-client';
-	import { record, rows, text } from '$lib/api/reliable';
+	import { record, rows, text, errorText } from '$lib/api/reliable';
 	type AttentionItem = { label: string; count: number; href: string; action: string };
 	function attentionItem(value: unknown): AttentionItem {
 		const item = record(value);
@@ -23,7 +23,7 @@
 			if (!Array.isArray(b.items)) throw new Error('Attention list could not be verified.');
 			items = rows('items', attentionItem)(b);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Attention list unavailable';
+			error = errorText(e, 'Attention list unavailable');
 		}
 	}
 	onMount(load);

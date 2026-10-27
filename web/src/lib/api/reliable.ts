@@ -42,6 +42,18 @@ export function rows<T>(key: string, decode: Decoder<T>): Decoder<T[]> {
 		return list.map(decode);
 	};
 }
+/**
+ * The sentence to show for a caught error. Errors thrown by our own code carry
+ * text written for the person. Browser failures do not: a dropped connection,
+ * a timeout or a garbled response arrives as "Failed to fetch" or similar, so
+ * those show the caller's own sentence instead.
+ */
+export function errorText(cause: unknown, fallback: string): string {
+	if (!(cause instanceof Error)) return fallback;
+	if (cause instanceof TypeError || cause instanceof SyntaxError) return fallback;
+	if (cause.name === 'AbortError' || cause.name === 'TimeoutError') return fallback;
+	return cause.message || fallback;
+}
 export function publicError(error: unknown, subject = 'these details'): string {
 	if (error instanceof UserFacingError) return error.message;
 	if (error instanceof RequestError && ['idempotency_access_changed', 'idempotency_ambiguous'].includes(error.code))

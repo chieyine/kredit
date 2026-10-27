@@ -2,7 +2,7 @@
 	import { getContext } from 'svelte';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
 	import { MutationIntent } from '$lib/api/mutation';
-	import { checkedJSON, LatestRequest, publicError, record, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, publicError, record, text, errorText } from '$lib/api/reliable';
 	import { formatKobo, nairaInput, parseNaira, type KoboValue } from '$lib/money';
 	import { productLabel, reasonText } from '$lib/product-language';
 	import { timeLabel } from '$lib/records';
@@ -82,7 +82,7 @@
 			uploaded = doc;
 			documentID = doc.id;
 		} catch (cause) {
-			if (scope === endpoint) error = cause instanceof Error ? cause.message : 'The upload could not be confirmed.';
+			if (scope === endpoint) error = errorText(cause, 'The upload could not be confirmed.');
 		} finally {
 			if (scope === endpoint) busy = false;
 		}
@@ -141,8 +141,7 @@
 			notice = 'Information added.';
 			await load();
 		} catch (cause) {
-			if (scope === endpoint)
-				error = cause instanceof Error ? cause.message : 'We could not confirm that the information was added.';
+			if (scope === endpoint) error = errorText(cause, 'We could not confirm that the information was added.');
 		} finally {
 			if (scope === endpoint) busy = false;
 		}
@@ -171,8 +170,7 @@
 			notice = 'Decision saved.';
 			await load();
 		} catch (cause) {
-			if (scope === endpoint)
-				error = cause instanceof Error ? cause.message : 'We could not confirm that the decision was saved.';
+			if (scope === endpoint) error = errorText(cause, 'We could not confirm that the decision was saved.');
 		} finally {
 			if (scope === endpoint) busy = false;
 		}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import { onMount } from 'svelte';
-	import { checkedJSON, LatestRequest, publicError, record, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, publicError, record, text, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { kobo } from '$lib/records';
 	import Money from '$lib/components/Money.svelte';
@@ -118,7 +118,7 @@
 			notice = 'Your correction request has been saved for review.';
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not confirm your correction request.';
+			error = errorText(cause, 'We could not confirm your correction request.');
 		} finally {
 			busy = false;
 		}

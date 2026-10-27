@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { record } from '$lib/api/reliable';
+	import { record, errorText } from '$lib/api/reliable';
 	import { articles, articleCategories } from '$lib/blog/articles';
 	import { onMount } from 'svelte';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
@@ -77,7 +77,7 @@
 				if (!signal.aborted) historyError = 'Saved history could not be opened. Reload to try again.';
 			}
 		} catch (e) {
-			if (!signal.aborted) error = e instanceof Error ? e.message : 'The editor could not be opened.';
+			if (!signal.aborted) error = errorText(e, 'The editor could not be opened.');
 		} finally {
 			if (!signal.aborted) loading = false;
 		}
@@ -104,7 +104,7 @@
 					? 'Published. The public page now uses this copy.'
 					: 'Draft saved. Preview it before publishing.';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'The result could not be confirmed. Reload to check the saved version.';
+			error = errorText(e, 'The result could not be confirmed. Reload to check the saved version.');
 		} finally {
 			busy = false;
 		}

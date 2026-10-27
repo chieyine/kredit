@@ -2,7 +2,7 @@
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { onMount } from 'svelte';
-	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, publicError, record, rows, text, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { kobo } from '$lib/records';
 	import { localTime } from '$lib/admin-client';
@@ -118,7 +118,7 @@
 					: 'Your rejection was confirmed. The old payment days still stand.';
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not confirm your decision.';
+			error = errorText(cause, 'We could not confirm your decision.');
 		} finally {
 			busy = false;
 		}

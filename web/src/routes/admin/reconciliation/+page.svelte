@@ -2,7 +2,7 @@
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { onMount } from 'svelte';
 	import { localTime } from '$lib/admin-client';
-	import { checkedJSON, record, rows, text, publicError, LatestRequest } from '$lib/api/reliable';
+	import { checkedJSON, record, rows, text, publicError, LatestRequest, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	type Review = {
 		id: string;
@@ -109,7 +109,7 @@
 			});
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'The review could not be updated.';
+			error = errorText(cause, 'The review could not be updated.');
 		} finally {
 			busy = '';
 		}

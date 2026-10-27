@@ -138,7 +138,7 @@
 			records = value.map(decodeRow);
 		} catch (cause) {
 			if (version === requestVersion && !signal.aborted) {
-				error = publicError(cause, title.toLowerCase());
+				error = publicError(cause, title.charAt(0).toLowerCase() + title.slice(1));
 			}
 		} finally {
 			if (version === requestVersion) loading = false;

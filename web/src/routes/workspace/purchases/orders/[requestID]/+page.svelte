@@ -14,7 +14,8 @@
 		rows,
 		text,
 		type Decoder,
-		type Resource
+		type Resource,
+		errorText
 	} from '$lib/api/reliable';
 	import { MutationError, MutationIntent } from '$lib/api/mutation';
 	import { saleView, paymentRow, kobo, dateLabel, timeLabel, type PaymentRow, type SaleView } from '$lib/records';
@@ -184,7 +185,7 @@
 			await load();
 		} catch (cause) {
 			if (requestID !== scope) return;
-			actionError = cause instanceof Error ? cause.message : 'We could not confirm this request.';
+			actionError = errorText(cause, 'We could not confirm this request.');
 			if (cause instanceof MutationError && cause.outcome === 'unknown') uncertain = action;
 		} finally {
 			busy = '';

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorText } from '$lib/api/reliable';
 	import { dispute, type Dispute } from '$lib/disputes';
 	import { onMount } from 'svelte';
 	import { adminGet, localTime } from '$lib/admin-client';
@@ -24,7 +25,7 @@
 				return item;
 			});
 		} catch (e) {
-			if (current === generation) error = e instanceof Error ? e.message : 'Disputes could not be loaded.';
+			if (current === generation) error = errorText(e, 'Disputes could not be loaded.');
 		} finally {
 			if (current === generation) loading = false;
 		}

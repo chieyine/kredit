@@ -5,7 +5,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { formatKobo, parseNaira, type KoboValue } from '$lib/money';
-	import { checkedJSON, LatestRequest, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, record, rows, text, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { kobo } from '$lib/records';
 
@@ -133,7 +133,7 @@
 			creditNotes = res.credit_notes;
 			loaded = true;
 		} catch (cause) {
-			if (req.current()) error = cause instanceof Error ? cause.message : 'Deliveries could not be loaded.';
+			if (req.current()) error = errorText(cause, 'Deliveries could not be loaded.');
 		} finally {
 			if (req.current()) loading = false;
 		}
@@ -166,7 +166,7 @@
 			dispatchQuantities = {};
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Shipment could not be dispatched.';
+			error = errorText(cause, 'Shipment could not be dispatched.');
 		} finally {
 			busy = false;
 		}
@@ -198,7 +198,7 @@
 			creditReason = '';
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Credit note could not be created.';
+			error = errorText(cause, 'Credit note could not be created.');
 		} finally {
 			busy = false;
 		}
@@ -226,7 +226,7 @@
 			message = `Adjustment applied. The recorded credit is ${formatKobo(note.amount_kobo)}.`;
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'The adjustment could not be applied.';
+			error = errorText(cause, 'The adjustment could not be applied.');
 		} finally {
 			busy = false;
 		}

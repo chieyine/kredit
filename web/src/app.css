@@ -64,6 +64,8 @@
 	--color-primary: #be4227;
 	--color-primary-hover: #a5371e;
 	--color-on-primary: #ffffff;
+	/* Quieter text on the accent. Mixed from on-primary so it keeps 4.5:1 in both themes. */
+	--color-on-primary-muted: color-mix(in srgb, var(--color-on-primary) 92%, var(--color-primary));
 
 	/* One accent, and it is the seal. 4.8:1 on paper, 5.5:1 on ink — it is also
 	   the focus ring, so it has to stay legible on every ground in the file. */

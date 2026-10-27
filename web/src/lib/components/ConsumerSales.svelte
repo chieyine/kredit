@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { read, readAllPurchases, purchase, Mutation, money, label, type Purchase } from '$lib/consumer';
-	import { record } from '$lib/api/reliable';
+	import { record, errorText } from '$lib/api/reliable';
 	import { organization, type Organization } from '$lib/records';
 	let { mode = 'buyer' }: { mode?: 'buyer' | 'seller' | 'admin' } = $props();
 	let items = $state<Purchase[]>([]),
@@ -60,7 +60,7 @@
 			cursor = typeof data.next_cursor === 'string' ? data.next_cursor : '';
 			loaded = true;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not load purchases.';
+			error = errorText(e, 'Could not load purchases.');
 		} finally {
 			busy = false;
 		}
@@ -74,7 +74,7 @@
 			items = [...items, ...data.items.map(purchase)];
 			cursor = typeof data.next_cursor === 'string' ? data.next_cursor : '';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not load more purchases.';
+			error = errorText(e, 'Could not load more purchases.');
 		} finally {
 			busy = false;
 		}
@@ -87,7 +87,7 @@
 			message = 'Settings confirmed.';
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not confirm previous action.';
+			error = errorText(e, 'Could not confirm previous action.');
 		} finally {
 			busy = false;
 		}
@@ -102,7 +102,7 @@
 			}
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not load businesses.';
+			error = errorText(e, 'Could not load businesses.');
 		}
 	}
 	async function connectBank() {
@@ -121,7 +121,7 @@
 			message = 'Receiving account matched. Consumer sales are available when your business checks are complete.';
 			number = '';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not confirm the receiving account.';
+			error = errorText(e, 'Could not confirm the receiving account.');
 		} finally {
 			busy = false;
 		}
@@ -142,7 +142,7 @@
 			);
 			message = 'Restriction updated. Eligible retailers can use consumer sales automatically.';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Settings were not saved.';
+			error = errorText(e, 'Settings were not saved.');
 		} finally {
 			busy = false;
 		}
@@ -155,7 +155,7 @@
 			enabled = s.enabled === true;
 			evidence = String(s.review_evidence ?? '');
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Settings unavailable.';
+			error = errorText(e, 'Settings unavailable.');
 		} finally {
 			busy = false;
 		}

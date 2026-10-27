@@ -426,7 +426,7 @@
 	}
 	.activation p:last-child {
 		max-width: 45rem;
-		color: var(--color-surface-muted);
+		color: var(--color-on-primary-muted);
 		line-height: 1.6;
 	}
 	.activation > div:last-child {
@@ -443,7 +443,7 @@
 		text-decoration: none;
 	}
 	.activation small {
-		color: var(--color-surface-muted);
+		color: var(--color-on-primary-muted);
 		line-height: 1.45;
 	}
 	.readiness {
