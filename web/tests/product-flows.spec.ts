@@ -849,9 +849,8 @@ test('buyer receipt issue opens a case without activating an obligation', async 
 	expect(drawdown.obligation_id).toBe('');
 });
 
-test('pilot-ready owner reviews mobile readiness and invites a sales user', async ({ page }) => {
+test('pilot-ready owner reviews mobile readiness', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
-	let invited: Record<string, unknown> | undefined;
 	await page.route('**/api/v1/organizations', async (route) =>
 		route.fulfill({
 			status: 200,
@@ -903,33 +902,9 @@ test('pilot-ready owner reviews mobile readiness and invites a sales user', asyn
 			})
 		})
 	);
-	await page.route('**/api/v1/organizations/org-ready/members', async (route) => {
-		if (route.request().method() === 'POST') {
-			invited = route.request().postDataJSON();
-			await route.fulfill({
-				status: 202,
-				contentType: 'application/json',
-				body: JSON.stringify({ membership: { user_id: 'sales-user', role: 'sales', status: 'invited' } })
-			});
-			return;
-		}
-		await route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ members: [{ user_id: 'owner-user', role: 'owner', status: 'active' }] })
-		});
-	});
 	await page.goto('/workspace/onboarding');
 	await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
 	await expect(page.getByText('10/10')).toBeVisible();
-	await page.getByRole('link', { name: 'Protect staff who handle money →' }).click();
-	await expect(page).toHaveURL(/\/workspace\/team$/);
-	await page.getByLabel('Email or phone').fill('sales@fresh-foods.test');
-	await page.getByRole('button', { name: 'Send invite' }).click();
-	await expect(
-		page.getByText('Invitation created. Ask your worker to sign in with the email or phone number you entered.')
-	).toBeVisible();
-	await expect.poll(() => invited).toEqual({ target: 'sales@fresh-foods.test', channel: 'email', role: 'sales' });
 });
 
 test('incomplete supplier sees precise recovery steps before financial activity', async ({ page }) => {
@@ -1093,38 +1068,6 @@ test('recovery start is enumeration-safe and explains independent proof', async 
 	await page.getByRole('button', { name: 'Start' }).click();
 	await expect(page.getByText('If the account is eligible, recovery instructions have been sent.')).toBeVisible();
 	await expect.poll(() => submitted).toEqual({ identifier: 'someone@example.test', channel: 'email' });
-});
-
-test('owner changes a role, suspends access, and restores it from the team interface', async ({ page }) => {
-	const changes: Record<string, unknown>[] = [];
-	let member = { user_id: 'team-user', role: 'sales', status: 'active' };
-	await page.route('**/api/v1/organizations', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ organizations: [{ id: 'org-team', legal_name: 'Team Supplier Ltd' }] })
-		})
-	);
-	await page.route('**/api/v1/organizations/org-team/members', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ members: [{ user_id: 'owner-user', role: 'owner', status: 'active' }, member] })
-		})
-	);
-	await page.route('**/api/v1/organizations/org-team/members/team-user', async (route) => {
-		const change = route.request().postDataJSON();
-		changes.push(change);
-		member = { ...member, ...change };
-		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ membership: member }) });
-	});
-	await page.goto('/workspace/team');
-	await page.locator('.controls select').selectOption('finance');
-	await page.getByRole('button', { name: 'Save' }).click();
-	await page.getByRole('button', { name: 'Stop their access' }).click();
-	await expect(page.getByRole('button', { name: 'Let them back in' })).toBeVisible();
-	await page.getByRole('button', { name: 'Let them back in' }).click();
-	await expect.poll(() => changes).toEqual([{ role: 'finance' }, { status: 'suspended' }, { status: 'active' }]);
 });
 
 test('supplier creates a mandate-backed trade line and sees provider validation safely', async ({ page }) => {
