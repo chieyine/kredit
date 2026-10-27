@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"kredit/internal/access"
 	"kredit/internal/whatsapp"
 	"net/http"
@@ -26,11 +27,26 @@ func (s *Server) whatsappWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	command, err := s.runtime.WhatsApp.Handle(r.Context(), event)
-	if err != nil {
-		writeProblem(w, 401, "whatsapp_webhook_rejected", err.Error())
+	var syntaxErr *whatsapp.CommandSyntaxError
+	switch {
+	case err == nil:
+	case errors.Is(err, whatsapp.ErrInvalidEvent):
+		writeProblem(w, http.StatusUnauthorized, "whatsapp_webhook_rejected", "The webhook signature is not valid.")
+		return
+	case errors.Is(err, whatsapp.ErrEventConflict):
+		writeProblem(w, http.StatusConflict, "whatsapp_event_conflict", "This event identifier was already used for a different message.")
+		return
+	case errors.As(err, &syntaxErr):
+		// The message is authentic and recorded. Acknowledge it so the
+		// provider does not retry text the parser cannot read.
+		writeJSON(w, http.StatusOK, map[string]any{"command": command, "understood": false})
+		return
+	default:
+		s.logger.Error("whatsapp webhook failed", "error", err)
+		writeProblem(w, http.StatusServiceUnavailable, "whatsapp_webhook_unavailable", "The message could not be recorded. Please retry.")
 		return
 	}
-	response := map[string]any{"command": command}
+	response := map[string]any{"command": command, "understood": true}
 	if command.RequiresConfirmation {
 		response["confirmation_summary"] = whatsapp.ConfirmationSummary(command)
 		response["secure_action_required"] = true
