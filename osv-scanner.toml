@@ -16,3 +16,12 @@ reason = "Not reachable: no use:enhance forms and no catch-all routes. Fixed onl
 id = "GHSA-27mw-82g8-phjj"
 ignoreUntil = 2027-01-31
 reason = "Not reachable: no prerendered pages and cache-control is always a fixed literal. Fixed only in SvelteKit 3."
+
+# deepmerge prototype poisoning. No fixed release exists. It is used only at
+# build time, by Rollup's node resolver and the Svelte Vite plugin, to merge
+# configuration this repository writes; no request data reaches it and it is
+# not part of the built server.
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-01-31
+reason = "Build-time only: merges our own Rollup and Svelte configuration, never request data. No fixed release exists."
