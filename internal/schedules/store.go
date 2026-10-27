@@ -283,48 +283,6 @@ func (s *Store) GetForObligationAt(obligationID string, now time.Time) (Schedule
 	return schedule, items, nil
 }
 
-func (s *Store) DeleteIfEmpty(obligationID string) error {
-	if s.pool != nil {
-		ctx := s.ctx
-		tx, err := s.pool.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
-		var scheduleID string
-		if err := tx.QueryRow(ctx, `SELECT id::text FROM app.repayment_schedules WHERE obligation_id = $1::uuid FOR UPDATE`, obligationID).Scan(&scheduleID); errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		} else if err != nil {
-			return err
-		}
-		var allocated int64
-		if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(allocated_kobo),0) FROM app.schedule_items WHERE schedule_id = $1::uuid`, scheduleID).Scan(&allocated); err != nil {
-			return err
-		}
-		if allocated > 0 {
-			return errors.New("schedule has allocated payments")
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM app.repayment_schedules WHERE id = $1::uuid`, scheduleID); err != nil {
-			return err
-		}
-		return tx.Commit(ctx)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	id := s.byObligation[obligationID]
-	if id == "" {
-		return nil
-	}
-	for _, item := range s.items[id] {
-		if item.AllocatedKobo > 0 {
-			return errors.New("schedule has allocated payments")
-		}
-	}
-	delete(s.items, id)
-	delete(s.schedules, id)
-	delete(s.byObligation, obligationID)
-	return nil
-}
 func (s *Store) ListForObligation(obligationID string) []Item {
 	_, items, err := s.GetForObligation(obligationID)
 	if err != nil {

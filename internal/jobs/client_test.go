@@ -15,8 +15,8 @@ func TestMaintenanceOperationsIncludeScheduleEvaluation(t *testing.T) {
 }
 
 func TestJobClassesUseDedicatedQueuesAndRetryBudgets(t *testing.T) {
-	if got := (FinancialArgs{}).InsertOpts().Queue; got != QueueFinancial {
-		t.Fatalf("financial queue = %q", got)
+	if got := (ReconciliationArgs{}).InsertOpts().Queue; got != QueueReconciliation {
+		t.Fatalf("reconciliation queue = %q", got)
 	}
 	if got := (ProviderWebhookArgs{}).InsertOpts().MaxAttempts; got != 10 {
 		t.Fatalf("provider max attempts = %d", got)

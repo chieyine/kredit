@@ -1,7 +1,5 @@
 package access
 
-import "errors"
-
 type Role string
 
 const RoleOwner Role = "owner"
@@ -64,14 +62,6 @@ const (
 	PermissionPlatformOwner      Permission = "platform_owner:manage"
 	PermissionPlatformSettings   Permission = "platform_settings:manage"
 )
-
-func ParseRole(value string) (Role, error) {
-	role := Role(value)
-	if !role.Valid() {
-		return "", errors.New("invalid organisation role")
-	}
-	return role, nil
-}
 
 func CanPlatform(role PlatformRole, permission Permission) bool {
 	if !role.Valid() {

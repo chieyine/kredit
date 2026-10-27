@@ -66,8 +66,8 @@ test('operator previews and safely retries one failed job', async ({ page }) => 
 				jobs: [
 					{
 						id: 41,
-						kind: 'kredit.financial',
-						queue: 'critical-financial',
+						kind: 'kredit.collection',
+						queue: 'collections',
 						state: 'retryable',
 						attempt: 2,
 						max_attempts: 12

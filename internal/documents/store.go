@@ -286,15 +286,10 @@ func (s *Store) completeScan(ctx context.Context, doc Document, state ScanState)
 	return current, nil
 }
 
-// CompleteUpload verifies that a direct-to-object-storage upload exists and
-// matches the declared size before it can enter the scanner queue. It never
+// CompleteUploadForTenant verifies that a direct-to-object-storage upload
+// exists and matches the declared size before it can enter the scanner queue,
+// under the request-local identity consumed by document RLS policies. It never
 // marks a document clean; only a scanner result may do that.
-func (s *Store) CompleteUpload(ctx context.Context, id string) (Document, error) {
-	return s.completeUpload(ctx, id, "", "")
-}
-
-// CompleteUploadForTenant performs the same transition while establishing the
-// request-local identity consumed by document RLS policies.
 func (s *Store) CompleteUploadForTenant(ctx context.Context, id, actorID, organizationID string) (Document, error) {
 	return s.completeUpload(ctx, id, actorID, organizationID)
 }
@@ -395,10 +390,6 @@ func (s *Store) completeUpload(ctx context.Context, id, actorID, organizationID 
 
 func (s *Store) Get(id string) (Document, bool) {
 	return s.getContext(context.Background(), id, "", "")
-}
-
-func (s *Store) GetForTenant(ctx context.Context, id, actorID, organizationID string) (Document, bool) {
-	return s.getContext(ctx, id, actorID, organizationID)
 }
 
 func (s *Store) getContext(ctx context.Context, id, actorID, organizationID string) (Document, bool) {

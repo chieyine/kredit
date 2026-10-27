@@ -239,16 +239,6 @@ func (p *SendlyProvider) request(req *http.Request, result any) error {
 	return nil
 }
 
-func NewDeliveryProvider(channel, endpoint, token, from string) (Provider, error) {
-	if channel == ChannelEmail {
-		return NewSendlyProvider(endpoint, token, from)
-	}
-	if channel == ChannelSMS {
-		return NewMesajProvider(endpoint, token, from)
-	}
-	return NewWebhookProvider(channel, endpoint, token)
-}
-
 func deliveryFailureState(err error) string {
 	if errors.Is(err, ErrRecipientSuppressed) {
 		return StateSuppressed

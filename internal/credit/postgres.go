@@ -39,7 +39,6 @@ type PostgresStore struct {
 	// projectionMu guards the cache bookkeeping only. It is never held while
 	// s.mu is taken, so the two locks cannot deadlock against each other.
 	projectionMu sync.Mutex
-	pinned       map[string]int
 	loadedAt     map[string]time.Time
 
 	// deemedAcceptanceNotice is how long a delivered goods-release notice must
@@ -60,7 +59,7 @@ func NewPostgresStore(pool *pgxpool.Pool, development *Store) *PostgresStore {
 	if development == nil {
 		development = NewStore(nil, ledger.NewStore())
 	}
-	store := &PostgresStore{Store: development, pool: pool, pinned: map[string]int{}, loadedAt: map[string]time.Time{}, deemedAcceptanceNotice: deemedAcceptanceWindow}
+	store := &PostgresStore{Store: development, pool: pool, loadedAt: map[string]time.Time{}, deemedAcceptanceNotice: deemedAcceptanceWindow}
 	store.purchasePermission = store.checkPurchasePermission
 	store.purchaseActions = store.readPurchaseActions
 	store.SetDeemedAcceptanceGate(store.assertDeemedAcceptanceEvidence)
@@ -140,36 +139,8 @@ SELECT
 	return nil
 }
 
-// pin marks an aggregate as being mutated. A pinned aggregate is never
-// refreshed from PostgreSQL or evicted, so a concurrent read cannot replace the
-// in-memory graph underneath an in-flight command.
-func (s *PostgresStore) pin(requestID string) {
-	s.projectionMu.Lock()
-	defer s.projectionMu.Unlock()
-	if s.pinned == nil {
-		s.pinned = map[string]int{}
-	}
-	s.pinned[requestID]++
-}
-
-func (s *PostgresStore) unpin(requestID string) {
-	s.projectionMu.Lock()
-	defer s.projectionMu.Unlock()
-	if s.pinned[requestID] <= 1 {
-		delete(s.pinned, requestID)
-		return
-	}
-	s.pinned[requestID]--
-}
-
-func (s *PostgresStore) isPinned(requestID string) bool {
-	s.projectionMu.Lock()
-	defer s.projectionMu.Unlock()
-	return s.pinned[requestID] > 0
-}
-
 // markLoaded records that an aggregate is resident and evicts the coldest
-// unpinned entries once the projection is over its bound.
+// entries once the projection is over its bound.
 func (s *PostgresStore) markLoaded(requestIDs ...string) {
 	if len(requestIDs) == 0 {
 		return
@@ -192,7 +163,7 @@ func (s *PostgresStore) markLoaded(requestIDs ...string) {
 		}
 		ordered := make([]candidate, 0, len(s.loadedAt))
 		for id, at := range s.loadedAt {
-			if keep[id] || s.pinned[id] > 0 {
+			if keep[id] {
 				continue
 			}
 			ordered = append(ordered, candidate{id: id, at: at})
@@ -215,16 +186,6 @@ func (s *PostgresStore) markLoaded(requestIDs ...string) {
 	for _, id := range victims {
 		s.discard(id)
 	}
-}
-
-// releaseListing unpins a batch loaded for one listing and makes it evictable.
-// Entries stay pinned while the listing is being read so eviction cannot remove
-// rows the caller is about to return.
-func (s *PostgresStore) releaseListing(requestIDs []string) {
-	for _, id := range requestIDs {
-		s.unpin(id)
-	}
-	s.markLoaded(requestIDs...)
 }
 
 func (s *PostgresStore) forgetProjection(requestID string) {

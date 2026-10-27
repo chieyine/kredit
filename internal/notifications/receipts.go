@@ -77,11 +77,6 @@ func (s *Store) RecordDeliveryReceipt(ctx context.Context, channel string, recei
 	return tx.Commit(ctx)
 }
 
-// ReconcileEmailDelivery is retained for callers that only need email lookup.
-func (s *Store) ReconcileEmailDelivery(ctx context.Context, limit int) error {
-	return s.ReconcileDelivery(ctx, ChannelEmail, limit)
-}
-
 // ReconcileDelivery reads authenticated provider records. A callback alone never
 // starts a waiting period, and a missed callback cannot strand a sent notice.
 func (s *Store) ReconcileDelivery(ctx context.Context, channel string, limit int) error {

@@ -12,21 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *PostgresStore) hydrate(requestID string) error {
-	s.mu.RLock()
-	_, exists := s.requests[requestID]
-	s.mu.RUnlock()
-	if exists {
-		return nil
-	}
-	return errors.New("credit tenant context is required before loading an aggregate")
-}
-
 // hydrateForTenant reloads the committed aggregate on every read. Returning a
 // projection this process loaded earlier would serve a supplier or buyer a
-// balance the worker has already changed, and PostgreSQL is authoritative. An
-// aggregate with an in-flight mutation is left alone: replacing it mid-command
-// would discard the mutation.
+// balance the worker has already changed, and PostgreSQL is authoritative.
+// installView never replaces a resident aggregate with an older version.
 func (s *PostgresStore) hydrateForTenant(requestID, userID, organizationID string) error {
 	view, err := s.loadViewForTenant(requestID, userID, organizationID)
 	if err != nil {
@@ -119,58 +108,6 @@ func (s *PostgresStore) hydrateByObligationForTenant(obligationID, userID, organ
 	s.installView(view)
 	s.markLoaded(view.Request.ID)
 	return nil
-}
-
-// hydrateList loads a tenant's aggregates and returns their identifiers pinned.
-// The caller must pass them to releaseListing once it has read the projection;
-// leaving them unpinned would let eviction remove rows mid-listing and return a
-// short list.
-func (s *PostgresStore) hydrateList(field, value string) (loaded []string, retErr error) {
-	loaded = []string{}
-	// The caller can release the batch only after a successful return. Undo
-	// every pin here if a later row, scan, or commit fails.
-	defer func() {
-		if retErr != nil {
-			s.releaseListing(loaded)
-		}
-	}()
-	tx, err := s.pool.Begin(context.Background())
-	if err != nil {
-		return loaded, err
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	setting := "app.current_organization_id"
-	if field == "buyer_user_id" {
-		setting = "app.current_user_id"
-	}
-	if _, err := tx.Exec(context.Background(), `SELECT set_config($1, $2, true)`, setting, value); err != nil {
-		return loaded, err
-	}
-	rows, err := tx.Query(context.Background(), fmt.Sprintf(`SELECT aggregate FROM app.credit_aggregate_snapshots WHERE %s = $1 ORDER BY updated_at DESC`, field), value)
-	if err != nil {
-		return loaded, err
-	}
-	for rows.Next() {
-		var payload []byte
-		if err := rows.Scan(&payload); err != nil {
-			rows.Close()
-			return loaded, err
-		}
-		var view View
-		if err := json.Unmarshal(payload, &view); err != nil {
-			rows.Close()
-			return loaded, err
-		}
-		s.pin(view.Request.ID)
-		s.installView(view)
-		loaded = append(loaded, view.Request.ID)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return loaded, err
-	}
-	rows.Close()
-	return loaded, tx.Commit(context.Background())
 }
 
 func (s *PostgresStore) installView(view View) {
