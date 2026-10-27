@@ -70,6 +70,14 @@ async function signedIn(page: Page, context: BrowserContext, baseURL?: string) {
 	});
 }
 
+// A due date the form will accept whenever the suite runs, and the collection
+// time the server would derive from it (the next day, 23:59 in Lagos).
+function futureDue(days = 60) {
+	const due = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+	const next = new Date(Date.parse(due) + 86_400_000).toISOString().slice(0, 10);
+	return { due, collectionAt: `${next}T22:59:00Z` };
+}
+
 test('unavailable balance, payments and disputes never produce an all-clear', async ({ page, context, baseURL }) => {
 	await signedIn(page, context, baseURL);
 	for (const suffix of ['reports/receivables', 'payments', 'disputes'])
@@ -219,12 +227,13 @@ test('giving credit uses the server timing preview and exact kobo, then opens th
 	context,
 	baseURL
 }) => {
+	const { due, collectionAt } = futureDue();
 	await signedIn(page, context, baseURL);
 	await page.route('**/organizations/org-a/credit-terms/preview', (route) =>
 		send(route, {
-			due_date: '2026-12-18',
+			due_date: due,
 			grace_hours: 24,
-			collection_at: '2026-12-19T22:59:00Z',
+			collection_at: collectionAt,
 			timezone: 'Africa/Lagos',
 			cutoff: '23:59',
 			timing_mode: 'lagos_end_of_day'
@@ -242,7 +251,7 @@ test('giving credit uses the server timing preview and exact kobo, then opens th
 						state: 'DRAFT',
 						buyer_legal_name: 'Kano Retail',
 						principal_kobo: 12750049,
-						due_date: '2026-12-18'
+						due_date: due
 					}
 				},
 				201
@@ -255,7 +264,7 @@ test('giving credit uses the server timing preview and exact kobo, then opens th
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
 	await page.getByLabel('What goods?').fill('40 cartons of cooking oil');
 	await page.getByLabel('How much? (₦)').fill('127,500.49');
-	await page.getByLabel('Pay by').fill('2026-12-18');
+	await page.getByLabel('Pay by').fill(due);
 	await expect(page.locator('.summary')).toContainText('₦127,500.49');
 	// The first step saves a draft. The seller sends it from the sale page after
 	// seeing the exact fees and terms.
@@ -263,7 +272,7 @@ test('giving credit uses the server timing preview and exact kobo, then opens th
 	await expect.poll(() => body).toBeTruthy();
 	expect(body).toMatchObject({
 		principal_kobo: 12750049,
-		collection_at: '2026-12-19T22:59:00Z',
+		collection_at: collectionAt,
 		timing_mode: 'lagos_end_of_day',
 		schedule_count: 1
 	});
@@ -372,6 +381,7 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 	context,
 	baseURL
 }) => {
+	const { due, collectionAt } = futureDue();
 	await signedIn(page, context, baseURL);
 	await page.route('**/api/v1/organizations/org-a/customers', (route) =>
 		send(route, {
@@ -395,9 +405,9 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 	);
 	await page.route('**/api/v1/organizations/org-a/credit-terms/preview', (route) =>
 		send(route, {
-			due_date: '2026-09-18',
+			due_date: due,
 			grace_hours: 24,
-			collection_at: '2026-09-19T22:59:00Z',
+			collection_at: collectionAt,
 			timezone: 'Africa/Lagos',
 			cutoff: '23:59',
 			timing_mode: 'lagos_end_of_day'
@@ -415,7 +425,7 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 						state: 'DRAFT',
 						buyer_legal_name: 'Second shop',
 						principal_kobo: 12750049,
-						due_date: '2026-09-18'
+						due_date: due
 					}
 				},
 				201
@@ -429,7 +439,7 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-2');
 	await page.getByLabel('What goods?').fill('40 cartons of cooking oil');
 	await page.getByLabel('How much? (₦)').fill('127,500.49');
-	await page.getByLabel('Pay by').fill('2026-09-18');
+	await page.getByLabel('Pay by').fill(due);
 	await expect(page.locator('.summary')).toContainText('Second shop');
 	await expect(page.locator('.summary')).toContainText('₦127,500.49');
 	expect(saved).toHaveLength(0);
@@ -439,7 +449,7 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 		buyer_user_id: 'buyer-1',
 		buyer_business_id: 'business-2',
 		principal_kobo: 12750049,
-		collection_at: '2026-09-19T22:59:00Z',
+		collection_at: collectionAt,
 		timing_mode: 'lagos_end_of_day'
 	});
 });

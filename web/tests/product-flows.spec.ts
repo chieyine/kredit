@@ -55,6 +55,14 @@ async function mockOperationsCommand(page: import('@playwright/test').Page, appl
 	});
 }
 
+// A due date the form will accept whenever the suite runs, and the collection
+// time the server would derive from it (the next day, 23:59 in Lagos).
+function futureDue(days = 60) {
+	const due = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+	const next = new Date(Date.parse(due) + 86_400_000).toISOString().slice(0, 10);
+	return { due, collectionAt: `${next}T22:59:00Z` };
+}
+
 test('operator previews and safely retries one failed job', async ({ page }) => {
 	const applied: Record<string, unknown>[] = [];
 	await mockOperationsCommand(page, applied);
@@ -170,6 +178,7 @@ test('operator places an expiring scoped buyer risk hold', async ({ page }) => {
 });
 
 test('supplier can create exact credit terms with a replay-safe request', async ({ page }) => {
+	const { due, collectionAt } = futureDue();
 	let submitted: Record<string, unknown> | undefined;
 	let idempotency = '';
 	await page.route('**/api/v1/organizations', async (route) =>
@@ -213,7 +222,7 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 					state: 'DRAFT',
 					buyer_legal_name: 'Kano Retail Limited',
 					principal_kobo: 120000000,
-					due_date: '2026-09-30'
+					due_date: due
 				}
 			})
 		});
@@ -224,9 +233,9 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 	await page.route('**/api/v1/organizations/org-1/credit-terms/preview', (route) =>
 		route.fulfill({
 			json: {
-				due_date: '2026-09-30',
+				due_date: due,
 				grace_hours: 24,
-				collection_at: '2026-10-02T08:00:00Z',
+				collection_at: collectionAt,
 				timezone: 'Africa/Lagos',
 				cutoff: '23:59',
 				timing_mode: 'lagos_explicit'
@@ -238,7 +247,7 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
 	await page.getByLabel('What goods?').fill('Twenty cartons of verified inventory');
 	await page.getByLabel('How much? (₦)').fill('1,200,000');
-	await page.getByLabel('Pay by').fill('2026-09-30');
+	await page.getByLabel('Pay by').fill(due);
 	expect(submitted).toBeUndefined();
 	await page.getByRole('button', { name: 'Review credit sale', exact: true }).click();
 	await expect(page).toHaveURL(/\/workspace\/sales\/request-1\?organization=org-1/);
