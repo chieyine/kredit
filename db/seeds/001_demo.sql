@@ -7,8 +7,6 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
 INSERT INTO app.users (id, normalized_email, normalized_phone, display_name, status)
 VALUES
     ('00000000-0000-7000-8000-000000000001', 'owner@abc-pharmaceuticals.test', '+2348000000001', 'ABC Supplier Owner', 'active'),
-    ('00000000-0000-7000-8000-000000000002', 'finance@abc-pharmaceuticals.test', '+2348000000002', 'ABC Finance Officer', 'active'),
-    ('00000000-0000-7000-8000-000000000003', 'sales@abc-pharmaceuticals.test', '+2348000000003', 'ABC Sales Representative', 'active'),
     ('00000000-0000-7000-8000-000000000004', 'buyer@royal-pharmacy.test', '+2348000000004', 'Royal Pharmacy Representative', 'active')
 ON CONFLICT (id) DO NOTHING;
 
@@ -18,8 +16,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO app.mfa_methods (id, user_id, method_type, credential_reference, verified_at)
 VALUES
-    ('00000000-0000-7000-8000-000000000014', '00000000-0000-7000-8000-000000000001', 'passkey', 'development-owner-mfa', NOW()),
-    ('00000000-0000-7000-8000-000000000015', '00000000-0000-7000-8000-000000000002', 'passkey', 'development-finance-mfa', NOW())
+    ('00000000-0000-7000-8000-000000000014', '00000000-0000-7000-8000-000000000001', 'passkey', 'development-owner-mfa', NOW())
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO app.supplier_onboarding_profiles (
@@ -31,7 +28,7 @@ INSERT INTO app.supplier_onboarding_profiles (
     billing_provider_reference, billing_cycle, billing_changed_at, default_credit_limit_kobo,
     default_payment_days, default_grace_hours, default_credit_policy_updated_at, terms_version,
     terms_accepted_at, terms_accepted_by, privacy_version, privacy_accepted_at,
-    privacy_accepted_by, owner_mfa_verified_at, finance_mfa_complete, readiness_state,
+    privacy_accepted_by, owner_mfa_verified_at, readiness_state,
     readiness_changed_at
 )
 VALUES (
@@ -41,7 +38,7 @@ VALUES (
     'ABC Pharmaceuticals Ltd', '0001', NOW(), 'configured', 'split_settlement',
     'demo-billing-reference', 'per_settlement', NOW(), 500000000, 30, 48, NOW(),
     'supplier-terms-v2-2026-09-07', NOW(), '00000000-0000-7000-8000-000000000001',
-    'privacy-v2-2026-09-07', NOW(), '00000000-0000-7000-8000-000000000001', NOW(), TRUE,
+    'privacy-v2-2026-09-07', NOW(), '00000000-0000-7000-8000-000000000001', NOW(),
     'pilot_ready', NOW()
 )
 ON CONFLICT (organization_id) DO NOTHING;
@@ -54,11 +51,9 @@ FROM app.supplier_onboarding_profiles p
 WHERE p.organization_id = '00000000-0000-7000-8000-000000000010'
 ON CONFLICT (organization_id, profile_version) DO NOTHING;
 
-INSERT INTO app.memberships (id, organization_id, user_id, role, status, accepted_at)
+INSERT INTO app.memberships (id, organization_id, user_id, role, status)
 VALUES
-    ('00000000-0000-7000-8000-000000000011', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000001', 'owner', 'active', NOW()),
-    ('00000000-0000-7000-8000-000000000012', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000002', 'finance', 'active', NOW()),
-    ('00000000-0000-7000-8000-000000000013', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000003', 'sales', 'active', NOW())
+    ('00000000-0000-7000-8000-000000000011', '00000000-0000-7000-8000-000000000010', '00000000-0000-7000-8000-000000000001', 'owner', 'active')
 ON CONFLICT (id) DO NOTHING;
 
 -- The acceptance seed is deliberately deterministic and contains no usable
@@ -110,16 +105,16 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO app.credit_requests (id,supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,currency,goods_description,invoice_reference,due_date,grace_hours,collection_at,state,created_by,created_at,updated_at,version)
 VALUES
-    ('00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000021',120000000,'NGN','Pharmaceutical inventory drawdown 1','DEMO-TL-001',DATE '2026-09-02',48,TIMESTAMPTZ '2026-09-04 17:00:00+01','ACTIVE','00000000-0000-7000-8000-000000000003',TIMESTAMPTZ '2026-08-02 09:00:00+01',TIMESTAMPTZ '2026-08-02 10:05:00+01',1),
-    ('00000000-0000-7000-8000-000000000052','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000021',90000000,'NGN','Pharmaceutical inventory drawdown 2','DEMO-TL-002',DATE '2026-09-08',48,TIMESTAMPTZ '2026-09-10 17:00:00+01','ACTIVE','00000000-0000-7000-8000-000000000003',TIMESTAMPTZ '2026-08-08 09:00:00+01',TIMESTAMPTZ '2026-08-08 10:05:00+01',1),
-    ('00000000-0000-7000-8000-000000000053','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000021',65000000,'NGN','Pharmaceutical inventory drawdown 3','DEMO-TL-003',DATE '2026-09-15',48,TIMESTAMPTZ '2026-09-17 17:00:00+01','ACTIVE','00000000-0000-7000-8000-000000000003',TIMESTAMPTZ '2026-08-15 09:00:00+01',TIMESTAMPTZ '2026-08-15 10:05:00+01',1)
+    ('00000000-0000-7000-8000-000000000051','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000021',120000000,'NGN','Pharmaceutical inventory drawdown 1','DEMO-TL-001',DATE '2026-09-02',48,TIMESTAMPTZ '2026-09-04 17:00:00+01','ACTIVE','00000000-0000-7000-8000-000000000001',TIMESTAMPTZ '2026-08-02 09:00:00+01',TIMESTAMPTZ '2026-08-02 10:05:00+01',1),
+    ('00000000-0000-7000-8000-000000000052','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000021',90000000,'NGN','Pharmaceutical inventory drawdown 2','DEMO-TL-002',DATE '2026-09-08',48,TIMESTAMPTZ '2026-09-10 17:00:00+01','ACTIVE','00000000-0000-7000-8000-000000000001',TIMESTAMPTZ '2026-08-08 09:00:00+01',TIMESTAMPTZ '2026-08-08 10:05:00+01',1),
+    ('00000000-0000-7000-8000-000000000053','00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000021',65000000,'NGN','Pharmaceutical inventory drawdown 3','DEMO-TL-003',DATE '2026-09-15',48,TIMESTAMPTZ '2026-09-17 17:00:00+01','ACTIVE','00000000-0000-7000-8000-000000000001',TIMESTAMPTZ '2026-08-15 09:00:00+01',TIMESTAMPTZ '2026-08-15 10:05:00+01',1)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO app.agreement_versions (id,credit_request_id,version,canonical_json,document_hash,terms_version,privacy_version,created_by,created_at)
 VALUES
-    ('00000000-0000-7000-8000-000000000061','00000000-0000-7000-8000-000000000051',1,'{"fixture":"trade-line-drawdown-1"}',encode(digest('{"fixture":"trade-line-drawdown-1"}','sha256'),'hex'),'trade-line-v1','privacy-v1','00000000-0000-7000-8000-000000000003',TIMESTAMPTZ '2026-08-02 09:00:00+01'),
-    ('00000000-0000-7000-8000-000000000062','00000000-0000-7000-8000-000000000052',1,'{"fixture":"trade-line-drawdown-2"}',encode(digest('{"fixture":"trade-line-drawdown-2"}','sha256'),'hex'),'trade-line-v1','privacy-v1','00000000-0000-7000-8000-000000000003',TIMESTAMPTZ '2026-08-08 09:00:00+01'),
-    ('00000000-0000-7000-8000-000000000063','00000000-0000-7000-8000-000000000053',1,'{"fixture":"trade-line-drawdown-3"}',encode(digest('{"fixture":"trade-line-drawdown-3"}','sha256'),'hex'),'trade-line-v1','privacy-v1','00000000-0000-7000-8000-000000000003',TIMESTAMPTZ '2026-08-15 09:00:00+01')
+    ('00000000-0000-7000-8000-000000000061','00000000-0000-7000-8000-000000000051',1,'{"fixture":"trade-line-drawdown-1"}',encode(digest('{"fixture":"trade-line-drawdown-1"}','sha256'),'hex'),'trade-line-v1','privacy-v1','00000000-0000-7000-8000-000000000001',TIMESTAMPTZ '2026-08-02 09:00:00+01'),
+    ('00000000-0000-7000-8000-000000000062','00000000-0000-7000-8000-000000000052',1,'{"fixture":"trade-line-drawdown-2"}',encode(digest('{"fixture":"trade-line-drawdown-2"}','sha256'),'hex'),'trade-line-v1','privacy-v1','00000000-0000-7000-8000-000000000001',TIMESTAMPTZ '2026-08-08 09:00:00+01'),
+    ('00000000-0000-7000-8000-000000000063','00000000-0000-7000-8000-000000000053',1,'{"fixture":"trade-line-drawdown-3"}',encode(digest('{"fixture":"trade-line-drawdown-3"}','sha256'),'hex'),'trade-line-v1','privacy-v1','00000000-0000-7000-8000-000000000001',TIMESTAMPTZ '2026-08-15 09:00:00+01')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO app.agreement_acceptances (id,credit_request_id,agreement_version_id,accepting_user_id,person_id,business_id,acceptance_method,authentication_level,agreement_hash,mandate_provider_id,accepted_at)
@@ -145,9 +140,9 @@ FROM (VALUES
 
 INSERT INTO app.drawdowns (id,trade_line_id,principal_kobo,goods_description,invoice_reference,due_date,collection_at,grace_hours,terms_version,agreement_hash,state,obligation_id,buyer_confirmed_at,release_actor_id,delivery_method,release_evidence_reference,released_at,receipt_state,receipt_actor_id,receipt_at,activated_at)
 VALUES
-    ('00000000-0000-7000-8000-000000000041','00000000-0000-7000-8000-000000000040',120000000,'Pharmaceutical inventory drawdown 1','DEMO-TL-001',DATE '2026-09-02',TIMESTAMPTZ '2026-09-04 17:00:00+01',48,'trade-line-v1','8a631674c3f425aa86b91ddef58a9b2b9c37bb7a187ee30ffe733a0e91689f86','ACTIVATED','00000000-0000-7000-8000-000000000071',TIMESTAMPTZ '2026-08-02 10:00:00+01','00000000-0000-7000-8000-000000000003','delivery','DEMO-RELEASE-1',TIMESTAMPTZ '2026-08-02 10:02:00+01','no_issue','00000000-0000-7000-8000-000000000004',TIMESTAMPTZ '2026-08-02 10:05:00+01',TIMESTAMPTZ '2026-08-02 10:05:00+01'),
-    ('00000000-0000-7000-8000-000000000042','00000000-0000-7000-8000-000000000040',90000000,'Pharmaceutical inventory drawdown 2','DEMO-TL-002',DATE '2026-09-08',TIMESTAMPTZ '2026-09-10 17:00:00+01',48,'trade-line-v1','64bf62359598479de600038ef64ae5529abcdb78353f1dcce4f58862a34e03b5','ACTIVATED','00000000-0000-7000-8000-000000000072',TIMESTAMPTZ '2026-08-08 10:00:00+01','00000000-0000-7000-8000-000000000003','delivery','DEMO-RELEASE-2',TIMESTAMPTZ '2026-08-08 10:02:00+01','no_issue','00000000-0000-7000-8000-000000000004',TIMESTAMPTZ '2026-08-08 10:05:00+01',TIMESTAMPTZ '2026-08-08 10:05:00+01'),
-    ('00000000-0000-7000-8000-000000000043','00000000-0000-7000-8000-000000000040',65000000,'Pharmaceutical inventory drawdown 3','DEMO-TL-003',DATE '2026-09-15',TIMESTAMPTZ '2026-09-17 17:00:00+01',48,'trade-line-v1','21c61c3462747e630f0edf70872fb928fd088dddb4419e4c73dcc80749f409b6','ACTIVATED','00000000-0000-7000-8000-000000000073',TIMESTAMPTZ '2026-08-15 10:00:00+01','00000000-0000-7000-8000-000000000003','delivery','DEMO-RELEASE-3',TIMESTAMPTZ '2026-08-15 10:02:00+01','no_issue','00000000-0000-7000-8000-000000000004',TIMESTAMPTZ '2026-08-15 10:05:00+01',TIMESTAMPTZ '2026-08-15 10:05:00+01')
+    ('00000000-0000-7000-8000-000000000041','00000000-0000-7000-8000-000000000040',120000000,'Pharmaceutical inventory drawdown 1','DEMO-TL-001',DATE '2026-09-02',TIMESTAMPTZ '2026-09-04 17:00:00+01',48,'trade-line-v1','8a631674c3f425aa86b91ddef58a9b2b9c37bb7a187ee30ffe733a0e91689f86','ACTIVATED','00000000-0000-7000-8000-000000000071',TIMESTAMPTZ '2026-08-02 10:00:00+01','00000000-0000-7000-8000-000000000001','delivery','DEMO-RELEASE-1',TIMESTAMPTZ '2026-08-02 10:02:00+01','no_issue','00000000-0000-7000-8000-000000000004',TIMESTAMPTZ '2026-08-02 10:05:00+01',TIMESTAMPTZ '2026-08-02 10:05:00+01'),
+    ('00000000-0000-7000-8000-000000000042','00000000-0000-7000-8000-000000000040',90000000,'Pharmaceutical inventory drawdown 2','DEMO-TL-002',DATE '2026-09-08',TIMESTAMPTZ '2026-09-10 17:00:00+01',48,'trade-line-v1','64bf62359598479de600038ef64ae5529abcdb78353f1dcce4f58862a34e03b5','ACTIVATED','00000000-0000-7000-8000-000000000072',TIMESTAMPTZ '2026-08-08 10:00:00+01','00000000-0000-7000-8000-000000000001','delivery','DEMO-RELEASE-2',TIMESTAMPTZ '2026-08-08 10:02:00+01','no_issue','00000000-0000-7000-8000-000000000004',TIMESTAMPTZ '2026-08-08 10:05:00+01',TIMESTAMPTZ '2026-08-08 10:05:00+01'),
+    ('00000000-0000-7000-8000-000000000043','00000000-0000-7000-8000-000000000040',65000000,'Pharmaceutical inventory drawdown 3','DEMO-TL-003',DATE '2026-09-15',TIMESTAMPTZ '2026-09-17 17:00:00+01',48,'trade-line-v1','21c61c3462747e630f0edf70872fb928fd088dddb4419e4c73dcc80749f409b6','ACTIVATED','00000000-0000-7000-8000-000000000073',TIMESTAMPTZ '2026-08-15 10:00:00+01','00000000-0000-7000-8000-000000000001','delivery','DEMO-RELEASE-3',TIMESTAMPTZ '2026-08-15 10:02:00+01','no_issue','00000000-0000-7000-8000-000000000004',TIMESTAMPTZ '2026-08-15 10:05:00+01',TIMESTAMPTZ '2026-08-15 10:05:00+01')
 ON CONFLICT (id) DO NOTHING;
 
 -- The portals must read the same debts as the normalized financial tables.
@@ -191,7 +186,7 @@ ON CONFLICT(id) DO NOTHING;
 
 WITH recorded AS (
  INSERT INTO app.payments(id,obligation_id,buyer_user_id,supplier_organization_id,source_type,amount_kobo,currency,state,paid_at,recorded_by,recorded_by_reference,idempotency_key)
- VALUES('00000000-0000-7000-8000-000000000091','00000000-0000-7000-8000-000000000071','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000010','supplier_recorded_transfer',100000000,'NGN','recognized',TIMESTAMPTZ '2026-08-25 12:00:00+01','00000000-0000-7000-8000-000000000002','00000000-0000-7000-8000-000000000002','seed:payment:royal-001')
+ VALUES('00000000-0000-7000-8000-000000000091','00000000-0000-7000-8000-000000000071','00000000-0000-7000-8000-000000000004','00000000-0000-7000-8000-000000000010','supplier_recorded_transfer',100000000,'NGN','recognized',TIMESTAMPTZ '2026-08-25 12:00:00+01','00000000-0000-7000-8000-000000000001','00000000-0000-7000-8000-000000000001','seed:payment:royal-001')
  ON CONFLICT(id) DO NOTHING RETURNING obligation_id,amount_kobo
 )
 UPDATE app.obligations o SET outstanding_kobo=o.outstanding_kobo-recorded.amount_kobo,payment_status='PARTIALLY_PAID'
