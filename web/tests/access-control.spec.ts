@@ -8,7 +8,7 @@ test('logged-out visitors are redirected before protected account pages render',
 	await expect(page.locator('footer.site-footer')).toBeVisible();
 	await expect(page.locator('footer.site-footer').getByText('How it works')).toBeVisible();
 	await expect(page.getByRole('navigation', { name: 'Your business', exact: true })).toHaveCount(0);
-	await expect(page.getByRole('heading', { name: 'Payments received' })).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'Money in', level: 1 })).toHaveCount(0);
 });
 
 test('every account area requires a session while private-token pages remain public', async ({ request }) => {
@@ -48,7 +48,7 @@ test('an invalid saved session shows only the account check before sign-in', asy
 	});
 	await page.goto('/workspace/money/received');
 	await expect(page.getByRole('heading', { name: 'Checking your account…' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Payments received' })).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'Money in', level: 1 })).toHaveCount(0);
 	await expect(page.getByRole('navigation', { name: 'Your business', exact: true })).toHaveCount(0);
 	await expect(page).toHaveURL(/\/signin\?next=%2Fworkspace%2Fmoney%2Freceived$/);
 });

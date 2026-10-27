@@ -54,9 +54,9 @@ test.describe('real-stack financial journeys', () => {
 		expect(paymentsBody.payments).toBeDefined();
 
 		await page.goto('/workspace/money/received');
-		await expect(page.getByRole('heading', { name: 'Payments received' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Money in', level: 1 })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Money received', exact: true })).toBeVisible();
-		await expect(page.getByText('We could not open your payment records.')).toHaveCount(0);
+		await expect(page.getByText('We could not open your payments.')).toHaveCount(0);
 	});
 
 	test('buyer browser opens persisted credit requests through the real API', async ({ page }) => {
