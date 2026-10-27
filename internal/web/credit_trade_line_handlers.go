@@ -191,7 +191,7 @@ func (s *Server) releaseDrawdown(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.requireSupplierReady(w, orgID, user.ID, "releasing goods") {
+	if !s.requireSupplierReady(w, r, orgID, user.ID, "releasing goods") {
 		return
 	}
 	if !s.requireCSRF(w, r) {

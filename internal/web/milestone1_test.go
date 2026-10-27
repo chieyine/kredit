@@ -70,15 +70,6 @@ func TestSupplierOnboardingAndTenantBoundaries(t *testing.T) {
 
 	organizationsResponse := doJSON(t, client, "/api/v1/organizations", http.MethodGet, nil, nil, http.StatusOK)
 	_ = organizationsResponse.Body.Close()
-	inviteResponse := doJSON(t, client, "/api/v1/organizations/"+organizationPayload.Organization.ID+"/members", http.MethodPost, map[string]string{"target": "sales@example.test", "channel": "email", "role": "sales"}, map[string]string{"X-CSRF-Token": csrfValue, "Idempotency-Key": "invite-step-up-denied"}, http.StatusForbidden)
-	var problem struct {
-		Title string `json:"title"`
-	}
-	decodeResponse(t, inviteResponse, &problem)
-	if problem.Title != "step_up_required" {
-		t.Fatalf("expected step-up denial, got %q", problem.Title)
-	}
-
 	enrollmentResponse := doJSON(t, client, "/api/v1/mfa/totp/enroll", http.MethodPost, map[string]string{}, map[string]string{"X-CSRF-Token": csrfValue}, http.StatusOK)
 	var enrollment struct {
 		Secret string `json:"secret"`
@@ -91,8 +82,6 @@ func TestSupplierOnboardingAndTenantBoundaries(t *testing.T) {
 			csrfValue = cookie.Value
 		}
 	}
-	inviteSuccessResponse := doJSON(t, client, "/api/v1/organizations/"+organizationPayload.Organization.ID+"/members", http.MethodPost, map[string]string{"target": "sales@example.test", "channel": "email", "role": "sales"}, map[string]string{"X-CSRF-Token": csrfValue, "Idempotency-Key": "invite-success"}, http.StatusAccepted)
-	_ = inviteSuccessResponse.Body.Close()
 	auditResponse := doJSON(t, client, "/api/v1/organizations/"+organizationPayload.Organization.ID+"/audit-events", http.MethodGet, nil, nil, http.StatusOK)
 	var auditPayload struct {
 		Events []map[string]any `json:"events"`

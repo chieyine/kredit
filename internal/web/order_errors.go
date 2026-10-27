@@ -15,7 +15,7 @@ func (s *Server) writeOrderProblem(w http.ResponseWriter, r *http.Request, err e
 	switch {
 	case errors.Is(err, orders.ErrNotFound), errors.Is(err, pgx.ErrNoRows), errors.Is(err, credit.ErrRequestNotFound):
 		writeProblem(w, 404, "order_record_not_found", "Order record was not found.")
-	case errors.Is(err, orders.ErrAuthority), errors.Is(err, orders.ErrDualControl):
+	case errors.Is(err, orders.ErrAuthority):
 		writeProblem(w, 403, "order_forbidden", "Current business owner authority is required.")
 	case errors.Is(err, orders.ErrConflict), errors.Is(err, orders.ErrAlreadyDecided):
 		writeProblem(w, 409, "order_conflict", "This action conflicts with recorded evidence. Refresh the record before retrying.")

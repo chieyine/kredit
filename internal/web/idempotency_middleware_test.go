@@ -64,7 +64,6 @@ func TestFinancialMutationRouteMatrixRequiresIdempotencyKey(t *testing.T) {
 		"/api/v1/obligations/obl-1/receipt",
 		"/api/v1/payments/adjust",
 		"/api/v1/settlement/change",
-		"/api/v1/organizations/org-1/members",
 		"/api/v1/buyer/trade-lines/line-1/drawdowns/draw-1/confirm",
 		"/api/v1/organizations/org-1/credit-requests/req-1/send",
 		"/api/v1/me/product-feedback",

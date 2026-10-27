@@ -13,7 +13,6 @@ func TestOrderLifecycle(t *testing.T) {
 	orgID := "org-supplier-1"
 	seller := "user-seller-1"
 	buyer := "user-buyer-1"
-	reviewer := "user-finance-1"
 
 	// 1. Line items
 	items := []LineItem{
@@ -86,21 +85,25 @@ func TestOrderLifecycle(t *testing.T) {
 		t.Fatalf("expected draft status, got %s", cn.Status)
 	}
 
-	// Issuer cannot self-approve
-	if err := store.ApproveCreditNote(ctx, cn.ID, seller); err != ErrDualControl {
-		t.Fatalf("expected ErrDualControl for self-approval, got %v", err)
+	// One operator runs the business (migration 213), so whoever drafted the
+	// note applies it after checking it; there is no second reviewer.
+	if err := store.ApproveCreditNote(ctx, cn.ID, seller); err != nil {
+		t.Fatalf("apply credit note: %v", err)
 	}
-
-	// Independent reviewer approves
-	if err := store.ApproveCreditNote(ctx, cn.ID, reviewer); err != nil {
-		t.Fatalf("approve credit note: %v", err)
+	// Applying the same note again is the same decision, not a second write.
+	if err := store.ApproveCreditNote(ctx, cn.ID, seller); err != nil {
+		t.Fatalf("repeat apply: %v", err)
+	}
+	// Anyone else finds it already decided.
+	if err := store.ApproveCreditNote(ctx, cn.ID, buyer); err != ErrAlreadyDecided {
+		t.Fatalf("expected ErrAlreadyDecided for a different person, got %v", err)
 	}
 
 	notes, err := store.ListCreditNotes(ctx, orderID)
 	if err != nil || len(notes) != 1 {
 		t.Fatalf("expected 1 credit note, got %d", len(notes))
 	}
-	if notes[0].Status != "approved" || notes[0].ApprovedBy != reviewer {
-		t.Fatalf("expected approved status by reviewer, got %+v", notes[0])
+	if notes[0].Status != "approved" || notes[0].ApprovedBy != seller {
+		t.Fatalf("expected approved status by the issuer, got %+v", notes[0])
 	}
 }

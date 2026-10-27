@@ -20,7 +20,6 @@ import (
 var (
 	ErrNotFound       = errors.New("record not found")
 	ErrInvalidInput   = errors.New("invalid input")
-	ErrDualControl    = errors.New("maker-checker dual control required: issuer cannot approve own credit note")
 	ErrAlreadyDecided = errors.New("credit note is already approved or closed")
 )
 
@@ -284,6 +283,10 @@ func (m *MemoryStore) ApproveCreditNote(ctx context.Context, noteID, reviewerID 
 	if cn.ObligationID != "" {
 		return ErrFinancialApplicationUnavailable
 	}
+	// A retry by the same person is the same decision, as in the Postgres store.
+	if cn.Status == "approved" && cn.ApprovedBy == reviewerID {
+		return nil
+	}
 	if cn.Status != "draft" {
 		return ErrAlreadyDecided
 	}
@@ -318,10 +321,6 @@ func NewPostgresStore(pool *pgxpool.Pool, l ...ledger.Service) *PostgresStore {
 		led = l[0]
 	}
 	return &PostgresStore{pool: pool, ledger: led}
-}
-
-func (p *PostgresStore) SetLedger(l ledger.Service) {
-	p.ledger = l
 }
 
 func (p *PostgresStore) beginTx(ctx context.Context, explicitOrg, explicitUser string) (pgx.Tx, error) {

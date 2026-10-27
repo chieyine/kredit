@@ -111,7 +111,7 @@ var RequiredPersistenceFunctions = []string{
 	"app.lock_buyer_payment_claim(uuid)",
 	"app.order_supplier_authorized(uuid,text[])", "app.order_evidence_visible(uuid)",
 	"app.apply_order_shipment_item()", "app.complete_order_receipt()",
-	"app.guard_order_credit_note()", "app.guard_terms_import_review()", "app.guard_terms_import_row()",
+	"app.guard_order_credit_note()",
 	"app.ensure_business_workspace(uuid)",
 	"app.isolation_operations_counts()", "app.dispute_reference_lookup(text)", "app.notification_recovery_subject(uuid)",
 	"app.recovery_subject(uuid)",

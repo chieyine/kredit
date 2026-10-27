@@ -58,7 +58,9 @@ require_text db/seeds/001_demo.sql 'JOIN app.obligations o ON o.id=r.obligation_
 for test_file in internal/credit/store_test.go internal/collections/engine_test.go internal/payments/store_test.go internal/disputes/store_test.go internal/tradelines/store_test.go; do require_file "$test_file"; done
 
 require_text docker-compose.yml 'provider-simulator:'
-require_text scripts/dev.sh 'provider-simulator'
+# dev.sh starts the local services through the shared infrastructure script.
+require_text scripts/dev.sh 'prepare-local-infrastructure.sh'
+require_text scripts/prepare-local-infrastructure.sh 'provider-simulator'
 require_text web/src/service-worker.ts 'Financial'
 
 for file in infra/environments/versions.tf infra/environments/main.tf infra/environments/variables.tf infra/monitoring/prometheus-rules.yaml infra/monitoring/otel-collector.yaml tests/contract/provider_contract_test.go tests/e2e/README.md tests/performance/acceptance.js tests/performance/portfolio_queries.sql; do require_file "$file"; done
