@@ -66,9 +66,16 @@ func TestRenderDrawdownHTMLVerifiesExactTerms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := RenderDrawdownHTML(DrawdownDocumentData{Line: line, Drawdown: drawdown})
+	body, err := RenderDrawdownHTML(DrawdownDocumentData{SupplierName: "Fresh Foods Ltd", BuyerName: "Royal Pharmacy Ltd", Line: line, Drawdown: drawdown})
 	if err != nil || !strings.Contains(string(body), drawdown.AgreementHash) || !strings.Contains(string(body), "verified stock") {
 		t.Fatalf("drawdown document missing verified evidence: err=%v", err)
+	}
+	if !strings.Contains(string(body), "Fresh Foods Ltd") || !strings.Contains(string(body), "Royal Pharmacy Ltd") {
+		t.Fatal("drawdown document does not name both parties")
+	}
+	unnamed, err := RenderDrawdownHTML(DrawdownDocumentData{Line: line, Drawdown: drawdown})
+	if err != nil || !strings.Contains(string(unnamed), line.SupplierOrganizationID) || !strings.Contains(string(unnamed), line.BuyerBusinessID) {
+		t.Fatalf("drawdown document without names must fall back to identifiers: err=%v", err)
 	}
 	drawdown.PrincipalKobo++
 	if _, err := RenderDrawdownHTML(DrawdownDocumentData{Line: line, Drawdown: drawdown}); err == nil {
