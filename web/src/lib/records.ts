@@ -254,31 +254,3 @@ export function timeLabel(value: string): string {
 export function customerBalance(value: unknown): Customer & { outstanding_kobo: KoboValue } {
 	return { ...customer(value), outstanding_kobo: kobo(record(value).outstanding_kobo) };
 }
-
-export function problemRow(value: unknown) {
-	const row = record(value);
-	return {
-		...row,
-		id: text(row.id),
-		state: text(row.state),
-		reason: optionalText(row.reason),
-		explanation: optionalText(row.explanation),
-		opened_at: optionalText(row.opened_at),
-		remaining_disputed_kobo: kobo(row.remaining_disputed_kobo),
-		total_disputed_kobo: kobo(row.total_disputed_kobo)
-	};
-}
-export function invitationRow(value: unknown) {
-	const row = record(value);
-	for (const key of ['trades', 'zero_balance_obligations'])
-		if (!Number.isSafeInteger(row[key]) || Number(row[key]) < 0)
-			throw new RequestError('Invitation progress could not be verified.');
-	return {
-		name: text(row.name),
-		state: text(row.state),
-		source_reference: optionalText(row.source_reference),
-		trades: Number(row.trades),
-		zero_balance_obligations: Number(row.zero_balance_obligations),
-		expires_at: optionalText(row.expires_at)
-	};
-}

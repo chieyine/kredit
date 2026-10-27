@@ -1,5 +1,3 @@
-import { productLabel } from './product-language';
-
 // The database records every change to a customer-facing table as
 // `record.insert`, `record.update` or `record.delete` against the table's name,
 // and the in-app notice for it names the table too. Those are storage words.
@@ -40,34 +38,12 @@ const nouns: Record<string, string> = {
 	documents: 'document'
 };
 
-const verbs: Record<string, string> = { insert: 'added', update: 'updated', delete: 'removed' };
-
 function noun(table: string) {
 	return nouns[table] ?? table.replaceAll('_', ' ').replace(/s$/, '');
 }
 
 function sentence(value: string) {
 	return value.replace(/^./, (letter) => letter.toUpperCase());
-}
-
-// Security and sign-in events, named for what the person did or was asked to do.
-const actions: Record<string, string> = {
-	'authorization.step_up_required': 'Asked for an extra sign-in check',
-	'authentication.required': 'Asked to sign in again',
-	'auth.login.succeeded': 'Signed in',
-	'auth.otp.requested': 'Sign-in code requested',
-	'auth.otp.verified': 'Sign-in code confirmed',
-	'auth.mfa.verified': 'Extra sign-in check passed',
-	'auth.mfa.enrollment.started': 'Started setting up extra sign-in safety',
-	'auth.logout': 'Signed out'
-};
-
-/** One line for an activity entry, such as "Sale updated" or "Credit approval requested". */
-export function activityLabel(action: string, resourceType = ''): string {
-	if (actions[action]) return actions[action];
-	const change = /^record\.(insert|update|delete)$/.exec(action);
-	if (change) return sentence(`${noun(resourceType)} ${verbs[change[1]]}`);
-	return productLabel(action.replaceAll('.', ' '));
 }
 
 const recordNoticeBody = /^A (.+?) record was updated\./;
