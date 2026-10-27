@@ -25,9 +25,6 @@ kredit_app app.analytics_events insert,select,update
 kredit_app app.audit_events insert,select
 kredit_app app.bank_account_references insert,select,update
 kredit_app app.bank_debit_enrollments insert,select,update
-kredit_app app.business_branches insert,select,update
-kredit_app app.business_credit_control_history select
-kredit_app app.business_credit_controls insert,select,update
 kredit_app app.business_policy_changes insert,select,update
 kredit_app app.business_policy_defaults insert,select,update
 kredit_app app.business_policy_events insert,select,update
@@ -50,10 +47,7 @@ kredit_app app.consumer_settings insert,select,update
 kredit_app app.correction_decisions insert,select,update
 kredit_app app.correction_requests insert,select,update
 kredit_app app.credit_aggregate_snapshots insert,select,update
-kredit_app app.credit_offer_approvals insert,select,update
 kredit_app app.credit_requests insert,select,update
-kredit_app app.credit_reviewer_limit_history select
-kredit_app app.credit_reviewer_limits insert,select,update
 kredit_app app.customer_registration_attempts insert,select,update
 kredit_app app.dispute_decisions insert,select,update
 kredit_app app.dispute_evidence insert,select,update
@@ -89,8 +83,6 @@ kredit_app app.legal_holds insert,select,update
 kredit_app app.mandate_authorization_intents insert,select,update
 kredit_app app.mandate_events insert,select,update
 kredit_app app.mandates insert,select,update
-kredit_app app.member_branch_scope_history select
-kredit_app app.member_branch_scopes insert,select,update
 kredit_app app.memberships insert,select,update
 kredit_app app.message_routes insert,select
 kredit_app app.message_submissions insert,select,update
@@ -98,7 +90,6 @@ kredit_app app.messaging_events insert,select,update
 kredit_app app.mfa_methods insert,select,update
 kredit_app app.native_identity_history select
 kredit_app app.native_identity_sessions insert,select,update
-kredit_app app.network_operation_history select
 kredit_app app.notification_delivery_receipts insert,select,update
 kredit_app app.notification_preferences insert,select,update
 kredit_app app.notification_templates insert,select,update
@@ -112,13 +103,9 @@ kredit_app app.order_delivery_receipts insert,select
 kredit_app app.order_line_items insert,select
 kredit_app app.order_shipment_items insert,select
 kredit_app app.order_shipments insert,select
-kredit_app app.organization_invitations insert,select,update
 kredit_app app.organizations insert,select,update
 kredit_app app.otp_challenges insert,select,update
 kredit_app app.outbox_events insert,select,update
-kredit_app app.partner_assignments insert,select,update
-kredit_app app.partner_terms_import_batches insert,select
-kredit_app app.partner_terms_import_rows insert,select
 kredit_app app.payment_allocations insert,select,update
 kredit_app app.payment_claims insert,select,update
 kredit_app app.payment_mandates insert,select,update
@@ -139,8 +126,6 @@ kredit_app app.provider_customer_bindings insert,select,update
 kredit_app app.provider_events insert,select,update
 kredit_app app.provider_reconciliation_events insert,select,update
 kredit_app app.provider_webhook_inbox insert,select,update
-kredit_app app.purchasing_delegation_history select
-kredit_app app.purchasing_delegations insert,select,update
 kredit_app app.receipt_confirmations insert,select,update
 kredit_app app.reconciliation_cases insert,select,update
 kredit_app app.relationship_consents insert,select
@@ -149,7 +134,6 @@ kredit_app app.repayment_schedules insert,select,update
 kredit_app app.request_rate_limits insert,select,update
 kredit_app app.risk_holds insert,select,update
 kredit_app app.runtime_process_instances delete,insert,select,update
-kredit_app app.runtime_process_status insert,select,update
 kredit_app app.schedule_items insert,select,update
 kredit_app app.seller_settlement_receipts insert,select
 kredit_app app.sessions insert,select,update
@@ -163,7 +147,6 @@ kredit_app app.support_cases insert,select,update
 kredit_app app.system_acceptances select
 kredit_app app.trade_lines insert,select,update
 kredit_app app.trade_relationships insert,select,update
-kredit_app app.tradeline_drawdown_approvals insert,select,update
 kredit_app app.users insert,select,update
 kredit_app app.verification_cases insert,select,update
 kredit_app jobs.river_client insert,select,update
@@ -264,7 +247,6 @@ kredit_worker app.operation_actions insert,select,update
 kredit_worker app.operations_command_events insert,select,update
 kredit_worker app.operations_commands insert,select,update
 kredit_worker app.order_credit_notes select
-kredit_worker app.organization_invitations insert,select,update
 kredit_worker app.organizations insert,select,update
 kredit_worker app.otp_challenges insert,select,update
 kredit_worker app.outbox_events insert,select,update
@@ -296,7 +278,6 @@ kredit_worker app.repayment_schedules insert,select,update
 kredit_worker app.request_rate_limits insert,select,update
 kredit_worker app.risk_holds insert,select,update
 kredit_worker app.runtime_process_instances delete,insert,select,update
-kredit_worker app.runtime_process_status insert,select,update
 kredit_worker app.schedule_items insert,select,update
 kredit_worker app.seller_settlement_receipts select
 kredit_worker app.sessions insert,select,update
@@ -310,7 +291,6 @@ kredit_worker app.support_cases insert,select,update
 kredit_worker app.system_acceptances insert,select
 kredit_worker app.trade_lines insert,select,update
 kredit_worker app.trade_relationships insert,select,update
-kredit_worker app.tradeline_drawdown_approvals insert,select,update
 kredit_worker app.users insert,select,update
 kredit_worker app.verification_cases insert,select,update
 kredit_worker jobs.river_client delete,insert,select,update

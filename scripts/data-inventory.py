@@ -3,6 +3,8 @@
 
 The original TSV remains unchanged. The reviewed additions are maintained in
 JSON to avoid repeating unverified control claims across hundreds of fields.
+Fields a later migration dropped are listed in a retired TSV, each naming the
+migration that removed it, so the original records stay untouched.
 Schema comparison validates coverage only, not legal or security approval.
 """
 from __future__ import annotations
@@ -18,7 +20,9 @@ from typing import Any
 COLUMNS = 'schema table field classification subject source purpose lawful_basis readers writers protection retention deletion_hold_behavior processor location_transfer owner'.split()
 KEYS = COLUMNS[:3]
 IDENTIFIER = re.compile(r'[a-z_][a-z0-9_]*\Z')
+MIGRATION = re.compile(r'[0-9]{3}_[a-z0-9_]+\Z')
 ROOT = Path(__file__).resolve().parent.parent
+RETIRED = ROOT / 'docs/compliance/data-inventory-retired.tsv'
 
 
 def cell(value: Any) -> str:
@@ -43,7 +47,26 @@ def unique_json(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def read_inventory(base: Path, additions: Path) -> list[dict[str, str]]:
+def read_retired(path: Path | None) -> set[tuple[str, str, str]]:
+    if path is None or not path.exists():
+        return set()
+    retired = set()
+    with path.open(encoding='utf-8', newline='') as source:
+        reader = csv.DictReader(source, delimiter='\t')
+        if reader.fieldnames != KEYS + ['removed_by']:
+            raise ValueError('unexpected retired inventory header')
+        for row in reader:
+            key = key_of(row)
+            migration = row['removed_by']
+            if MIGRATION.fullmatch(migration or '') is None or not (ROOT / 'db/migrations' / (migration + '.sql')).is_file():
+                raise ValueError('retired field must name the migration that removed it: ' + '.'.join(key))
+            if key in retired:
+                raise ValueError('duplicate retired field: ' + '.'.join(key))
+            retired.add(key)
+    return retired
+
+
+def read_inventory(base: Path, additions: Path, retired_path: Path | None = RETIRED) -> list[dict[str, str]]:
     records: dict[tuple[str, str, str], dict[str, str]] = {}
 
     def append(row: dict[str, Any]) -> None:
@@ -82,6 +105,10 @@ def read_inventory(base: Path, additions: Path) -> list[dict[str, str]]:
             raise ValueError('explicit nonempty fields are required')
         for field in table['fields']:
             append({**defaults, 'schema': table['schema'], 'table': table['table'], 'field': field, 'purpose': table['purpose']})
+    for key in read_retired(retired_path):
+        # Retiring a field nobody recorded would hide a typo, not a removal.
+        if records.pop(key, None) is None:
+            raise ValueError('retired field is not in the inventory: ' + '.'.join(key))
     return [records[key] for key in sorted(records)]
 
 
@@ -110,10 +137,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base', type=Path, default=ROOT / 'docs/compliance/data-inventory.tsv')
     parser.add_argument('--additions', type=Path, default=ROOT / 'docs/compliance/data-inventory-additions.json')
+    parser.add_argument('--retired', type=Path, default=RETIRED)
     parser.add_argument('--check-schema', type=Path)
     args = parser.parse_args()
     try:
-        rows = read_inventory(args.base, args.additions)
+        rows = read_inventory(args.base, args.additions, args.retired)
         if args.check_schema:
             check_schema(rows, args.check_schema)
             pending = sum(row['classification'] == 'restricted_pending_review' for row in rows)
