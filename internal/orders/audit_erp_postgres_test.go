@@ -19,20 +19,20 @@ func TestAuditERPIncludesPaymentsReversalsAndCreditNotes(t *testing.T) {
 		t.Fatal(err)
 	}
 	paymentStore := payments.NewPostgresStore(f.runtime.Raw(), nil, nil)
-	p, _, err := paymentStore.RecordContext(f.as(f.finance), payments.RecordInput{ObligationID: f.obligation[0], SourceType: payments.SourceSupplierTransfer, AmountKobo: 2500, RecordedBy: f.finance, IdempotencyKey: "erp-payment:" + f.obligation[0]})
+	p, _, err := paymentStore.RecordContext(f.as(f.owner), payments.RecordInput{ObligationID: f.obligation[0], SourceType: payments.SourceSupplierTransfer, AmountKobo: 2500, RecordedBy: f.owner, IdempotencyKey: "erp-payment:" + f.obligation[0]})
 	if err != nil {
 		t.Fatal(err)
 	}
-	note, err := f.store().CreateCreditNote(f.as(f.sales), CreditNoteInput{OrderID: f.order[0], SupplierOrganizationID: f.org, IssuedBy: f.sales, AmountKobo: 1000, Reason: "verified synthetic shortage"})
+	note, err := f.store().CreateCreditNote(f.as(f.owner), CreditNoteInput{OrderID: f.order[0], SupplierOrganizationID: f.org, IssuedBy: f.owner, AmountKobo: 1000, Reason: "verified synthetic shortage"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = f.store().ApproveCreditNote(f.as(f.finance), note.ID, f.finance); err != nil {
+	if err = f.store().ApproveCreditNote(f.as(f.owner), note.ID, f.owner); err != nil {
 		t.Fatal(err)
 	}
 	check := func(count int, total ledger.Money) {
 		t.Helper()
-		records, err := erp.LoadLedgerMovements(f.as(f.finance), f.runtime.Raw(), f.org, now.Add(-time.Hour), time.Now().UTC().Add(time.Hour))
+		records, err := erp.LoadLedgerMovements(f.as(f.owner), f.runtime.Raw(), f.org, now.Add(-time.Hour), time.Now().UTC().Add(time.Hour))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,16 +54,16 @@ func TestAuditERPIncludesPaymentsReversalsAndCreditNotes(t *testing.T) {
 		}
 	}
 	check(3, 6500)
-	if _, err = paymentStore.ReverseContext(f.as(f.finance), p.ID, f.finance, "synthetic confirmed reversal"); err != nil {
+	if _, err = paymentStore.ReverseContext(f.as(f.owner), p.ID, f.owner, "synthetic confirmed reversal"); err != nil {
 		t.Fatal(err)
 	}
 	check(4, 9000)
-	for _, ctx := range []context.Context{f.ctx, db.WithTenantContext(f.ctx, f.finance, f.buyerOrg), f.as(f.other), f.as(f.sales)} {
+	for _, ctx := range []context.Context{f.ctx, db.WithTenantContext(f.ctx, f.owner, f.buyerOrg), f.as(f.other)} {
 		if _, err = erp.LoadLedgerMovements(ctx, f.runtime.Raw(), f.org, now.Add(-time.Hour), now.Add(time.Hour)); err == nil {
 			t.Fatal("unauthorized ledger read accepted")
 		}
 	}
-	records, err := erp.LoadLedgerMovements(f.as(f.finance), f.runtime.Raw(), f.org, now.Add(-48*time.Hour), now.Add(-24*time.Hour))
+	records, err := erp.LoadLedgerMovements(f.as(f.owner), f.runtime.Raw(), f.org, now.Add(-48*time.Hour), now.Add(-24*time.Hour))
 	if err != nil || len(records) != 0 {
 		t.Fatalf("period leaked: %+v %v", records, err)
 	}

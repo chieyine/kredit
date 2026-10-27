@@ -15,7 +15,7 @@ import (
 func TestAuditSplitReversalRetainsEvidenceAndIsReplaySafe(t *testing.T) {
 	f := newAuditFixture(t)
 	store := payments.NewPostgresStore(f.runtime.Raw(), nil, nil)
-	p, _, err := store.RecordContext(f.as(f.finance), payments.RecordInput{ObligationID: f.obligation[0], SourceType: payments.SourceSupplierTransfer, AmountKobo: 2500, RecordedBy: f.finance, IdempotencyKey: "audit-split:" + f.obligation[0]})
+	p, _, err := store.RecordContext(f.as(f.owner), payments.RecordInput{ObligationID: f.obligation[0], SourceType: payments.SourceSupplierTransfer, AmountKobo: 2500, RecordedBy: f.owner, IdempotencyKey: "audit-split:" + f.obligation[0]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestAuditSplitReversalRetainsEvidenceAndIsReplaySafe(t *testing.T) {
 	if err = tx.Commit(f.ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ReverseContext(f.as(f.finance), p.ID, f.finance, "synthetic confirmed reversal"); err != nil {
+	if _, err = store.ReverseContext(f.as(f.owner), p.ID, f.owner, "synthetic confirmed reversal"); err != nil {
 		t.Fatal(err)
 	}
 	if n := f.scalar(t, `SELECT amount_kobo FROM app.split_fee_allocations WHERE payment_id=$1::uuid`, p.ID); n != 500 {
@@ -48,19 +48,19 @@ func TestAuditSplitReversalRetainsEvidenceAndIsReplaySafe(t *testing.T) {
 	if n := f.scalar(t, `SELECT collected_kobo FROM app.fees WHERE id=$1::uuid`, fee); n != 0 {
 		t.Fatalf("fee undo=%d", n)
 	}
-	if _, err = store.ReverseContext(f.as(f.finance), p.ID, f.finance, "repeat confirmed reversal"); err != nil {
+	if _, err = store.ReverseContext(f.as(f.owner), p.ID, f.owner, "repeat confirmed reversal"); err != nil {
 		t.Fatal(err)
 	}
 	// The composing helper itself must be replay-safe, not just the outer method.
-	again, err := f.runtime.Raw().Begin(f.as(f.finance))
+	again, err := f.runtime.Raw().Begin(f.as(f.owner))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = again.Rollback(f.ctx) }()
-	if err = db.SetTenantContext(f.as(f.finance), again); err != nil {
+	if err = db.SetTenantContext(f.as(f.owner), again); err != nil {
 		t.Fatal(err)
 	}
-	if err = billing.ReverseSplitTx(f.as(f.finance), again, p.ID, time.Now().UTC()); err != nil {
+	if err = billing.ReverseSplitTx(f.as(f.owner), again, p.ID, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	if err = again.Commit(f.ctx); err != nil {

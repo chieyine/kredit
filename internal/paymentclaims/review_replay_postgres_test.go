@@ -40,10 +40,10 @@ func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 	if err := admin.QueryRow(ctx, `INSERT INTO app.organizations(legal_name,business_type,business_address,industry) VALUES($1,'limited_company','Synthetic address','Test') RETURNING id::text`, prefix).Scan(&org); err != nil {
 		t.Fatal(err)
 	}
-	for _, actor := range []string{reviewer, otherReviewer} {
-		if _, err := admin.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'finance','active')`, org, actor); err != nil {
-			t.Fatal(err)
-		}
+	// The reviewer owns the supplier business. The other reviewer is a signed-in
+	// person outside it and must not be able to decide the claim.
+	if _, err := admin.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, org, reviewer); err != nil {
+		t.Fatal(err)
 	}
 	if err := admin.QueryRow(ctx, `INSERT INTO app.organizations(legal_name,business_type,business_address,industry) VALUES($1,'limited_company','Synthetic address','Test') RETURNING id::text`, prefix+"-buyer").Scan(&buyerOrg); err != nil {
 		t.Fatal(err)
@@ -164,13 +164,11 @@ func TestPostgresConfirmationReplayPreservesReviewAndAccounting(t *testing.T) {
 			t.Fatalf("restart-safe exact replay changed evidence: %+v %v", retry, err)
 		}
 	}
-	for _, tc := range []struct{ actor, reason string }{
-		{otherReviewer, "Matched original bank evidence"},
-		{reviewer, "Different bank evidence"},
-	} {
-		if _, err := claims.Confirm(db.WithTenantContext(ctx, tc.actor, org), claim.ID, tc.actor, tc.reason, paymentStore); !errors.Is(err, ErrReviewConflict) {
-			t.Fatalf("different review was accepted: %v", err)
-		}
+	if _, err := claims.Confirm(db.WithTenantContext(ctx, otherReviewer, org), claim.ID, otherReviewer, "Matched original bank evidence", paymentStore); err == nil {
+		t.Fatal("a person outside the business confirmed the claim")
+	}
+	if _, err := claims.Confirm(reviewContext, claim.ID, reviewer, "Different bank evidence", paymentStore); !errors.Is(err, ErrReviewConflict) {
+		t.Fatalf("different review was accepted: %v", err)
 	}
 	stored, err := claims.Get(reviewContext, claim.ID)
 	if err != nil || stored.PaymentID != first.PaymentID || stored.ReviewedBy != first.ReviewedBy || stored.ReviewReason != first.ReviewReason || stored.ReviewedAt == nil || !stored.ReviewedAt.Equal(*first.ReviewedAt) {

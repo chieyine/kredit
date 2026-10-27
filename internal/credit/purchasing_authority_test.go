@@ -22,22 +22,20 @@ func TestPurchasingRevocationBlocksCachedOwnerAndSerializesWrites(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer admin.Close()
-	buyer, seller, successor, workspace, supplier, profile, requestID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	buyer, seller, workspace, supplier, profile, requestID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	exec := func(sql string, args ...any) {
 		t.Helper()
 		if _, e := admin.Exec(ctx, sql, args...); e != nil {
 			t.Fatal(e)
 		}
 	}
-	for _, id := range []string{buyer, seller, successor} {
+	for _, id := range []string{buyer, seller} {
 		exec(`INSERT INTO app.users(id,normalized_email) VALUES($1::uuid,$2)`, id, id+"@authority.test")
 	}
 	for _, id := range []string{workspace, supplier} {
 		exec(`INSERT INTO app.organizations(id,legal_name,business_type,business_address,industry) VALUES($1::uuid,'Authority fixture','limited_company','Lagos','food')`, id)
 	}
-	for _, owner := range []string{buyer, successor} {
-		exec(`INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, workspace, owner)
-	}
+	exec(`INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, workspace, buyer)
 	exec(`INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, supplier, seller)
 	exec(`INSERT INTO app.businesses(id,organization_id,owner_user_id,legal_name,business_type,business_address,industry,status) VALUES($1::uuid,$2::uuid,$3::uuid,'Authority fixture','limited_company','Lagos','food','verified')`, profile, workspace, buyer)
 	exec(`INSERT INTO app.credit_requests(id,supplier_organization_id,buyer_user_id,buyer_business_id,principal_kobo,goods_description,due_date,collection_at,state,created_by) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,10000,'Goods',current_date+7,now()+interval '7 days','SENT',$5::uuid)`, requestID, supplier, buyer, profile, seller)

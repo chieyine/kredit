@@ -49,7 +49,7 @@ func TestPostgresRecoveryAndPrivacyControls(t *testing.T) {
 	if _, err := s.CreatePrivacyRequest(ctx, buyer, org, "ACCESS", "Unrelated business scope"); !errors.Is(err, ErrPrivacyOrganizationForbidden) {
 		t.Fatalf("unrelated business privacy request accepted: %v", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'viewer','active')`, org, buyer); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, org, buyer); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreatePrivacyRequest(ctx, buyer, org, "ACCESS", "My personal data at this business"); err != nil {
