@@ -61,6 +61,8 @@ async function signedIn(page: Page, context: BrowserContext, baseURL?: string) {
 		if (path.endsWith('/payment-claims')) return send(route, { payment_claims: [] });
 		if (path.endsWith('/overdue')) return send(route, { overdue: [] });
 		if (path.endsWith('/disputes')) return send(route, { disputes: [] });
+		if (path.endsWith('/due')) return send(route, { due: [] });
+		if (path.endsWith('/consumer-sales/summary')) return send(route, { items: [] });
 		if (path.endsWith('/reports/receivables'))
 			return send(route, { summary: { obligation_count: 1, outstanding_kobo: 12750049, overdue_kobo: 0 } });
 		if (path === '/api/v1/buyer/credit-requests/sale-1') return send(route, sale());
@@ -212,7 +214,11 @@ test('failed sign-out is not presented as successful logout', async ({ page, con
 	expect((await context.cookies()).some((cookie) => cookie.name === 'kredit_session')).toBe(true);
 });
 
-test('giving credit uses the server timing preview, exact kobo, and sends it', async ({ page, context, baseURL }) => {
+test('giving credit uses the server timing preview and exact kobo, then opens the draft for review', async ({
+	page,
+	context,
+	baseURL
+}) => {
 	await signedIn(page, context, baseURL);
 	await page.route('**/organizations/org-a/credit-terms/preview', (route) =>
 		send(route, {
@@ -225,17 +231,24 @@ test('giving credit uses the server timing preview, exact kobo, and sends it', a
 		})
 	);
 	let body: Record<string, unknown> | undefined;
-	let sent = false;
 	await page.route('**/organizations/org-a/credit-requests', async (route) => {
 		if (route.request().method() === 'POST') {
 			body = route.request().postDataJSON();
-			return send(route, { request: { id: 'created-sale' } }, 201);
+			return send(
+				route,
+				{
+					request: {
+						id: 'created-sale',
+						state: 'DRAFT',
+						buyer_legal_name: 'Kano Retail',
+						principal_kobo: 12750049,
+						due_date: '2026-12-18'
+					}
+				},
+				201
+			);
 		}
 		return send(route, { requests: [] });
-	});
-	await page.route('**/organizations/org-a/credit-requests/created-sale/send', (route) => {
-		sent = true;
-		return send(route, { request: { id: 'created-sale', state: 'SENT' } });
 	});
 	await page.goto('/workspace/give?organization=org-a');
 	await page.getByText('A business', { exact: true }).click();
@@ -244,7 +257,9 @@ test('giving credit uses the server timing preview, exact kobo, and sends it', a
 	await page.getByLabel('How much? (₦)').fill('127,500.49');
 	await page.getByLabel('Pay by').fill('2026-12-18');
 	await expect(page.locator('.summary')).toContainText('₦127,500.49');
-	await page.getByRole('button', { name: 'Send to customer' }).click();
+	// The first step saves a draft. The seller sends it from the sale page after
+	// seeing the exact fees and terms.
+	await page.getByRole('button', { name: 'Review credit sale' }).click();
 	await expect.poll(() => body).toBeTruthy();
 	expect(body).toMatchObject({
 		principal_kobo: 12750049,
@@ -252,8 +267,7 @@ test('giving credit uses the server timing preview, exact kobo, and sends it', a
 		timing_mode: 'lagos_end_of_day',
 		schedule_count: 1
 	});
-	await expect.poll(() => sent).toBe(true);
-	await expect(page).toHaveURL(/\/workspace\/sales\/created-sale\?organization=org-a&given=1$/);
+	await expect(page).toHaveURL(/\/workspace\/sales\/created-sale\?organization=org-a&created=1$/);
 });
 
 test('exact typed pricing supports voluntary and partial repayment examples', async ({ page }) => {
@@ -326,8 +340,7 @@ for (const [label, path] of [
 	['home', '/'],
 	['pricing', '/pricing'],
 	['supplier', '/workspace/today'],
-	['quick-sale', '/workspace/sales/quick'],
-	['full-sale', '/workspace/sales/new?advanced=1'],
+	['give-credit', '/workspace/give?organization=org-a'],
 	['buyer', '/workspace/purchases/orders/sale-1']
 ] as const) {
 	test(`visual and accessibility evidence: ${label}`, async ({ page, context, baseURL }, testInfo) => {
@@ -394,21 +407,33 @@ test('full sale keeps business identity and server-reviewed timing on the invoic
 	await page.route('**/api/v1/organizations/org-a/credit-requests', (route) => {
 		if (route.request().method() === 'POST') {
 			saved.push(route.request().postDataJSON());
-			return send(route, { request: { id: 'created-sale' } }, 201);
+			return send(
+				route,
+				{
+					request: {
+						id: 'created-sale',
+						state: 'DRAFT',
+						buyer_legal_name: 'Second shop',
+						principal_kobo: 12750049,
+						due_date: '2026-09-18'
+					}
+				},
+				201
+			);
 		}
 		return send(route, { requests: [] });
 	});
-	await page.goto('/workspace/sales/new?advanced=1&organization=org-a');
-	await expect(page.locator('.review')).not.toContainText('-₦0.01');
+	await page.goto('/workspace/give?organization=org-a');
+	await page.getByText('A business', { exact: true }).click();
+	// One buyer runs two shops. The sale must be billed to the shop chosen here.
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-2');
-	await page.getByRole('textbox', { name: 'Sale amount (₦)' }).fill('127,500.49');
-	await page.getByRole('textbox', { name: 'What goods are they taking?' }).fill('40 cartons of cooking oil');
-	await page.getByLabel('First payment date').fill('2026-09-18');
-	await page.getByRole('button', { name: 'Check terms', exact: true }).click();
-	await expect(page.getByRole('button', { name: 'Save draft sale', exact: true })).toBeEnabled();
+	await page.getByLabel('What goods?').fill('40 cartons of cooking oil');
+	await page.getByLabel('How much? (₦)').fill('127,500.49');
+	await page.getByLabel('Pay by').fill('2026-09-18');
+	await expect(page.locator('.summary')).toContainText('Second shop');
+	await expect(page.locator('.summary')).toContainText('₦127,500.49');
 	expect(saved).toHaveLength(0);
-	await expect(page.locator('.review')).toContainText('₦127,500.49');
-	await page.getByRole('button', { name: 'Save draft sale', exact: true }).click();
+	await page.getByRole('button', { name: 'Review credit sale', exact: true }).click();
 	await expect.poll(() => saved.length).toBe(1);
 	expect(saved[0]).toMatchObject({
 		buyer_user_id: 'buyer-1',
@@ -428,5 +453,5 @@ test('giving credit never presents an unavailable customer list as empty', async
 	await page.getByText('A business', { exact: true }).click();
 	await expect(page.getByRole('alert')).toContainText('Your customers unavailable');
 	await expect(page.getByRole('heading', { name: 'New business customer' })).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Send to customer' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Review credit sale' })).toHaveCount(0);
 });

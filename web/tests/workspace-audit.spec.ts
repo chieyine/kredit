@@ -23,7 +23,18 @@ test('failed business lookup shows an error and can be retried', async ({ page }
 		return route.fulfill(attempts === 1 ? { status: 503, json: {} } : { json: { organizations } });
 	});
 	await page.route('**/api/v1/organizations/*/customers', (route) =>
-		route.fulfill({ json: { customers: [{ id: 'buyer-1', legal_name: 'Ada Stores', outstanding_kobo: 123456 }] } })
+		route.fulfill({
+			json: {
+				customers: [
+					{
+						buyer_user_id: 'buyer-1',
+						buyer_business_id: 'business-1',
+						legal_name: 'Ada Stores',
+						outstanding_kobo: 123456
+					}
+				]
+			}
+		})
 	);
 	await page.goto('/workspace/partners/customers');
 	// The message names the thing that failed and the next move, rather than
@@ -70,21 +81,24 @@ test('switching business resets pagination and ignores a late response', async (
 });
 
 test('what I owe lists credits to accept beside credits being paid', async ({ page }) => {
+	const sale = (fields: Record<string, unknown>) => ({ principal_kobo: 100000, due_date: '2026-12-01', ...fields });
 	await page.route('**/api/v1/buyer/credit-requests*', (route) =>
 		route.fulfill({
 			json: {
 				requests: [
 					{
-						request: {
+						request: sale({
 							id: 'offer',
 							state: 'SENT',
 							goods_description: 'Pending goods',
 							buyer_legal_name: 'Pending sale'
-						}
+						})
 					},
-					{ request: { id: 'draft', state: 'DRAFT', goods_description: 'Not sent yet', buyer_legal_name: 'Draft' } },
 					{
-						request: { id: 'accepted', buyer_legal_name: 'Accepted sale' },
+						request: sale({ id: 'draft', state: 'DRAFT', goods_description: 'Not sent yet', buyer_legal_name: 'Draft' })
+					},
+					{
+						request: sale({ id: 'accepted', state: 'ACTIVE', buyer_legal_name: 'Accepted sale' }),
 						obligation: { id: 'debt', outstanding_kobo: 75000 }
 					}
 				]
@@ -143,7 +157,7 @@ test('customer history and repeat-sale link preserve the selected business', asy
 	await page.goto('/workspace/partners/customers/business-1?organization=org-b');
 	await expect(page.getByRole('link', { name: 'Sell to them again' })).toHaveAttribute(
 		'href',
-		'/workspace/sales/new?customer=customer-1&customer_business=business-1&organization=org-b'
+		'/workspace/give?customer=customer-1&customer_business=business-1&organization=org-b'
 	);
 	expect(requested.length).toBe(2);
 	expect(requested.every((url) => url.includes('/organizations/org-b/'))).toBe(true);

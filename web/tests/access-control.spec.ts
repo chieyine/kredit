@@ -148,6 +148,7 @@ test('the signed-in payments page prioritizes money and items needing an answer'
 				payments: [
 					{
 						id: 'sale-1',
+						payment_id: 'payment-1',
 						buyer_legal_name: 'Kano Retail',
 						description: 'Twenty bags of rice',
 						amount_kobo: 40000000,

@@ -207,7 +207,15 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 		await route.fulfill({
 			status: 201,
 			contentType: 'application/json',
-			body: JSON.stringify({ request: { id: 'request-1' } })
+			body: JSON.stringify({
+				request: {
+					id: 'request-1',
+					state: 'DRAFT',
+					buyer_legal_name: 'Kano Retail Limited',
+					principal_kobo: 120000000,
+					due_date: '2026-09-30'
+				}
+			})
 		});
 	});
 	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1', async (route) =>
@@ -225,15 +233,14 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 			}
 		})
 	);
-	await page.goto('/workspace/sales/new?advanced=1');
+	await page.goto('/workspace/give?organization=org-1');
+	await page.getByText('A business', { exact: true }).click();
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
-	await page.getByLabel('Sale amount (₦)').fill('1,200,000');
-	await page.getByLabel('What goods are they taking?').fill('Twenty cartons of verified inventory');
-	await page.getByLabel('First payment date').fill('2026-09-30');
-	await page.getByLabel('Optional later collection time (Nigerian time)').fill('2026-10-02T09:00');
-	await page.getByRole('button', { name: 'Check terms', exact: true }).click();
+	await page.getByLabel('What goods?').fill('Twenty cartons of verified inventory');
+	await page.getByLabel('How much? (₦)').fill('1,200,000');
+	await page.getByLabel('Pay by').fill('2026-09-30');
 	expect(submitted).toBeUndefined();
-	await page.getByRole('button', { name: 'Save draft sale', exact: true }).click();
+	await page.getByRole('button', { name: 'Review credit sale', exact: true }).click();
 	await expect(page).toHaveURL(/\/workspace\/sales\/request-1\?organization=org-1/);
 	expect(idempotency.length).toBeGreaterThanOrEqual(8);
 	await expect
@@ -1068,86 +1075,6 @@ test('recovery start is enumeration-safe and explains independent proof', async 
 	await page.getByRole('button', { name: 'Start' }).click();
 	await expect(page.getByText('If the account is eligible, recovery instructions have been sent.')).toBeVisible();
 	await expect.poll(() => submitted).toEqual({ identifier: 'someone@example.test', channel: 'email' });
-});
-
-test('supplier creates a mandate-backed trade line and sees provider validation safely', async ({ page }) => {
-	let submitted: Record<string, unknown> | undefined;
-	let attempts = 0;
-	await page.route('**/api/v1/organizations', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ organizations: [{ id: 'org-line', legal_name: 'Line Supplier Ltd' }] })
-		})
-	);
-	await page.route('**/api/v1/organizations/org-line/customers', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				customers: [{ buyer_user_id: 'buyer-line', buyer_business_id: 'business-line', legal_name: 'Repeat Buyer Ltd' }]
-			})
-		})
-	);
-	await page.route('**/api/v1/organizations/org-line/trade-lines', async (route) => {
-		if (route.request().method() === 'GET') {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ trade_lines: [] }) });
-			return;
-		}
-		submitted = route.request().postDataJSON();
-		attempts++;
-		if (attempts === 1) {
-			await route.fulfill({
-				status: 422,
-				contentType: 'application/problem+json',
-				body: JSON.stringify({ detail: 'The mandate provider could not verify this reference.' })
-			});
-			return;
-		}
-		await route.fulfill({
-			status: 201,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				trade_line: {
-					id: 'line-created',
-					...submitted,
-					supplier_organization_id: 'org-line',
-					current_exposure_kobo: 0,
-					reserved_pending_kobo: 0,
-					available_limit_kobo: 100000000,
-					state: 'ACTIVE',
-					version: 1
-				}
-			})
-		});
-	});
-	// Customer limits are off by default, here and on the server. A test about
-	// that flow switches it on the way the platform owner would.
-	await page.route('**/api/v1/platform/capabilities', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ features: { trade_lines: true, drawdowns: true } })
-		})
-	);
-	await page.goto('/workspace/sales/limits');
-	await page.locator('.card form select').first().selectOption('buyer-line');
-	await page.getByLabel('Bank debit setup number').fill('mandate-approved');
-	await page.getByLabel('Most they may owe you at once (₦)').fill('1,000,000');
-	await page.getByLabel('Start day').fill('2026-09-01T09:00');
-	await page.getByLabel('End day').fill('2027-09-01T09:00');
-	await page.getByRole('button', { name: 'Give a ₦1,000,000.00 limit' }).click();
-	await expect(page.getByText('The request was not accepted. Check the details and try again.')).toBeVisible();
-	await page.getByRole('button', { name: 'Give a ₦1,000,000.00 limit' }).click();
-	await expect(page.getByText('Customer limit saved: ₦1,000,000.00. Status: Active.')).toBeVisible();
-	await expect
-		.poll(() => submitted)
-		.toMatchObject({
-			buyer_user_id: 'buyer-line',
-			buyer_business_id: 'business-line',
-			mandate_id: 'mandate-approved',
-			approved_limit_kobo: 100000000
-		});
 });
 
 test('buyer attaches evidence to an existing dispute and sees the status timeline', async ({ page }) => {

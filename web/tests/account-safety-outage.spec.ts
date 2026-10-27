@@ -46,7 +46,7 @@ test('an interrupted backup-code rotation releases the button and reports uncert
 	await page.goto('/account/security');
 	await expect(page.getByRole('heading', { name: 'Extra sign-in safety is on' })).toBeVisible();
 	await page.getByRole('button', { name: 'Make new backup codes' }).click();
-	await expect(page.getByRole('status')).toContainText('We could not confirm the result');
+	await expect(page.getByRole('status')).toContainText('New backup codes could not be confirmed.');
 	await expect(page.getByRole('button', { name: 'Make new backup codes' })).toBeEnabled();
 	await expect(page.getByRole('heading', { name: 'Write these backup codes down' })).toHaveCount(0);
 });
@@ -134,7 +134,7 @@ test('interrupted account recovery can be retried without a stuck button', async
 	await page.goto('/recover');
 	await page.getByLabel('Your email or phone number').fill('owner@example.test');
 	await page.getByRole('button', { name: 'Start', exact: true }).click();
-	await expect(page.getByRole('alert')).toContainText('We could not confirm the result');
+	await expect(page.getByRole('alert')).toContainText('We could not confirm this step.');
 	await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
 	await expect(page.getByRole('status')).toHaveCount(0);
 });
@@ -147,7 +147,10 @@ for (const path of ['billing', 'settlement', 'credit-policy']) {
 		);
 		await page.route('**/api/v1/organizations/org-a/onboarding', (route) =>
 			route.fulfill({
-				json: { profile: { version: 1 }, permissions: { billing: true, settlement: true, credit_policy: true } }
+				json: {
+					profile: { version: 1, default_credit_limit_kobo: 0, default_payment_days: 30, default_grace_hours: 24 },
+					permissions: { billing: true, settlement: true, credit_policy: true }
+				}
 			})
 		);
 		await page.route('**/api/v1/organizations/org-a/onboarding/settlement/banks', (route) =>

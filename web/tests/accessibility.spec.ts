@@ -193,7 +193,7 @@ for (const journey of [
 			await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
 		if (journey[0] === 'credit creation')
 			await expect(page.getByRole('combobox', { name: 'Customer', exact: true })).toBeVisible();
-		if (journey[0] === 'credit to a person') await expect(page.getByLabel('His WhatsApp number')).toBeVisible();
+		if (journey[0] === 'credit to a person') await expect(page.getByLabel('Customer’s WhatsApp number')).toBeVisible();
 		await expectNoSeriousViolations(page, journey[0]);
 	});
 }
@@ -234,14 +234,14 @@ test('keyboard, focus, reflow, reduced motion, and touch-target safeguards remai
 
 test('giving credit stays closed until who, what, how much and when are filled', async ({ page }) => {
 	await page.goto('/workspace/give?customer=buyer-a11y&customer_business=business-a11y');
-	const send = page.getByRole('button', { name: 'Send to customer', exact: true });
+	const send = page.getByRole('button', { name: 'Review credit sale', exact: true });
 	await expect(send).toBeDisabled();
 	await page.getByLabel('What goods?').fill('Twenty bags of rice');
 	await page.getByLabel('How much? (₦)').fill('0');
 	await expect(send).toBeDisabled();
 	await page.getByLabel('How much? (₦)').fill('150000');
 	await expect(send).toBeEnabled();
-	await expect(page.getByText('owes you')).toBeVisible();
+	await expect(page.getByText('will be asked to pay')).toBeVisible();
 });
 
 test('offline mode is announced and financial actions remain unqueued', async ({ page, context }) => {
