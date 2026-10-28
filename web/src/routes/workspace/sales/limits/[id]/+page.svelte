@@ -2,7 +2,7 @@
 	import { readableDate } from '$lib/datetime';
 	import { feeDisclosure } from '$lib/fee-terms';
 	import { parseNaira, formatKobo, nairaInput } from '$lib/money';
-	import { checkedJSON, LatestRequest, publicError, record, rows, RequestError } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, publicError, record, rows, RequestError, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { organization, type Organization } from '$lib/records';
 	import { tradeLine, drawdown, tradeStatement, type TradeStatement } from '$lib/trade-line-records';
@@ -138,7 +138,7 @@
 		} catch (cause) {
 			if (generation === routeGeneration && lineID === page.params.id) {
 				pendingCommand = intents.get(path)?.unresolved ? submitted : null;
-				error = cause instanceof Error ? cause.message : 'The result has not been confirmed.';
+				error = errorText(cause, 'The result has not been confirmed.');
 			}
 			return false;
 		} finally {

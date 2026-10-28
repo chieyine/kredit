@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { adminGet, localTime, localInput, lagosISO } from '$lib/admin-client';
 	import { formatKobo, parseNaira, exactKobo, type KoboValue } from '$lib/money';
-	import { LatestRequest, record, rows, text } from '$lib/api/reliable';
+	import { LatestRequest, record, rows, text, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	const reads = new LatestRequest();
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
@@ -161,7 +161,7 @@
 			isPlatformOwner = verifiedRoles.includes('platform_owner');
 			governanceMode = mode;
 		} catch (e) {
-			if (read.current()) error = e instanceof Error ? e.message : 'That did not go through. Try again.';
+			if (read.current()) error = errorText(e, 'That did not go through. Try again.');
 		} finally {
 			if (read.current()) busy = false;
 		}
@@ -183,7 +183,7 @@
 			);
 			proposalID = crypto.randomUUID();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'That did not go through. Try again.';
+			error = errorText(e, 'That did not go through. Try again.');
 		} finally {
 			busy = false;
 		}
@@ -217,7 +217,7 @@
 			message = 'Proposal recorded for review.';
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'That did not go through. Try again.';
+			error = errorText(e, 'That did not go through. Try again.');
 		} finally {
 			busy = false;
 		}
@@ -238,7 +238,7 @@
 			message = 'Decision recorded.';
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'That did not go through. Try again.';
+			error = errorText(e, 'That did not go through. Try again.');
 		} finally {
 			busy = false;
 		}
@@ -260,7 +260,7 @@
 			message = 'Approved. The change is recorded.';
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'That did not go through. Try again.';
+			error = errorText(e, 'That did not go through. Try again.');
 		} finally {
 			busy = false;
 		}

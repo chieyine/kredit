@@ -50,3 +50,7 @@ infra/environments/db-certs/
 *.tfstate.*
 .terraform/
 infra/environments/backend.hcl
+
+# Python bytecode from running the compliance scripts
+__pycache__/
+*.pyc

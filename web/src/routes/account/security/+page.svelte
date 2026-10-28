@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { adminPost } from '$lib/admin-client';
-	import { checkedJSON, record, text, publicError } from '$lib/api/reliable';
+	import { checkedJSON, record, text, publicError, errorText } from '$lib/api/reliable';
 	let enrolled = false,
 		loading = true,
 		loadError = '';
@@ -38,7 +38,7 @@
 			secret = nextSecret;
 			message = 'Add Kredit to your authenticator app, then type the six-digit code it shows.';
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'Setup could not be confirmed.';
+			message = errorText(cause, 'Setup could not be confirmed.');
 		} finally {
 			busy = false;
 		}
@@ -70,7 +70,7 @@
 			code = '';
 			message = 'Extra sign-in safety is now on. We will ask for a code before any important change.';
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'Verification could not be confirmed.';
+			message = errorText(cause, 'Verification could not be confirmed.');
 		} finally {
 			busy = false;
 		}
@@ -87,7 +87,7 @@
 			recoveryCodes = body.recovery_codes.map(text);
 			message = 'Your new backup codes are ready. The old ones no longer work.';
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'New backup codes could not be confirmed.';
+			message = errorText(cause, 'New backup codes could not be confirmed.');
 		} finally {
 			busy = false;
 		}

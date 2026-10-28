@@ -68,7 +68,7 @@ func TestDurableImportAtomicReplayCancellationAndAuthority(t *testing.T) {
 	if _, err = admin.Exec(ctx, `INSERT INTO app.organizations(id,legal_name,business_type,business_address,industry) VALUES($1::uuid,'Import test','limited_company','Lagos','food')`, org); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = admin.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'sales','active')`, org, actor); err != nil {
+	if _, err = admin.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, org, actor); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
@@ -146,7 +146,7 @@ func TestDurableImportAtomicReplayCancellationAndAuthority(t *testing.T) {
 	if _, err = admin.Exec(ctx, `INSERT INTO app.organizations(id,legal_name,business_type,business_address,industry) VALUES($1::uuid,'Second supplier','limited_company','Lagos','food')`, otherOrg); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = admin.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'sales','active')`, otherOrg, actor); err != nil {
+	if _, err = admin.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, otherOrg, actor); err != nil {
 		t.Fatal(err)
 	}
 	otherBatch, err := s.SaveImport(ctx, actor, otherOrg, hash, importContacts())

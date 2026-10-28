@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { checkedJSON, record, text, publicError } from '$lib/api/reliable';
+	import { checkedJSON, record, text, publicError, errorText } from '$lib/api/reliable';
 	import { formatKobo } from '$lib/money';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { actualPaymentTime, positiveNaira } from '$lib/financial-input';
@@ -131,7 +131,7 @@
 		} catch (cause) {
 			unconfirmed = intent.unresolved;
 			recoveryReference = intent.recoveryReference;
-			error = cause instanceof Error ? cause.message : 'Settlement recording was not confirmed.';
+			error = errorText(cause, 'Settlement recording was not confirmed.');
 		} finally {
 			busy = false;
 		}

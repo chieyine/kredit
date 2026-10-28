@@ -41,11 +41,8 @@ test('homepage shows a whole sale on credit and the full business-to-consumer ne
 	await expect(page.getByRole('heading', { name: 'Your customers stay yours.' })).toBeVisible();
 });
 
-test('both sale-creation entry points preserve authentication and the intended destination', async ({ request }) => {
-	for (const path of [
-		'/workspace/sales/quick?customer=u1&goods=Rice&amount=100000',
-		'/workspace/sales/new?advanced=1'
-	]) {
+test('the sale form preserves authentication and the intended destination', async ({ request }) => {
+	for (const path of ['/workspace/give?customer=u1&goods=Rice&amount=100000', '/workspace/give?kind=person']) {
 		const response = await request.get(path, { maxRedirects: 0 });
 		expect(response.status()).toBe(303);
 		const location = new URL(response.headers().location, 'http://127.0.0.1:5173');

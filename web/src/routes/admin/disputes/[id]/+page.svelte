@@ -3,7 +3,7 @@
 	import { timeLabel } from '$lib/records';
 	import { productLabel, reasonText } from '$lib/product-language';
 	import { page } from '$app/state';
-	import { checkedJSON, record, text, LatestRequest, publicError } from '$lib/api/reliable';
+	import { checkedJSON, record, text, LatestRequest, publicError, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { disputeDetail, type Dispute, type DisputeDecision, type DisputeEvidence } from '$lib/disputes';
 	let dispute = $state<Dispute | null>(null),
@@ -109,8 +109,7 @@
 				await load();
 			}
 		} catch (cause) {
-			if (id === page.params.id)
-				actionError = cause instanceof Error ? cause.message : 'The decision could not be confirmed.';
+			if (id === page.params.id) actionError = errorText(cause, 'The decision could not be confirmed.');
 		} finally {
 			busy = false;
 		}

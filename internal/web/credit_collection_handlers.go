@@ -37,7 +37,7 @@ func (s *Server) startCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r = r.WithContext(db.WithTenantContext(r.Context(), user.ID, orgID))
-	if !s.requireSupplierReady(w, orgID, user.ID, "starting a live collection") {
+	if !s.requireSupplierReady(w, r, orgID, user.ID, "starting a live collection") {
 		return
 	}
 	if !s.requireCSRF(w, r) {

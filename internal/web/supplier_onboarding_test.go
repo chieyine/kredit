@@ -11,9 +11,10 @@ import (
 	"kredit/internal/auth"
 	"kredit/internal/config"
 	"kredit/internal/onboarding"
+	"kredit/internal/organizations"
 )
 
-func TestNewSupplierOwnerReachesPilotReadyAndCanInviteSales(t *testing.T) {
+func TestNewSupplierOwnerReachesPilotReady(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	cfg, err := config.Load()
 	if err != nil {
@@ -123,18 +124,20 @@ func TestNewSupplierOwnerReachesPilotReadyAndCanInviteSales(t *testing.T) {
 	if !ready.Readiness.Ready || len(ready.Readiness.Missing) != 0 {
 		t.Fatalf("expected pilot ready: %#v", ready)
 	}
-	invite := doJSON(t, client, "/api/v1/organizations/"+org+"/members", http.MethodPost, map[string]string{"target": "sales@fresh-foods.test", "channel": "email", "role": "sales"}, headers("onboard-invite-sales"), http.StatusAccepted)
-	_ = invite.Body.Close()
 }
 
 func TestIncompleteSupplierGateExplainsRecovery(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	cfg, _ := config.Load()
 	runtime := NewRuntime(cfg)
-	_, _ = runtime.Onboarding.Ensure("org-incomplete", "owner", true, false)
+	organization, _, err := runtime.Organizations.Create("owner", organizations.CreateInput{LegalName: "Incomplete Ltd", BusinessType: "limited_company", BusinessAddress: "Lagos", Industry: "wholesale"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = runtime.Onboarding.Ensure(organization.ID, "owner", true, false)
 	server := NewServerWithRuntime(cfg, slog.Default(), runtime)
 	rec := httptest.NewRecorder()
-	if server.requireSupplierReady(rec, "org-incomplete", "owner", "releasing goods") {
+	if server.requireSupplierReady(rec, httptest.NewRequest(http.MethodPost, "/", nil), organization.ID, "owner", "releasing goods") {
 		t.Fatal("incomplete supplier must be blocked")
 	}
 	if rec.Code != http.StatusConflict {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorText } from '$lib/api/reliable';
 	import { onMount } from 'svelte';
 	import { adminPost } from '$lib/admin-client';
 	import { loadOnboardingSettings, settingsProfile } from '$lib/api/onboarding-settings';
@@ -30,7 +31,7 @@
 			days = Number(profile.default_payment_days);
 			grace = Number(profile.default_grace_hours);
 		} catch (cause) {
-			loadError = cause instanceof Error ? cause.message : 'We could not load these settings.';
+			loadError = errorText(cause, 'We could not load these settings.');
 		} finally {
 			loading = false;
 		}
@@ -53,7 +54,7 @@
 			profile = settingsProfile(result.profile);
 			message = 'Saved. We will use these on your next sale.';
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'We could not confirm this change.';
+			message = errorText(cause, 'We could not confirm this change.');
 		} finally {
 			busy = false;
 		}

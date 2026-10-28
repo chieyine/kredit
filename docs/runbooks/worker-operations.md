@@ -2,9 +2,8 @@
 
 ## Queue contract
 
-River workers are separated into `critical-financial`, `provider-webhooks`,
-`collections`, `reconciliation`, `notifications`, `documents`, `reports`, and
-`maintenance` queues. Each job class has a stable kind, unique arguments, and a
+River workers are separated into `provider-webhooks`, `collections`,
+`reconciliation`, `notifications`, `documents` and `maintenance` queues. Each job class has a stable kind, unique arguments, and a
 bounded retry budget.
 
 ## Triage

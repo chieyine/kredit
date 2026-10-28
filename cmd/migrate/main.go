@@ -118,13 +118,3 @@ func run(args []string) error {
 func dbpool(ctx context.Context, databaseURL string) (*db.Pool, error) {
 	return db.Open(ctx, databaseURL)
 }
-
-// extractUpSQL remains a small compatibility helper for migration tests and
-// tooling that inspect a Goose migration without executing it.
-func extractUpSQL(contents []byte) string {
-	const downMarker = "-- +goose Down"
-	if index := strings.Index(string(contents), downMarker); index >= 0 {
-		return string(contents[:index])
-	}
-	return string(contents)
-}

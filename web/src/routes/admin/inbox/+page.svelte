@@ -2,7 +2,7 @@
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
 	import { onMount } from 'svelte';
 	import { adminGet, adminPost, localTime, localInput, lagosISO } from '$lib/admin-client';
-	import { optionalText, record, rows, text } from '$lib/api/reliable';
+	import { optionalText, record, rows, text, errorText } from '$lib/api/reliable';
 	import { productLabel } from '$lib/product-language';
 	const kindNames: Record<string, string> = {
 		policy: 'Business policy',
@@ -64,7 +64,7 @@
 			items = verified.slice(0, 200);
 			actor = b.actor_id;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'We could not open this. Try again.';
+			error = errorText(e, 'We could not open this. Try again.');
 		} finally {
 			busy = false;
 		}
@@ -86,7 +86,7 @@
 			message = 'Ownership and deadline recorded.';
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'We could not open this. Try again.';
+			error = errorText(e, 'We could not open this. Try again.');
 		} finally {
 			busy = false;
 		}

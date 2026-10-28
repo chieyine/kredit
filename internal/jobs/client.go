@@ -21,23 +21,18 @@ import (
 )
 
 const (
-	QueueCriticalFinancial = "critical-financial"
-	QueueFinancial         = QueueCriticalFinancial
-	QueueProvider          = "provider-webhooks"
-	QueueCollections       = "collections"
-	QueueReconciliation    = "reconciliation"
-	QueueNotifications     = "notifications"
-	QueueDocuments         = "documents"
-	QueueReports           = "reports"
-	QueueMaintenance       = "maintenance"
-	KindMaintenance        = "kredit.maintenance"
-	KindFinancial          = "kredit.financial"
-	KindReconciliation     = "kredit.reconciliation"
-	KindProviderWebhook    = "kredit.provider_webhook"
-	KindCollection         = "kredit.collection"
-	KindNotification       = "kredit.notification"
-	KindDocument           = "kredit.document"
-	KindReport             = "kredit.report"
+	QueueProvider       = "provider-webhooks"
+	QueueCollections    = "collections"
+	QueueReconciliation = "reconciliation"
+	QueueNotifications  = "notifications"
+	QueueDocuments      = "documents"
+	QueueMaintenance    = "maintenance"
+	KindMaintenance     = "kredit.maintenance"
+	KindReconciliation  = "kredit.reconciliation"
+	KindProviderWebhook = "kredit.provider_webhook"
+	KindCollection      = "kredit.collection"
+	KindNotification    = "kredit.notification"
+	KindDocument        = "kredit.document"
 
 	OpExpireReservations          = "expire_drawdown_reservations"
 	OpReconcileSupplierOnboarding = "reconcile_supplier_onboarding"
@@ -47,7 +42,6 @@ const (
 	OpReconcileProvider           = "reconcile_provider"
 	OpDeliver                     = "deliver"
 	OpScan                        = "scan"
-	OpExport                      = "export"
 )
 
 type MaintenanceArgs struct {
@@ -59,16 +53,6 @@ type MaintenanceArgs struct {
 func (MaintenanceArgs) Kind() string { return KindMaintenance }
 func (MaintenanceArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{Queue: QueueMaintenance, MaxAttempts: 5, UniqueOpts: river.UniqueOpts{ByArgs: true, ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled}}}
-}
-
-type FinancialArgs struct {
-	Operation  string `json:"operation"`
-	ResourceID string `json:"resource_id,omitempty"`
-}
-
-func (FinancialArgs) Kind() string { return KindFinancial }
-func (FinancialArgs) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: QueueFinancial, MaxAttempts: 12, UniqueOpts: river.UniqueOpts{ByArgs: true}}
 }
 
 type ReconciliationArgs struct {
@@ -127,16 +111,6 @@ func (DocumentArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{Queue: QueueDocuments, MaxAttempts: 5, UniqueOpts: river.UniqueOpts{ByArgs: true}}
 }
 
-type ReportArgs struct {
-	Operation string `json:"operation"`
-	ExportID  string `json:"export_id"`
-}
-
-func (ReportArgs) Kind() string { return KindReport }
-func (ReportArgs) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: QueueReports, MaxAttempts: 4, UniqueOpts: river.UniqueOpts{ByArgs: true}}
-}
-
 type OperationHandler func(context.Context, string, string) error
 type CollectionHandler func(context.Context, CollectionArgs) error
 
@@ -147,7 +121,6 @@ type Handlers struct {
 	Collection       CollectionHandler
 	Notification     OperationHandler
 	Document         OperationHandler
-	Report           OperationHandler
 	Tracer           *observability.Tracer
 	Metrics          *observability.Store
 }
@@ -346,22 +319,6 @@ func expireTenantDrawdownReservations(ctx context.Context, pool *pgxpool.Pool) e
 	return tx.Commit(ctx)
 }
 
-type FinancialWorker struct {
-	river.WorkerDefaults[FinancialArgs]
-	Pool   *pgxpool.Pool
-	Logger *slog.Logger
-}
-
-func (w *FinancialWorker) Work(ctx context.Context, job *river.Job[FinancialArgs]) error {
-	if w.Pool == nil {
-		return errors.New("financial worker database is not configured")
-	}
-	if job.Args.Operation != OpReconcileLedger {
-		return fmt.Errorf("unsupported financial operation %q", job.Args.Operation)
-	}
-	return reconcileLedger(ctx, w.Pool, w.Logger)
-}
-
 type ReconciliationWorker struct {
 	river.WorkerDefaults[ReconciliationArgs]
 	Pool   *pgxpool.Pool
@@ -514,23 +471,7 @@ func (w *DocumentWorker) Work(ctx context.Context, job *river.Job[DocumentArgs])
 	return w.Handler(ctx, job.Args.Operation, job.Args.DocumentID)
 }
 
-type ReportWorker struct {
-	river.WorkerDefaults[ReportArgs]
-	Handler OperationHandler
-}
-
-func (w *ReportWorker) Work(ctx context.Context, job *river.Job[ReportArgs]) error {
-	if w.Handler == nil {
-		return errors.New("report operation handler is not configured")
-	}
-	return w.Handler(ctx, job.Args.Operation, job.Args.ExportID)
-}
-
 type Client struct{ inner *river.Client[pgx.Tx] }
-
-func NewClient(pool *pgxpool.Pool, logger *slog.Logger) (*Client, error) {
-	return NewClientWithHandlers(pool, logger, Handlers{})
-}
 
 func NewClientWithHandlers(pool *pgxpool.Pool, logger *slog.Logger, handlers Handlers) (*Client, error) {
 	if pool == nil {
@@ -538,7 +479,6 @@ func NewClientWithHandlers(pool *pgxpool.Pool, logger *slog.Logger, handlers Han
 	}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &MaintenanceWorker{Pool: pool, Logger: logger, MaturedCredit: handlers.MaturedCredit, CleanupDocuments: handlers.CleanupDocuments})
-	river.AddWorker(workers, &FinancialWorker{Pool: pool, Logger: logger})
 	river.AddWorker(workers, &ReconciliationWorker{Pool: pool, Logger: logger})
 	// Optional workers are registered only when their durable handler is
 	// supplied. This prevents a production process from claiming jobs it cannot
@@ -555,19 +495,14 @@ func NewClientWithHandlers(pool *pgxpool.Pool, logger *slog.Logger, handlers Han
 	if handlers.Document != nil {
 		river.AddWorker(workers, &DocumentWorker{Handler: handlers.Document})
 	}
-	if handlers.Report != nil {
-		river.AddWorker(workers, &ReportWorker{Handler: handlers.Report})
-	}
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault:  {MaxWorkers: 1},
-			QueueFinancial:      {MaxWorkers: 8},
 			QueueProvider:       {MaxWorkers: 8},
 			QueueCollections:    {MaxWorkers: 12},
 			QueueReconciliation: {MaxWorkers: 4},
 			QueueNotifications:  {MaxWorkers: 12},
 			QueueDocuments:      {MaxWorkers: 4},
-			QueueReports:        {MaxWorkers: 4},
 			QueueMaintenance:    {MaxWorkers: 2},
 		},
 		Workers:      workers,
@@ -598,9 +533,6 @@ func (c *Client) Stop(ctx context.Context) error {
 func (c *Client) EnqueueMaintenance(ctx context.Context, args MaintenanceArgs) error {
 	return c.insert(ctx, args, nil)
 }
-func (c *Client) EnqueueFinancial(ctx context.Context, args FinancialArgs) error {
-	return c.insert(ctx, args, nil)
-}
 func (c *Client) EnqueueReconciliation(ctx context.Context, args ReconciliationArgs) error {
 	return c.insert(ctx, args, nil)
 }
@@ -616,9 +548,6 @@ func (c *Client) EnqueueNotification(ctx context.Context, args NotificationArgs)
 func (c *Client) EnqueueDocument(ctx context.Context, args DocumentArgs) error {
 	return c.insert(ctx, args, nil)
 }
-func (c *Client) EnqueueReport(ctx context.Context, args ReportArgs) error {
-	return c.insert(ctx, args, nil)
-}
 
 func (c *Client) insert(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) error {
 	if c == nil || c.inner == nil {
@@ -627,8 +556,6 @@ func (c *Client) insert(ctx context.Context, args river.JobArgs, opts *river.Ins
 	_, err := c.inner.Insert(ctx, args, opts)
 	return err
 }
-
-func ScheduleMaintenance(now time.Time) time.Time { return now.Add(time.Minute) }
 
 // NewEnqueueClient never runs workers in the API process.
 func NewEnqueueClient(pool *pgxpool.Pool) (*Client, error) {

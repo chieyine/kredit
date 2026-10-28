@@ -240,10 +240,6 @@ func (s *PostgresStore) ReadMembership(ctx context.Context, organizationID, user
 	return membership, nil
 }
 
-func (s *PostgresStore) beginTenantTx(userID, organizationID string) (pgx.Tx, error) {
-	return s.beginTenantTxContext(context.Background(), userID, organizationID)
-}
-
 func (s *PostgresStore) beginTenantTxContext(ctx context.Context, userID, organizationID string) (pgx.Tx, error) {
 	if s == nil || s.pool == nil {
 		return nil, errors.New("organization database is not configured")

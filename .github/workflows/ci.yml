@@ -14,7 +14,9 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Playwright 1.55 cannot install Chromium dependencies on Ubuntu 26.04,
+    # which ubuntu-latest now resolves to. Pin the image the suite supports.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:18

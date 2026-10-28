@@ -21,14 +21,14 @@
 			await adminPost(`/api/v1/buyer/me/verification/refresh${businessQuery}`, {});
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not check verification.';
+			error = errorText(cause, 'We could not check verification.');
 		} finally {
 			checkingVerification = false;
 		}
 	}
 	import { exactKobo, formatKobo, sumKobo, type KoboValue } from '$lib/money';
 	import { kobo, saleView, type SaleView } from '$lib/records';
-	import { checkedJSON, LatestRequest, record, rows, text, publicError } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, record, rows, text, publicError, errorText } from '$lib/api/reliable';
 	import FeedbackPrompt from '$lib/components/FeedbackPrompt.svelte';
 
 	type Portal = {
@@ -292,7 +292,7 @@
 		background: var(--color-primary);
 		color: var(--color-on-primary);
 		padding: 1.6rem 1.4rem 1.5rem;
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.owe-hero .owed span {
 		display: block;

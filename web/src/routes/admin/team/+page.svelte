@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { lagosISO, localTime } from '$lib/admin-client';
-	import { checkedJSON, rows, record, publicError, text, LatestRequest } from '$lib/api/reliable';
+	import { checkedJSON, rows, record, publicError, text, LatestRequest, errorText } from '$lib/api/reliable';
 
 	import { MutationIntent } from '$lib/api/mutation';
 	const requests = new LatestRequest();
@@ -146,7 +146,7 @@
 			expires = '';
 			await load();
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'Access could not be confirmed.';
+			message = errorText(cause, 'Access could not be confirmed.');
 		} finally {
 			busy = false;
 		}
@@ -171,7 +171,7 @@
 			revokeReason = '';
 			await load();
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'Access removal could not be confirmed.';
+			message = errorText(cause, 'Access removal could not be confirmed.');
 		} finally {
 			busy = false;
 		}

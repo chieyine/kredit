@@ -1,0 +1,27 @@
+# Advisories reviewed and found not to apply. Each entry expires so it is
+# looked at again; remove it once the dependency is upgraded.
+
+# SvelteKit open redirect through enhanced form actions. The fix ships only in
+# SvelteKit 3. Kredit has no `use:enhance` forms and no catch-all routes, the
+# two preconditions for the redirect.
+[[IgnoredVulns]]
+id = "GHSA-pfhg-q3qv-9q6r"
+ignoreUntil = 2027-01-31
+reason = "Not reachable: no use:enhance forms and no catch-all routes. Fixed only in SvelteKit 3."
+
+# SvelteKit XSS through an untrusted cache-control header on a prerendered
+# page. Kredit prerenders nothing, and every cache-control value it sets is a
+# fixed literal.
+[[IgnoredVulns]]
+id = "GHSA-27mw-82g8-phjj"
+ignoreUntil = 2027-01-31
+reason = "Not reachable: no prerendered pages and cache-control is always a fixed literal. Fixed only in SvelteKit 3."
+
+# deepmerge prototype poisoning. No fixed release exists. It is used only at
+# build time, by Rollup's node resolver and the Svelte Vite plugin, to merge
+# configuration this repository writes; no request data reaches it and it is
+# not part of the built server.
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-01-31
+reason = "Build-time only: merges our own Rollup and Svelte configuration, never request data. No fixed release exists."

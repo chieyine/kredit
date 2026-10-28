@@ -107,7 +107,7 @@ Notes were recorded as the audit progressed. Earlier references to pending cross
 | File | Review | Notes |
 | --- | --- | --- |
 | [main.go](../../../cmd/migrate/main.go) | read-complete | Read all: migration connection selection, guarded down command, Goose and River sequencing. No confirmed defect in this pass. |
-| [main_test.go](../../../cmd/migrate/main_test.go) | read-complete | Read in full as source only; no tests executed. Reviewed command setup and assertions. |
+| main_test.go (since removed) | read-complete | Read in full as source only; no tests executed. Reviewed command setup and assertions. |
 
 ## cmd/provider-simulator
 

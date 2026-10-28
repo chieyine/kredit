@@ -2,7 +2,7 @@
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import { feeDisclosure, validFeeTerms } from '$lib/fee-terms';
 	import { onMount } from 'svelte';
-	import { checkedJSON, LatestRequest, publicError, record, rows } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, publicError, record, rows, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { tradeLine, tradeStatement, drawdown as drawdownRecord, type TradeStatement } from '$lib/trade-line-records';
 	import { formatKobo } from '$lib/money';
@@ -84,7 +84,7 @@
 			notice = 'Your response has been saved.';
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not confirm your response.';
+			error = errorText(cause, 'We could not confirm your response.');
 		} finally {
 			busy = '';
 		}

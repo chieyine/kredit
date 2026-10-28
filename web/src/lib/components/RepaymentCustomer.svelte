@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorText } from '$lib/api/reliable';
 	import VerifyIdentity from './VerifyIdentity.svelte';
 	import { adminPost } from '$lib/admin-client';
 	let { businessID, businessName }: { businessID: string; businessName: string } = $props();
@@ -24,8 +25,7 @@
 			if (result.registered !== true) throw new Error('Registration needs review.');
 			message = 'Business bank details registered. Open your sale to give bank debit permission.';
 		} catch (cause) {
-			message =
-				cause instanceof Error ? cause.message : 'The bank setup is unconfirmed. Contact support before trying again.';
+			message = errorText(cause, 'The bank setup is unconfirmed. Contact support before trying again.');
 		} finally {
 			bvn = '';
 			busy = false;

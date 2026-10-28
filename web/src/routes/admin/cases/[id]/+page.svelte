@@ -3,7 +3,16 @@
 	import { page } from '$app/state';
 	import { localTime } from '$lib/admin-client';
 	import { productLabel, shortReference } from '$lib/product-language';
-	import { checkedJSON, optionalText, record, rows, text, LatestRequest, publicError } from '$lib/api/reliable';
+	import {
+		checkedJSON,
+		optionalText,
+		record,
+		rows,
+		text,
+		LatestRequest,
+		publicError,
+		errorText
+	} from '$lib/api/reliable';
 	type SupportCase = { id: string; state: string; subject_type: string; subject_id: string; created_at: string };
 	type CaseEvent = { action: string; created_at: string; note: string };
 	let item = $state<SupportCase | null>(null),
@@ -81,7 +90,7 @@
 			await load(id);
 		} catch (cause) {
 			if (page.params.id !== id) return;
-			notice = cause instanceof Error ? cause.message : 'The case update could not be confirmed.';
+			notice = errorText(cause, 'The case update could not be confirmed.');
 		} finally {
 			busy = false;
 		}

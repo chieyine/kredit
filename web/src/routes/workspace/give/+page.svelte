@@ -14,7 +14,8 @@
 		RequestError,
 		rows,
 		text,
-		type Resource
+		type Resource,
+		errorText
 	} from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { customer, organization, saleView, dateLabel, type Customer, type Organization } from '$lib/records';
@@ -182,7 +183,7 @@
 				}
 			);
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not confirm the customer link. Try again.';
+			error = errorText(cause, 'We could not confirm the customer link. Try again.');
 		} finally {
 			busy = false;
 		}

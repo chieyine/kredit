@@ -499,7 +499,7 @@
 	.money-summary article.total {
 		color: var(--color-on-primary);
 		background: var(--color-primary);
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.money-summary article.needs-action {
 		box-shadow: inset 0 0.35rem var(--color-accent);
@@ -521,7 +521,7 @@
 		color: var(--color-on-primary);
 	}
 	.money-summary .total small {
-		color: var(--color-surface-muted);
+		color: var(--color-on-primary-muted);
 	}
 	.review-section {
 		margin-bottom: 5rem;
@@ -613,7 +613,7 @@
 		color: var(--color-on-primary);
 		font: inherit;
 		font-weight: 750;
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.claim-actions .secondary {
 		border-color: var(--color-primary);
@@ -671,7 +671,7 @@
 		font-weight: 750;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.payment-row {
 		background: var(--color-surface);
@@ -788,7 +788,7 @@
 		color: var(--color-on-primary);
 		background: var(--color-primary);
 		box-shadow: inset 0 0.4rem var(--color-accent);
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.money-summary .total > span,
 	.money-summary .total strong,

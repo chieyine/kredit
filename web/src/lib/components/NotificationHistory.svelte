@@ -330,7 +330,7 @@
 		color: var(--color-on-primary);
 	}
 	.empty-state p {
-		color: var(--color-surface-muted);
+		color: var(--color-on-primary-muted);
 	}
 	.explain {
 		margin-top: 2rem;

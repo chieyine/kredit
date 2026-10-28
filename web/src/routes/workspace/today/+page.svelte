@@ -2,7 +2,7 @@
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { getContext, onMount } from 'svelte';
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
-	import { LatestRequest, publicError, readResource, record, rows, type Resource } from '$lib/api/reliable';
+	import { LatestRequest, publicError, readResource, record, rows, type Resource, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import {
 		organization,
@@ -281,7 +281,7 @@
 			);
 			await load();
 		} catch (cause) {
-			createError = cause instanceof Error ? cause.message : 'We could not confirm your business details.';
+			createError = errorText(cause, 'We could not confirm your business details.');
 		} finally {
 			createBusy = false;
 		}
@@ -481,7 +481,7 @@
 		padding: 1.5rem;
 		background: var(--color-primary);
 		color: var(--color-on-primary);
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.balance-card > p {
 		margin: 0;

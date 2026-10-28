@@ -105,10 +105,6 @@ export const articles: Article[] = publishableGuideDrafts.map((draft) => {
 
 export const articleCategories = [...new Set(articles.map((article) => article.category))];
 export const articlesBySlug = new Map(articles.map((article) => [article.slug, article]));
-export function articleForSlug(slug: string) {
-	return articlesBySlug.get(slug);
-}
-
 export function categorySlug(category: ArticleCategory) {
 	return category.toLowerCase().replaceAll(' ', '-');
 }

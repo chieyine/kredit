@@ -62,10 +62,3 @@ test('Who owes me carries the selected business into every tab', async ({ page }
 	// Supplier balances moved off the seller's home to What I owe.
 	await expect(page.getByRole('region', { name: 'Supplier balances' })).toHaveCount(0);
 });
-
-test('a switched-off tool sends the person back and keeps the business', async ({ page }) => {
-	await page.goto('/workspace/partners/import?organization=org-b');
-	await expect(page).toHaveURL(/\/workspace\/partners\/customers\?organization=org-b$/);
-	await page.goto('/workspace/sales/quick?organization=org-b&goods=Rice');
-	await expect(page).toHaveURL(/\/workspace\/give\?organization=org-b&goods=Rice$/);
-});

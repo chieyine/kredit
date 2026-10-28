@@ -15,6 +15,7 @@ inventory = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(inventory)
 BASE = ROOT / 'docs/compliance/data-inventory.tsv'
 ADDITIONS = ROOT / 'docs/compliance/data-inventory-additions.json'
+RETIRED = ROOT / 'docs/compliance/data-inventory-retired.tsv'
 
 
 class InventoryTests(unittest.TestCase):
@@ -41,12 +42,30 @@ class InventoryTests(unittest.TestCase):
             original = list(csv.DictReader(source, delimiter='\t'))
         rows = self.rendered()
         lookup = {inventory.key_of(row): row for row in rows}
+        retired = inventory.read_retired(RETIRED)
         self.assertEqual(len(original), 1424)
-        self.assertEqual(len(rows), 1645)
+        self.assertEqual(len(retired), 19)
+        self.assertEqual(len(rows), 1492)
         for row in original:
-            self.assertEqual(row, lookup[inventory.key_of(row)])
-        self.assertEqual(sum(row['classification'] == 'restricted_pending_review' for row in rows), 221)
+            if inventory.key_of(row) not in retired:
+                self.assertEqual(row, lookup[inventory.key_of(row)])
+        self.assertEqual(sum(row['classification'] == 'restricted_pending_review' for row in rows), 87)
         self.assertEqual(rows, self.rendered())
+
+    def test_retired_fields_must_name_their_migration_and_exist(self):
+        additions = self.root / 'additions.json'
+        additions.write_text(json.dumps(self.manifest))
+        header = 'schema\ttable\tfield\tremoved_by\n'
+        for body in [
+            'app\tmemberships\tinvited_at\tnot_a_migration\n',
+            'app\tmemberships\tinvited_at\t999_missing_migration\n',
+            'app\tunknown_table\tunknown_field\t213_single_owner_business\n',
+            'app\tmemberships\tinvited_at\t213_single_owner_business\n' * 2,
+        ]:
+            path = self.root / 'retired.tsv'
+            path.write_text(header + body)
+            with self.assertRaises(ValueError):
+                inventory.read_inventory(BASE, additions, path)
 
     def test_live_schema_cannot_silently_add_or_remove_fields(self):
         rows = self.rendered()

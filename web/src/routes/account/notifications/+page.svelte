@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { idempotencyKey } from '$lib/api/client';
 	import { adminPost } from '$lib/admin-client';
-	import { checkedJSON, record, publicError } from '$lib/api/reliable';
+	import { checkedJSON, record, publicError, errorText } from '$lib/api/reliable';
 	type Channel = 'whatsapp' | 'email' | 'sms';
 	type Preferences = {
 		preferred_channel: Channel;
@@ -86,7 +86,7 @@
 			intent = null;
 			message = 'Your message choices were saved.';
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'Your choices could not be confirmed.';
+			message = errorText(cause, 'Your choices could not be confirmed.');
 		} finally {
 			busy = false;
 		}

@@ -150,14 +150,6 @@ func (p *Pool) CheckSchema(ctx context.Context) error {
 	return nil
 }
 
-func (p *Pool) Exec(ctx context.Context, sql string, args ...any) error {
-	if p == nil || p.inner == nil {
-		return errors.New("postgres pool is not configured")
-	}
-	_, err := p.inner.Exec(ctx, sql, args...)
-	return err
-}
-
 func (p *Pool) Begin(ctx context.Context) (pgx.Tx, error) {
 	if p == nil || p.inner == nil {
 		return nil, errors.New("postgres pool is not configured")

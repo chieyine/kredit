@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { read, Mutation, money, kobo } from '$lib/consumer';
-	import { record, normalizeNigerianPhone } from '$lib/api/reliable';
+	import { record, normalizeNigerianPhone, errorText } from '$lib/api/reliable';
 	type Rules = {
 		version: number;
 		enabled: boolean;
@@ -147,7 +147,7 @@
 				account = data.self.account_number;
 			}
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not load referrals.';
+			error = errorText(e, 'Could not load referrals.');
 		} finally {
 			busy = false;
 		}
@@ -173,7 +173,7 @@
 				data.next[key] = next.next[key];
 			}
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not load the next page.';
+			error = errorText(e, 'Could not load the next page.');
 		} finally {
 			busy = false;
 		}
@@ -193,7 +193,7 @@
 			selected = null;
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'The action was not confirmed.';
+			error = errorText(e, 'The action was not confirmed.');
 		} finally {
 			busy = false;
 		}
@@ -211,7 +211,7 @@
 				consent
 			});
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Check your details.';
+			error = errorText(e, 'Check your details.');
 		}
 	}
 	function choose(row: Reviewable, what: string) {
@@ -247,7 +247,7 @@
 				}
 			});
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Check the reward amounts.';
+			error = errorText(e, 'Check the reward amounts.');
 		}
 	}
 	async function retry() {
@@ -259,7 +259,7 @@
 			selected = null;
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not confirm the action.';
+			error = errorText(e, 'Could not confirm the action.');
 		} finally {
 			busy = false;
 		}

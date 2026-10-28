@@ -55,6 +55,14 @@ async function mockOperationsCommand(page: import('@playwright/test').Page, appl
 	});
 }
 
+// A due date the form will accept whenever the suite runs, and the collection
+// time the server would derive from it (the next day, 23:59 in Lagos).
+function futureDue(days = 60) {
+	const due = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+	const next = new Date(Date.parse(due) + 86_400_000).toISOString().slice(0, 10);
+	return { due, collectionAt: `${next}T22:59:00Z` };
+}
+
 test('operator previews and safely retries one failed job', async ({ page }) => {
 	const applied: Record<string, unknown>[] = [];
 	await mockOperationsCommand(page, applied);
@@ -66,8 +74,8 @@ test('operator previews and safely retries one failed job', async ({ page }) => 
 				jobs: [
 					{
 						id: 41,
-						kind: 'kredit.financial',
-						queue: 'critical-financial',
+						kind: 'kredit.collection',
+						queue: 'collections',
 						state: 'retryable',
 						attempt: 2,
 						max_attempts: 12
@@ -170,6 +178,7 @@ test('operator places an expiring scoped buyer risk hold', async ({ page }) => {
 });
 
 test('supplier can create exact credit terms with a replay-safe request', async ({ page }) => {
+	const { due, collectionAt } = futureDue();
 	let submitted: Record<string, unknown> | undefined;
 	let idempotency = '';
 	await page.route('**/api/v1/organizations', async (route) =>
@@ -207,7 +216,15 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 		await route.fulfill({
 			status: 201,
 			contentType: 'application/json',
-			body: JSON.stringify({ request: { id: 'request-1' } })
+			body: JSON.stringify({
+				request: {
+					id: 'request-1',
+					state: 'DRAFT',
+					buyer_legal_name: 'Kano Retail Limited',
+					principal_kobo: 120000000,
+					due_date: due
+				}
+			})
 		});
 	});
 	await page.route('**/api/v1/organizations/org-1/credit-requests/request-1', async (route) =>
@@ -216,24 +233,23 @@ test('supplier can create exact credit terms with a replay-safe request', async 
 	await page.route('**/api/v1/organizations/org-1/credit-terms/preview', (route) =>
 		route.fulfill({
 			json: {
-				due_date: '2026-09-30',
+				due_date: due,
 				grace_hours: 24,
-				collection_at: '2026-10-02T08:00:00Z',
+				collection_at: collectionAt,
 				timezone: 'Africa/Lagos',
 				cutoff: '23:59',
 				timing_mode: 'lagos_explicit'
 			}
 		})
 	);
-	await page.goto('/workspace/sales/new?advanced=1');
+	await page.goto('/workspace/give?organization=org-1');
+	await page.getByText('A business', { exact: true }).click();
 	await page.getByRole('combobox', { name: 'Customer', exact: true }).selectOption('buyer-1:business-1');
-	await page.getByLabel('Sale amount (₦)').fill('1,200,000');
-	await page.getByLabel('What goods are they taking?').fill('Twenty cartons of verified inventory');
-	await page.getByLabel('First payment date').fill('2026-09-30');
-	await page.getByLabel('Optional later collection time (Nigerian time)').fill('2026-10-02T09:00');
-	await page.getByRole('button', { name: 'Check terms', exact: true }).click();
+	await page.getByLabel('What goods?').fill('Twenty cartons of verified inventory');
+	await page.getByLabel('How much? (₦)').fill('1,200,000');
+	await page.getByLabel('Pay by').fill(due);
 	expect(submitted).toBeUndefined();
-	await page.getByRole('button', { name: 'Save draft sale', exact: true }).click();
+	await page.getByRole('button', { name: 'Review credit sale', exact: true }).click();
 	await expect(page).toHaveURL(/\/workspace\/sales\/request-1\?organization=org-1/);
 	expect(idempotency.length).toBeGreaterThanOrEqual(8);
 	await expect
@@ -849,9 +865,8 @@ test('buyer receipt issue opens a case without activating an obligation', async 
 	expect(drawdown.obligation_id).toBe('');
 });
 
-test('pilot-ready owner reviews mobile readiness and invites a sales user', async ({ page }) => {
+test('pilot-ready owner reviews mobile readiness', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
-	let invited: Record<string, unknown> | undefined;
 	await page.route('**/api/v1/organizations', async (route) =>
 		route.fulfill({
 			status: 200,
@@ -903,33 +918,9 @@ test('pilot-ready owner reviews mobile readiness and invites a sales user', asyn
 			})
 		})
 	);
-	await page.route('**/api/v1/organizations/org-ready/members', async (route) => {
-		if (route.request().method() === 'POST') {
-			invited = route.request().postDataJSON();
-			await route.fulfill({
-				status: 202,
-				contentType: 'application/json',
-				body: JSON.stringify({ membership: { user_id: 'sales-user', role: 'sales', status: 'invited' } })
-			});
-			return;
-		}
-		await route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ members: [{ user_id: 'owner-user', role: 'owner', status: 'active' }] })
-		});
-	});
 	await page.goto('/workspace/onboarding');
 	await expect(page.getByRole('heading', { name: 'Account setup complete' })).toBeVisible();
 	await expect(page.getByText('10/10')).toBeVisible();
-	await page.getByRole('link', { name: 'Protect staff who handle money →' }).click();
-	await expect(page).toHaveURL(/\/workspace\/team$/);
-	await page.getByLabel('Email or phone').fill('sales@fresh-foods.test');
-	await page.getByRole('button', { name: 'Send invite' }).click();
-	await expect(
-		page.getByText('Invitation created. Ask your worker to sign in with the email or phone number you entered.')
-	).toBeVisible();
-	await expect.poll(() => invited).toEqual({ target: 'sales@fresh-foods.test', channel: 'email', role: 'sales' });
 });
 
 test('incomplete supplier sees precise recovery steps before financial activity', async ({ page }) => {
@@ -1093,118 +1084,6 @@ test('recovery start is enumeration-safe and explains independent proof', async 
 	await page.getByRole('button', { name: 'Start' }).click();
 	await expect(page.getByText('If the account is eligible, recovery instructions have been sent.')).toBeVisible();
 	await expect.poll(() => submitted).toEqual({ identifier: 'someone@example.test', channel: 'email' });
-});
-
-test('owner changes a role, suspends access, and restores it from the team interface', async ({ page }) => {
-	const changes: Record<string, unknown>[] = [];
-	let member = { user_id: 'team-user', role: 'sales', status: 'active' };
-	await page.route('**/api/v1/organizations', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ organizations: [{ id: 'org-team', legal_name: 'Team Supplier Ltd' }] })
-		})
-	);
-	await page.route('**/api/v1/organizations/org-team/members', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ members: [{ user_id: 'owner-user', role: 'owner', status: 'active' }, member] })
-		})
-	);
-	await page.route('**/api/v1/organizations/org-team/members/team-user', async (route) => {
-		const change = route.request().postDataJSON();
-		changes.push(change);
-		member = { ...member, ...change };
-		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ membership: member }) });
-	});
-	await page.goto('/workspace/team');
-	await page.locator('.controls select').selectOption('finance');
-	await page.getByRole('button', { name: 'Save' }).click();
-	await page.getByRole('button', { name: 'Stop their access' }).click();
-	await expect(page.getByRole('button', { name: 'Let them back in' })).toBeVisible();
-	await page.getByRole('button', { name: 'Let them back in' }).click();
-	await expect.poll(() => changes).toEqual([{ role: 'finance' }, { status: 'suspended' }, { status: 'active' }]);
-});
-
-test('supplier creates a mandate-backed trade line and sees provider validation safely', async ({ page }) => {
-	let submitted: Record<string, unknown> | undefined;
-	let attempts = 0;
-	await page.route('**/api/v1/organizations', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ organizations: [{ id: 'org-line', legal_name: 'Line Supplier Ltd' }] })
-		})
-	);
-	await page.route('**/api/v1/organizations/org-line/customers', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				customers: [{ buyer_user_id: 'buyer-line', buyer_business_id: 'business-line', legal_name: 'Repeat Buyer Ltd' }]
-			})
-		})
-	);
-	await page.route('**/api/v1/organizations/org-line/trade-lines', async (route) => {
-		if (route.request().method() === 'GET') {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ trade_lines: [] }) });
-			return;
-		}
-		submitted = route.request().postDataJSON();
-		attempts++;
-		if (attempts === 1) {
-			await route.fulfill({
-				status: 422,
-				contentType: 'application/problem+json',
-				body: JSON.stringify({ detail: 'The mandate provider could not verify this reference.' })
-			});
-			return;
-		}
-		await route.fulfill({
-			status: 201,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				trade_line: {
-					id: 'line-created',
-					...submitted,
-					supplier_organization_id: 'org-line',
-					current_exposure_kobo: 0,
-					reserved_pending_kobo: 0,
-					available_limit_kobo: 100000000,
-					state: 'ACTIVE',
-					version: 1
-				}
-			})
-		});
-	});
-	// Customer limits are off by default, here and on the server. A test about
-	// that flow switches it on the way the platform owner would.
-	await page.route('**/api/v1/platform/capabilities', async (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ features: { trade_lines: true, drawdowns: true } })
-		})
-	);
-	await page.goto('/workspace/sales/limits');
-	await page.locator('.card form select').first().selectOption('buyer-line');
-	await page.getByLabel('Bank debit setup number').fill('mandate-approved');
-	await page.getByLabel('Most they may owe you at once (₦)').fill('1,000,000');
-	await page.getByLabel('Start day').fill('2026-09-01T09:00');
-	await page.getByLabel('End day').fill('2027-09-01T09:00');
-	await page.getByRole('button', { name: 'Give a ₦1,000,000.00 limit' }).click();
-	await expect(page.getByText('The request was not accepted. Check the details and try again.')).toBeVisible();
-	await page.getByRole('button', { name: 'Give a ₦1,000,000.00 limit' }).click();
-	await expect(page.getByText('Customer limit saved: ₦1,000,000.00. Status: Active.')).toBeVisible();
-	await expect
-		.poll(() => submitted)
-		.toMatchObject({
-			buyer_user_id: 'buyer-line',
-			buyer_business_id: 'business-line',
-			mandate_id: 'mandate-approved',
-			approved_limit_kobo: 100000000
-		});
 });
 
 test('buyer attaches evidence to an existing dispute and sees the status timeline', async ({ page }) => {

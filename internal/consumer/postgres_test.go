@@ -37,10 +37,10 @@ func TestConsumerPostgresPermissionsMoneyAndReplay(t *testing.T) {
 	if e = root.QueryRow(ctx, `INSERT INTO app.organizations(legal_name,business_type,business_address,industry) VALUES('Synthetic Retailer','limited_company','Test address','retail') RETURNING id::text`).Scan(&org); e != nil {
 		t.Fatal(e)
 	}
-	for _, v := range []struct{ id, role string }{{owner, "owner"}, {viewer, "viewer"}} {
-		if _, e = root.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,$3,'active')`, org, v.id, v.role); e != nil {
-			t.Fatal(e)
-		}
+	// A business has one owner. The viewer is a signed-in person with no role
+	// in it, who must be refused like anyone else outside the business.
+	if _, e = root.Exec(ctx, `INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, org, owner); e != nil {
+		t.Fatal(e)
 	}
 	if _, e = root.Exec(ctx, `INSERT INTO app.supplier_onboarding_profiles(organization_id,readiness_state,kyb_state,settlement_state,settlement_provider,settlement_provider_reference,settlement_account_last4,settlement_bank_name,billing_state) VALUES($1::uuid,'pilot_ready','approved','verified','fixture','fixture','7890','Synthetic Bank','configured')`, org); e != nil {
 		t.Fatal(e)

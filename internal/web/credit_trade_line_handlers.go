@@ -3,6 +3,7 @@ package web
 import (
 	"kredit/internal/access"
 	"kredit/internal/agreementdocs"
+	"kredit/internal/buyers"
 	"kredit/internal/ledger"
 	"kredit/internal/mandates"
 	"kredit/internal/notifications"
@@ -191,7 +192,7 @@ func (s *Server) releaseDrawdown(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.requireSupplierReady(w, orgID, user.ID, "releasing goods") {
+	if !s.requireSupplierReady(w, r, orgID, user.ID, "releasing goods") {
 		return
 	}
 	if !s.requireCSRF(w, r) {
@@ -477,7 +478,8 @@ func (s *Server) renderDrawdownAgreementDocument(w http.ResponseWriter, r *http.
 		writeProblem(w, http.StatusNotFound, "drawdown_not_found", "drawdown was not found")
 		return
 	}
-	document, err := agreementdocs.RenderDrawdownHTML(agreementdocs.DrawdownDocumentData{Line: line, Drawdown: *drawdown})
+	supplierName, buyerName := s.drawdownPartyNames(line)
+	document, err := agreementdocs.RenderDrawdownHTML(agreementdocs.DrawdownDocumentData{SupplierName: supplierName, BuyerName: buyerName, Line: line, Drawdown: *drawdown})
 	if err != nil {
 		writeProblem(w, http.StatusConflict, "agreement_document_unavailable", err.Error())
 		return
@@ -488,4 +490,26 @@ func (s *Server) renderDrawdownAgreementDocument(w http.ResponseWriter, r *http.
 	w.Header().Set("X-Agreement-Hash", drawdown.AgreementHash)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(document)
+}
+
+// drawdownPartyNames resolves the legal names printed on a drawdown agreement.
+// A failed lookup leaves the name empty and the document prints the identifier.
+func (s *Server) drawdownPartyNames(line tradelines.TradeLine) (string, string) {
+	var supplierName, buyerName string
+	if organization, ok := s.runtime.Organizations.Get(line.SupplierOrganizationID); ok {
+		supplierName = organization.LegalName
+	}
+	if reader, ok := s.runtime.Buyers.(interface {
+		ReadCustomers(string) ([]buyers.Customer, error)
+	}); ok {
+		if customers, err := reader.ReadCustomers(line.SupplierOrganizationID); err == nil {
+			for _, customer := range customers {
+				if customer.BuyerBusinessID == line.BuyerBusinessID {
+					buyerName = customer.LegalName
+					break
+				}
+			}
+		}
+	}
+	return supplierName, buyerName
 }

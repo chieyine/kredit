@@ -225,7 +225,6 @@ type Store struct {
 	mu                          sync.Mutex
 	secret                      []byte
 	providers                   map[string]Provider
-	templates                   map[string]string
 	preferences                 map[string]Preferences
 	deliveries                  map[string]*Delivery
 	dedupe                      map[string]string
@@ -241,7 +240,7 @@ type Store struct {
 }
 
 func NewStore(secret string) *Store {
-	return &Store{secret: []byte(secret), providers: map[string]Provider{}, templates: map[string]string{}, preferences: map[string]Preferences{}, deliveries: map[string]*Delivery{}, dedupe: map[string]string{}, eventFingerprints: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier, baseURL: "https://app.kredit.ng"}
+	return &Store{secret: []byte(secret), providers: map[string]Provider{}, preferences: map[string]Preferences{}, deliveries: map[string]*Delivery{}, dedupe: map[string]string{}, eventFingerprints: map[string]string{}, now: func() time.Time { return time.Now().UTC() }, newID: newIdentifier, baseURL: "https://app.kredit.ng"}
 }
 func NewPostgresStore(pool *pgxpool.Pool, secret string) *Store {
 	store := NewStore(secret)
@@ -261,14 +260,6 @@ func (s *Store) RegisterProvider(provider Provider) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.providers[provider.Channel()] = provider
-}
-func (s *Store) SetTemplate(eventType, channel, version, body string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.templates[eventType+"|"+channel+"|"+version] = body
-	if s.pool != nil {
-		_, _ = s.pool.Exec(context.Background(), `INSERT INTO app.notification_templates(event_type,channel,version,body,active) VALUES($1,$2,$3,$4,true) ON CONFLICT(event_type,channel,version) DO UPDATE SET body=EXCLUDED.body,active=true`, eventType, channel, version, body)
-	}
 }
 func (s *Store) SetPreferences(recipient string, prefs Preferences) {
 	s.mu.Lock()
@@ -475,11 +466,7 @@ func (s *Store) deliver(ctx context.Context, event Event, channel string, prefs 
 		return delivery, nil
 	}
 	templateVersion := "v1"
-	body := s.templates[event.Type+"|"+channel+"|"+templateVersion]
-	if body == "" {
-		body = defaultTemplate(event.Type)
-	}
-	body = render(body, event)
+	body := render(defaultTemplate(event.Type), event)
 	now := s.now()
 	delivery := &Delivery{ID: s.newID(), EventID: event.ID, RecipientID: event.RecipientID, Channel: channel, Template: event.Type, TemplateVersion: templateVersion, Body: body}
 	if event.DeferDelivery || (event.Priority != PriorityCritical && inQuietHours(now, prefs)) {
@@ -768,17 +755,12 @@ func newIdentifier() string             { return identifier.New() }
 func (s *Store) deliverPostgres(ctx context.Context, event Event, channel string, prefs Preferences) (Delivery, error) {
 	templateVersion := "v1"
 	s.mu.Lock()
-	body := s.templates[event.Type+"|"+channel+"|"+templateVersion]
 	provider := s.providers[channel]
 	s.mu.Unlock()
-	if body == "" {
-		var persisted string
-		err := s.pool.QueryRow(ctx, `SELECT body FROM app.notification_templates WHERE event_type=$1 AND channel=$2 AND version=$3 AND active=true`, event.Type, channel, templateVersion).Scan(&persisted)
-		if err == nil {
-			body = persisted
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return Delivery{}, err
-		}
+	var body string
+	err := s.pool.QueryRow(ctx, `SELECT body FROM app.notification_templates WHERE event_type=$1 AND channel=$2 AND version=$3 AND active=true`, event.Type, channel, templateVersion).Scan(&body)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return Delivery{}, err
 	}
 	if body == "" {
 		body = defaultTemplate(event.Type)

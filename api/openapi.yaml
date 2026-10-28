@@ -3594,7 +3594,13 @@ paths:
               $ref: '#/components/schemas/WhatsAppWebhook'
       responses:
         '200':
-          description: Structured command parsed; financial actions require secure confirmation.
+          description: Event recorded. `understood` says whether the text parsed into a command; financial actions require secure confirmation.
+        '401':
+          description: The webhook signature is not valid.
+        '409':
+          description: The event identifier was already used for a different message.
+        '503':
+          description: The event could not be recorded; the provider should retry.
   /me/notifications:
     get:
       operationId: myNotifications

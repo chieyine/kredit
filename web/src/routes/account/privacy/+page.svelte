@@ -2,7 +2,16 @@
 	import { readableDate } from '$lib/datetime';
 	import { onMount } from 'svelte';
 	import VerifyIdentity from '$lib/components/VerifyIdentity.svelte';
-	import { checkedJSON, LatestRequest, optionalText, record, rows, text, publicError } from '$lib/api/reliable';
+	import {
+		checkedJSON,
+		LatestRequest,
+		optionalText,
+		record,
+		rows,
+		text,
+		publicError,
+		errorText
+	} from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { productLabel, privacyRequestChoices, privacyRequestLabel } from '$lib/product-language';
 	let requests: PrivacyRequest[] = $state([]),
@@ -84,7 +93,7 @@
 			message = 'We have got your request. Come back to this page to see how it is going.';
 			await load();
 		} catch (cause) {
-			message = cause instanceof Error ? cause.message : 'We could not confirm this request.';
+			message = errorText(cause, 'We could not confirm this request.');
 		} finally {
 			busy = false;
 		}

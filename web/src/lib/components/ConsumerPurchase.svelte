@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorText } from '$lib/api/reliable';
 	import { readableDate, readableDateTime } from '$lib/datetime';
 	import { nairaInput } from '$lib/money';
 	import { onMount, tick } from 'svelte';
@@ -50,7 +51,7 @@
 		try {
 			sale = purchase(await read(endpoint));
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not load this purchase.';
+			error = errorText(e, 'Could not load this purchase.');
 		} finally {
 			busy = false;
 		}
@@ -138,7 +139,7 @@
 			message = doneMessage(action);
 			action = '';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'The action was not confirmed.';
+			error = errorText(e, 'The action was not confirmed.');
 		} finally {
 			busy = false;
 		}
@@ -151,7 +152,7 @@
 			action = '';
 			message = 'Previous action confirmed.';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not confirm previous action.';
+			error = errorText(e, 'Could not confirm previous action.');
 		} finally {
 			busy = false;
 		}

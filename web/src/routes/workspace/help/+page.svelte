@@ -2,7 +2,7 @@
 	import { readableDate } from '$lib/datetime';
 	import { chooseWorkspace, requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
-	import { checkedJSON, LatestRequest, publicError, record, rows, text } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, publicError, record, rows, text, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { productLabel, shortReference } from '$lib/product-language';
 	type Organization = { id: string; legal_name: string; trading_name?: string };
@@ -100,8 +100,7 @@
 			notice = `Your message was saved. Help number: ${shortReference(item.id)}`;
 			await loadCases();
 		} catch (cause) {
-			error =
-				cause instanceof Error ? cause.message : 'We could not confirm your message. Retry with the same details.';
+			error = errorText(cause, 'We could not confirm your message. Retry with the same details.');
 		} finally {
 			busy = false;
 		}
@@ -129,7 +128,7 @@
 				state === 'RESOLVED' ? 'Marked as solved. You can close it after checking everything.' : 'Help request closed.';
 			await loadCases();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not confirm this update.';
+			error = errorText(cause, 'We could not confirm this update.');
 		} finally {
 			busy = false;
 		}

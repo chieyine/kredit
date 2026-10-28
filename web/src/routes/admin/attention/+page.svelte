@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import AdminAttention from '$lib/components/AdminAttention.svelte';
 	import { adminGet, localTime } from '$lib/admin-client';
-	import { optionalText, record, rows, text } from '$lib/api/reliable';
+	import { optionalText, record, rows, text, errorText } from '$lib/api/reliable';
 	type ExpiringMandate = { id: string; expires_at: string; buyer_id: string; buyer: string };
 	type UncertainDebit = { id: string; state: string; requested_at: string };
 	type FailedNotice = { id: string; recipient: string; template: string; channel: string; reason: string };
@@ -43,7 +43,7 @@
 			const body = await adminGet('/api/v1/ops/attention/details');
 			data = details(body);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'We could not open this. Try again.';
+			error = errorText(e, 'We could not open this. Try again.');
 		}
 	}
 	onMount(load);

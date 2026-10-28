@@ -17,9 +17,6 @@ export const workspaceLinks: [string, string][] = [...workspacePrimary, ...works
 	name,
 	href
 ]);
-/** No sub-tabs: each simple screen carries what it needs on the page itself. */
-export const workspaceSections: { root: string; label: string; links: [string, string][] }[] = [];
-
 /** Scope belongs in the URL so refreshes and shared workspace links stay explicit. */
 export function workspaceHref(href: string, current: URL): string {
 	if (!href.startsWith('/workspace')) return href;

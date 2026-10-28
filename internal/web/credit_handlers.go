@@ -254,7 +254,7 @@ func (s *Server) sendCreditRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.requireSupplierReady(w, orgID, user.ID, "sending credit") {
+	if !s.requireSupplierReady(w, r, orgID, user.ID, "sending credit") {
 		return
 	}
 	if !s.requireCSRF(w, r) {
@@ -305,7 +305,7 @@ func (s *Server) releaseCreditRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.requireSupplierReady(w, orgID, user.ID, "releasing goods") {
+	if !s.requireSupplierReady(w, r, orgID, user.ID, "releasing goods") {
 		return
 	}
 	if !s.requireCSRF(w, r) {

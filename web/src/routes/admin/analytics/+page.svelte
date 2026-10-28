@@ -322,7 +322,7 @@
 		background: var(--color-primary);
 		color: var(--color-on-primary);
 		font-weight: 800;
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.status {
 		display: flex;
@@ -397,7 +397,7 @@
 		padding: clamp(1.5rem, 4vw, 2.5rem);
 		color: var(--color-on-primary);
 		background: var(--color-primary);
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.feedback-breakdown h2 {
 		font-family: var(--font-serif);

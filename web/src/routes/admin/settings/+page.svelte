@@ -9,7 +9,7 @@
 		localTime,
 		lagosISO
 	} from '$lib/admin-client';
-	import { LatestRequest, record, rows, text } from '$lib/api/reliable';
+	import { LatestRequest, record, rows, text, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	const reads = new LatestRequest();
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- idempotency keys are never rendered
@@ -161,7 +161,7 @@
 		try {
 			preview = impactData(await adminPost('/api/v1/ops/business-policies/preview', { values, base_revision: base }));
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Preview unavailable';
+			error = errorText(e, 'Preview unavailable');
 		} finally {
 			busy = false;
 		}
@@ -224,7 +224,7 @@
 			governanceMode = mode;
 			reset();
 		} catch (e) {
-			if (read.current()) error = e instanceof Error ? e.message : 'Settings could not be loaded';
+			if (read.current()) error = errorText(e, 'Settings could not be loaded');
 		} finally {
 			if (read.current()) loading = false;
 		}
@@ -246,7 +246,7 @@
 			await load();
 			message = 'Approved. The change is recorded.';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'That approval was not saved.';
+			error = errorText(e, 'That approval was not saved.');
 		} finally {
 			busy = false;
 		}
@@ -287,7 +287,7 @@
 					? ' You can approve it yourself below.'
 					: ' A second administrator must approve it before its effective date.');
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Proposal could not be saved';
+			error = errorText(e, 'Proposal could not be saved');
 		} finally {
 			busy = false;
 		}
@@ -309,7 +309,7 @@
 			await load();
 			message = 'Decision recorded.';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Decision could not be saved';
+			error = errorText(e, 'Decision could not be saved');
 		} finally {
 			busy = false;
 		}

@@ -3,7 +3,16 @@
 	import { ACCOUNT_CONTEXT, type AccountContext } from '$lib/account-context';
 	const account = getContext<AccountContext>(ACCOUNT_CONTEXT);
 	import { MutationIntent } from '$lib/api/mutation';
-	import { checkedJSON, LatestRequest, optionalText, rows, record, text, publicError } from '$lib/api/reliable';
+	import {
+		checkedJSON,
+		LatestRequest,
+		optionalText,
+		rows,
+		record,
+		text,
+		publicError,
+		errorText
+	} from '$lib/api/reliable';
 	type Seller = { id: string; name: string };
 	type Consent = {
 		id: string;
@@ -112,7 +121,7 @@
 				: `${seller.name} may no longer send optional payment reminders.`;
 			await load();
 		} catch (cause) {
-			notice = cause instanceof Error ? cause.message : 'We could not confirm this permission.';
+			notice = errorText(cause, 'We could not confirm this permission.');
 		} finally {
 			busy = '';
 		}

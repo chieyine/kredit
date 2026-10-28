@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { untrack, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { checkedJSON, LatestRequest, record, text, publicError, RequestError } from '$lib/api/reliable';
+	import { checkedJSON, LatestRequest, record, text, publicError, RequestError, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { productLabel } from '$lib/product-language';
 
@@ -151,7 +151,7 @@
 			);
 			if (token === activeToken) await goto(`/workspace/purchases?business_id=${encodeURIComponent(acceptedBusiness)}`);
 		} catch (cause) {
-			if (token === activeToken) error = cause instanceof Error ? cause.message : 'We could not confirm your details.';
+			if (token === activeToken) error = errorText(cause, 'We could not confirm your details.');
 		} finally {
 			if (token === activeToken) busy = false;
 		}

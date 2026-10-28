@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# A mutable tag is not a pin. `actions/checkout@v4` and `golang:1.26.8-alpine`
+# A mutable tag is not a pin. `actions/checkout@v4` and `golang:1.26.10-alpine`
 # both resolve to whatever the publisher last pushed, so a compromised or
 # simply changed upstream lands in a build that signs financial artefacts
 # without any change to this repository.

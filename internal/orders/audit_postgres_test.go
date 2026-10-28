@@ -23,12 +23,12 @@ import (
 // operation under test uses APP_DATABASE_URL and the real non-owner login.
 // Never run this fixture outside an explicitly named, disposable *_test DB.
 type auditFixture struct {
-	admin                                                       *pgxpool.Pool
-	runtime                                                     *db.Pool
-	org, buyerOrg, owner, sales, finance, other, buyer, profile string
-	order                                                       [2]string
-	obligation                                                  [2]string
-	ctx                                                         context.Context
+	admin                                       *pgxpool.Pool
+	runtime                                     *db.Pool
+	org, buyerOrg, owner, other, buyer, profile string
+	order                                       [2]string
+	obligation                                  [2]string
+	ctx                                         context.Context
 }
 
 func newAuditFixture(t *testing.T) *auditFixture {
@@ -55,20 +55,18 @@ func newAuditFixture(t *testing.T) *auditFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(runtime.Close)
-	f := &auditFixture{admin: admin, runtime: runtime, ctx: ctx, org: uuid.NewString(), owner: uuid.NewString(), sales: uuid.NewString(), finance: uuid.NewString(), other: uuid.NewString(), buyer: uuid.NewString(), profile: uuid.NewString()}
+	f := &auditFixture{admin: admin, runtime: runtime, ctx: ctx, org: uuid.NewString(), owner: uuid.NewString(), other: uuid.NewString(), buyer: uuid.NewString(), profile: uuid.NewString()}
 	exec := func(q string, args ...any) {
 		t.Helper()
 		if _, e := admin.Exec(ctx, q, args...); e != nil {
 			t.Fatalf("fixture: %v", e)
 		}
 	}
-	for _, id := range []string{f.owner, f.sales, f.finance, f.other, f.buyer} {
+	for _, id := range []string{f.owner, f.other, f.buyer} {
 		exec(`INSERT INTO app.users(id,normalized_email) VALUES($1::uuid,$2)`, id, id+"@audit-regression.test")
 	}
 	exec(`INSERT INTO app.organizations(id,legal_name,business_type,business_address,industry) VALUES($1::uuid,'Audit supplier','limited_company','synthetic','test')`, f.org)
-	for _, member := range []struct{ id, role string }{{f.owner, "owner"}, {f.sales, "sales"}, {f.finance, "finance"}} {
-		exec(`INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,$3,'active')`, f.org, member.id, member.role)
-	}
+	exec(`INSERT INTO app.memberships(organization_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'owner','active')`, f.org, f.owner)
 	exec(`INSERT INTO app.businesses(id,owner_user_id,legal_name,business_type,business_address,industry) VALUES($1::uuid,$2::uuid,'Audit buyer','limited_company','synthetic','test')`, f.profile, f.buyer)
 	if err = admin.QueryRow(ctx, `SELECT organization_id::text FROM app.businesses WHERE id=$1::uuid`, f.profile).Scan(&f.buyerOrg); err != nil {
 		t.Fatal(err)
@@ -114,20 +112,20 @@ func TestAuditPostgresShipmentRelationsConcurrencyAndReceipts(t *testing.T) {
 	f := newAuditFixture(t)
 	s := f.store()
 	for _, order := range f.order {
-		if err := s.CreateLineItems(f.as(f.sales), order, []LineItem{{Description: "cartons", Quantity: 10, UnitPriceKobo: 1000}, {Description: "other cartons", Quantity: 10, UnitPriceKobo: 1000}}); err != nil {
+		if err := s.CreateLineItems(f.as(f.owner), order, []LineItem{{Description: "cartons", Quantity: 10, UnitPriceKobo: 1000}, {Description: "other cartons", Quantity: 10, UnitPriceKobo: 1000}}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	a, err := s.ListLineItems(f.as(f.sales), f.order[0])
+	a, err := s.ListLineItems(f.as(f.owner), f.order[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.ListLineItems(f.as(f.sales), f.order[1])
+	b, err := s.ListLineItems(f.as(f.owner), f.order[1])
 	if err != nil {
 		t.Fatal(err)
 	}
 	dispatch := func(items []ShipmentItem) (Shipment, error) {
-		return s.DispatchShipment(f.as(f.sales), DispatchInput{OrderID: f.order[0], SupplierOrganizationID: f.org, DispatchedBy: f.sales, Items: items})
+		return s.DispatchShipment(f.as(f.owner), DispatchInput{OrderID: f.order[0], SupplierOrganizationID: f.org, DispatchedBy: f.owner, Items: items})
 	}
 	for _, items := range [][]ShipmentItem{
 		{{LineItemID: b[0].ID, Quantity: 1}},
@@ -165,7 +163,7 @@ func TestAuditPostgresShipmentRelationsConcurrencyAndReceipts(t *testing.T) {
 		t.Fatalf("concurrent over-fulfilment: successes=%d failures=%d", len(results), len(failures))
 	}
 	ship := <-results
-	listed, err := s.ListShipments(f.as(f.sales), f.order[0])
+	listed, err := s.ListShipments(f.as(f.owner), f.order[0])
 	if err != nil || len(listed) != 1 || len(listed[0].Items) != 1 {
 		t.Fatalf("shipment items missing from list: %+v %v", listed, err)
 	}
@@ -181,8 +179,8 @@ func TestAuditPostgresShipmentRelationsConcurrencyAndReceipts(t *testing.T) {
 		t.Fatal("receipt bound to different order")
 	}
 	in.OrderID = f.order[0]
-	in.ReceivedBy = f.sales
-	if _, err = s.RecordDeliveryReceipt(f.as(f.sales), in); err == nil {
+	in.ReceivedBy = f.owner
+	if _, err = s.RecordDeliveryReceipt(f.as(f.owner), in); err == nil {
 		t.Fatal("seller signed buyer receipt")
 	}
 	in.ReceivedBy = f.buyer
@@ -224,12 +222,12 @@ func (l auditFailingLedger) PostAdjustmentTx(ctx context.Context, tx pgx.Tx, id 
 func TestAuditPostgresCreditNoteBindsOrderAndRollsBackFinancialAggregate(t *testing.T) {
 	f := newAuditFixture(t)
 	s := f.store()
-	in := CreditNoteInput{OrderID: f.order[0], ObligationID: f.obligation[1], SupplierOrganizationID: f.org, IssuedBy: f.sales, AmountKobo: 2500, Reason: "verified shortage"}
-	if _, err := s.CreateCreditNote(f.as(f.sales), in); err == nil {
+	in := CreditNoteInput{OrderID: f.order[0], ObligationID: f.obligation[1], SupplierOrganizationID: f.org, IssuedBy: f.owner, AmountKobo: 2500, Reason: "verified shortage"}
+	if _, err := s.CreateCreditNote(f.as(f.owner), in); err == nil {
 		t.Fatal("credit note targeted another order's obligation")
 	}
 	in.ObligationID = ""
-	note, err := s.CreateCreditNote(f.as(f.sales), in)
+	note, err := s.CreateCreditNote(f.as(f.owner), in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +235,7 @@ func TestAuditPostgresCreditNoteBindsOrderAndRollsBackFinancialAggregate(t *test
 		t.Fatal("canonical obligation was not resolved")
 	}
 	failing := NewPostgresStore(f.runtime.Raw(), auditFailingLedger{ledger.NewPostgresStore(f.runtime.Raw())})
-	if err = failing.ApproveCreditNote(f.as(f.finance), note.ID, f.finance); !errors.Is(err, errAuditInjected) {
+	if err = failing.ApproveCreditNote(f.as(f.owner), note.ID, f.owner); !errors.Is(err, errAuditInjected) {
 		t.Fatalf("failure injection did not reach journal: %v", err)
 	}
 	if n := f.scalar(t, `SELECT count(*) FROM app.order_credit_notes WHERE id=$1::uuid AND status='draft'`, note.ID); n != 1 {
@@ -249,13 +247,10 @@ func TestAuditPostgresCreditNoteBindsOrderAndRollsBackFinancialAggregate(t *test
 	if n := f.scalar(t, `SELECT outstanding_kobo FROM app.obligations WHERE id=$1::uuid`, f.obligation[0]); n != 10000 {
 		t.Fatal("failed approval changed balance")
 	}
-	if err = s.ApproveCreditNote(f.as(f.sales), note.ID, f.sales); err == nil {
-		t.Fatal("sales/self approval allowed")
-	}
-	if err = s.ApproveCreditNote(f.as(f.finance), note.ID, f.finance); err != nil {
+	if err = s.ApproveCreditNote(f.as(f.owner), note.ID, f.owner); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.ApproveCreditNote(f.as(f.finance), note.ID, f.finance); err != nil {
+	if err = s.ApproveCreditNote(f.as(f.owner), note.ID, f.owner); err != nil {
 		t.Fatalf("exact approval replay: %v", err)
 	}
 	for _, query := range []string{

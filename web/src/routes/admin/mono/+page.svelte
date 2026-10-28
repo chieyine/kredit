@@ -155,7 +155,7 @@
 		margin: 2rem 0;
 		background: var(--color-primary);
 		color: var(--color-on-primary);
-		--color-muted: rgb(255 255 255 / 0.72);
+		--color-muted: var(--color-on-primary-muted);
 	}
 	.status-card > div {
 		display: grid;

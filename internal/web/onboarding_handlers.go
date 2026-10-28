@@ -69,7 +69,7 @@ func (s *Server) getSupplierOnboarding(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.syncOnboardingSecurity(orgID, user.ID); err != nil {
+	if err := s.syncOnboardingSecurity(r.Context(), orgID, user.ID); err != nil {
 		writeProblem(w, 503, "onboarding_security_unavailable", "Account security requirements could not be checked")
 		return
 	}
@@ -414,8 +414,8 @@ func (s *Server) finishOnboardingChange(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, 200, map[string]any{"profile": p, "readiness": sum})
 }
 
-func (s *Server) syncOnboardingSecurity(orgID, actor string) error {
-	owner, err := s.runtime.Organizations.ReadOwner(context.Background(), orgID)
+func (s *Server) syncOnboardingSecurity(ctx context.Context, orgID, actor string) error {
+	owner, err := s.runtime.Organizations.ReadOwner(ctx, orgID)
 	if err != nil {
 		return err
 	}
@@ -427,8 +427,8 @@ func onboardingPermissions(role access.Role) map[string]bool {
 	return map[string]bool{"business": access.Can(role, access.PermissionManageOrganization), "settlement": access.Can(role, access.PermissionManageFinancial), "billing": access.Can(role, access.PermissionManageFinancial), "credit_policy": access.Can(role, access.PermissionManageOrganization), "consents": role == access.RoleOwner}
 }
 
-func (s *Server) requireSupplierReady(w http.ResponseWriter, organizationID, actorUserID, action string) bool {
-	if err := s.syncOnboardingSecurity(organizationID, actorUserID); err != nil {
+func (s *Server) requireSupplierReady(w http.ResponseWriter, r *http.Request, organizationID, actorUserID, action string) bool {
+	if err := s.syncOnboardingSecurity(r.Context(), organizationID, actorUserID); err != nil {
 		writeProblem(w, 503, "onboarding_security_unavailable", "Account security requirements could not be checked")
 		return false
 	}

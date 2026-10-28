@@ -1,7 +1,5 @@
 import { browser } from '$app/environment';
 
-export type SavedSaleItem = { name: string; amount: string; usedAt: string };
-
 export function readLocal<T>(key: string, fallback: T): T {
 	if (!browser) return fallback;
 	try {
@@ -20,27 +18,6 @@ export function writeLocal(key: string, value: unknown): boolean {
 	} catch {
 		return false;
 	}
-}
-
-export function removeLocal(key: string) {
-	if (!browser) return;
-	try {
-		localStorage.removeItem(key);
-	} catch {
-		/* Storage is optional. */
-	}
-}
-
-export function rememberSaleItem(name: string, amount: string) {
-	const cleanName = name.trim();
-	const cleanAmount = amount.trim();
-	if (!cleanName || !cleanAmount) return;
-	const current = readLocal<SavedSaleItem[]>('kredit:saved-sale-items', []);
-	const next = [
-		{ name: cleanName, amount: cleanAmount, usedAt: new Date().toISOString() },
-		...current.filter((item) => item.name.toLowerCase() !== cleanName.toLowerCase())
-	].slice(0, 12);
-	writeLocal('kredit:saved-sale-items', next);
 }
 
 export function whatsappURL(message: string) {

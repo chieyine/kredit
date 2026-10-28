@@ -3,7 +3,16 @@
 	import { workspaceHref } from '$lib/workspace-navigation';
 	import { buyerEndpoint } from '$lib/buyer-navigation';
 	import { onMount } from 'svelte';
-	import { checkedJSON, LatestRequest, optionalText, publicError, record, rows, text } from '$lib/api/reliable';
+	import {
+		checkedJSON,
+		LatestRequest,
+		optionalText,
+		publicError,
+		record,
+		rows,
+		text,
+		errorText
+	} from '$lib/api/reliable';
 	import type { KoboValue } from '$lib/money';
 	import { MutationIntent } from '$lib/api/mutation';
 	import { kobo } from '$lib/records';
@@ -77,7 +86,7 @@
 						: 'Your bank permission update has been saved.';
 			await load();
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not confirm your bank permission change.';
+			error = errorText(cause, 'We could not confirm your bank permission change.');
 		} finally {
 			busy = '';
 		}

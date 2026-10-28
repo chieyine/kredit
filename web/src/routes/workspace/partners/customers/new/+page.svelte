@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { requestedWorkspace } from '$lib/workspace-context';
 	import { onMount } from 'svelte';
-	import { checkedJSON, record, rows, text, publicError, LatestRequest } from '$lib/api/reliable';
+	import { checkedJSON, record, rows, text, publicError, LatestRequest, errorText } from '$lib/api/reliable';
 	import { MutationIntent } from '$lib/api/mutation';
 	import ShareActions from '$lib/components/ShareActions.svelte';
 	import { organization, type Organization } from '$lib/records';
@@ -82,7 +82,7 @@
 				}
 			);
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'We could not confirm the customer link.';
+			error = errorText(cause, 'We could not confirm the customer link.');
 		} finally {
 			busy = false;
 		}

@@ -20,7 +20,7 @@ func (d scopedBusinessDirectory) ListBusinessProfiles(context.Context, string) (
 }
 
 func TestPurchasingScopeRequiresOwnedBusinessAndMatchingWorkspace(t *testing.T) {
-	s := &Server{runtime: &Runtime{Buyers: scopedBusinessDirectory{profiles: []buyers.Business{{ID: "profile-a", WorkspaceID: "workspace-a"}, {ID: "profile-b", WorkspaceID: "workspace-b"}}}}}
+	s := &Server{runtime: &Runtime{Buyers: scopedBusinessDirectory{profiles: []buyers.Business{{ID: "profile-a", WorkspaceID: "workspace-a", OwnerUserID: "owner"}, {ID: "profile-b", WorkspaceID: "workspace-b", OwnerUserID: "owner"}, {ID: "profile-c", WorkspaceID: "workspace-c", OwnerUserID: "someone-else"}}}}}
 	cases := []struct {
 		query, id string
 		status    int
@@ -30,6 +30,8 @@ func TestPurchasingScopeRequiresOwnedBusinessAndMatchingWorkspace(t *testing.T) 
 		{"?business_id=profile-a&organization=workspace-b", "", 404},
 		{"?business_id=outsider", "", 404},
 		{"?organization=outsider", "", 404},
+		// Listed, but owned by someone else: one owner per business.
+		{"?business_id=profile-c", "", 404},
 	}
 	for _, tc := range cases {
 		t.Run(tc.query, func(t *testing.T) {

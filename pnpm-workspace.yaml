@@ -8,5 +8,11 @@ overrides:
   'cookie@<0.7.0': 0.7.2
   'esbuild@>=0.27.3 <0.28.1': 0.28.1
 
-  # GHSA-9rgm-9g3h-6x36: reject malformed devalue input.
-  'devalue@<5.9.2': 5.9.2
+  # GHSA-9rgm-9g3h-6x36 and its follow-up: reject malformed devalue input.
+  'devalue@<5.9.3': 5.9.3
+
+  # GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7 and GHSA-q2hr-2g5m-vwhr.
+  'brace-expansion@>=5.0.0 <5.0.12': 5.0.12
+
+  # Patched source-map-js, pulled in through postcss.
+  'source-map-js@<1.2.2': 1.2.2

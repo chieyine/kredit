@@ -314,6 +314,7 @@ func requestLimits(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
 func decode(w http.ResponseWriter, r *http.Request, target any) bool {
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(target); err != nil {
@@ -326,6 +327,7 @@ func decode(w http.ResponseWriter, r *http.Request, target any) bool {
 	}
 	return true
 }
+
 func writeDecodeError(w http.ResponseWriter, err error) {
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
@@ -334,11 +336,13 @@ func writeDecodeError(w http.ResponseWriter, err error) {
 	}
 	writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 }
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
+
 func scenario(r *http.Request, fallback string) string {
 	value := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Simulator-Scenario")))
 	if value == "" {
@@ -353,11 +357,13 @@ func scenario(r *http.Request, fallback string) string {
 	}
 	return value
 }
+
 func stableID(parts ...string) string {
 	encoded, _ := json.Marshal(parts)
 	sum := sha256.Sum256(encoded)
 	return "sim_" + hex.EncodeToString(sum[:12])
 }
+
 func firstString(input map[string]any, keys ...string) string {
 	for _, key := range keys {
 		if value, ok := input[key].(string); ok && value != "" {
@@ -366,6 +372,7 @@ func firstString(input map[string]any, keys ...string) string {
 	}
 	return "simulated-subject"
 }
+
 func clone(input map[string]any) map[string]any {
 	output := make(map[string]any, len(input))
 	for key, value := range input {
@@ -373,6 +380,7 @@ func clone(input map[string]any) map[string]any {
 	}
 	return output
 }
+
 func envOr(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
 		return value
